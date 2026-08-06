@@ -1,0 +1,116 @@
+import { NextRequest } from 'next/server'
+import { db } from '@/lib/db'
+import { withUser, schoolScoped } from '@/lib/api'
+
+export const runtime = 'nodejs'
+
+// GET messages for the current user (inbox + sent)
+export async function GET(req: NextRequest) {
+  return withUser(async (user) => {
+    const schoolId = schoolScoped(user)
+    const { searchParams } = new URL(req.url)
+    const box = searchParams.get('box') || 'inbox' // inbox | sent
+
+    const where = box === 'sent'
+      ? { schoolId, senderId: user.id }
+      : { schoolId, recipientId: user.id }
+
+    const messages = await db.message.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        sender: { select: { id: true, name: true, role: true } },
+        recipient: { select: { id: true, name: true, role: true } },
+      },
+    })
+    return messages
+  })
+}
+
+// POST send a new message
+export async function POST(req: NextRequest) {
+  return withUser(
+    async (user) => {
+      const schoolId = schoolScoped(user)
+      const body = await req.json().catch(() => ({}))
+      const subject = String(body.subject || '').trim()
+      const messageBody = String(body.body || '').trim()
+
+      if (!subject || !messageBody) {
+        throw new Error('Subject and message are required')
+      }
+
+      // Bulk mode: send to all users with a specific role in the school
+      if (body.bulk && body.role) {
+        const recipients = await db.user.findMany({
+          where: { schoolId, role: body.role, status: 'ACTIVE', id: { not: user.id } },
+          select: { id: true },
+        })
+
+        if (recipients.length === 0) {
+          throw new Error(`No ${body.role.toLowerCase()}s found to message`)
+        }
+
+        await db.message.createMany({
+          data: recipients.map((r) => ({
+            schoolId,
+            senderId: user.id,
+            recipientId: r.id,
+            subject,
+            body: messageBody,
+          })),
+        })
+
+        return { bulk: true, sentCount: recipients.length, role: body.role }
+      }
+
+      // Single recipient mode
+      const recipientId = String(body.recipientId || '').trim()
+      if (!recipientId) {
+        throw new Error('Recipient is required (or use bulk mode with role)')
+      }
+
+      // Verify recipient is in the same school
+      const recipient = await db.user.findFirst({
+        where: { id: recipientId, schoolId },
+        select: { id: true, name: true },
+      })
+      if (!recipient) throw new Error('Recipient not found in your school')
+
+      const msg = await db.message.create({
+        data: {
+          schoolId,
+          senderId: user.id,
+          recipientId,
+          subject,
+          body: messageBody,
+        },
+        include: {
+          sender: { select: { id: true, name: true, role: true } },
+          recipient: { select: { id: true, name: true, role: true } },
+        },
+      })
+      return msg
+    },
+    { roles: ['PRINCIPAL', 'MANAGEMENT', 'TEACHER'] }
+  )
+}
+
+// PATCH mark as read
+export async function PATCH(req: NextRequest) {
+  return withUser(async (user) => {
+    const body = await req.json().catch(() => ({}))
+    const id = String(body.id || '')
+    if (!id) throw new Error('Message id required')
+
+    const msg = await db.message.findUnique({ where: { id } })
+    if (!msg || msg.recipientId !== user.id) throw new Error('NOT_FOUND')
+
+    const updated = await db.message.update({
+      where: { id },
+      data: { read: true },
+    })
+    return { id: updated.id, read: updated.read }
+  })
+}
