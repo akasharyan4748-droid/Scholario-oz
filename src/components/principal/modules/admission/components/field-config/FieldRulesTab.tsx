@@ -1,49 +1,16 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ChevronRight } from 'lucide-react'
 import {
-  Collapsible, CollapsibleTrigger, CollapsibleContent,
-} from '@/components/ui/collapsible'
+  SettingsCard, SettingsCardSection, ToggleRow,
+} from '@/components/principal/modules/shared/settings-primitives'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 import { FIELD_SECTIONS } from './types'
 
-function Section({
-  defaultOpen = false,
-  icon: Icon,
-  title,
-  children,
-}: {
-  defaultOpen?: boolean
-  icon: React.ElementType
-  title: string
-  children: React.ReactNode
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <button type="button" className="w-full flex items-center gap-3 py-4 text-left">
-          <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-          <p className="text-base font-medium text-foreground flex-1">{title}</p>
-          <ChevronRight className={cn('h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-90')} />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="pb-4 pl-7 pr-1">{children}</div>
-      </CollapsibleContent>
-    </Collapsible>
-  )
-}
-
 function FieldRow({
-  label,
-  visible,
-  required,
-  onToggleVisible,
-  onToggleRequired,
+  label, visible, required, onToggleVisible, onToggleRequired,
 }: {
   label: string
   visible: boolean
@@ -103,12 +70,12 @@ export function FieldRulesTab() {
   const extras = Object.keys(grouped).filter((k) => !knownIds.includes(k))
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card px-6 divide-y divide-border/40">
+    <SettingsCard>
       {FIELD_SECTIONS.map((meta, idx) => {
         const rules = grouped[meta.id] || []
         if (rules.length === 0) return null
         return (
-          <Section key={meta.id} defaultOpen={idx === 0} icon={meta.icon} title={meta.title}>
+          <SettingsCardSection key={meta.id} defaultOpen={idx === 0} icon={meta.icon} title={meta.title}>
             {rules.map((rule) => (
               <FieldRow
                 key={rule.fieldKey}
@@ -119,7 +86,7 @@ export function FieldRulesTab() {
                 onToggleRequired={() => handleToggleRequired(rule.fieldKey)}
               />
             ))}
-          </Section>
+          </SettingsCardSection>
         )
       })}
 
@@ -127,7 +94,7 @@ export function FieldRulesTab() {
         const rules = grouped[sectionId] || []
         if (rules.length === 0) return null
         return (
-          <Section key={sectionId} defaultOpen={false} icon={FIELD_SECTIONS[0].icon} title={sectionId}>
+          <SettingsCardSection key={sectionId} defaultOpen={false} icon={FIELD_SECTIONS[0].icon} title={sectionId}>
             {rules.map((rule) => (
               <FieldRow
                 key={rule.fieldKey}
@@ -138,9 +105,9 @@ export function FieldRulesTab() {
                 onToggleRequired={() => handleToggleRequired(rule.fieldKey)}
               />
             ))}
-          </Section>
+          </SettingsCardSection>
         )
       })}
-    </div>
+    </SettingsCard>
   )
 }

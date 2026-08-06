@@ -1,8 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import {
   GraduationCap, Users, UserPlus, FileCheck, FileSpreadsheet,
-  ChevronLeft,
+  ChevronLeft, SlidersHorizontal,
 } from 'lucide-react'
 import { GlassCard, SectionHeading, PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,7 @@ import { AppointmentLettersTab } from './appointment-letters-tab'
 import { AppointmentLetterDocument } from './appointment-letter-document'
 import { AddTeacherWizard } from './add-teacher-wizard'
 import { TeacherProfileDrawer } from './profile-drawer'
+import { TeacherSettingsPage } from './teacher-settings-page'
 import {
   LockAccountModal, CredentialsSlipModal,
   PayrollRevisionModal, TerminationModal,
@@ -39,6 +41,16 @@ const TABS = [
 export function TeachersModule() {
   const s = useTeachersState()
   const actions = useTeachersActions(s)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+
+  // Settings full-page sub-route — takes over the entire module area
+  if (isSettingsOpen) {
+    return (
+      <PageTransition>
+        <TeacherSettingsPage onBack={() => setIsSettingsOpen(false)} />
+      </PageTransition>
+    )
+  }
 
   return (
     <PageTransition className="space-y-6">
@@ -48,6 +60,15 @@ export function TeachersModule() {
         icon={<GraduationCap className="h-5 w-5" />}
         action={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsSettingsOpen(true)}
+              className="text-xs gap-1.5"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Settings
+            </Button>
             <Button
               onClick={() => s.setActiveTab('add')}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-md shadow-emerald-500/20"

@@ -1,186 +1,174 @@
 'use client'
 
-import { useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
 import {
-  Collapsible, CollapsibleTrigger, CollapsibleContent,
-} from '@/components/ui/collapsible'
-import { Switch } from '@/components/ui/switch'
+  SettingsCard, SettingsCardSection, ToggleRow, ValueRow, ActionBar,
+} from '@/components/principal/modules/shared/settings-primitives'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
-import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 import {
-  GENERAL_SECTIONS,
-  FLAG_LABELS,
-  type GeneralSectionId,
-  type FlagKey,
-} from './types'
+  Lock, SlidersHorizontal, Stethoscope, Bus, Award, FileStack,
+} from 'lucide-react'
+import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 
-/* ------------------------------------------------------------------ */
-/*  Section wrapper — collapsible with rotating chevron                */
-/* ------------------------------------------------------------------ */
-
-function Section({
-  id,
-  defaultOpen = false,
-  icon: Icon,
-  title,
-  children,
-}: {
-  id: string
-  defaultOpen?: boolean
-  icon: React.ElementType
-  title: string
-  children: React.ReactNode
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} id={id}>
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="w-full flex items-center gap-3 py-4 text-left group"
-        >
-          <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-          <p className="text-base font-medium text-foreground flex-1">{title}</p>
-          <ChevronRight
-            className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform shrink-0',
-              open && 'rotate-90'
-            )}
-          />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="pb-4 pl-7 pr-1">{children}</div>
-      </CollapsibleContent>
-    </Collapsible>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  Setting row — just name + control, no description                  */
-/* ------------------------------------------------------------------ */
-
-function SettingRow({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-3 border-t border-border/40 first:border-t-0">
-      <p className="text-sm text-foreground">{label}</p>
-      <div className="shrink-0">{children}</div>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  Main GeneralTab                                                    */
-/* ------------------------------------------------------------------ */
-
+/**
+ * GeneralTab — the broadest settings for the Admissions module.
+ *
+ * Toggle-style flags (Medical / Transport / Hostel / etc.) are applied
+ * immediately and toast-confirm — the user sees the effect at once.
+ *
+ * "Soft" settings that affect multiple downstream computations
+ * (Privacy, Duplicate Detection, Rejection Retention, Custom Fields) are
+ * queued in local state and committed via the sticky ActionBar's Save
+ * button. The bar appears only when there are unsaved changes.
+ */
 export function GeneralTab() {
   const store = useSchoolSettingsStore()
   const settings = store.admissionSettings
   const flags = settings.featureFlags
-  const retentionDays = settings.rejectionRetentionDays || 60
 
-  const handleToggleFlag = (key: FlagKey) => {
+  // ---- Local draft state for "soft" settings (Privacy, Dup, Retention, Custom Fields) ----
+  const initialDraft = useMemo(() => ({
+    showPersonalDataOnLetter: settings.showPersonalDataOnLetter,
+    dupEnabled: settings.duplicateDetection.enabled,
+    retentionDays: settings.rejectionRetentionDays || 60,
+    enableCustomFields: flags.enableCustomFields,
+  }), [settings.showPersonalDataOnLetter, settings.duplicateDetection.enabled,
+       settings.rejectionRetentionDays, flags.enableCustomFields])
+
+  const [draft, setDraft] = useState(initialDraft)
+  const [saving, setSaving] = useState(false)
+
+  // Re-sync when the store catches up from elsewhere.
+  useEffect(() => { setDraft(initialDraft) }, [initialDraft])
+
+  const dirty = (
+    draft.showPersonalDataOnLetter !== initialDraft.showPersonalDataOnLetter ||
+    draft.dupEnabled !== initialDraft.dupEnabled ||
+    draft.retentionDays !== initialDraft.retentionDays ||
+    draft.enableCustomFields !== initialDraft.enableCustomFields
+  )
+
+  const handleDiscard = () => {
+    setDraft(initialDraft)
+    toast.info('Changes discarded')
+  }
+
+  const handleSave = () => {
+    setSaving(true)
+    try {
+      store.updateAdmissionSettings({
+        showPersonalDataOnLetter: draft.showPersonalDataOnLetter,
+        rejectionRetentionDays: draft.retentionDays,
+      })
+      store.updateDuplicateDetection({ enabled: draft.dupEnabled })
+      store.updateAdmissionFeatureFlags({ enableCustomFields: draft.enableCustomFields } as any)
+      toast.success('Settings saved')
+    } catch (e) {
+      toast.error('Failed to save settings')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ---- Immediate-effect toggles (medical, transport, hostel, financial, docs) ----
+  const toggleImmediate = (key: keyof typeof flags) => {
     store.updateAdmissionFeatureFlags({ [key]: !flags[key] } as any)
     toast.success(`${FLAG_LABELS[key]} ${flags[key] ? 'disabled' : 'enabled'}`)
   }
 
-  const handleRetentionDaysChange = (days: number) => {
-    const validDays = Math.max(30, Math.min(90, days))
-    store.updateAdmissionSettings({ rejectionRetentionDays: validDays })
-  }
-
-  const handlePrivacyToggle = (next: boolean) => {
-    // ON = protection enabled → hide personal data on the admission letter.
-    // OFF = show personal data on the letter (less protection).
-    store.updateAdmissionSettings({ showPersonalDataOnLetter: !next })
-    toast.success(`Sensitive data protection ${next ? 'enabled' : 'disabled'}`)
-  }
-
-  const handleDuplicateToggle = (next: boolean) => {
-    store.updateDuplicateDetection({ enabled: next })
-    toast.success(`Duplicate detection ${next ? 'enabled' : 'disabled'}`)
-  }
-
-  // Render the custom content for Privacy + Duplicate Detection sections.
-  const renderCustom = (id: GeneralSectionId) => {
-    if (id === 'privacy') {
-      // Protection is ON when personal data is NOT shown on the letter.
-      const protected_ = !settings.showPersonalDataOnLetter
-      return (
-        <SettingRow label="Sensitive Data Protection">
-          <Switch checked={protected_} onCheckedChange={handlePrivacyToggle} />
-        </SettingRow>
-      )
-    }
-    if (id === 'duplicate') {
-      return (
-        <SettingRow label="Enable Duplicate Detection">
-          <Switch
-            checked={settings.duplicateDetection.enabled}
-            onCheckedChange={handleDuplicateToggle}
+  return (
+    <>
+      <SettingsCard>
+        {/* Privacy — soft setting (queued for Save) */}
+        <SettingsCardSection title="Privacy" icon={Lock} defaultOpen>
+          <ToggleRow
+            label="Sensitive Data Protection"
+            checked={!draft.showPersonalDataOnLetter}
+            onCheckedChange={(v) => setDraft({ ...draft, showPersonalDataOnLetter: !v })}
           />
-        </SettingRow>
-      )
-    }
-    return null
-  }
+        </SettingsCardSection>
 
-  // Render a section + its toggle rows. Privacy + duplicate use custom content;
-  // the rest render one SettingRow per toggle.
-  const renderSection = (meta: (typeof GENERAL_SECTIONS)[number], idx: number) => {
-    const isCustom = meta.keys && meta.keys.length === 0
-    const defaultOpen = idx === 0 // first section open by default
-    const Icon = meta.icon
-    return (
-      <Section
-        key={meta.id}
-        id={`section-${meta.id}`}
-        defaultOpen={defaultOpen}
-        icon={Icon}
-        title={meta.title}
-      >
-        {isCustom ? (
-          renderCustom(meta.id)
-        ) : (
-          meta.keys!.map((k) => (
-            <SettingRow key={k} label={FLAG_LABELS[k]}>
-              <Switch checked={flags[k]} onCheckedChange={() => handleToggleFlag(k)} />
-            </SettingRow>
-          ))
-        )}
+        {/* Duplicate Detection — soft setting (queued for Save) */}
+        <SettingsCardSection title="Duplicate Detection" icon={SlidersHorizontal} defaultOpen>
+          <ToggleRow
+            label="Enable Duplicate Detection"
+            checked={draft.dupEnabled}
+            onCheckedChange={(v) => setDraft({ ...draft, dupEnabled: v })}
+          />
+        </SettingsCardSection>
 
-        {/* Advanced: extra inputs after the toggles */}
-        {meta.id === 'advanced' && (
-          <SettingRow label="Rejection Retention">
+        {/* Medical — immediate */}
+        <SettingsCardSection title="Medical" icon={Stethoscope}>
+          <ToggleRow
+            label="Medical Section"
+            checked={flags.enableMedical}
+            onCheckedChange={() => toggleImmediate('enableMedical')}
+          />
+        </SettingsCardSection>
+
+        {/* Transport & Hostel — immediate */}
+        <SettingsCardSection title="Transport & Hostel" icon={Bus}>
+          <ToggleRow label="Transport Facility" checked={flags.enableTransport}
+            onCheckedChange={() => toggleImmediate('enableTransport')} />
+          <ToggleRow label="Hostel Facility" checked={flags.enableHostel}
+            onCheckedChange={() => toggleImmediate('enableHostel')} />
+        </SettingsCardSection>
+
+        {/* Financial — immediate */}
+        <SettingsCardSection title="Financial" icon={Award}>
+          <ToggleRow label="Scholarship" checked={flags.enableScholarship}
+            onCheckedChange={() => toggleImmediate('enableScholarship')} />
+          <ToggleRow label="Fee Waiver" checked={flags.enableFeeWaiver}
+            onCheckedChange={() => toggleImmediate('enableFeeWaiver')} />
+        </SettingsCardSection>
+
+        {/* Documents — immediate */}
+        <SettingsCardSection title="Documents" icon={FileStack}>
+          <ToggleRow label="Student Photo" checked={flags.enableStudentPhoto}
+            onCheckedChange={() => toggleImmediate('enableStudentPhoto')} />
+          <ToggleRow label="Parent Photo" checked={flags.enableParentPhoto}
+            onCheckedChange={() => toggleImmediate('enableParentPhoto')} />
+          <ToggleRow label="Signature Upload" checked={flags.enableSignature}
+            onCheckedChange={() => toggleImmediate('enableSignature')} />
+        </SettingsCardSection>
+
+        {/* Advanced — Custom Fields is soft (queued), Retention is soft (queued) */}
+        <SettingsCardSection title="Advanced" icon={SlidersHorizontal}>
+          <ToggleRow label="Custom Fields" checked={draft.enableCustomFields}
+            onCheckedChange={(v) => setDraft({ ...draft, enableCustomFields: v })} />
+          <ValueRow label="Rejection Retention">
             <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={30}
-                max={90}
-                value={retentionDays}
-                onChange={(e) => handleRetentionDaysChange(parseInt(e.target.value) || 60)}
-                className="w-16 h-7 text-center text-xs"
-              />
+              <Input type="number" min={30} max={90} value={draft.retentionDays}
+                onChange={(e) => setDraft({
+                  ...draft,
+                  retentionDays: Math.max(30, Math.min(90, parseInt(e.target.value) || 60)),
+                })}
+                className="w-16 h-7 text-center text-xs" />
               <span className="text-xs text-muted-foreground">days</span>
             </div>
-          </SettingRow>
-        )}
-      </Section>
-    )
-  }
+          </ValueRow>
+        </SettingsCardSection>
+      </SettingsCard>
 
-  return (
-    <div className="rounded-xl border border-border/60 bg-card px-6 divide-y divide-border/40">
-      {GENERAL_SECTIONS.map((meta, idx) => renderSection(meta, idx))}
-    </div>
+      <ActionBar
+        dirty={dirty}
+        saving={saving}
+        onDiscard={handleDiscard}
+        onSave={handleSave}
+      />
+    </>
   )
+}
+
+const FLAG_LABELS: Record<string, string> = {
+  enableMedical: 'Medical Section',
+  enableHostel: 'Hostel Facility',
+  enableTransport: 'Transport Facility',
+  enableScholarship: 'Scholarship',
+  enableFeeWaiver: 'Fee Waiver',
+  enableStudentPhoto: 'Student Photo',
+  enableParentPhoto: 'Parent Photo',
+  enableSignature: 'Signature Upload',
+  enableCustomFields: 'Custom Fields',
 }
