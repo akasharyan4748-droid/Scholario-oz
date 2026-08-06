@@ -19,8 +19,9 @@ model School {
   city         String?
   phone        String?
   email        String?
-  themeColor   String?
-  accentColor  String?
+  themeColor   String    @default("#0f766e")
+  accentColor  String    @default("#f59e0b")
+  logoUrl      String?
   plan         String    @default("STANDARD")
   status       String    @default("ACTIVE")
   academicYear String?
@@ -46,6 +47,8 @@ model School {
   questionBanks QuestionBank[]
   examPapers    ExamPaper[]
   activityLogs  ActivityLog[]
+  messages      Message[]
+  events        SchoolEvent[]
 }
 
 model User {
@@ -58,15 +61,22 @@ model User {
   role         String   @default("STUDENT")
   phone        String?
   avatar       String?
+  avatarUrl    String?
   status       String   @default("ACTIVE")
   lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  teacher  Teacher?
-  student  Student?
-  driver   Driver?
-  sessions Session[]
+  teacher            Teacher?
+  student            Student?
+  driver             Driver?
+  sessions           Session[]
+  activityLogs       ActivityLog[]
+  sentNotifications  Notification[]
+  createdAssignments Assignment[]
+  sentMessages       Message[] @relation("MessageSender")
+  receivedMessages  Message[] @relation("MessageRecipient")
+  createdEvents     SchoolEvent[]
 }
 
 model Teacher {
@@ -100,6 +110,7 @@ model Student {
   bloodGroup    String?
   address       String?
   routeId       String?
+  route         Route?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
 
   results    Result[]
@@ -116,7 +127,7 @@ model Class {
   gradeLevel     String?
   section        String?
   capacity       Int?      @default(40)
-  room           String?
+  room            String?
   classTeacherId String?
   createdAt      DateTime  @default(now())
 
@@ -200,14 +211,21 @@ model QuestionBank {
 }
 
 model ExamPaper {
-  id        String   @id @default(cuid())
-  schoolId  String
-  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  examId    String?
-  exam      Exam?    @relation(fields: [examId], references: [id])
-  title     String
-  content   String?
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  schoolId     String
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  examId       String?
+  exam         Exam?    @relation(fields: [examId], references: [id])
+  title        String
+  content      String?
+  subjectName  String?
+  className    String?
+  duration     Int      @default(180)
+  totalMarks   Int      @default(100)
+  instructions String?
+  questions    String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
 }
 
 model Fee {
@@ -237,6 +255,7 @@ model Payment {
   method        String?
   status        String   @default("SUCCESS")
   transactionId String?
+  note          String?
   createdAt     DateTime @default(now())
 }
 
@@ -252,6 +271,8 @@ model Attendance {
   status    String
   markedBy  String?
   createdAt DateTime @default(now())
+
+  @@unique([studentId, date], name: "studentId_date")
 }
 
 model Timetable {
@@ -283,6 +304,7 @@ model Assignment {
   description String?
   dueDate     DateTime?
   createdBy   String?
+  creator     User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
 }
 
@@ -295,6 +317,7 @@ model Notification {
   audience  String   @default("ALL")
   priority  String   @default("NORMAL")
   senderId  String?
+  sender    User?    @relation(fields: [senderId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
 }
 
@@ -306,11 +329,13 @@ model LibraryBook {
   author    String?
   category  String?
   publisher String?
+  isbn      String?
+  shelf     String?
   copies    Int      @default(1)
   available Int      @default(1)
   createdAt DateTime @default(now())
 
-  bookIssues BookIssue[]
+  issues BookIssue[]
 }
 
 model BookIssue {
@@ -320,6 +345,7 @@ model BookIssue {
   studentId  String?
   student    Student?    @relation(fields: [studentId], references: [id])
   issuedDate DateTime    @default(now())
+  dueDate    DateTime?
   returnDate DateTime?
   status     String      @default("ISSUED")
 }
@@ -349,6 +375,7 @@ model Route {
   createdAt DateTime @default(now())
 
   vehicles Vehicle[]
+  students Student[]
 }
 
 model Vehicle {
@@ -370,6 +397,7 @@ model ActivityLog {
   schoolId  String?
   school    School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   action    String
   detail    String?
   createdAt DateTime @default(now())
@@ -388,4 +416,34 @@ model PlatformSetting {
   id             String   @id @default("global")
   showDemoSchool Boolean  @default(true)
   updatedAt      DateTime @updatedAt
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  senderId    String?
+  sender      User?    @relation("MessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+  recipientId String?
+  recipient   User?    @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
+  subject     String
+  body        String
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model SchoolEvent {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  type        String   @default("EVENT")
+  startDate   DateTime
+  endDate     DateTime?
+  location    String?
+  audience    String   @default("ALL")
+  createdBy   String?
+  creator     User?    @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
 }

@@ -26,6 +26,8 @@ async function main() {
   await db.class.deleteMany()
   await db.activityLog.deleteMany()
   await db.session.deleteMany()
+  await db.message.deleteMany()
+  await db.schoolEvent.deleteMany()
   await db.user.deleteMany()
   await db.school.deleteMany()
   await db.platformSetting.deleteMany()

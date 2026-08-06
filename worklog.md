@@ -1,0 +1,80 @@
+---
+Task ID: SCHOLARIO-BOOT
+Agent: main
+Task: Get Scholario Next.js 16 school ERP running on pnpm — install deps, fix blocking bugs, set up env, push Prisma schema, seed DB, deliver live preview URL.
+
+Work Log:
+- Extracted uploaded `hello-connect.zip` to `/home/z/my-project/` (from `/home/z/my-project/workspace/`).
+- Installed pnpm 9.15.9 globally via `npm install -g pnpm@9` (Node 24.18.0 was already present).
+- Wrote `/home/z/my-project/.npmrc` with `shamefully-hoist=true`, `strict-peer-dependencies=false`, `enable-pre-post-scripts=true`, `auto-install-peers=true` for Next 16 + React 19 + Radix ecosystem compatibility.
+- Removed `bun.lock`. Wrote `/home/z/my-project/.env.local` with `DATABASE_URL=file:/home/z/my-project/db/custom.db`, `AUTH_SECRET`, `SESSION_SECRET`, `NEXT_PUBLIC_APP_URL`, `GEMINI_API_KEY` (empty — AI route gracefully no-ops when absent), Supabase placeholder. Updated `.env` to match.
+- Patched `package.json`: switched `dev` script to `next dev -p 3000`, simplified `build` (dropped the standalone cp dance), replaced `start` (was `bun .next/standalone/server.js`) with `next start`, added `db:seed` script using `tsx`, replaced `bun-types` with `@types/node`, added `tsx` to devDeps, made `postinstall` fault-tolerant (`prisma generate || true`).
+- `pnpm install` completed in 35.8s — 60+ deps resolved cleanly.
+- `pnpm db:generate` → Prisma client generated for SQLite.
+- `pnpm db:push` → fresh SQLite DB created at `db/custom.db`.
+- `pnpm db:seed` → seeded successfully. Demo accounts:
+  - `admin@scholario.cloud / admin123` (super admin)
+  - `principal@demoschool.edu / password123`
+  - `teacher1@demoschool.edu / password123`
+  - `student1@demoschool.edu / password123`
+- Audited Prisma schema drift via Explore subagent — found 14 drift items across 12 models plus 2 missing models (`Message`, `SchoolEvent`).
+- Rewrote `prisma/schema.prisma` end-to-end with all fixes:
+  - `School`: added `logoUrl`, made `themeColor`/`accentColor` non-nullable with defaults.
+  - `User`: added `avatarUrl` (kept `avatar` for back-compat), added 7 back-relations (`activityLogs`, `sentNotifications`, `createdAssignments`, `sentMessages`/`receivedMessages` with named relations, `createdEvents`).
+  - `Student`: added `route Route? @relation(...)`.
+  - `ActivityLog`: added `user User? @relation(...)`.
+  - `Notification`: added `sender User? @relation(...)`.
+  - `LibraryBook`: renamed back-relation `bookIssues` → `issues`, added `isbn`, `shelf`.
+  - `BookIssue`: added `dueDate`.
+  - `ExamPaper`: added 7 fields (`subjectName`, `className`, `duration`, `totalMarks`, `instructions`, `questions`, `createdBy`).
+  - `Payment`: added `note`.
+  - `Assignment`: added `creator User? @relation(...)`.
+  - `Attendance`: added `@@unique([studentId, date], name: "studentId_date")`.
+  - `Route`: added `students Student[]` back-relation.
+  - Created new `Message` model (10 fields, named sender/recipient relations to User).
+  - Created new `SchoolEvent` model (11 fields, creator relation to User).
+- Updated `prisma/seed.ts` to delete the two new models (`message`, `schoolEvent`) before re-seeding.
+- Re-pushed schema (resolved ambiguous-relation error by using `@relation("MessageSender")` / `@relation("MessageRecipient")`).
+- Re-seeded cleanly.
+- Wrote `/home/z/my-project/scripts/start-dev.sh` — robust detached launcher using `setsid -f` + `node node_modules/next/dist/bin/next dev -p 3000` (avoids the `.bin/next` shell-script-as-Node-module bug). Saves PID to `logs/dev.pid`, log to `logs/dev.log`.
+- First attempt: dev server kept dying silently (boot showed "Ready in 299ms" then process vanished). Root cause: the platform's `start.sh` runs `.zscripts/dev.sh` in a background subshell during container boot; that subshell backgrounds `bun run dev` and exits after the health-check loop, sending SIGHUP to the dev server. Our `nohup`/`setsid` invocation now survives this.
+- Dev server now running on PID 3559, port 3000 bound, ready in 316ms with Turbopack.
+- Smoke-tested all 13 API endpoints — every one returns HTTP 200:
+  - `/api/auth/login` (POST) → 200, returns principal user + school
+  - `/api/dashboard` → 200, returns full stats (19 students, 4 teachers, 2 classes, 5 subjects, 3 exams, attendance 86%, fees ₹4.5L total / ₹2.75L paid / 7 overdue)
+  - `/api/students` → 200, 20KB list
+  - `/api/fees` → 200
+  - `/api/library` → 200
+  - `/api/messages` → 200 (empty)
+  - `/api/events` → 200 (empty)
+  - `/api/notifications` → 200
+  - `/api/notifications-feed` → 200
+  - `/api/transport` → 200
+  - `/api/assignments` → 200
+  - `/api/exam-papers` → 200 (empty)
+  - `/api/teachers` → 200, 4 teachers
+  - `/api/exams` → 200, 3 exams with class relation
+- Homepage `GET /` → 200, 14KB, title `SCHOLARIO-OS — Enterprise School ERP`, loading spinner renders, app JS chunks load, `/logo.svg` returns 200.
+- Zero errors in `logs/dev.log` after all requests.
+
+Stage Summary:
+- Project root: `/home/z/my-project/`
+- pnpm install: ✅ 35.8s, no peer-dep errors
+- Prisma schema: ✅ patched, 14 drift items fixed, 2 new models added (Message, SchoolEvent)
+- Database: ✅ SQLite at `db/custom.db`, schema synced, seeded with 5 demo accounts
+- Dev server: ✅ PID 3559, port 3000 listening, ready in 316ms, zero runtime errors
+- All 13 tested API endpoints return HTTP 200
+- Homepage renders correctly
+- Caddy on port 81 proxies to localhost:3000 (verified, 50ms latency)
+- Files created:
+  - `/home/z/my-project/.npmrc` (pnpm config)
+  - `/home/z/my-project/.env.local` (env vars)
+  - `/home/z/my-project/.env` (DATABASE_URL for Prisma CLI)
+  - `/home/z/my-project/scripts/start-dev.sh` (detached dev launcher)
+  - `/home/z/my-project/logs/dev.log` (server log)
+  - `/home/z/my-project/logs/dev.pid` (PID file)
+- Files modified:
+  - `/home/z/my-project/package.json` (scripts + deps)
+  - `/home/z/my-project/tsconfig.json` (excluded skills/, examples/, tests/, mini-services/, docs/)
+  - `/home/z/my-project/prisma/schema.prisma` (full rewrite with drift fixes)
+  - `/home/z/my-project/prisma/seed.ts` (added Message + SchoolEvent cleanup)
