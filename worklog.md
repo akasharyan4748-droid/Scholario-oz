@@ -124,3 +124,54 @@ Stage Summary:
   - Temp extraction dirs and test artifacts in /tmp
 - Visual verification: 6 section screenshots + 1 full-page screenshot saved to `/home/z/my-project/download/screenshots/` for reference
 - Live preview: https://preview-c4006a58-a821-42f4-aceb-64115efcdf6d.space-z.ai/
+
+---
+Task ID: LOGIN-REFINE
+Agent: main
+Task: Refine the login screen using the uploaded "Spacer" HTML design as reference — adapt to Scholario emerald/teal theme, use real school logo + name, keep one-tap demo logins, only Sign In + Forgot Password (no Sign Up, no terms checkbox), delete older login files.
+
+Work Log:
+- Read uploaded Spacer HTML: split-pane layout with animated blue gradient left pane (welcome text, white circular logo container, brand name, description, cloud SVG divider on right edge) + right pane with "Student & Staff Login" heading, underline-style inputs with checkmark icons, terms checkbox, "Sign In" + "Request Access" buttons.
+- Inspected current Scholario login implementation: 7 files in `src/components/login/login-page/` (index.tsx orchestrator, branding-panel.tsx, login-form.tsx, loading-phase.tsx, background.tsx, particles.tsx, data.tsx). Existing demo credentials in `data.tsx` already match the seeded DB:
+  - Principal: `principal@greenwood.edu.in` / `principal123`
+  - Teacher: `rohan.mehta@greenwood.edu.in` / `teacher123`
+  - Student: `aarav.sharma@greenwood.edu.in` / `student123`
+  - Super Admin: `admin@scholario.cloud` / `admin123`
+- Confirmed `/logo.svg` (dark square logo with breathing "Z" mark) is in `/public/` and accessible at `GET /logo.svg`.
+- Rewrote `src/components/login/login-page/index.tsx` end-to-end (~530 lines, single self-contained file):
+  - **Left pane (45%)**: animated emerald→teal gradient background (`linear-gradient(180deg, #064e3b 0%, #0d9488 50%, #065f46 100%)` with `bgShift` keyframe animation), floating ambient orbs, "Welcome to" header, white rounded container holding the real `/logo.svg` school logo, school name "Demo School" with "OF SCHOLARIO" subtext, tagline description, footer with "← Back to Website" + "CBSE · Estd. 2020", and the cloud SVG divider preserved on the right edge (3 layered paths with decreasing opacity).
+  - **Right pane (55%)**: clean white panel, mobile-only logo header, "Student & Staff Login" heading + subtitle, one-tap demo access chips for all 4 roles (Principal/Teacher/Student/Super Admin with their colored gradient icons preserved), underline-style inputs (no border box — just bottom border with emerald gradient underline that animates width on focus), green checkmark icons on the right, Forgot Password link (replaces Request Access), full-width emerald-gradient Sign In button with rounded-full pill shape. No Sign Up button, no terms checkbox.
+  - **Forgot Password modal**: backdrop with `bg-black/40 backdrop-blur-sm`, white rounded-3xl card, "Forgot your password?" heading, description, email input, Cancel + Send reset link buttons, success state with green checkmark + "Check your inbox" message.
+  - Used `<style jsx>` for the custom input underline animation (preserved the original Spacer CSS `.custom-input-wrapper::after` technique with the emerald→teal gradient instead of blue).
+  - Wired up the existing `startAuth` / `login` auth-store hooks and the real `/api/auth/login` POST call (same as before — auth flows are unchanged).
+- Deleted 4 old sub-component files (no longer needed since everything is inline):
+  - `src/components/login/login-page/background.tsx`
+  - `src/components/login/login-page/particles.tsx`
+  - `src/components/login/login-page/branding-panel.tsx`
+  - `src/components/login/login-page/login-form.tsx`
+- Kept `loading-phase.tsx` (still imported by index.tsx for the post-login loading animation) and `data.tsx` (still imports the demo credential cards).
+- Verified with VLM:
+  - Login page screenshot: VLM confirmed "split-pane layout", "emerald-to-teal gradient", "white circular container holding a dark square logo", "Demo School" name, "OF SCHOLARIO" subtext, "← Back to Website" link, cloud SVG divider "clearly visible on the right edge", "Student & Staff Login" heading, "QUICK DEMO ACCESS — ONE TAP TO SIGN IN" with 4 role chips, "underline style (no border box)" inputs with "green checkmark icon", "Forgot password?" link, "Sign In →" button with "emerald gradient, fully rounded". Verdict: "no obvious broken images, missing content, or rendering bugs".
+  - Forgot password modal: VLM confirmed "modal centered on screen with dark backdrop", "Forgot your password?" heading, description, email input with placeholder, Cancel + Send reset link buttons, "no significant visual issues are apparent".
+- End-to-end tested all 4 one-tap demo logins via headless browser (agent-browser):
+  - **Principal**: tap chip → form auto-fills `principal@greenwood.edu.in` / `principal123` → tap Sign In → loading phase → lands on Principal dashboard (`h1: "Dashboard"`, 5379 chars body).
+  - **Teacher**: tap chip → form auto-fills `rohan.mehta@greenwood.edu.in` / `teacher123` → tap Sign In → lands on Teacher dashboard (`h1: "Dashboard"`, 5206 chars body).
+  - **Student**: tap chip → form auto-fills `aarav.sharma@greenwood.edu.in` / `student123` → tap Sign In → lands on Student dashboard (`h1: "Dashboard"`, 4040 chars body).
+  - **Super Admin**: tap chip → form auto-fills `admin@scholario.cloud` / `admin123` → tap Sign In → lands on Platform Overview (`h1: "Platform Overview"`, 963 chars body).
+- Forgot password modal tested: open → fill email → submit → success state with "Check your inbox" + green checkmark appears.
+- Dev server confirmed healthy on PID 3559, port 3000, GET / returns 200 in ~30ms, zero runtime errors in dev log after compile.
+
+Stage Summary:
+- Files modified:
+  - `/home/z/my-project/src/components/login/login-page/index.tsx` — full rewrite (~530 lines, single self-contained file with all login UI inline)
+- Files deleted:
+  - `src/components/login/login-page/background.tsx`
+  - `src/components/login/login-page/particles.tsx`
+  - `src/components/login/login-page/branding-panel.tsx`
+  - `src/components/login/login-page/login-form.tsx`
+- Files kept (unchanged):
+  - `src/components/login/login-page/data.tsx` (4 demo credentials)
+  - `src/components/login/login-page/loading-phase.tsx` (post-login loading animation)
+- File count in `login-page/`: 3 files (down from 7).
+- All 4 one-tap demo logins verified working end-to-end.
+- Screenshot saved: `/home/z/my-project/download/screenshots/login.png`.
