@@ -175,3 +175,97 @@ Stage Summary:
 - File count in `login-page/`: 3 files (down from 7).
 - All 4 one-tap demo logins verified working end-to-end.
 - Screenshot saved: `/home/z/my-project/download/screenshots/login.png`.
+
+---
+Task ID: ADMISSION-SETTINGS-REDESIGN
+Agent: main
+Task: Redesign the Admission Settings modal to be enterprise-grade and minimal — collapsible sections, row-based settings, 4 tabs (General / Seats / Duplicate Detection / Fields), Apple-level simplicity. UI/IA only — preserve 100% of functionality.
+
+Work Log:
+- Audited current Admission Settings implementation:
+  - `FieldConfigModal.tsx` — parent modal with 4 tabs (Features, Seats, Duplicates, Fields)
+  - `FeatureFlagsTab.tsx` — 17 toggles in 7 sections + 3 special cards (Privacy notice, Rejection Retention, Skip Classes) — heavily card-based with icons per setting
+  - `SeatCapacityTab.tsx` — 15-row table with capacity/enrolled/available columns
+  - `DuplicateDetectionTab.tsx` — 1 toggle + 2 threshold cards + 6 match-key cards
+  - `FieldRulesTab.tsx` — 12 field rules in a single table
+  - Backed by `school-settings-store` Zustand store with slices for `updateAdmissionSettings`, `updateAdmissionFeatureFlags`, `updateSeatCapacity`, `updateDuplicateDetection`
+  - Initial state in `initial-state.ts` seeded with: 17 feature flags (3 ON, rest mixed), 15 seat capacities, 6 duplicate match keys (all ON), 12 field rules, plus `rejectionRetentionDays: 60`, `previousSchoolSkipClasses: ['Nursery', 'LKG', 'UKG', 'Class 1']`
+- Public API preserved: `<FieldConfigModal open={...} onClose={...} />` — same props as before, no consumer changes needed in `admission.tsx`.
+- **Rewrote `types.ts`** — kept original `FEATURE_TOGGLES` array intact for backward compat, added new section metadata:
+  - `GENERAL_SECTIONS`: 7 sections (workflow, medical, transportHostel, financial, documents, personalFields, advanced), each with icon, hint, and which toggle keys belong to it
+  - `FIELD_SECTIONS`: 5 sections (Personal, Parents, Previous School, Medical, Transport & Hostel) for grouping field rules
+  - `DUPLICATE_MATCH_KEY_LABELS`: human labels for the 6 match keys
+  - `PRIVACY_SAFEGUARD_FIELDS`: list of always-excluded fields shown as info chips
+- **Rewrote `FieldConfigModal.tsx`** — new minimal container:
+  - Tighter `max-w-3xl` (down from `max-w-4xl`), `max-h-[85vh]`
+  - Minimal header: just title + one-line subtitle, no large description
+  - 4 tab triggers using border-b underline style (Linear/Notion aesthetic) instead of pill buttons
+  - Tab content area uses px-6 py-4 padding for compact density
+  - Footer is single right-aligned "Done" button (matches existing auto-save behavior — no Save button needed since Zustand updates immediately)
+- **Created new `GeneralTab.tsx`** (replaces old `FeatureFlagsTab.tsx`) — uses Radix Collapsible primitives:
+  - **Privacy** section (always expanded, info-only): shows chips for the 5 always-excluded fields (Religion, Category, Blood Group, Gender, Aadhaar) with "always excluded" tag — replaces the old verbose emerald banner
+  - **Workflow** section (default open): toggles for Entrance Exam, Interview Stage, Document Verification, Previous School
+  - **Medical** section: Medical Section, Blood Group
+  - **Transport & Hostel** section: Transport Facility, Hostel Facility
+  - **Financial** section: Scholarship, Fee Waiver
+  - **Documents** section: Student Photo, Parent Photo, Signature Upload
+  - **Personal Fields** section: Aadhaar, Religion, Social Category
+  - **Advanced** section (collapsed by default): Custom Fields toggle + Rejection Retention input + Skip Previous School Classes input with Save button
+  - Each setting is a row: name + helper on left, Switch on right (or input + Save for advanced configs). Border-bottom divider instead of card backgrounds.
+  - Section header: icon + title + hint on left, rotating chevron on right
+- **Rewrote `SeatCapacityTab.tsx`** — even more compact:
+  - Single rounded container with subtle border
+  - Header row: Class / Capacity / Enrolled / Available / Fill (5 cols)
+  - Each row: class name, two small number inputs (Capacity, Enrolled), colored available count (emerald/amber/rose based on fill), inline 10px-wide progress bar + percentage
+  - Single info note at bottom about 90% waitlist trigger
+  - Max-height scroll container preserves all 15 rows on smaller screens
+- **Rewrote `DuplicateDetectionTab.tsx`** — collapsible sections:
+  - **Detection** section (default open): "Enable Live Duplicate Detection" toggle
+  - **Match Keys** section (default open): 6 toggle rows for Aadhaar, Name+DOB, Parent Phone, Parent Names, Previous School, Address
+  - **Thresholds** section (collapsed by default): Block Threshold input (90-100%) + Warn Threshold input (50-95%)
+  - Same SettingRow pattern as GeneralTab for visual consistency
+- **Rewrote `FieldRulesTab.tsx`** — collapsible sections grouped by `rule.section`:
+  - 5 sections in declared order: Personal, Parents, Previous School, Medical, Hostel & Transport
+  - First section (Personal) expanded by default
+  - Each field row: label on left, then two toggle groups on right ("Visible" with switch, "Required" with switch that's disabled when not visible)
+  - Any unrecognized sections fall through to a generic Section component at the bottom
+- Deleted old `FeatureFlagsTab.tsx` (replaced by `GeneralTab.tsx`)
+- Verified with VLM across all 4 tabs:
+  - **General tab**: VLM confirmed "clean, centered modal", "4 tabs General/Seats/Duplicate Detection/Fields", "Privacy expanded showing chips for Religion/Category/Blood Group/Gender/Aadhaar", "Workflow expanded showing Entrance Exam/Interview/Document Verification/Previous School", "Medical/Transport/Financial collapsed", "clean and minimal, no large heavy cards", "green Done button bottom right", "no visual issues"
+  - **Seats tab**: VLM confirmed "compact table with Class/Capacity/Enrolled/Available/Fill columns", "input fields small and inline", "fill progress bar with percentage", "info note about 90% waitlist"
+  - **Duplicate Detection tab**: VLM confirmed "3 collapsible sections Detection/Match Keys/Thresholds", "Enable Live Duplicate Detection toggle active", "6 toggles for match keys (Aadhaar, Name+DOB, Parent Phone, Parent Names, Previous School, Address) all enabled", "clean row-based pattern with name on left, toggle on right", "polished and professional"
+  - **Fields tab**: VLM confirmed "5 collapsible sections Personal/Parents/Previous School/Medical/Hostel & Transport", "Personal expanded showing Student Aadhaar Number, Blood Group, Religion, Social Category", "each row: name on left, Visible toggle, Required toggle on right", "Social Category both ON, others Visible only ON"
+- End-to-end functionality test:
+  - Logged in as principal via one-tap chip
+  - Opened Admission Settings modal — all 4 tabs render correctly
+  - Toggled "Entrance Exam" switch from OFF to ON
+  - Verified state change reflected in DOM (`checked=true`)
+  - Verified Zustand persisted state in localStorage: `{"scholario_school_settings_v1":{"enableEntranceExam":true,"enableMedical":true}}` — change persisted correctly
+- Dev server confirmed healthy on PID 1306, GET / returns 200 in ~30ms, zero compile/runtime errors in dev log.
+
+Stage Summary:
+- Files modified (full rewrites):
+  - `src/components/principal/modules/admission/components/FieldConfigModal.tsx` — minimal container with 4 underline tabs
+  - `src/components/principal/modules/admission/components/field-config/types.ts` — added section metadata + kept original FEATURE_TOGGLES for backward compat
+  - `src/components/principal/modules/admission/components/field-config/SeatCapacityTab.tsx` — compact table with progress bars
+  - `src/components/principal/modules/admission/components/field-config/DuplicateDetectionTab.tsx` — collapsible sections
+  - `src/components/principal/modules/admission/components/field-config/FieldRulesTab.tsx` — collapsible sections by section
+- Files created:
+  - `src/components/principal/modules/admission/components/field-config/GeneralTab.tsx` — new minimal General tab with 8 collapsible sections
+- Files deleted:
+  - `src/components/principal/modules/admission/components/field-config/FeatureFlagsTab.tsx` (replaced by GeneralTab.tsx)
+- 100% feature parity confirmed:
+  - All 17 feature flag toggles preserved
+  - All 15 seat capacity rows preserved
+  - All 6 duplicate match keys preserved
+  - Both thresholds (Block/Warn) preserved with same validation ranges
+  - All 12 field rules preserved with visible/required toggles
+  - Rejection Retention input (30-90 days) preserved
+  - Skip Previous School Classes input preserved
+  - Privacy safeguard info preserved as chips
+  - All Zustand store actions (`updateAdmissionFeatureFlags`, `updateSeatCapacity`, `updateDuplicateDetection`, `updateAdmissionSettings`) called with same args
+- Screenshots saved:
+  - `/home/z/my-project/download/screenshots/admission-settings-general.png`
+  - `/home/z/my-project/download/screenshots/admission-settings-seats.png`
+  - `/home/z/my-project/download/screenshots/admission-settings-duplicates.png`
+  - `/home/z/my-project/download/screenshots/admission-settings-fields.png`
