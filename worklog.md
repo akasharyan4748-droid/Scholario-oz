@@ -269,3 +269,89 @@ Stage Summary:
   - `/home/z/my-project/download/screenshots/admission-settings-seats.png`
   - `/home/z/my-project/download/screenshots/admission-settings-duplicates.png`
   - `/home/z/my-project/download/screenshots/admission-settings-fields.png`
+
+---
+Task ID: ADMISSION-SETTINGS-FINAL-CLEANUP
+Agent: main
+Task: Convert Admission Settings from modal to full-page sub-route. Remove Workflow section, Skip Previous School, Duplicate Detection tab, Match Keys/Thresholds, and per-setting descriptions. Keep 3 tabs (General / Seats / Fields) with premium segmented pill tab style.
+
+Work Log:
+- Inspected current architecture: `FieldConfigModal.tsx` rendered as Radix Dialog, triggered from `admission.tsx` via `isFieldConfigOpen` state. The Settings button in `dashboard/DashboardHeader.tsx` called `onOpenSettingsModal` which flipped the boolean.
+- Created new full-page component `AdmissionSettingsPage.tsx`:
+  - Renders inside the Admissions module content area (not as an overlay/modal)
+  - Header: "Back" ghost button + "Admission Settings" h1 + subtle subtitle
+  - Centered `max-w-4xl` container for premium enterprise feel
+  - 3 tabs in segmented pill control: `bg-muted/60` rounded-full container with `p-1` padding, each tab trigger is `rounded-full` with active state using `bg-white shadow-sm` (NO green rectangle, NO harsh border)
+- Rewrote `GeneralTab.tsx` end-to-end:
+  - 7 collapsible sections in a single rounded card container
+  - **Privacy** section (default open): single "Sensitive Data Protection" toggle — maps to `showPersonalDataOnLetter` (inverted: ON = protection enabled = data hidden from letter)
+  - **Duplicate Detection** section: single "Enable Duplicate Detection" toggle — maps to `duplicateDetection.enabled` (match keys + thresholds removed from UI)
+  - **Medical** section: "Medical Section" toggle only (no description)
+  - **Transport & Hostel** section: "Transport Facility" + "Hostel Facility" toggles only
+  - **Financial** section: "Scholarship" + "Fee Waiver" toggles only
+  - **Documents** section: "Student Photo" + "Parent Photo" + "Signature Upload" toggles only
+  - **Advanced** section: "Custom Fields" toggle + "Rejection Retention" days input only
+  - Removed entirely: Workflow section (4 toggles), Skip Previous School input + Save button, all per-setting descriptions
+- Rewrote `FieldRulesTab.tsx`:
+  - 5 collapsible sections in single rounded card: Personal, Parents, Previous School, Medical, Hostel & Transport
+  - Each row: field name on left, Visible + Required toggles on right
+  - Removed per-row section label (now redundant since fields are grouped into collapsible sections)
+  - Removed all descriptions
+- Updated `SeatCapacityTab.tsx`:
+  - Wrapped in rounded card with `divide-y` borders
+  - Header padding increased for breathing room (px-5 py-2.5)
+  - Same compact 5-column table with progress bars (preserved exactly)
+- Cleaned up `types.ts`:
+  - Removed `GENERAL_SECTIONS` `hint` field (no descriptions shown in UI)
+  - Removed all section metadata that's no longer needed
+  - Added `FLAG_LABELS` map for clean toggle labels
+  - Kept `PRIVACY_SAFEGUARD_FIELDS` and `DUPLICATE_MATCH_KEY_LABELS` for backward compat (still used elsewhere)
+- Updated `admission.tsx`:
+  - Replaced `isFieldConfigOpen` state with `isSettingsOpen`
+  - Replaced `<FieldConfigModal>` import with `<AdmissionSettingsPage>`
+  - When `isSettingsOpen` is true, render `<AdmissionSettingsPage onBack={...} />` instead of the dashboard/workspaces
+  - All other views (verification, issuance, wizard) are gated by `!isSettingsOpen` so they don't render underneath
+- Deleted old files:
+  - `FieldConfigModal.tsx` (replaced by AdmissionSettingsPage.tsx)
+  - `field-config/DuplicateDetectionTab.tsx` (removed per spec)
+- Verified with VLM:
+  - **General tab**: VLM confirmed "full-page settings screen, not a modal", "Back button + Admission Settings title", "3 tabs in segmented pill style with active state using white background" (no green rectangle), "7 sections: Privacy, Duplicate Detection, Medical, Transport & Hostel, Financial, Documents, Advanced", "no large green borders or rectangles", "clean, minimal, enterprise-grade, modern SaaS aesthetic", "no visual bugs"
+  - **Fields tab**: VLM confirmed "5 collapsible sections: Personal/Parents/Previous School/Medical/Hostel & Transport", "Personal expanded showing Student Aadhaar Number/Blood Group/Religion/Social Category", "each row: name on left, Visible + Required toggles on right, NO descriptions", "well-structured configuration panel matching specifications exactly"
+- End-to-end functionality test:
+  - Logged in as principal via one-tap chip
+  - Navigated to Admissions module → clicked Settings button → full-page Admission Settings rendered (no dialog/modal/overlay)
+  - General tab: expanded Medical section, toggled Medical Section OFF
+  - Verified state change persisted to localStorage: `enableMedical: false` (was true), other settings untouched
+  - Tested Back button: returned to Admissions Dashboard correctly
+- Dev server confirmed healthy on PID 1306, GET / returns 200 in ~30ms, no compile errors.
+
+Stage Summary:
+- Files created:
+  - `src/components/principal/modules/admission/components/AdmissionSettingsPage.tsx` — full-page settings sub-route
+- Files rewritten:
+  - `src/components/principal/modules/admission/components/field-config/types.ts` — cleaned up, removed hint field, added FLAG_LABELS
+  - `src/components/principal/modules/admission/components/field-config/GeneralTab.tsx` — 7 collapsible sections, single Privacy toggle, single Duplicate Detection toggle
+  - `src/components/principal/modules/admission/components/field-config/FieldRulesTab.tsx` — grouped in card, no per-row descriptions
+  - `src/components/principal/modules/admission/components/field-config/SeatCapacityTab.tsx` — wrapped in card for consistency
+  - `src/components/principal/modules/admission.tsx` — replaced modal with full-page view via `isSettingsOpen` state
+- Files deleted:
+  - `src/components/principal/modules/admission/components/FieldConfigModal.tsx`
+  - `src/components/principal/modules/admission/components/field-config/DuplicateDetectionTab.tsx`
+- Removed per spec:
+  - Entire Workflow section (4 toggles: Entrance Exam, Interview, Document Verification, Previous School)
+  - "Skip Previous School for Fresh Admission" input + Save button
+  - Duplicate Detection tab (separate tab removed)
+  - All Match Keys toggles (6 fields)
+  - Block Threshold + Warn Threshold inputs
+  - All per-setting descriptions / helper text
+- Preserved (still working):
+  - All seat capacity inputs (15 classes)
+  - All 12 field rules with Visible + Required toggles
+  - Custom Fields toggle, Rejection Retention input
+  - Sensitive Data Protection toggle (Privacy)
+  - Enable Duplicate Detection toggle (single ON/OFF)
+  - All retained General tab toggles (Medical, Transport, Hostel, Scholarship, Fee Waiver, Student Photo, Parent Photo, Signature Upload)
+- Screenshots saved:
+  - `/home/z/my-project/download/screenshots/admission-settings-page-general.png`
+  - `/home/z/my-project/download/screenshots/admission-settings-page-seats.png`
+  - `/home/z/my-project/download/screenshots/admission-settings-page-fields.png`

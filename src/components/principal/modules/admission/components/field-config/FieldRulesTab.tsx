@@ -10,10 +10,6 @@ import { cn } from '@/lib/utils'
 import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 import { FIELD_SECTIONS } from './types'
 
-/* ------------------------------------------------------------------ */
-/*  Section wrapper (local to this tab so it can be styled standalone) */
-/* ------------------------------------------------------------------ */
-
 function Section({
   defaultOpen = false,
   icon: Icon,
@@ -27,24 +23,20 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border-b border-border/40 last:border-b-0">
+    <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
-        <button type="button" className="w-full flex items-center gap-3 py-3 text-left">
+        <button type="button" className="w-full flex items-center gap-3 py-4 text-left">
           <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-          <p className="text-sm font-medium text-foreground flex-1">{title}</p>
+          <p className="text-base font-medium text-foreground flex-1">{title}</p>
           <ChevronRight className={cn('h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-90')} />
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="pb-2 pl-7 pr-1">{children}</div>
+        <div className="pb-4 pl-7 pr-1">{children}</div>
       </CollapsibleContent>
     </Collapsible>
   )
 }
-
-/* ------------------------------------------------------------------ */
-/*  Field row — name on left, Visible + Required toggles on right      */
-/* ------------------------------------------------------------------ */
 
 function FieldRow({
   label,
@@ -60,7 +52,7 @@ function FieldRow({
   onToggleRequired: () => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2.5 border-t border-border/30 first:border-t-0">
+    <div className="flex items-center justify-between gap-4 py-3 border-t border-border/40 first:border-t-0">
       <p className="text-sm text-foreground flex-1 min-w-0 truncate">{label}</p>
       <div className="flex items-center gap-5 shrink-0">
         <label className="flex items-center gap-1.5 cursor-pointer">
@@ -80,10 +72,6 @@ function FieldRow({
   )
 }
 
-/* ------------------------------------------------------------------ */
-/*  Main FieldRulesTab                                                 */
-/* ------------------------------------------------------------------ */
-
 export function FieldRulesTab() {
   const store = useSchoolSettingsStore()
   const fieldRules = store.admissionSettings.fieldRules || []
@@ -102,7 +90,6 @@ export function FieldRulesTab() {
     store.updateAdmissionSettings({ fieldRules: updatedRules })
   }
 
-  // Group rules by section, in FIELD_SECTIONS order; any unmatched section goes last.
   const grouped = useMemo(() => {
     const map: Record<string, typeof fieldRules> = {}
     for (const rule of fieldRules) {
@@ -112,22 +99,16 @@ export function FieldRulesTab() {
     return map
   }, [fieldRules])
 
-  // Render known sections first (in declared order), then any extras.
   const knownIds = FIELD_SECTIONS.map((s) => s.id)
   const extras = Object.keys(grouped).filter((k) => !knownIds.includes(k))
 
   return (
-    <div className="divide-y divide-border/40">
+    <div className="rounded-xl border border-border/60 bg-card px-6 divide-y divide-border/40">
       {FIELD_SECTIONS.map((meta, idx) => {
         const rules = grouped[meta.id] || []
         if (rules.length === 0) return null
         return (
-          <Section
-            key={meta.id}
-            defaultOpen={idx === 0}
-            icon={meta.icon}
-            title={meta.title}
-          >
+          <Section key={meta.id} defaultOpen={idx === 0} icon={meta.icon} title={meta.title}>
             {rules.map((rule) => (
               <FieldRow
                 key={rule.fieldKey}

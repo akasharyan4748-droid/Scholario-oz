@@ -21,7 +21,7 @@ import { type FeeDataState } from './FeeStructureStep'
 import { AdmissionsDashboard } from './admission/components/AdmissionsDashboard'
 import { VerificationWorkspace } from './admission/components/VerificationWorkspace'
 import { IssuanceWorkspace } from './admission/components/IssuanceWorkspace'
-import { FieldConfigModal } from './admission/components/FieldConfigModal'
+import { AdmissionSettingsPage } from './admission/components/AdmissionSettingsPage'
 import { FormWizard } from './admission/components/FormWizard'
 import { OcrFormUploadModal } from './admission/components/OcrFormUploadModal'
 import { useSeatCapacity } from './admission/lib/admission-utils'
@@ -55,7 +55,7 @@ export function AdmissionModule() {
 
   const [activeWorkspace, setActiveWorkspace] = useState<'none' | 'verification' | 'issuance'>('none')
   const [selectedWorkspaceAppId, setSelectedWorkspaceAppId] = useState<string | null>(null)
-  const [isFieldConfigOpen, setIsFieldConfigOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isOcrModalOpen, setIsOcrModalOpen] = useState(false)
   const [isBlankFormModalOpen, setIsBlankFormModalOpen] = useState(false)
 
@@ -79,7 +79,11 @@ export function AdmissionModule() {
       {/* ====================================================================== */}
       {/* ENTERPRISE ADMISSION WORKSPACES & DASHBOARD                           */}
       {/* ====================================================================== */}
-      {activeWorkspace === 'verification' && selectedWorkspaceAppId && (
+      {isSettingsOpen && (
+        <AdmissionSettingsPage onBack={() => setIsSettingsOpen(false)} />
+      )}
+
+      {!isSettingsOpen && activeWorkspace === 'verification' && selectedWorkspaceAppId && (
         <VerificationWorkspace
           appId={selectedWorkspaceAppId}
           onBack={() => setActiveWorkspace('none')}
@@ -95,7 +99,7 @@ export function AdmissionModule() {
         />
       )}
 
-      {activeWorkspace === 'issuance' && selectedWorkspaceAppId && (
+      {!isSettingsOpen && activeWorkspace === 'issuance' && selectedWorkspaceAppId && (
         <IssuanceWorkspace
           appId={selectedWorkspaceAppId}
           onBack={() => setActiveWorkspace('none')}
@@ -103,7 +107,7 @@ export function AdmissionModule() {
         />
       )}
 
-      {activeWorkspace === 'none' && viewMode === 'list' && (
+      {!isSettingsOpen && activeWorkspace === 'none' && viewMode === 'list' && (
         <AdmissionsDashboard
           onOpenWizard={(appId) => {
             if (appId) {
@@ -123,7 +127,7 @@ export function AdmissionModule() {
             setSelectedWorkspaceAppId(appId)
             setActiveWorkspace('issuance')
           }}
-          onOpenSettingsModal={() => setIsFieldConfigOpen(true)}
+          onOpenSettingsModal={() => setIsSettingsOpen(true)}
           onOpenOcrModal={() => setIsOcrModalOpen(true)}
           onOpenBlankFormModal={() => setIsBlankFormModalOpen(true)}
         />
@@ -179,10 +183,7 @@ export function AdmissionModule() {
       />
 
       {/* DYNAMIC FIELD CONFIGURATION SETTINGS MODAL */}
-      <FieldConfigModal
-        open={isFieldConfigOpen}
-        onClose={() => setIsFieldConfigOpen(false)}
-      />
+      {/* (Replaced by AdmissionSettingsPage — now a full-page sub-route) */}
     </PageTransition>
   )
 }
