@@ -29,12 +29,3 @@ export interface PublicWebsiteProps {
   onOpenPortal: (role?: string) => void
   onOpenPlatform?: () => void
 }
-
-export type GalleryCategory = 'all' | 'campus' | 'academics' | 'sports' | 'events'
-
-export interface GalleryItem {
-  id: string
-  title: string
-  category: Exclude<GalleryCategory, 'all'>
-  image: string
-}

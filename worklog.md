@@ -78,3 +78,49 @@ Stage Summary:
   - `/home/z/my-project/tsconfig.json` (excluded skills/, examples/, tests/, mini-services/, docs/)
   - `/home/z/my-project/prisma/schema.prisma` (full rewrite with drift fixes)
   - `/home/z/my-project/prisma/seed.ts` (added Message + SchoolEvent cleanup)
+
+---
+Task ID: LANDING-REFINE
+Agent: main
+Task: Refine the public landing page using the design from uploaded stitch_single_screen_landing_page.zip — merge uploaded design with Scholario's premium tokens, delete all old files, leave only the new landing page.
+
+Work Log:
+- Extracted uploaded `stitch_single_screen_landing_page.zip` to `/tmp/stitch_extract/` — contained `code.html` (485 lines Tailwind+CDN prototype) and `screen.png` (561×1600 reference screenshot).
+- Used VLM (`z-ai vision`) to extract a full visual brief from `screen.png`: header with logo+nav+Login Portal button; hero with badge "Admissions open for 2025–26", headline "Empowering Minds, Inspiring Excellence", 2 CTAs, 3 legacy stats (30+, 1:12, 98%), and a 2×2 stats dashboard card on the right (1,840 students / 152 faculty / 18 labs / 240+ awards); "Why families choose us" 4-card grid (Academic Excellence, Holistic Growth, Modern Facilities, Safe & Inclusive) with colored circular icons; "A journey for every stage" 3-card grid (Primary/Middle/Senior) with colored top borders; "World-class facilities" 4-card grid (Smart Classrooms, Science Labs, Sports Complex, Library); admissions form with Parent Name, Email, Phone, Grade; 4-column footer.
+- Merged the uploaded design's content/structure with Scholario's premium design tokens (mesh-bg ambient background, glass-strong sticky header, font-display headings, emerald→teal gradient brand, shadow-premium card depth, framer-motion scroll-reveal animations).
+- Rewrote `/home/z/my-project/src/components/public-website/public-website.tsx` end-to-end as a single self-contained file (~620 lines). All sections (Header, Hero, WhyChooseUs, Journey, Facilities, Admissions, Footer) are local components in the same file — no more external section files needed.
+- Wired up the existing `usePublicSchoolData` and `useAdmissionForm` hooks so the new design talks to the same `/api/schools/public` and `/api/admissions/public` endpoints — verified admissions form POST returns 200 with `{"success":true,...}`.
+- Wired up `onOpenPortal` callback on every Login Portal button (header, hero, footer, mobile menu).
+- Deleted the old multi-file structure:
+  - `src/components/public-website/sections/` (10 files: header, hero, about, academics, facilities, gallery, events, admissions, footer, lightbox) — gone
+  - `src/components/public-website/gallery-data.ts` — gone
+  - Cleaned up `types.ts` (removed unused `GalleryCategory` / `GalleryItem` types)
+- Bug found and fixed: the headline's "Inspiring Excellence" gradient text was being rendered as solid color bars because Tailwind v4's `@layer utilities` was overriding `.text-gradient`'s `background-clip: text`. VLM confirmed the issue ("two solid colored rectangles blocking the headline"). Fix: replaced the `.text-gradient` class with inline Tailwind classes + inline `style` for `WebkitBackgroundClip: 'text'` / `WebkitTextFillColor: 'transparent'` — this bypasses the layer cascade entirely. VLM re-verification confirmed "gradient on headline renders smoothly without harsh clipping or banding."
+- Verified all sections render correctly via headless Chrome (agent-browser) + VLM:
+  - Hero: VLM verdict — "high-fidelity, professional education landing page design that successfully integrates all requested elements without any visible technical or aesthetic flaws"
+  - About ("Why families choose us"): VLM verdict — "No visual issues detected. The layout is clean, the typography is legible, the color palette is consistent"
+  - Journey: VLM confirmed all 3 stage cards with correct grade labels and colored top borders (emerald / sky-blue / orange-to-pink gradient)
+  - Facilities: VLM confirmed all 4 facility cards with correct titles and icons
+  - Admissions: VLM confirmed all 7 form elements present, no layout issues
+- DOM audit confirmed all 6 sections exist with correct IDs (#top, #about, #journey, #facilities, #admissions, #footer), body height 3906px, headline reads "Empowering Minds, Inspiring Excellence" correctly.
+- Cleanup performed per user's explicit instruction "don't leave any trash":
+  - Deleted `/home/z/my-project/upload/hello-connect.zip` (original 5.4MB project upload — no longer needed)
+  - Deleted `/home/z/my-project/upload/stitch_single_screen_landing_page.zip` (the design reference)
+  - Deleted `/tmp/stitch_extract/` (temp extraction dir with code.html + screen.png)
+  - Deleted all `/tmp/*.html` test artifacts (home.html, landing.html, caddy-*.html, cookies.txt, unzip*.log)
+  - Deleted stale `download/screenshots/landing-top.png` (pre-fix screenshot)
+  - Closed headless browser
+- Final file count in `src/components/public-website/`: 3 files (public-website.tsx, types.ts, use-public-website-data.ts) — down from 12.
+- Dev server confirmed healthy on PID 3559, port 3000, GET / returns 200 in ~50ms with zero runtime errors.
+
+Stage Summary:
+- Files modified:
+  - `/home/z/my-project/src/components/public-website/public-website.tsx` — full rewrite (~620 lines, single-file landing page with all 7 sections inline)
+  - `/home/z/my-project/src/components/public-website/types.ts` — trimmed unused Gallery types
+- Files deleted:
+  - `src/components/public-website/sections/` (entire directory, 10 files)
+  - `src/components/public-website/gallery-data.ts`
+  - `upload/hello-connect.zip`, `upload/stitch_single_screen_landing_page.zip`
+  - Temp extraction dirs and test artifacts in /tmp
+- Visual verification: 6 section screenshots + 1 full-page screenshot saved to `/home/z/my-project/download/screenshots/` for reference
+- Live preview: https://preview-c4006a58-a821-42f4-aceb-64115efcdf6d.space-z.ai/
