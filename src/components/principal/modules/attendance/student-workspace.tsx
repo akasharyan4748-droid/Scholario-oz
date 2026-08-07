@@ -3,7 +3,7 @@
 // Student attendance workspace — primary surface for the Attendance module.
 
 import { useState } from 'react'
-import { Download, Filter } from 'lucide-react'
+import { Download, Filter, CalendarCheck, UserCheck, UserX, Clock } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import { classList } from '@/lib/mock/school'
 import { formatNumber } from '@/lib/format'
 import { toast } from 'sonner'
 import { ModuleHeader } from '../shared/module-header'
+import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
 import { OverviewCharts } from './overview-charts'
 import { AttendanceHeatmap } from './heatmap'
 import { ClassReport } from './class-report'
@@ -25,14 +26,6 @@ export function StudentWorkspace() {
   const present = attendanceOverview.today.present
   const absent = attendanceOverview.today.absent + attendanceOverview.today.leave
   const late = attendanceOverview.today.late
-
-  // Compact meta strip — replaces 4 oversized KpiCards
-  const metaStats = [
-    { label: "Today's rate", value: `${todaysRate.toFixed(1)}%`, hint: 'vs yesterday +0.8' },
-    { label: 'Present', value: formatNumber(present), hint: `of ${formatNumber(attendanceOverview.today.total)}` },
-    { label: 'Absent + leave', value: absent, hint: 'lower than weekly avg' },
-    { label: 'Late arrivals', value: late, hint: 'within 15 min window' },
-  ]
 
   const handleExport = () => {
     toast.success('Attendance report exported', {
@@ -67,16 +60,13 @@ export function StudentWorkspace() {
         }
       />
 
-      {/* Compact meta strip — replaces 4 KpiCards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/60 rounded-lg overflow-hidden">
-        {metaStats.map((s) => (
-          <div key={s.label} className="bg-card px-4 py-2.5">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-            <p className="text-lg font-semibold text-foreground tabular-nums leading-tight mt-0.5">{s.value}</p>
-            {s.hint && <p className="text-[10px] text-muted-foreground mt-0.5">{s.hint}</p>}
-          </div>
-        ))}
-      </div>
+      {/* Premium summary cards — Admission-style design language */}
+      <SummaryCardGrid columns={4}>
+        <SummaryCard label="Today's Rate" value={todaysRate} suffix="%" sub="vs yesterday +0.8" tone="emerald" icon={<CalendarCheck className="h-4 w-4" />} delay={0} />
+        <SummaryCard label="Present Today" value={present} sub={`of ${formatNumber(attendanceOverview.today.total)}`} tone="cyan" icon={<UserCheck className="h-4 w-4" />} delay={0.05} />
+        <SummaryCard label="Absent + Leave" value={absent} sub="lower than weekly avg" tone="rose" icon={<UserX className="h-4 w-4" />} delay={0.1} />
+        <SummaryCard label="Late Arrivals" value={late} sub="within 15 min window" tone="amber" icon={<Clock className="h-4 w-4" />} delay={0.15} />
+      </SummaryCardGrid>
 
       <OverviewCharts todaysRate={todaysRate} />
       <AttendanceHeatmap selectedDay={selectedDay} setSelectedDay={setSelectedDay} />
@@ -85,3 +75,4 @@ export function StudentWorkspace() {
     </PageTransition>
   )
 }
+

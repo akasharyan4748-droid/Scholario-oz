@@ -7,11 +7,11 @@ import {
   Lightbulb, Layers, School, ChevronRight, PieChart,
 } from 'lucide-react'
 import { GlassCard } from '@/components/shared/ui'
-import { KpiCard } from '@/components/shared/kpi-card'
 import { Button } from '@/components/ui/button'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { getVirtualOccupied, type StudentRecord, type StudentsState } from '@/lib/store/students-store'
+import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
 
 interface OverviewTabProps {
   store: StudentsState
@@ -75,14 +75,14 @@ export function OverviewTab({ store, onNavigateToClasses }: OverviewTabProps) {
 
   return (
     <div className="space-y-5">
-      {/* Institution-Wide High Level KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KpiCard label="Total Enrolled" value={totalStudents} icon={<Users className="h-4 w-4" />} accent="emerald" trend={2.4} trendLabel="vs last term" delay={0} />
-        <KpiCard label="Active Students" value={activeStudents.length} icon={<GraduationCap className="h-4 w-4" />} accent="cyan" trendLabel={`${Math.round((activeStudents.length / (totalStudents || 1)) * 100)}% active`} delay={0.04} />
-        <KpiCard label="Inactive / Leave" value={inactiveStudents.length} icon={<UserX className="h-4 w-4" />} accent="rose" delay={0.08} />
-        <KpiCard label="Total Capacity" value={totalCapacity} icon={<School className="h-4 w-4" />} accent="violet" trendLabel={`${occupancyPct}% utilized`} delay={0.12} />
-        <KpiCard label="Active Classes" value={classes.length} icon={<Layers className="h-4 w-4" />} accent="amber" trendLabel={`${totalSections} sections`} delay={0.16} />
-        <KpiCard label="Over Capacity" value={overloadedClasses.length} icon={<AlertTriangle className="h-4 w-4" />} accent={overloadedClasses.length > 0 ? 'rose' : 'emerald'} delay={0.2} />
+      {/* Institution-Wide High Level KPIs — premium summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+        <SummaryCard label="Total Enrolled" value={totalStudents} sub="+2.4% vs last term" tone="emerald" icon={<Users className="h-4 w-4" />} delay={0} />
+        <SummaryCard label="Active Students" value={activeStudents.length} sub={`${Math.round((activeStudents.length / (totalStudents || 1)) * 100)}% active`} tone="cyan" icon={<GraduationCap className="h-4 w-4" />} delay={0.04} />
+        <SummaryCard label="Inactive / Leave" value={inactiveStudents.length} sub="requires follow-up" tone="rose" icon={<UserX className="h-4 w-4" />} delay={0.08} />
+        <SummaryCard label="Total Capacity" value={totalCapacity} sub={`${occupancyPct}% utilized`} tone="violet" icon={<School className="h-4 w-4" />} delay={0.12} />
+        <SummaryCard label="Active Classes" value={classes.length} sub={`${totalSections} sections`} tone="amber" icon={<Layers className="h-4 w-4" />} delay={0.16} />
+        <SummaryCard label="Over Capacity" value={overloadedClasses.length} sub={overloadedClasses.length > 0 ? 'needs attention' : 'within limits'} tone={overloadedClasses.length > 0 ? 'rose' : 'emerald'} icon={<AlertTriangle className="h-4 w-4" />} delay={0.2} />
       </div>
 
       {/* Global Smart Insights */}

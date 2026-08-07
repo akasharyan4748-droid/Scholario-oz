@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Search, Shield } from 'lucide-react'
+import { Search, Shield, Users, CalendarDays, UserCheck, Wallet } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
@@ -9,6 +9,7 @@ import { departments } from '@/lib/mock/school'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { TeacherRecord } from '@/lib/store/teachers-store'
+import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
 import { gradientFor } from './shared'
 
 interface Props {
@@ -29,36 +30,24 @@ interface Props {
 }
 
 /**
- * Faculty Directory tab — clean inline filter bar + minimal teacher cards.
- * Removed: oversized KPI cards, heavy GlassCard filter container, card-in-card.
+ * Faculty Directory tab — premium summary cards + inline filter bar + minimal teacher cards.
  */
 export function DirectoryTab({
   filteredTeachers, search, setSearch, dept, setDept, statusFilter, setStatusFilter,
   totalTeachers, activeTeachersCount, onLeaveCount, avgAttendance, totalSalary,
   onOpenProfile,
 }: Props) {
-  // Slim meta strip instead of 4 KPI cards
-  const metaStats = [
-    { label: 'Total', value: totalTeachers, hint: `${activeTeachersCount} active` },
-    { label: 'On leave', value: onLeaveCount },
-    { label: 'Attendance', value: `${avgAttendance}%` },
-    { label: 'Payroll', value: formatINR(totalSalary, true) },
-  ]
-
   return (
     <div className="space-y-4">
-      {/* Meta strip — replaces 4 KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/60 rounded-lg overflow-hidden">
-        {metaStats.map((s) => (
-          <div key={s.label} className="bg-card px-4 py-2.5">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-            <p className="text-lg font-semibold text-foreground tabular-nums leading-tight mt-0.5">{s.value}</p>
-            {s.hint && <p className="text-[10px] text-muted-foreground mt-0.5">{s.hint}</p>}
-          </div>
-        ))}
-      </div>
+      {/* Premium summary cards — Admission-style */}
+      <SummaryCardGrid columns={4}>
+        <SummaryCard label="Total Teachers" value={totalTeachers} sub={`${activeTeachersCount} active`} tone="emerald" icon={<Users className="h-4 w-4" />} delay={0} />
+        <SummaryCard label="On Leave Today" value={onLeaveCount} sub="Substitutes ready" tone="amber" icon={<CalendarDays className="h-4 w-4" />} delay={0.05} />
+        <SummaryCard label="Avg Attendance" value={avgAttendance} suffix="%" sub="Last 30 days" tone="cyan" icon={<UserCheck className="h-4 w-4" />} delay={0.1} />
+        <SummaryCard label="Monthly Payroll" value={formatINR(totalSalary, true)} sub="Bank transfer" tone="violet" icon={<Wallet className="h-4 w-4" />} delay={0.15} />
+      </SummaryCardGrid>
 
-      {/* Inline filter row — no GlassCard wrapper */}
+      {/* Inline filter row */}
       <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center justify-between">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -108,7 +97,6 @@ export function DirectoryTab({
               onClick={() => onOpenProfile(t)}
               className="cursor-pointer rounded-lg border border-border/60 bg-card p-4 hover:border-emerald-500/40 hover:shadow-sm transition-all"
             >
-              {/* Header row: avatar + name + status dot */}
               <div className="flex items-start gap-3">
                 <div className={cn('relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white font-semibold text-sm', gradientFor(t.id))}>
                   {t.avatar}
@@ -131,7 +119,6 @@ export function DirectoryTab({
                 </div>
               </div>
 
-              {/* Subjects */}
               {t.subjects.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-3">
                   {t.subjects.slice(0, 3).map((s) => (
@@ -142,7 +129,6 @@ export function DirectoryTab({
                 </div>
               )}
 
-              {/* Stats row — compact */}
               <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-border/40 text-xs">
                 <div>
                   <p className="text-[10px] text-muted-foreground">Exp</p>
@@ -160,7 +146,6 @@ export function DirectoryTab({
                 </div>
               </div>
 
-              {/* Footer */}
               <div className="mt-2 pt-2 border-t border-border/40 flex items-center justify-between text-[10px]">
                 <span className="font-mono text-muted-foreground">{t.employeeId}</span>
                 {t.positions.filter((p) => p.status === 'Active').slice(0, 1).map((p) => (
@@ -176,3 +161,4 @@ export function DirectoryTab({
     </div>
   )
 }
+

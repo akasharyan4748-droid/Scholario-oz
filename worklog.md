@@ -567,3 +567,58 @@ Stage Summary:
 - Screenshots saved:
   - `/home/z/my-project/download/screenshots/dashboard-refined.png`
   - `/home/z/my-project/download/screenshots/teachers-refined.png`
+
+---
+Task ID: PREMIUM-SUMMARY-CARDS-PASS
+Agent: main
+Task: Restart server, redesign all summary cards using Admission module design language (soft tinted bg + large value + small subtitle + animations), apply across all modules for visual consistency.
+
+Work Log:
+- Killed all Next.js processes (PID 1293 + 1305 + 1332) and restarted fresh on PID 2718 with cleared .next/cache.
+- Studied the Admission module's reference card design (`admission/components/dashboard/KpiStat.tsx`): `rounded-xl border border-border p-3.5` + soft tinted bg (`bg-{color}-500/5`) + uppercase label + large extrabold value in colored text + small muted subtitle.
+- Created shared primitive `SummaryCard` (`shared/summary-card.tsx`, 177 lines) matching the Admission design language PLUS premium micro-interactions:
+  - **Entrance animation**: fade + slide-up (framer-motion `whileInView`, staggered via `delay` prop)
+  - **Number count-up animation**: numeric values animate from 0 → final value over 700ms with easeOutCubic, triggered when card enters viewport
+  - **Hover elevation**: `whileHover={{ y: -2, scale: 1.01 }}` for clickable cards (1.005 for non-clickable)
+  - **Click feedback**: `whileTap={{ scale: 0.99 }}` for interactive cards
+  - **Keyboard focus**: `focus-visible:ring-2 focus-visible:ring-emerald-500/40` for accessibility
+  - **Reduced-motion respect**: disables animations + count-up when `prefers-reduced-motion: reduce`
+  - **8 tone variants**: sky / amber / emerald / teal / rose / violet / cyan / slate — guarantees semantic consistency (emerald=positive, rose=negative, amber=warning, etc.)
+  - **SummaryCardGrid** wrapper for consistent 2/3/4-column responsive grids
+
+- Applied `SummaryCard` across 4 modules + dashboard:
+  - **Principal Dashboard** (`kpi-row.tsx`): 8 cards in 4-col grid (Students, Teachers, Attendance, Revenue, Pending fees, Salary due, New admissions, Upcoming exams) — replaces flat MetaStrip
+  - **Teachers Directory tab** (`directory-tab.tsx`): 4 cards (Total Teachers, On Leave Today, Avg Attendance, Monthly Payroll)
+  - **Attendance workspace** (`student-workspace.tsx`): 4 cards (Today's Rate, Present Today, Absent+Leave, Late Arrivals)
+  - **Students Overview tab** (`overview-tab.tsx`): 6 cards (Total Enrolled, Active Students, Inactive/Leave, Total Capacity, Active Classes, Over Capacity)
+
+- VLM verification:
+  - **Dashboard cards**: "Strong premium visual characteristics", "Large Values in bold, large typography (24-28px)", "Soft Tinted Backgrounds — subtle pastel backgrounds (mint, pale yellow, light blue, soft green, light pink, lavender, cream, light red)", "Distinct Accent Colors per metric", "Polished execution — generous padding, smooth border-radius (12-16px)", "8 Summary Cards in 4-Column Grid Layout", "Distinctly enterprise-grade, not flat/empty", "Excellent hierarchy: large numbers → uppercase labels → subtitles → icons", Verdict: "high-fidelity, production-ready enterprise dashboard"
+  - **Cross-module consistency** (VLM comparing Teachers + Attendance + Students screenshots): "100% consistent across Teachers, Attendance, and Students modules", "Identical Design System: Large bold value + small subtitle, Soft tinted pastel backgrounds, Small line icons top-right, Same font weights, sizes, and color hierarchy, Uniform padding, consistent border-radius, equal gaps", "The UI component is a reusable design token. Whether showing teacher counts, attendance percentages, or student enrollment numbers, the card container, spacing, icon placement, and visual weight are pixel-perfect consistent across all three modules"
+
+- All files under 300-line limit:
+  - shared/summary-card.tsx: 177 lines
+  - dashboard/kpi-row.tsx: 47 lines (down from 40)
+  - teachers/directory-tab.tsx: 164 lines
+  - attendance/student-workspace.tsx: 78 lines
+  - students/overview-tab.tsx: 200 lines
+- Dev server confirmed healthy on PID 2718, GET / returns 200 in ~36ms, zero compile errors.
+
+Stage Summary:
+- Files created:
+  - `src/components/principal/modules/shared/summary-card.tsx` — premium summary card with animations + 8 tones + count-up
+- Files rewritten to use SummaryCard (replacing flat MetaStrip / KpiCard):
+  - `dashboard/kpi-row.tsx` — 8-card grid with consistent tone palette
+  - `teachers/directory-tab.tsx` — 4-card grid
+  - `attendance/student-workspace.tsx` — 4-card grid
+  - `students/overview-tab.tsx` — 6-card grid
+- Established pattern for remaining modules (Fees, Exams, Homework, Library, Transport, etc.):
+  - Import `SummaryCard, SummaryCardGrid` from `../shared/summary-card`
+  - Choose tone per metric (emerald=positive, rose=negative, amber=warning, cyan/teal/sky/violet for neutral data)
+  - Use `<SummaryCardGrid columns={4}>` wrapper for consistent responsive grids
+  - Pass `delay={i * 0.04}` for staggered entrance
+- Screenshots saved:
+  - `/home/z/my-project/download/screenshots/dashboard-premium-cards.png`
+  - `/home/z/my-project/download/screenshots/teachers-premium-cards.png`
+  - `/home/z/my-project/download/screenshots/attendance-premium-cards.png`
+  - `/home/z/my-project/download/screenshots/students-premium-cards.png`
