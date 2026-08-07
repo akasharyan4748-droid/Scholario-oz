@@ -10,13 +10,14 @@ import { KpiCard } from '@/components/shared/kpi-card'
 import { ChartCard, AreaTrend, Donut } from '@/components/shared/charts'
 import { jobPostings, candidates, interviews, recruitmentStats, hrStats, type Candidate } from '@/lib/mock/recruitment'
 import { school } from '@/lib/mock/school'
-import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { type Tab } from './data'
 import { PostingsTab } from './postings-tab'
 import { CandidatesTab } from './candidates-tab'
 import { InterviewsTab } from './interviews-tab'
 import { CandidateModal } from './candidate-modal'
+
+import { SegmentedTabs } from '../shared/segmented-tabs'
 
 export function RecruitmentModule() {
   const [tab, setTab] = useState<Tab>('postings')
@@ -75,26 +76,15 @@ export function RecruitmentModule() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2">
-        {[
-          { id: 'postings' as Tab, label: 'Job Postings', icon: <Briefcase className="h-3.5 w-3.5" />, count: jobPostings.length },
-          { id: 'candidates' as Tab, label: 'Candidates', icon: <Users className="h-3.5 w-3.5" />, count: candidates.length },
-          { id: 'interviews' as Tab, label: 'Interviews', icon: <Calendar className="h-3.5 w-3.5" />, count: interviews.length },
-        ].map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-              tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.icon}
-            {t.label}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold', tab === t.id ? 'bg-primary-foreground/20' : 'bg-muted')}>{t.count}</span>
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+      tabs={[
+        { value: 'postings', label: 'Job Postings', icon: <Briefcase className="h-3.5 w-3.5" />, badge: jobPostings.length },
+        { value: 'candidates', label: 'Candidates', icon: <Users className="h-3.5 w-3.5" />, badge: candidates.length },
+        { value: 'interviews', label: 'Interviews', icon: <Calendar className="h-3.5 w-3.5" />, badge: interviews.length }
+      ]}
+      value={tab}
+      onValueChange={setTab}
+    />
 
       <AnimatePresence mode="wait">
         {tab === 'postings' && <PostingsTab />}

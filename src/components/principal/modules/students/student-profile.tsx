@@ -97,7 +97,7 @@ export function StudentProfileSheet({ student, open, onOpenChange, onArchive, on
                 onClick={() => setActiveTab(tab)}
                 className={cn(
                   'rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
-                  activeTab === tab ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-accent/40'
+                  activeTab === tab ? 'bg-white dark:bg-white/10 shadow-sm text-foreground rounded-full' : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
                 )}
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}

@@ -6,7 +6,6 @@ import { Truck, FileText, Package, Plus } from 'lucide-react'
 import { SectionHeading } from '@/components/shared/ui'
 import { vendors, type Vendor } from '@/lib/mock/procurement'
 import { purchaseOrders, goodsReceipts } from '@/lib/mock/procurement'
-import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { type Tab } from './data'
 import { KpiRow } from './kpi-row'
@@ -15,6 +14,8 @@ import { VendorsTab } from './vendors-tab'
 import { OrdersTab } from './orders-tab'
 import { ReceiptsTab } from './receipts-tab'
 import { VendorModal } from './vendor-modal'
+
+import { SegmentedTabs } from '../shared/segmented-tabs'
 
 export function ProcurementModule() {
   const [tab, setTab] = useState<Tab>('vendors')
@@ -46,26 +47,15 @@ export function ProcurementModule() {
       <ChartsRow />
 
       {/* Tabs */}
-      <div className="flex gap-2">
-        {[
-          { id: 'vendors' as Tab, label: 'Vendors', icon: <Truck className="h-3.5 w-3.5" />, count: vendors.length },
-          { id: 'orders' as Tab, label: 'Purchase Orders', icon: <FileText className="h-3.5 w-3.5" />, count: purchaseOrders.length },
-          { id: 'receipts' as Tab, label: 'Goods Receipts', icon: <Package className="h-3.5 w-3.5" />, count: goodsReceipts.length },
-        ].map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-              tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.icon}
-            {t.label}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold', tab === t.id ? 'bg-primary-foreground/20' : 'bg-muted')}>{t.count}</span>
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+      tabs={[
+        { value: 'vendors', label: 'Vendors', icon: <Truck className="h-3.5 w-3.5" />, badge: vendors.length },
+        { value: 'orders', label: 'Purchase Orders', icon: <FileText className="h-3.5 w-3.5" />, badge: purchaseOrders.length },
+        { value: 'receipts', label: 'Goods Receipts', icon: <Package className="h-3.5 w-3.5" />, badge: goodsReceipts.length }
+      ]}
+      value={tab}
+      onValueChange={setTab}
+    />
 
       <AnimatePresence mode="wait">
         {tab === 'vendors' && (

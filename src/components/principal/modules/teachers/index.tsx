@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 import { ModuleHeader } from '../shared/module-header'
+import { SegmentedTabs } from '../shared/segmented-tabs'
 import { useTeachersState } from './use-teachers-state'
 import { useTeachersActions } from './use-teachers-actions'
 import { DirectoryTab } from './directory-tab'
@@ -87,25 +88,20 @@ export function TeachersModule() {
         }
       />
 
-      {/* Segmented tabs — pill style */}
-      <div className="inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60">
-        {TABS.map((tab) => {
+      {/* Segmented tabs — shared component */}
+      <SegmentedTabs
+        tabs={TABS.map((tab) => {
           const Icon = tab.icon
-          const isCurrent = s.activeTab === tab.id
-          const badge = tab.id === 'directory' ? s.totalTeachers : tab.id === 'logs' ? s.auditLogs.length : undefined
-          return (
-            <button key={tab.id} onClick={() => s.setActiveTab(tab.id)}
-              className={cn('flex items-center gap-1.5 px-3.5 rounded-full text-xs font-medium whitespace-nowrap transition-all',
-                isCurrent ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>
-              <Icon className="h-3.5 w-3.5" />
-              <span>{tab.label}</span>
-              {badge !== undefined && (
-                <Badge variant="secondary" className="ml-0.5 text-[10px] px-1.5 py-0 bg-muted/80 text-muted-foreground">{badge}</Badge>
-              )}
-            </button>
-          )
+          return {
+            value: tab.id,
+            label: tab.label,
+            icon: <Icon className="h-3.5 w-3.5" />,
+            badge: tab.id === 'directory' ? s.totalTeachers : tab.id === 'logs' ? s.auditLogs.length : undefined,
+          }
         })}
-      </div>
+        value={s.activeTab}
+        onValueChange={(v) => s.setActiveTab(v as typeof s.activeTab)}
+      />
 
       {/* TAB 1: FACULTY DIRECTORY */}
       {s.activeTab === 'directory' && (

@@ -10,13 +10,14 @@ import { SectionHeading } from '@/components/shared/ui'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { ChartCard, AreaTrend, Donut } from '@/components/shared/charts'
 import { complianceItems, auditLogs, complianceDocuments, complianceStats, type ComplianceItem } from '@/lib/mock/compliance'
-import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { type Tab } from './data'
 import { ComplianceTab } from './compliance-tab'
 import { AuditsTab } from './audits-tab'
 import { DocumentsTab } from './documents-tab'
 import { ComplianceModal } from './compliance-modal'
+
+import { SegmentedTabs } from '../shared/segmented-tabs'
 
 export function ComplianceModule() {
   const [tab, setTab] = useState<Tab>('compliance')
@@ -98,26 +99,15 @@ export function ComplianceModule() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2">
-        {[
-          { id: 'compliance' as Tab, label: 'Compliance Items', icon: <ShieldCheck className="h-3.5 w-3.5" />, count: complianceItems.length },
-          { id: 'audits' as Tab, label: 'Audit Log', icon: <FileCheck className="h-3.5 w-3.5" />, count: auditLogs.length },
-          { id: 'documents' as Tab, label: 'Documents', icon: <FileText className="h-3.5 w-3.5" />, count: complianceDocuments.length },
-        ].map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-              tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.icon}
-            {t.label}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold', tab === t.id ? 'bg-primary-foreground/20' : 'bg-muted')}>{t.count}</span>
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+      tabs={[
+        { value: 'compliance', label: 'Compliance Items', icon: <ShieldCheck className="h-3.5 w-3.5" />, badge: complianceItems.length },
+        { value: 'audits', label: 'Audit Log', icon: <FileCheck className="h-3.5 w-3.5" />, badge: auditLogs.length },
+        { value: 'documents', label: 'Documents', icon: <FileText className="h-3.5 w-3.5" />, badge: complianceDocuments.length }
+      ]}
+      value={tab}
+      onValueChange={setTab}
+    />
 
       <AnimatePresence mode="wait">
         {tab === 'compliance' && <ComplianceTab onSelect={setSelected} />}

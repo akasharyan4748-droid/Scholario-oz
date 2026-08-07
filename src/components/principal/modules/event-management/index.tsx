@@ -11,13 +11,14 @@ import { KpiCard } from '@/components/shared/kpi-card'
 import { ChartCard, AreaTrend, Donut } from '@/components/shared/charts'
 import { events, eventTasks, eventGallery, eventStats, type SchoolEvent } from '@/lib/mock/events'
 import { formatINR } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { type Tab } from './data'
 import { EventsTab } from './events-tab'
 import { TasksTab } from './tasks-tab'
 import { GalleryTab } from './gallery-tab'
 import { EventDetailModal } from './event-detail-modal'
+
+import { SegmentedTabs } from '../shared/segmented-tabs'
 
 export function EventManagementModule() {
   const [tab, setTab] = useState<Tab>('events')
@@ -58,26 +59,15 @@ export function EventManagementModule() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2">
-        {[
-          { id: 'events' as Tab, label: 'Events', icon: <CalendarDays className="h-3.5 w-3.5" />, count: events.length },
-          { id: 'tasks' as Tab, label: 'Tasks', icon: <ListChecks className="h-3.5 w-3.5" />, count: eventTasks.length },
-          { id: 'gallery' as Tab, label: 'Gallery', icon: <ImageIcon className="h-3.5 w-3.5" />, count: eventGallery.length },
-        ].map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-              tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.icon}
-            {t.label}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold', tab === t.id ? 'bg-primary-foreground/20' : 'bg-muted')}>{t.count}</span>
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+      tabs={[
+        { value: 'events', label: 'Events', icon: <CalendarDays className="h-3.5 w-3.5" />, badge: events.length },
+        { value: 'tasks', label: 'Tasks', icon: <ListChecks className="h-3.5 w-3.5" />, badge: eventTasks.length },
+        { value: 'gallery', label: 'Gallery', icon: <ImageIcon className="h-3.5 w-3.5" />, badge: eventGallery.length }
+      ]}
+      value={tab}
+      onValueChange={setTab}
+    />
 
       <AnimatePresence mode="wait">
         {tab === 'events' && <EventsTab onSelect={setSelectedEvent} />}

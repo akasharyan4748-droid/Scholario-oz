@@ -10,12 +10,13 @@ import { KpiCard } from '@/components/shared/kpi-card'
 import { ChartCard, AreaTrend, Donut } from '@/components/shared/charts'
 import { hostelBlocks, hostelRooms, hostelStats } from '@/lib/mock/hostel'
 import { formatINR } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { type Tab } from './data'
 import { BlocksTab } from './blocks-tab'
 import { RoomsTab } from './rooms-tab'
 import { MessTab } from './mess-tab'
+
+import { SegmentedTabs } from '../shared/segmented-tabs'
 
 export function HostelModule() {
   const [tab, setTab] = useState<Tab>('blocks')
@@ -56,26 +57,15 @@ export function HostelModule() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2">
-        {[
-          { id: 'blocks' as Tab, label: 'Hostel Blocks', icon: <Building2 className="h-3.5 w-3.5" />, count: hostelBlocks.length },
-          { id: 'rooms' as Tab, label: 'Rooms', icon: <BedDouble className="h-3.5 w-3.5" />, count: hostelRooms.length },
-          { id: 'mess' as Tab, label: 'Mess & Dining', icon: <UtensilsCrossed className="h-3.5 w-3.5" /> },
-        ].map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-              tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.icon}
-            {t.label}
-            {t.count != null && <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold', tab === t.id ? 'bg-primary-foreground/20' : 'bg-muted')}>{t.count}</span>}
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+      tabs={[
+        { value: 'blocks', label: 'Hostel Blocks', icon: <Building2 className="h-3.5 w-3.5" />, badge: hostelBlocks.length },
+        { value: 'rooms', label: 'Rooms', icon: <BedDouble className="h-3.5 w-3.5" />, badge: hostelRooms.length },
+        { value: 'mess', label: 'Mess & Dining', icon: <UtensilsCrossed className="h-3.5 w-3.5" /> }
+      ]}
+      value={tab}
+      onValueChange={setTab}
+    />
 
       <AnimatePresence mode="wait">
         {tab === 'blocks' && <BlocksTab key="bl" />}

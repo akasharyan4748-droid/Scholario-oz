@@ -14,7 +14,6 @@ import { useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { HeartPulse, Plus } from 'lucide-react'
 import { SectionHeading } from '@/components/shared/ui'
-import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { StudentHealth } from '@/lib/mock/health'
 import { KpiRow } from './kpi-row'
@@ -24,6 +23,8 @@ import { VaccinationsTab } from './vaccinations-tab'
 import { InfirmaryTab } from './infirmary-tab'
 import { HealthDetailModal } from './health-detail-modal'
 import { tabs, type Tab } from './data'
+
+import { SegmentedTabs } from '../shared/segmented-tabs'
 
 export function HealthWellnessModule() {
   const [tab, setTab] = useState<Tab>('records')
@@ -53,22 +54,11 @@ export function HealthWellnessModule() {
       <ChartsRow />
 
       {/* Tabs */}
-      <div className="flex gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-              tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.icon}
-            {t.label}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold', tab === t.id ? 'bg-primary-foreground/20' : 'bg-muted')}>{t.count}</span>
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+      tabs={tabs.map((t) => ({ value: t.id, label: t.label, icon: t.icon, badge: t.count }))}
+      value={tab}
+      onValueChange={setTab}
+    />
 
       <AnimatePresence mode="wait">
         {tab === 'records' && (

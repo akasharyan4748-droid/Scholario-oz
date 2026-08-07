@@ -10,28 +10,19 @@ import {
   pnlData, balanceSheet, cashflow, financeStats,
 } from '@/lib/mock/finance-dashboard'
 import { formatINR } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import { E, R, V, statementTabs, type Tab } from './data'
 import { SectionLabel } from './shared'
+
+import { SegmentedTabs } from '../shared/segmented-tabs'
 
 /* ---------- Tab strip ---------- */
 export function TabButtons({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      {statementTabs.map((t) => (
-        <button
-          key={t.id}
-          onClick={() => setTab(t.id)}
-          className={cn(
-            'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-            tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
-          )}
-        >
-          {t.icon}
-          {t.label}
-        </button>
-      ))}
-    </div>
+    <SegmentedTabs
+      tabs={statementTabs.map((t) => ({ value: t.id, label: t.label, icon: t.icon, badge: t.count }))}
+      value={tab}
+      onValueChange={setTab}
+    />
   )
 }
 

@@ -8,12 +8,13 @@ import { KpiCard } from '@/components/shared/kpi-card'
 import { ChartCard, AreaTrend, Donut } from '@/components/shared/charts'
 import { alumni, alumniStats, type Alumni } from '@/lib/mock/alumni'
 import { formatINR } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { DirectoryTab } from './directory-tab'
 import { DonationsTab } from './donations-tab'
 import { ReunionsTab } from './reunions-tab'
 import { AlumniDetailModal } from './detail-modal'
+
+import { SegmentedTabs } from '../shared/segmented-tabs'
 
 type Tab = 'directory' | 'donations' | 'reunions'
 
@@ -60,22 +61,15 @@ export function AlumniModule() {
         </ChartCard>
       </div>
 
-      <div className="flex gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-              tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.icon}
-            {t.label}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold', tab === t.id ? 'bg-primary-foreground/20' : 'bg-muted')}>{t.count}</span>
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+      tabs={[
+        { value: 'directory', label: 'Alumni Directory', icon: <Users className="h-3.5 w-3.5" />, badge: alumni.length },
+        { value: 'donations', label: 'Donations', icon: <Heart className="h-3.5 w-3.5" />, badge: alumni.length },
+        { value: 'reunions', label: 'Reunions', icon: <CalendarDays className="h-3.5 w-3.5" />, badge: alumni.length }
+      ]}
+      value={tab}
+      onValueChange={setTab}
+    />
 
       <AnimatePresence mode="wait">
         {tab === 'directory' && <DirectoryTab alumni={alumni} search={search} setSearch={setSearch} onSelect={setSelectedAlumni} />}
