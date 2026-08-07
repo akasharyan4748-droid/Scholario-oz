@@ -106,7 +106,7 @@ export function SummaryCard({
   const inner = (
     <>
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider truncate">
+        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider leading-tight break-words">
           {label}
         </span>
         {icon && <span className="text-muted-foreground/70 shrink-0">{icon}</span>}
@@ -114,7 +114,7 @@ export function SummaryCard({
       <div className={cn('font-display text-2xl sm:text-3xl font-extrabold tabular-nums leading-tight', toneStyles.text)}>
         {formattedValue}
       </div>
-      {sub && <p className="text-[11px] text-muted-foreground mt-1 truncate">{sub}</p>}
+      {sub && <p className="text-[11px] text-muted-foreground mt-1 leading-tight break-words">{sub}</p>}
     </>
   )
 
@@ -161,13 +161,14 @@ export function SummaryCardGrid({
   className,
 }: {
   children: ReactNode
-  columns?: 2 | 3 | 4
+  columns?: 2 | 3 | 4 | 6
   className?: string
 }) {
   const colClass = {
     2: 'grid-cols-2',
     3: 'grid-cols-2 sm:grid-cols-3',
     4: 'grid-cols-2 sm:grid-cols-4',
+    6: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
   }[columns]
   return (
     <div className={cn('grid gap-3 sm:gap-4', colClass, className)}>

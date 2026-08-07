@@ -16,6 +16,7 @@ import { PrincipalDashboard } from './modules/dashboard'
 import { AdmissionModule } from './modules/admission'
 import { TeachersModule } from './modules/teachers'
 import { StudentsModule } from './modules/students'
+import { ClassesModule } from './modules/classes'
 import { TimetableModule } from './modules/timetable'
 import { AttendanceModule } from './modules/attendance'
 import { FeesModule } from './modules/fees'
@@ -43,7 +44,7 @@ const moduleRegistry: Record<string, React.ComponentType<any>> = {
   'students:overview': StudentsModule,
   'students:directory': StudentsModule,
   'students:classes': StudentsModule,
-  classes: StudentsModule,
+  classes: ClassesModule,
   timetable: TimetableModule,
   attendance: AttendanceModule,
   fees: FeesModule,
@@ -81,11 +82,11 @@ const navGroups: NavGroup[] = [
         label: 'Students',
         icon: <School className="h-4.5 w-4.5" />,
         children: [
-          { key: 'students:overview', label: 'Dashboard', icon: <LayoutGrid className="h-3.5 w-3.5" /> },
+          { key: 'students:overview', label: 'Overview', icon: <LayoutGrid className="h-3.5 w-3.5" /> },
           { key: 'students:directory', label: 'Directory', icon: <Users className="h-3.5 w-3.5" /> },
-          { key: 'students:classes', label: 'Classes', icon: <Layers className="h-3.5 w-3.5" /> },
         ],
       },
+      { key: 'classes', label: 'Classes', icon: <Layers className="h-4.5 w-4.5" /> },
       { key: 'timetable', label: 'Timetable', icon: <Clock className="h-4.5 w-4.5" /> },
       { key: 'attendance', label: 'Attendance', icon: <CalendarCheck className="h-4.5 w-4.5" /> },
       { key: 'exams', label: 'Examinations', icon: <FileText className="h-4.5 w-4.5" /> },

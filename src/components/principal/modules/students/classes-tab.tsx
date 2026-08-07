@@ -7,7 +7,7 @@ import {
   BookOpen, UserCheck, TrendingUp, AlertTriangle, Filter,
 } from 'lucide-react'
 import { GlassCard, SectionHeading, GradientAvatar } from '@/components/shared/ui'
-import { KpiCard } from '@/components/shared/kpi-card'
+import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -146,12 +146,12 @@ export function ClassesTab({ store, onStudentClick, initialSelectedClassId = nul
       />
 
       {/* Summary Stat Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="Total Classes" value={classes.length} icon={<Layers className="h-4 w-4" />} accent="amber" delay={0} />
-        <KpiCard label="Total Capacity" value={totalCapacity} icon={<Users className="h-4 w-4" />} accent="violet" delay={0.04} />
-        <KpiCard label="Total Enrolled" value={totalEnrolled} icon={<Users className="h-4 w-4" />} accent="emerald" trendLabel={`${occupancyPct}% capacity`} delay={0.08} />
-        <KpiCard label="Over Capacity" value={overloadedCount} icon={<AlertTriangle className="h-4 w-4" />} accent={overloadedCount > 0 ? 'rose' : 'cyan'} delay={0.12} />
-      </div>
+      <SummaryCardGrid columns={4}>
+        <SummaryCard label="Total Classes" value={classes.length} icon={<Layers className="h-4 w-4" />} tone="amber" delay={0} />
+        <SummaryCard label="Total Capacity" value={totalCapacity} icon={<Users className="h-4 w-4" />} tone="violet" delay={0.04} />
+        <SummaryCard label="Total Enrolled" value={totalEnrolled} sub={`${occupancyPct}% capacity`} icon={<Users className="h-4 w-4" />} tone="emerald" delay={0.08} />
+        <SummaryCard label="Over Capacity" value={overloadedCount} sub={overloadedCount > 0 ? 'needs attention' : 'within limits'} icon={<AlertTriangle className="h-4 w-4" />} tone={overloadedCount > 0 ? 'rose' : 'cyan'} delay={0.12} />
+      </SummaryCardGrid>
 
       {/* Search & Filter Controls */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/40 p-3 rounded-xl border border-border">

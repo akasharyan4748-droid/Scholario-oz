@@ -76,14 +76,14 @@ export function OverviewTab({ store, onNavigateToClasses }: OverviewTabProps) {
   return (
     <div className="space-y-5">
       {/* Institution-Wide High Level KPIs — premium summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+      <SummaryCardGrid columns={6}>
         <SummaryCard label="Total Enrolled" value={totalStudents} sub="+2.4% vs last term" tone="emerald" icon={<Users className="h-4 w-4" />} delay={0} />
         <SummaryCard label="Active Students" value={activeStudents.length} sub={`${Math.round((activeStudents.length / (totalStudents || 1)) * 100)}% active`} tone="cyan" icon={<GraduationCap className="h-4 w-4" />} delay={0.04} />
         <SummaryCard label="Inactive / Leave" value={inactiveStudents.length} sub="requires follow-up" tone="rose" icon={<UserX className="h-4 w-4" />} delay={0.08} />
         <SummaryCard label="Total Capacity" value={totalCapacity} sub={`${occupancyPct}% utilized`} tone="violet" icon={<School className="h-4 w-4" />} delay={0.12} />
         <SummaryCard label="Active Classes" value={classes.length} sub={`${totalSections} sections`} tone="amber" icon={<Layers className="h-4 w-4" />} delay={0.16} />
         <SummaryCard label="Over Capacity" value={overloadedClasses.length} sub={overloadedClasses.length > 0 ? 'needs attention' : 'within limits'} tone={overloadedClasses.length > 0 ? 'rose' : 'emerald'} icon={<AlertTriangle className="h-4 w-4" />} delay={0.2} />
-      </div>
+      </SummaryCardGrid>
 
       {/* Global Smart Insights */}
       <div>

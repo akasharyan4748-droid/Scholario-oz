@@ -16,11 +16,10 @@ import { useStudentsStore, getVirtualOccupied, type StudentRecord } from '@/lib/
 import { ModuleHeader } from './shared/module-header'
 import { OverviewTab } from './students/overview-tab'
 import { DirectoryTab } from './students/directory-tab'
-import { ClassesTab } from './students/classes-tab'
 import { ArchivedTab } from './students/archived-tab'
 import { StudentProfileSheet } from './students/student-profile'
 
-export type StudentsTabKey = 'overview' | 'directory' | 'classes' | 'archived'
+export type StudentsTabKey = 'overview' | 'directory' | 'archived'
 
 interface StudentsModuleProps {
   initialTab?: StudentsTabKey
@@ -96,7 +95,7 @@ export function StudentsModule({ initialTab = 'overview' }: StudentsModuleProps)
             <OverviewTab
               store={store}
               onStudentClick={openProfile}
-              onNavigateToClasses={() => setActiveTab('classes')}
+              onNavigateToClasses={() => {}}
             />
           )}
 
@@ -104,13 +103,6 @@ export function StudentsModule({ initialTab = 'overview' }: StudentsModuleProps)
             <DirectoryTab
               students={store.students.filter((s) => s.status === 'Active')}
               classes={store.classes}
-              onStudentClick={openProfile}
-            />
-          )}
-
-          {activeTab === 'classes' && (
-            <ClassesTab
-              store={store}
               onStudentClick={openProfile}
             />
           )}
