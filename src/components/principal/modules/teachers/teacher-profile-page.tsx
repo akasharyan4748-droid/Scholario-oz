@@ -13,6 +13,7 @@ import {
   type PositionDefinition,
 } from '@/lib/store/teachers-store'
 import { gradientFor } from './shared'
+import { getPermissionLabels } from './permission-labels'
 
 interface Props {
   teacher: TeacherRecord
@@ -23,9 +24,6 @@ interface Props {
   onToggleLock: () => void
   onOpenTermination: () => void
   onOpenPayrollModal: () => void
-  onOpenEmergencyOverride: (posId: string) => void
-  onRemovePosition: (assignmentId: string) => void
-  onOpenWorkload: () => void
 }
 
 /**
@@ -38,7 +36,7 @@ interface Props {
 export function TeacherProfilePage({
   teacher, positionsList, onBack,
   onResetPassword, onViewAppointment, onToggleLock, onOpenTermination,
-  onOpenPayrollModal, onOpenEmergencyOverride, onRemovePosition, onOpenWorkload,
+  onOpenPayrollModal,
 }: Props) {
   const activePermissions = getTeacherActivePermissions(teacher, positionsList)
 
@@ -96,73 +94,81 @@ export function TeacherProfilePage({
           <TabsTrigger value="payroll" className="text-xs rounded-full px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground">Payroll</TabsTrigger>
         </TabsList>
 
-        {/* POSITIONS & ALLOCATION */}
+        {/* POSITIONS & ALLOCATION — read-only display (managed centrally) */}
         <TabsContent value="positions" className="space-y-4 mt-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-xs uppercase tracking-wider text-primary">Assigned Positions</h3>
-            <Button size="sm" variant="outline" onClick={onOpenWorkload} className="text-[11px] h-7">
-              Manage Allocations
-            </Button>
-          </div>
-
-          <div className="space-y-2">
-            {teacher.positions.map((p) => (
-              <div key={p.id} className="rounded-lg border border-border/60 bg-card p-3 flex items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-foreground">{p.positionTitle}</span>
-                    <Badge variant="outline" className={cn('text-[9px]',
-                      p.status === 'Active' ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700'
-                        : 'border-amber-500/50 bg-amber-500/10 text-amber-700')}>
-                      {p.status}
-                    </Badge>
+          {/* Current Positions */}
+          <div>
+            <h3 className="font-bold text-xs uppercase tracking-wider text-primary mb-3">Current Positions</h3>
+            {teacher.positions.length > 0 ? (
+              <div className="space-y-2">
+                {teacher.positions.map((p) => (
+                  <div key={p.id} className="rounded-lg border border-border/60 bg-card p-3 flex items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-foreground">{p.positionTitle}</span>
+                        <Badge variant="outline" className={cn('text-[9px]',
+                          p.status === 'Active' ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700'
+                            : 'border-amber-500/50 bg-amber-500/10 text-amber-700')}>
+                          {p.status}
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Assigned by {p.assignedBy} on {p.assignedDate}</p>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Assigned by {p.assignedBy} on {p.assignedDate}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  {p.status === 'Pending Acceptance' && (
-                    <Button size="sm" variant="destructive" className="text-[10px] h-7 px-2"
-                      onClick={() => onOpenEmergencyOverride(p.positionId)}>
-                      Emergency Override
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" className="text-[10px] text-rose-600 h-7 px-2"
-                    onClick={() => onRemovePosition(p.id)}>
-                    Remove
-                  </Button>
-                </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <p className="text-xs text-muted-foreground">No positions assigned. Manage from Settings → Staff Settings.</p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          {/* Subjects + Classes — display only */}
+          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border">
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase mb-2">Subjects</p>
               <div className="flex flex-wrap gap-1">
-                {teacher.subjects.map((s) => (
-                  <Badge key={s} variant="secondary" className="text-xs bg-primary/10 text-primary">{s}</Badge>
-                ))}
+                {teacher.subjects.length > 0 ? (
+                  teacher.subjects.map((s) => (
+                    <Badge key={s} variant="secondary" className="text-xs bg-primary/10 text-primary">{s}</Badge>
+                  ))
+                ) : (
+                  <p className="text-[10px] text-muted-foreground">Managed via Timetable</p>
+                )}
               </div>
             </div>
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase mb-2">Classes</p>
               <div className="flex flex-wrap gap-1">
-                {teacher.classes.map((c) => (
-                  <Badge key={c} variant="secondary" className="text-xs bg-emerald-500/10 text-emerald-700">{c}</Badge>
-                ))}
+                {teacher.classes.length > 0 ? (
+                  teacher.classes.map((c) => (
+                    <Badge key={c} variant="secondary" className="text-xs bg-emerald-500/10 text-emerald-700">{c}</Badge>
+                  ))
+                ) : (
+                  <p className="text-[10px] text-muted-foreground">Managed via Class Settings</p>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="pt-3 border-t border-border">
-            <h4 className="font-bold text-xs text-foreground mb-2">Granted Permissions ({activePermissions.length})</h4>
-            <div className="flex flex-wrap gap-1">
-              {activePermissions.map((perm) => (
-                <span key={perm} className="inline-flex items-center rounded bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-mono">
-                  ✓ {perm}
-                </span>
-              ))}
+          {/* Granted Permissions — human-readable labels */}
+          {activePermissions.length > 0 && (
+            <div className="pt-3 border-t border-border">
+              <h4 className="font-bold text-xs text-foreground mb-2">Granted Permissions</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {getPermissionLabels(activePermissions).map((label) => (
+                  <span key={label} className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[11px] font-medium">
+                    ✓ {label}
+                  </span>
+                ))}
+              </div>
             </div>
+          )}
+
+          {/* Info note about centralized management */}
+          <div className="pt-3 border-t border-border">
+            <p className="text-[11px] text-muted-foreground italic">
+              Positions, subjects, and class assignments are managed centrally from Settings → Staff Settings, Class Settings, and Timetable module respectively.
+            </p>
           </div>
         </TabsContent>
 

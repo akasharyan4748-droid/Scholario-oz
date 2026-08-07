@@ -66,19 +66,6 @@ export function TeachersModule() {
           onToggleLock={() => actions.handleOpenLockModal(s.selectedTeacher!)}
           onOpenTermination={() => actions.handleOpenTerminationModal(s.selectedTeacher!)}
           onOpenPayrollModal={() => actions.handleOpenPayrollModal(s.selectedTeacher!)}
-          onOpenEmergencyOverride={(posId) => {
-            s.setSelectedPosForOverride(posId)
-            s.setEmergencyOverrideModalOpen(true)
-          }}
-          onRemovePosition={(assignmentId) => {
-            s.removePositionFromTeacher(s.selectedTeacher!.id, assignmentId)
-            toast.success('Position removal initiated', { description: 'Notification sent to teacher.' })
-          }}
-          onOpenWorkload={() => {
-            s.setSelectedSubjects(s.selectedTeacher!.subjects)
-            s.setSelectedClasses(s.selectedTeacher!.classes)
-            s.setWorkloadModalOpen(true)
-          }}
         />
       </PageTransition>
     )

@@ -4,7 +4,8 @@ import { useState, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronLeft, ChevronRight, UserPlus, CheckCircle2,
-  User, GraduationCap, Wallet, Shield, Camera, FileText,
+  User, GraduationCap, Wallet, Shield, Camera, Pencil, ChevronDown,
+  MapPin, Mail, FileText,
 } from 'lucide-react'
 import { GlassCard } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ import { Step1BasicInfo, Step2Qualifications, Step3Appointment, Step4Academic } 
 import { Step5PhotoSignature } from './add-teacher-step-photo'
 import { StepperHeader, type WizardStep } from '../admission/components/StepperHeader'
 import { NavigationControls } from '../admission/components/NavigationControls'
+import { cn } from '@/lib/utils'
 
 interface Props {
   onSuccess: (teacher: TeacherRecord) => void
@@ -157,71 +159,8 @@ export function AddTeacherWizard({ onSuccess, onCancel }: Props) {
             {step === 4 && <Step4Academic {...step4Props} />}
             {step === 5 && <Step5PhotoSignature form={form} setF={setF} />}
 
-            {/* STEP 6 — Review (single clean page, no tabs/toggles) */}
-            {step === 6 && (
-              <div className="space-y-5">
-                {/* Teacher summary — profile card, subordinate to Review title */}
-                <div className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/30">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-semibold text-sm">
-                    {(form.name || '?').split(' ').map((n: string) => n[0] || '?').join('').slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm text-foreground truncate">{form.name || 'New Teacher'}</p>
-                    <p className="text-xs text-muted-foreground truncate">Subject Teacher · Academic</p>
-                  </div>
-                </div>
-
-                {/* Review fields — grouped by section with dividers */}
-                <div>
-                  <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Employment</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <ReviewField label="Employee ID" value="Auto-generated" />
-                    <ReviewField label="Joining Date" value={form.joiningDate ? formatDate(form.joiningDate) : '—'} />
-                    <ReviewField label="Employment" value={form.employmentType} />
-                    <ReviewField label="Salary" value={form.salary ? `${formatINR(Number(form.salary))}/mo` : '—'} />
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-border">
-                  <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Contact</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <ReviewField label="Mobile" value={form.phone || '—'} mono />
-                    <ReviewField label="Email" value={form.email || '—'} />
-                    <ReviewField label="Blood Group" value={form.bloodGroup || '—'} />
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-border">
-                  <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Academic</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <ReviewField label="Subjects" value={form.selectedSubjects.length ? form.selectedSubjects.join(', ') : 'None'} />
-                    <ReviewField label="Classes" value={form.selectedClasses.length ? form.selectedClasses.join(', ') : 'None'} />
-                    <ReviewField label="Class Teacher" value={form.classTeacherRole !== 'None' ? form.classTeacherRole : 'No'} />
-                  </div>
-                </div>
-
-                {/* Photo + Signature preview */}
-                {(form.photoDataUrl || form.signatureDataUrl) && (
-                  <div className="pt-4 border-t border-border">
-                    <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Documents</p>
-                    <div className="flex gap-4">
-                      {form.photoDataUrl && (
-                        <div>
-                          <img src={form.photoDataUrl} alt="Photo" className="h-16 w-16 rounded-lg object-cover border border-border" />
-                          <p className="text-[10px] text-muted-foreground mt-1">Photo</p>
-                        </div>
-                      )}
-                      {form.signatureDataUrl && (
-                        <div>
-                          <img src={form.signatureDataUrl} alt="Signature" className="h-16 w-24 rounded-lg object-contain border border-border bg-white" />
-                          <p className="text-[10px] text-muted-foreground mt-1">Signature</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* STEP 6 — Review (Admissions-style collapsible section cards, single view) */}
+            {step === 6 && <TeacherReviewStep form={form} onJumpTo={setStep} />}
           </GlassCard>
         </motion.div>
       </AnimatePresence>
@@ -250,11 +189,149 @@ export function AddTeacherWizard({ onSuccess, onCancel }: Props) {
   )
 }
 
-function ReviewField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+/* ------------------------------------------------------------------ */
+/*  Teacher Review Step — matches Admissions Review (collapsible      */
+/*  section cards with icon + title + Edit button + chevron).         */
+/*  NO Digital/Official toggle — single clean view only.              */
+/* ------------------------------------------------------------------ */
+
+function TeacherReviewStep({ form, onJumpTo }: { form: AddTeacherForm; onJumpTo: (step: number) => void }) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const toggleSection = (id: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const initials = (form.name || '?').split(' ').map((n) => n[0] || '?').join('').slice(0, 2).toUpperCase()
+
+  const sections = [
+    { id: 'Basic Info', step: 1, icon: User, rows: [
+      { label: 'Name', value: form.name || '—' },
+      { label: 'Gender', value: form.gender || '—' },
+      { label: 'DOB', value: form.dob ? formatDate(form.dob) : '—' },
+      { label: 'Blood Group', value: form.bloodGroup || '—' },
+      { label: 'Aadhaar', value: form.aadhaarNo || '—' },
+    ]},
+    { id: 'Contact', step: 1, icon: Mail, rows: [
+      { label: 'Email', value: form.email || '—' },
+      { label: 'Phone', value: form.phone || '—' },
+      { label: 'Emergency Contact', value: form.emergencyName || '—' },
+      { label: 'Emergency Phone', value: form.emergencyPhone || '—' },
+    ]},
+    { id: 'Address', step: 1, icon: MapPin, rows: [
+      { label: 'Address Line', value: form.currentAddress || '—' },
+      { label: 'District', value: form.district || '—' },
+      { label: 'State', value: form.state || '—' },
+      { label: 'PIN', value: form.pincode || '—' },
+      { label: 'Country', value: 'India' },
+    ]},
+    { id: 'Qualifications', step: 2, icon: GraduationCap, rows: [
+      { label: 'Degree', value: form.degree || '—' },
+      { label: 'Specialization', value: form.specialization || '—' },
+      { label: 'Institution', value: form.institution || '—' },
+      { label: 'Certifications', value: form.profQualifications || '—' },
+      { label: 'Experience', value: form.totalExperience ? `${form.totalExperience} years` : '—' },
+      { label: 'Previous School', value: form.prevOrg || '—' },
+    ]},
+    { id: 'Employment', step: 3, icon: Wallet, rows: [
+      { label: 'Joining Date', value: form.joiningDate ? formatDate(form.joiningDate) : '—' },
+      { label: 'Employment Type', value: form.employmentType || '—' },
+      { label: 'Salary', value: form.salary ? `${formatINR(Number(form.salary))}/mo` : '—' },
+      { label: 'Bank', value: form.bankName || '—' },
+      { label: 'Account No', value: form.accountNo || '—' },
+      { label: 'IFSC', value: form.ifscCode || '—' },
+    ]},
+    { id: 'Academic Assignment', step: 4, icon: Shield, rows: [
+      { label: 'Incharge Position', value: form.inchargePosition !== 'None' ? form.inchargePosition : '—' },
+      { label: 'Class Teacher', value: form.classTeacherRole !== 'None' ? form.classTeacherRole : '—' },
+      { label: 'Asst. Class Teacher', value: form.assistantClassTeacherRole !== 'None' ? form.assistantClassTeacherRole : '—' },
+      { label: 'Subjects', value: form.selectedSubjects.length ? form.selectedSubjects.join(', ') : '—' },
+      { label: 'Classes', value: form.selectedClasses.length ? form.selectedClasses.join(', ') : '—' },
+    ]},
+    ...(form.photoDataUrl || form.signatureDataUrl ? [{ id: 'Documents', step: 5, icon: Camera, rows: [
+      { label: 'Photo', value: form.photoDataUrl ? 'Uploaded' : '—' },
+      { label: 'Signature', value: form.signatureDataUrl ? 'Uploaded' : '—' },
+    ]}] : []),
+  ]
+
   return (
-    <div>
-      <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">{label}</p>
-      <p className={`text-sm font-medium text-foreground mt-0.5 truncate ${mono ? 'font-mono' : ''}`}>{value}</p>
+    <div className="space-y-4">
+      {/* Profile card — same as Admissions */}
+      <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-4">
+        {form.photoDataUrl ? (
+          <img src={form.photoDataUrl} alt={form.name} className="h-14 w-14 rounded-xl object-cover" />
+        ) : (
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-display text-lg font-bold">
+            {initials}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-lg text-foreground">{form.name || 'New Teacher'}</h3>
+          <p className="text-xs text-muted-foreground">
+            {form.employmentType} · {form.joiningDate ? formatDate(form.joiningDate) : 'Joining date not set'}
+          </p>
+        </div>
+      </div>
+
+      {/* Collapsible section cards — identical pattern to Admissions Review */}
+      <div className="space-y-2.5">
+        {sections.map((section) => {
+          const Icon = section.icon
+          const isOpen = !collapsed.has(section.id)
+          return (
+            <div key={section.id} className="rounded-xl border border-border bg-card overflow-hidden">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleSection(section.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection(section.id) } }}
+                className="w-full flex items-center justify-between p-3.5 hover:bg-muted/30 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <span className="font-semibold text-sm">{section.id}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onJumpTo(section.step) }}
+                    className="flex items-center gap-1 text-[11px] font-medium text-primary hover:bg-primary/10 rounded-md px-2 py-1 transition-colors"
+                  >
+                    <Pencil className="h-3 w-3" /> Edit
+                  </button>
+                  <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', isOpen && 'rotate-180')} />
+                </div>
+              </div>
+              <AnimatePresence>
+                {isOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="p-3.5 pt-0 space-y-1.5">
+                      {section.rows.map((row) => (
+                        <div key={row.label} className="flex justify-between items-start text-xs gap-2">
+                          <span className="text-muted-foreground shrink-0">{row.label}:</span>
+                          <span className="font-medium text-foreground text-right">{row.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
