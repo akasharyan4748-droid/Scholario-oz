@@ -138,15 +138,13 @@ export function PrincipalPanel() {
   const ActiveModule = moduleRegistry[active] ?? PrincipalDashboard
 
   let initialStudentTab: StudentsTabKey = 'overview'
-  if (active === 'students:classes' || active === 'classes') {
-    initialStudentTab = 'classes'
-  } else if (active === 'students:directory') {
+  if (active === 'students:directory') {
     initialStudentTab = 'directory'
   } else if (active === 'students:archived') {
     initialStudentTab = 'archived'
   }
 
-  const isStudentModule = active.startsWith('students') || active === 'classes'
+  const isStudentModule = active.startsWith('students:')
 
   return (
     <AppShell
