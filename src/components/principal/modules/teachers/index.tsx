@@ -8,7 +8,6 @@ import {
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { departments, school } from '@/lib/mock/school'
 import { toast } from 'sonner'
@@ -22,7 +21,7 @@ import { AuditLogsTab } from './audit-logs-tab'
 import { AppointmentLettersTab } from './appointment-letters-tab'
 import { AppointmentLetterDocument } from './appointment-letter-document'
 import { AddTeacherWizard } from './add-teacher-wizard'
-import { TeacherProfileDrawer } from './profile-drawer'
+import { TeacherProfilePage } from './teacher-profile-page'
 import { TeacherSettingsPage } from './teacher-settings-page'
 import {
   LockAccountModal, CredentialsSlipModal,
@@ -49,6 +48,38 @@ export function TeachersModule() {
     return (
       <PageTransition>
         <TeacherSettingsPage onBack={() => setIsSettingsOpen(false)} />
+      </PageTransition>
+    )
+  }
+
+  // Teacher Profile full-page sub-route — replaces the right-side drawer
+  // with a proper Admissions-style workspace when a teacher is selected.
+  if (s.sheetOpen && s.selectedTeacher) {
+    return (
+      <PageTransition>
+        <TeacherProfilePage
+          teacher={s.selectedTeacher}
+          positionsList={s.positionsList}
+          onBack={() => { s.setSheetOpen(false); s.setSelectedTeacher(null) }}
+          onResetPassword={() => actions.handleResetPassword(s.selectedTeacher!)}
+          onViewAppointment={() => actions.handleOpenAppointmentLetter(s.selectedTeacher!)}
+          onToggleLock={() => actions.handleOpenLockModal(s.selectedTeacher!)}
+          onOpenTermination={() => actions.handleOpenTerminationModal(s.selectedTeacher!)}
+          onOpenPayrollModal={() => actions.handleOpenPayrollModal(s.selectedTeacher!)}
+          onOpenEmergencyOverride={(posId) => {
+            s.setSelectedPosForOverride(posId)
+            s.setEmergencyOverrideModalOpen(true)
+          }}
+          onRemovePosition={(assignmentId) => {
+            s.removePositionFromTeacher(s.selectedTeacher!.id, assignmentId)
+            toast.success('Position removal initiated', { description: 'Notification sent to teacher.' })
+          }}
+          onOpenWorkload={() => {
+            s.setSelectedSubjects(s.selectedTeacher!.subjects)
+            s.setSelectedClasses(s.selectedTeacher!.classes)
+            s.setWorkloadModalOpen(true)
+          }}
+        />
       </PageTransition>
     )
   }
@@ -102,6 +133,7 @@ export function TeachersModule() {
           onLeaveCount={s.onLeaveCount}
           avgAttendance={s.avgAttendance}
           totalSalary={s.totalSalary}
+          relievedCount={s.relievedCount}
           onOpenProfile={actions.openTeacherProfile}
         />
       )}
@@ -141,39 +173,7 @@ export function TeachersModule() {
       {/* TAB 3: ACTIVITY AUDIT LOGS */}
       {s.activeTab === 'logs' && <AuditLogsTab auditLogs={s.auditLogs} />}
 
-      {/* COMPREHENSIVE TEACHER PROFILE SHEET */}
-      <Sheet open={s.sheetOpen} onOpenChange={s.setSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto p-0">
-          <SheetHeader className="sr-only">
-            <SheetTitle>Teacher Profile</SheetTitle>
-            <SheetDescription>Teacher details and profile management</SheetDescription>
-          </SheetHeader>
-          {s.selectedTeacher && (
-            <TeacherProfileDrawer
-              teacher={s.selectedTeacher}
-              positionsList={s.positionsList}
-              onResetPassword={() => actions.handleResetPassword(s.selectedTeacher!)}
-              onViewAppointment={() => actions.handleOpenAppointmentLetter(s.selectedTeacher!)}
-              onToggleLock={() => actions.handleOpenLockModal(s.selectedTeacher!)}
-              onOpenTermination={() => actions.handleOpenTerminationModal(s.selectedTeacher!)}
-              onOpenPayrollModal={() => actions.handleOpenPayrollModal(s.selectedTeacher!)}
-              onOpenEmergencyOverride={(posId) => {
-                s.setSelectedPosForOverride(posId)
-                s.setEmergencyOverrideModalOpen(true)
-              }}
-              onRemovePosition={(assignmentId) => {
-                s.removePositionFromTeacher(s.selectedTeacher!.id, assignmentId)
-                toast.success('Position removal initiated', { description: 'Notification sent to teacher.' })
-              }}
-              onOpenWorkload={() => {
-                s.setSelectedSubjects(s.selectedTeacher!.subjects)
-                s.setSelectedClasses(s.selectedTeacher!.classes)
-                s.setWorkloadModalOpen(true)
-              }}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
+      {/* (Teacher Profile is now a full-page sub-route — see early return above) */}
 
       {/* APPOINTMENT LETTER PREVIEW & PRINT MODAL */}
       <Dialog open={s.appointmentModalOpen} onOpenChange={s.setAppointmentModalOpen}>

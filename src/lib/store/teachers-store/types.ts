@@ -119,7 +119,7 @@ export interface TeacherRecord {
   employmentType: 'Full Time' | 'Part Time' | 'Probation' | 'Contract' | 'Guest'
   department: string
   designation: string
-  status: 'Active' | 'On Leave' | 'Suspended' | 'Probation'
+  status: 'Active' | 'On Leave' | 'Suspended' | 'Probation' | 'Relieved'
   attendance: number // %
 
   // Salary

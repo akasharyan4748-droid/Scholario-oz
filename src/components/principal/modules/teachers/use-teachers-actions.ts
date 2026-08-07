@@ -84,7 +84,7 @@ export function useTeachersActions(s: TeachersState) {
     s.setTerminationModalOpen(false)
     s.setSheetOpen(false)
     toast.success(`Staff Relieved: ${s.selectedTeacher.name}`, {
-      description: `Teacher record status updated to Suspended/Terminated. Login locked: ${s.lockLoginOnTerminate}`,
+      description: `Record archived with full history preserved. Login locked: ${s.lockLoginOnTerminate}. Viewable under Archived / Relieved filter.`,
     })
   }
 

@@ -26,6 +26,7 @@ interface Props {
   onLeaveCount: number
   avgAttendance: number
   totalSalary: number
+  relievedCount?: number
   onOpenProfile: (t: TeacherRecord) => void
 }
 
@@ -35,7 +36,7 @@ interface Props {
 export function DirectoryTab({
   filteredTeachers, search, setSearch, dept, setDept, statusFilter, setStatusFilter,
   totalTeachers, activeTeachersCount, onLeaveCount, avgAttendance, totalSalary,
-  onOpenProfile,
+  relievedCount, onOpenProfile,
 }: Props) {
   return (
     <div className="space-y-4">
@@ -69,12 +70,13 @@ export function DirectoryTab({
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[120px] h-9 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="w-[130px] h-9 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="all">All Active</SelectItem>
               <SelectItem value="Active">Active</SelectItem>
               <SelectItem value="On Leave">On Leave</SelectItem>
               <SelectItem value="Probation">Probation</SelectItem>
+              <SelectItem value="archived">Archived / Relieved</SelectItem>
             </SelectContent>
           </Select>
           <Badge variant="secondary" className="bg-muted text-muted-foreground text-xs py-1.5 px-3 h-9 flex items-center">

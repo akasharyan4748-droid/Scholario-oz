@@ -833,3 +833,100 @@ Stage Summary:
   - `/home/z/my-project/download/screenshots/teachers-appointment-letters.png`
   - `/home/z/my-project/download/screenshots/teachers-audit-logs.png`
   - `/home/z/my-project/download/screenshots/teachers-settings.png`
+
+---
+Task ID: TEACHERS-MODULE-REFINEMENT-PHASE-3
+Agent: main
+Task: Phase 3 refinement of Teachers module — Audit Logs readability, Teacher Profile full-page conversion, Add Teacher placeholder cleanup + Review hierarchy fix, Relieved Teacher lifecycle implementation.
+
+Work Log:
+
+### Task 1 — Audit Logs Readability
+- Rewrote `audit-logs-tab.tsx` (82 lines):
+  - Removed `truncate` class from action details paragraph
+  - Added `break-words leading-relaxed` to allow natural wrapping into 2-3 lines
+  - Restructured layout: top row = badge + teacher name + time (single line), below = action details (wraps naturally), then actor attribution
+  - VLM verified: "Activity messages shown in full without truncation or ellipsis, wrapping naturally across multiple lines"
+
+### Task 2 — Teacher Profile Full Page
+- Created `teacher-profile-page.tsx` (233 lines) — replaces the right-side Sheet drawer with a proper full-page workspace:
+  - Page header: Back button (ArrowLeft icon) + avatar + teacher name (h1) + designation/employeeId
+  - Action buttons inline: Joining Letter, Account Slip, Lock/Unlock, Relieve
+  - Status strip: department, experience, status badge, portal locked badge
+  - Segmented pill tabs (Positions & Allocation / Profile / Payroll) — same as Admission Settings style
+  - Profile tab: flat label-value fields (no card backgrounds)
+  - Payroll tab: salary summary + breakdown with dividers
+- Updated `index.tsx`:
+  - Removed `Sheet`, `SheetContent`, `SheetHeader`, `SheetTitle`, `SheetDescription` imports
+  - Removed `TeacherProfileDrawer` import, replaced with `TeacherProfilePage`
+  - Added early return when `s.sheetOpen && s.selectedTeacher` → renders `<TeacherProfilePage onBack={...} />` as full-page sub-route
+  - Removed the entire `<Sheet>` block at the bottom
+- VLM verified: "Full-page view with Back arrow button, teacher name as main page title, 3 tabs"
+
+### Task 3 — Add Teacher Placeholders
+- Updated `add-teacher-data.ts` (275 lines):
+  - Replaced ALL pre-filled values in `initialFormState` with empty strings / zeros / empty arrays
+  - Only structural defaults kept: `gender: 'Male'`, `nationality: 'Indian'`, `employmentType: 'Full Time'`, `emergencyRelation: 'Father'`, position roles = `'None'`
+  - No more "Aniket Sharma", "B+", "1992-05-18", "7829 4019 2837", "aniket.sharma@demoschool.edu", etc.
+- Rewrote `add-teacher-steps.tsx` (331 lines):
+  - Added placeholder hints to ALL text inputs (e.g., "e.g. Aniket Sharma", "e.g. B+", "e.g. 98765 43210", "e.g. HDFC Bank")
+  - Added section grouping with dividers + uppercase headings (Education / Experience / Joining / Bank Details / Classes & Subjects) — matches Admission Parents step pattern
+  - Removed per-step `<h3>` headings (StepHeader already shows the title — avoids duplicate headings)
+  - Date pickers now have placeholder text ("Select birth date", "Select joining date")
+  - IFSC code input: uppercase + font-mono styling
+- VLM verified: "All fields are empty with placeholder hints. No pre-filled values"
+
+### Task 3b — Review Screen Hierarchy
+- Updated `add-teacher-wizard.tsx` (229 lines):
+  - Teacher summary block: changed from `font-semibold text-base` (heading-weight) to `font-medium text-sm` inside a `rounded-lg border border-border/60 bg-muted/30 p-3` profile card
+  - Avatar size reduced from `h-12 w-12` to `h-10 w-10`
+  - Added fallback handling for empty form (shows "New Teacher" + "?" avatar instead of crashing)
+  - Review fields now show "—" for empty values instead of showing the raw `formatDate('')` output
+- VLM verified: "'Review & Create' is the primary heading. Below it sits a smaller contained profile card which does not compete as a heading"
+
+### Task 4 — Relieved Teacher Lifecycle
+- Updated `teachers-store/types.ts`:
+  - Added `'Relieved'` to the teacher status union: `'Active' | 'On Leave' | 'Suspended' | 'Probation' | 'Relieved'`
+- Updated `lifecycle-slice.ts` (61 lines):
+  - `terminateTeacher` now sets `status: 'Relieved'` (was `'Suspended'`)
+  - PRESERVES positions, subjects, classes (was clearing them to `[]`) — per spec "Nothing should be lost"
+  - Audit log message updated: "Record archived with full history preserved"
+- Updated `use-teachers-state.ts` (160 lines):
+  - `filteredTeachers` now EXCLUDES Relieved teachers from the normal directory (they only appear when `statusFilter === 'archived'`)
+  - `avgAttendance` and `totalSalary` exclude Relieved teachers from calculations (they're no longer active/paid)
+  - Added `relievedCount` derived stat
+- Updated `directory-tab.tsx` (166 lines):
+  - Added "Archived / Relieved" option to the Status filter dropdown
+  - Changed "All Status" label to "All Active" (makes it clear Relieved teachers are excluded)
+  - Added `relievedCount` prop
+- Updated `index.tsx` to pass `relievedCount={s.relievedCount}` to DirectoryTab
+- Updated `use-teachers-actions.ts`:
+  - Toast message updated: "Record archived with full history preserved. Viewable under Archived / Relieved filter"
+
+### Task 5 — Final Verification
+- VLM verified ALL 4 changes in a single multi-image comparison: "ALL PASS"
+  - Teacher Profile: full-page view with Back button + teacher name as page title + 3 tabs ✓
+  - Add Teacher Step 1: all fields empty with placeholder hints, no pre-filled values ✓
+  - Add Teacher Review: "Review & Create" primary heading, teacher summary as subordinate profile card ✓
+  - Audit Logs: messages shown in full without truncation, wrapping naturally ✓
+- Dev server confirmed healthy on PID 1258, GET / returns 200, zero compile errors
+
+Stage Summary:
+- Files created:
+  - `teachers/teacher-profile-page.tsx` — full-page teacher profile workspace (233 lines)
+- Files rewritten:
+  - `teachers/audit-logs-tab.tsx` — natural wrapping, no truncation (82 lines)
+  - `teachers/add-teacher-wizard.tsx` — review hierarchy fix (229 lines)
+  - `teachers/add-teacher-steps.tsx` — placeholders + section grouping (331 lines)
+  - `teachers/add-teacher-data.ts` — removed all pre-filled values (275 lines)
+  - `teachers/directory-tab.tsx` — added Archived filter option (166 lines)
+  - `teachers/use-teachers-state.ts` — Relieved exclusion logic (160 lines)
+  - `teachers/use-teachers-actions.ts` — updated toast message
+  - `teachers/index.tsx` — full-page profile sub-route + removed Sheet imports
+  - `teachers-store/types.ts` — added 'Relieved' status
+  - `teachers-store/slices/lifecycle-slice.ts` — preserve records on relieve (61 lines)
+- Screenshots saved:
+  - `/home/z/my-project/download/screenshots/teacher-profile-fullpage.png`
+  - `/home/z/my-project/download/screenshots/teachers-add-teacher-placeholders.png`
+  - `/home/z/my-project/download/screenshots/teachers-add-teacher-review-refined.png`
+  - `/home/z/my-project/download/screenshots/teachers-audit-logs-refined.png`

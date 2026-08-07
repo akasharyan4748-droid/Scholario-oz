@@ -148,13 +148,15 @@ export function AddTeacherWizard({ onSuccess, onCancel }: Props) {
         {/* STEP 5 — Review (no box-in-box; uses single container with dividers) */}
         {step === 5 && (
           <div className="space-y-5">
-            {/* Identity summary */}
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-semibold text-base">
-                {form.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+            {/* Teacher summary — profile card, clearly subordinate to the
+                "Review & Create" title above. Smaller text + bordered card
+                so it doesn't compete with the StepHeader. */}
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/30">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-semibold text-sm">
+                {(form.name || '?').split(' ').map((n: string) => n[0] || '?').join('').slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0">
-                <p className="font-semibold text-base text-foreground truncate">{form.name}</p>
+                <p className="font-medium text-sm text-foreground truncate">{form.name || 'New Teacher'}</p>
                 <p className="text-xs text-muted-foreground truncate">
                   {(form as any).designation || 'Subject Teacher'} · {(form as any).department || 'Academic'}
                 </p>
@@ -162,29 +164,29 @@ export function AddTeacherWizard({ onSuccess, onCancel }: Props) {
             </div>
 
             {/* Review fields — grouped by section, separated by dividers */}
-            <div className="pt-4 border-t border-border">
+            <div>
               <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Employment</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <ReviewField label="Employee ID" value="Auto-generated" />
-                <ReviewField label="Joining Date" value={formatDate(form.joiningDate)} />
+                <ReviewField label="Joining Date" value={form.joiningDate ? formatDate(form.joiningDate) : '—'} />
                 <ReviewField label="Employment" value={form.employmentType} />
-                <ReviewField label="Salary" value={`${formatINR(Number(form.salary))}/mo`} />
+                <ReviewField label="Salary" value={form.salary ? `${formatINR(Number(form.salary))}/mo` : '—'} />
               </div>
             </div>
 
             <div className="pt-4 border-t border-border">
               <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Contact</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <ReviewField label="Mobile" value={form.phone} mono />
-                <ReviewField label="Email" value={form.email} />
+                <ReviewField label="Mobile" value={form.phone || '—'} mono />
+                <ReviewField label="Email" value={form.email || '—'} />
               </div>
             </div>
 
             <div className="pt-4 border-t border-border">
               <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Academic</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <ReviewField label="Subjects" value={form.selectedSubjects.join(', ') || 'None'} />
-                <ReviewField label="Classes" value={form.selectedClasses.join(', ') || 'None'} />
+                <ReviewField label="Subjects" value={form.selectedSubjects.length ? form.selectedSubjects.join(', ') : 'None'} />
+                <ReviewField label="Classes" value={form.selectedClasses.length ? form.selectedClasses.join(', ') : 'None'} />
                 <ReviewField label="Class Teacher" value={form.classTeacherRole !== 'None' ? form.classTeacherRole : 'No'} />
               </div>
             </div>

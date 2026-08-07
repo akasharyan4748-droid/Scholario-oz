@@ -10,10 +10,17 @@ interface Props {
 }
 
 /**
- * Audit Logs — concise activity feed (GitHub Activity / Linear style).
+ * Audit Logs — concise activity feed.
  *
- * No large heading, no descriptive paragraph. Each event is a compact
- * row with: status badge · teacher name · action · time · actor.
+ * Layout per row:
+ *   [Status Badge]  Teacher Name              [Time]
+ *                   Action details (wraps naturally)
+ *                   — by Actor (Role)
+ *
+ * Action details are NEVER truncated — they wrap into 2–3 lines when
+ * needed so important context (full position title, salary, dates) is
+ * always readable. Teacher name + time stay anchored on the top row
+ * for quick scanning.
  */
 export function AuditLogsTab({ auditLogs }: Props) {
   if (auditLogs.length === 0) {
@@ -31,40 +38,42 @@ export function AuditLogsTab({ auditLogs }: Props) {
         return (
           <div
             key={log.id}
-            className="px-4 py-3 bg-card hover:bg-muted/30 transition-colors flex items-center gap-3 flex-wrap"
+            className="px-4 py-3 bg-card hover:bg-muted/30 transition-colors"
           >
-            {/* Status badge — color-coded by category */}
-            <Badge
-              variant="outline"
-              className={cn(
-                'text-[10px] font-semibold shrink-0',
-                isEmergency
-                  ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
-                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-              )}
-            >
-              {log.category}
-            </Badge>
-
-            {/* Teacher + actor — single line */}
-            <div className="flex items-baseline gap-1.5 min-w-0 flex-1">
-              <span className="font-semibold text-sm text-foreground truncate">{log.targetTeacherName}</span>
-              <span className="text-xs text-muted-foreground">·</span>
-              <span className="text-xs text-muted-foreground truncate">{log.actorName}</span>
+            {/* Top row: badge + teacher name + time */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge
+                variant="outline"
+                className={cn(
+                  'text-[10px] font-semibold shrink-0',
+                  isEmergency
+                    ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                )}
+              >
+                {log.category}
+              </Badge>
+              <span className="font-semibold text-sm text-foreground truncate flex-1 min-w-0">
+                {log.targetTeacherName}
+              </span>
+              <span
+                className="text-[11px] text-muted-foreground font-mono shrink-0"
+                title={formatDate(log.timestamp)}
+              >
+                {formatRelativeTime(log.timestamp)}
+              </span>
             </div>
 
-            {/* Action details — muted mono, truncated */}
-            <p className="text-xs text-muted-foreground font-mono truncate max-w-[40%] hidden sm:block">
+            {/* Action details — wraps naturally, never truncated */}
+            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed break-words">
               {log.details}
             </p>
 
-            {/* Time — relative + absolute on hover */}
-            <span
-              className="text-[11px] text-muted-foreground font-mono shrink-0 ml-auto"
-              title={formatDate(log.timestamp)}
-            >
-              {formatRelativeTime(log.timestamp)}
-            </span>
+            {/* Actor — subtle attribution */}
+            <p className="text-[11px] text-muted-foreground/80 mt-1">
+              — by <span className="font-medium text-muted-foreground">{log.actorName}</span>
+              {log.actorRole && <span className="text-muted-foreground/60"> · {log.actorRole}</span>}
+            </p>
           </div>
         )
       })}

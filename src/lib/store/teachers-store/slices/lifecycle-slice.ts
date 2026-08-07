@@ -29,17 +29,21 @@ export const createLifecycleSlice: StateCreator<
     const teacher = get().teachers.find((t) => t.id === teacherId)
     if (!teacher) return
 
+    // Per spec — relieved teachers are NOT deleted. We mark them as
+    // 'Relieved' so they're excluded from the active Faculty Directory
+    // but their full record (positions, subjects, classes, salary
+    // history, documents) remains intact for audit + future rejoining.
     set((s) => ({
       teachers: s.teachers.map((t) =>
         t.id === teacherId
           ? {
               ...t,
-              status: 'Suspended' as const,
+              status: 'Relieved' as const,
               isLocked: lockLogin,
-              positions: [],
-              subjects: [],
-              classes: [],
-              remarks: `Relieved / Terminated on ${new Date().toISOString().split('T')[0]}. Reason: ${reason}`,
+              // Preserve positions, subjects, classes — do NOT clear them.
+              // The full record stays for audit, appointment history,
+              // salary history, and potential future rejoining.
+              remarks: `Relieved on ${new Date().toISOString().split('T')[0]}. Reason: ${reason}`,
             }
           : t
       ),
@@ -51,7 +55,7 @@ export const createLifecycleSlice: StateCreator<
       actorRole: 'Principal',
       targetTeacherId: teacher.id,
       targetTeacherName: teacher.name,
-      details: `RELIEVED & TERMINATED staff record for ${teacher.name}. Reason: ${reason}. Login Locked: ${lockLogin}`,
+      details: `RELIEVED staff record for ${teacher.name}. Reason: ${reason}. Login Locked: ${lockLogin}. Record archived with full history preserved.`,
     })
   },
 })

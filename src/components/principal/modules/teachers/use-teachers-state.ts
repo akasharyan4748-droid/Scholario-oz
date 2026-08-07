@@ -82,7 +82,13 @@ export function useTeachersState() {
         t.employeeId.toLowerCase().includes(search.toLowerCase()) ||
         t.subjects.join(' ').toLowerCase().includes(search.toLowerCase())
       const matchesDept = dept === 'all' || t.department === dept
-      const matchesStatus = statusFilter === 'all' || t.status === statusFilter
+      // Per spec — Relieved teachers should NOT appear in the normal
+      // Faculty Directory. They live in their own Archived/Relieved view.
+      // The statusFilter 'archived' surfaces them; otherwise they're hidden.
+      const isRelieved = t.status === 'Relieved'
+      const matchesStatus = isRelieved
+        ? statusFilter === 'archived'   // only show if explicitly filtering for archived
+        : statusFilter === 'all' || t.status === statusFilter
       return matchesSearch && matchesDept && matchesStatus
     })
   }, [teachers, search, dept, statusFilter])
@@ -90,8 +96,13 @@ export function useTeachersState() {
   const totalTeachers = teachers.length
   const activeTeachersCount = teachers.filter((t) => t.status === 'Active').length
   const onLeaveCount = teachers.filter((t) => t.status === 'On Leave').length
-  const avgAttendance = Math.round(teachers.reduce((a, t) => a + t.attendance, 0) / (teachers.length || 1))
-  const totalSalary = teachers.reduce((a, t) => a + t.salary, 0)
+  const relievedCount = teachers.filter((t) => t.status === 'Relieved').length
+  // Active payroll excludes Relieved teachers (they're no longer paid)
+  const avgAttendance = Math.round(
+    teachers.filter((t) => t.status !== 'Relieved').reduce((a, t) => a + t.attendance, 0) /
+    (teachers.filter((t) => t.status !== 'Relieved').length || 1)
+  )
+  const totalSalary = teachers.filter((t) => t.status !== 'Relieved').reduce((a, t) => a + t.salary, 0)
 
   return {
     // store data + actions
@@ -108,6 +119,7 @@ export function useTeachersState() {
     filteredTeachers,
     // derived stats
     totalTeachers, activeTeachersCount, onLeaveCount, avgAttendance, totalSalary,
+    relievedCount,
     // selection + sheet
     selectedTeacher, setSelectedTeacher,
     sheetOpen, setSheetOpen,
