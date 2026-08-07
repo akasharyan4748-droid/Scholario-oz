@@ -2,7 +2,10 @@
 
 /**
  * Wizard Step 3 — Address Information.
- * Extracted from the original admission.tsx monolith (Task ID: 21).
+ *
+ * Layout: Country / State / District / Address Line / PIN Code (no City field).
+ * District already identifies the location; City was redundant form length.
+ * Both Current + Permanent addresses use the same minimal structure.
  */
 import { MapPin } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -11,8 +14,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import {
-  COUNTRIES, getStatesForCountry, getDistrictsForState, getCitiesForDistrict,
-  validateIndianPin,
+  COUNTRIES, getStatesForCountry, getDistrictsForState, validateIndianPin,
 } from '@/lib/indian-address'
 import type { FormData } from '../constants'
 import { StepHeader, Field } from './StepShared'
@@ -28,10 +30,8 @@ export function AddressStep({
 }) {
   const currentStates = getStatesForCountry(data.country)
   const currentDistricts = getDistrictsForState(data.country, data.state)
-  const currentCities = getCitiesForDistrict(data.country, data.state, data.district)
   const permStates = getStatesForCountry(data.permCountry)
   const permDistricts = getDistrictsForState(data.permCountry, data.permState)
-  const permCities = getCitiesForDistrict(data.permCountry, data.permState, data.permDistrict)
 
   const pinValid = data.pincode ? validateIndianPin(data.pincode) : null
   const permPinValid = data.permPincode ? validateIndianPin(data.permPincode) : null
@@ -40,23 +40,21 @@ export function AddressStep({
     set('country', v)
     set('state', '')
     set('district', '')
-    set('city', '')
     set('pincode', '')
   }
   const handleStateChange = (v: string) => {
     set('state', v)
     set('district', '')
-    set('city', '')
   }
   const handleDistrictChange = (v: string) => {
     set('district', v)
-    set('city', '')
   }
 
   return (
     <div>
       <StepHeader title="Address Information" subtitle="Residential and permanent communication details" icon={<MapPin className="h-5 w-5" />} />
       <div className="space-y-6">
+        {/* CURRENT ADDRESS */}
         <div>
           <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">CURRENT ADDRESS</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -67,15 +65,6 @@ export function AddressStep({
                   {COUNTRIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
-            </Field>
-
-            <Field label="Address Line">
-              <Textarea
-                value={data.currentAddress}
-                onChange={(e) => set('currentAddress', e.target.value)}
-                placeholder="House no, street, area"
-                className="min-h-[60px]"
-              />
             </Field>
 
             <Field label="State">
@@ -96,13 +85,13 @@ export function AddressStep({
               </Select>
             </Field>
 
-            <Field label="City">
-              <Select value={data.city} onValueChange={(v) => set('city', v)} disabled={!data.district}>
-                <SelectTrigger className="w-full"><SelectValue placeholder={data.district ? 'Select City' : 'Select district first'} /></SelectTrigger>
-                <SelectContent>
-                  {currentCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <Field label="Address Line">
+              <Textarea
+                value={data.currentAddress}
+                onChange={(e) => set('currentAddress', e.target.value)}
+                placeholder="House no, street, area"
+                className="min-h-[60px]"
+              />
             </Field>
 
             <Field label="PIN Code" hint={pinValid === false ? 'Enter a valid 6-digit PIN' : '6-digit postal code'}>
@@ -120,6 +109,7 @@ export function AddressStep({
           </div>
         </div>
 
+        {/* PERMANENT ADDRESS */}
         <div className="pt-4 border-t border-border">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
             <p className="text-xs font-bold text-primary uppercase tracking-wider">PERMANENT ADDRESS</p>
@@ -134,10 +124,28 @@ export function AddressStep({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <Field label="Country">
-              <Select value={data.permCountry} onValueChange={(v) => { set('permCountry', v); set('permState', ''); set('permDistrict', ''); set('permCity', '') }} disabled={data.sameAsCurrentAddress}>
+              <Select value={data.permCountry} onValueChange={(v) => { set('permCountry', v); set('permState', ''); set('permDistrict', '') }} disabled={data.sameAsCurrentAddress}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {COUNTRIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label="State">
+              <Select value={data.permState} onValueChange={(v) => { set('permState', v); set('permDistrict', '') }} disabled={data.sameAsCurrentAddress}>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Select State" /></SelectTrigger>
+                <SelectContent>
+                  {permStates.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label="District">
+              <Select value={data.permDistrict} onValueChange={(v) => set('permDistrict', v)} disabled={data.sameAsCurrentAddress || !data.permState}>
+                <SelectTrigger className="w-full"><SelectValue placeholder={data.permState ? 'Select District' : 'Select state first'} /></SelectTrigger>
+                <SelectContent>
+                  {permDistricts.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Field>
@@ -150,33 +158,6 @@ export function AddressStep({
                 placeholder="House no, street, area"
                 className="min-h-[60px] disabled:opacity-60 disabled:bg-muted/50"
               />
-            </Field>
-
-            <Field label="State">
-              <Select value={data.permState} onValueChange={(v) => { set('permState', v); set('permDistrict', ''); set('permCity', '') }} disabled={data.sameAsCurrentAddress}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select State" /></SelectTrigger>
-                <SelectContent>
-                  {permStates.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            <Field label="District">
-              <Select value={data.permDistrict} onValueChange={(v) => { set('permDistrict', v); set('permCity', '') }} disabled={data.sameAsCurrentAddress || !data.permState}>
-                <SelectTrigger className="w-full"><SelectValue placeholder={data.permState ? 'Select District' : 'Select state first'} /></SelectTrigger>
-                <SelectContent>
-                  {permDistricts.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            <Field label="City">
-              <Select value={data.permCity} onValueChange={(v) => set('permCity', v)} disabled={data.sameAsCurrentAddress || !data.permDistrict}>
-                <SelectTrigger className="w-full"><SelectValue placeholder={data.permDistrict ? 'Select City' : 'Select district first'} /></SelectTrigger>
-                <SelectContent>
-                  {permCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
             </Field>
 
             <Field label="PIN Code" hint={permPinValid === false ? 'Enter a valid 6-digit PIN' : undefined}>

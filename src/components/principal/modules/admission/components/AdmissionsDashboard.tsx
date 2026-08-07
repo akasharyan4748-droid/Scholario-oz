@@ -33,9 +33,6 @@ export function AdmissionsDashboard({
   const [selectedClass, setSelectedClass] = useState<string>('All')
   const [selectedSession, setSelectedSession] = useState<string>('All')
   const [selectedAdmissionType, setSelectedAdmissionType] = useState<string>('All')
-  const [dateFrom, setDateFrom] = useState<string>('')
-  const [dateTo, setDateTo] = useState<string>('')
-  const [showDateFilter, setShowDateFilter] = useState(false)
 
   const { inReview, needCorrection, approved, enrolled, statusCounts } = computeStatusCounts(applications)
 
@@ -45,8 +42,6 @@ export function AdmissionsDashboard({
     selectedClass,
     selectedSession,
     selectedAdmissionType,
-    dateFrom,
-    dateTo,
   })
 
   return (
@@ -82,12 +77,6 @@ export function AdmissionsDashboard({
         setSelectedSession={setSelectedSession}
         selectedAdmissionType={selectedAdmissionType}
         setSelectedAdmissionType={setSelectedAdmissionType}
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        showDateFilter={showDateFilter}
-        setShowDateFilter={setShowDateFilter}
       />
 
       <ApplicationsTable

@@ -2,24 +2,34 @@
 
 /**
  * Wizard Step 4 — Applying For (Class & Section).
- * Extracted from the original admission.tsx monolith (Task ID: 21).
+ *
+ * Minimal: just Class + Section + seat availability indicator.
+ * The academic session is shown in the step subtitle (no separate banner,
+ * no "Auto-fetched from school settings" description).
  */
 import { useMemo } from 'react'
-import { GraduationCap, Calendar, X, Clock, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { GraduationCap, X, Clock, CheckCircle2 } from 'lucide-react'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { classList } from '@/lib/mock/school'
-import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 import {
   useAdmissionFeatureFlags,
   useSeatCapacity,
   getSeatInfo,
 } from '../lib/admission-utils'
+import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 import type { FormData } from '../constants'
 import { StepHeader, Field } from './StepShared'
 
-export function ClassStep({ data, set, flags, seatCapacity }: { data: FormData; set: <K extends keyof FormData>(k: K, v: FormData[K]) => void; flags: ReturnType<typeof useAdmissionFeatureFlags>; seatCapacity: ReturnType<typeof useSeatCapacity> }) {
+export function ClassStep({
+  data, set, flags, seatCapacity,
+}: {
+  data: FormData
+  set: <K extends keyof FormData>(k: K, v: FormData[K]) => void
+  flags: ReturnType<typeof useAdmissionFeatureFlags>
+  seatCapacity: ReturnType<typeof useSeatCapacity>
+}) {
   const seatInfo = getSeatInfo(seatCapacity, data.className)
   const waitlisted = seatInfo.waitlisted
   const activeSession = useSchoolSettingsStore.getState().academics.currentSession
@@ -38,17 +48,12 @@ export function ClassStep({ data, set, flags, seatCapacity }: { data: FormData; 
 
   return (
     <div>
-      <StepHeader title="Applying For" subtitle={`Session ${activeSession} (active) · Class & section`} icon={<GraduationCap className="h-5 w-5" />} />
-      {/* Active session indicator — read-only, auto-fetched */}
-      <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 flex items-center gap-2.5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600">
-          <Calendar className="h-4 w-4" />
-        </div>
-        <div>
-          <p className="text-xs font-semibold">Academic Session: {activeSession}</p>
-          <p className="text-[10px] text-muted-foreground">Auto-fetched from school settings</p>
-        </div>
-      </div>
+      <StepHeader
+        title="Applying For"
+        subtitle={`Academic Session ${activeSession}`}
+        icon={<GraduationCap className="h-5 w-5" />}
+      />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <Field label="Applying for Class">
           <Select value={data.className} onValueChange={handleClassChange}>
@@ -66,7 +71,7 @@ export function ClassStep({ data, set, flags, seatCapacity }: { data: FormData; 
           </Select>
         </Field>
 
-        <Field label="Applying for Section (Optional)">
+        <Field label="Section (Optional)">
           <Select value={data.section || 'NONE'} onValueChange={(v) => set('section', v === 'NONE' ? '' : v)}>
             <SelectTrigger className="w-full"><SelectValue placeholder="No preference" /></SelectTrigger>
             <SelectContent>
@@ -78,7 +83,7 @@ export function ClassStep({ data, set, flags, seatCapacity }: { data: FormData; 
           </Select>
         </Field>
 
-        {/* Seat availability indicator */}
+        {/* Seat availability — provides real value (informs waitlist decision) */}
         {data.className && (
           <div className={cn(
             'sm:col-span-2 rounded-xl border p-3 flex items-center justify-between gap-3',
@@ -120,16 +125,6 @@ export function ClassStep({ data, set, flags, seatCapacity }: { data: FormData; 
           </div>
         )}
       </div>
-
-      {waitlisted && (
-        <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-          <div>
-            <p className="font-semibold">Waitlist Active</p>
-            <p className="text-[11px] mt-0.5 opacity-80">This class is at or near capacity. The application will be added to the waitlist and auto-promoted when a seat opens.</p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

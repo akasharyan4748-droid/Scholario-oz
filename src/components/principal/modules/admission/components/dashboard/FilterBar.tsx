@@ -1,8 +1,6 @@
-import { Calendar, Search } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { cn } from '@/lib/utils'
 import { classList } from '@/lib/mock/school'
 
 interface FilterBarProps {
@@ -14,30 +12,18 @@ interface FilterBarProps {
   setSelectedSession: (v: string) => void
   selectedAdmissionType: string
   setSelectedAdmissionType: (v: string) => void
-  dateFrom: string
-  setDateFrom: (v: string) => void
-  dateTo: string
-  setDateTo: (v: string) => void
-  showDateFilter: boolean
-  setShowDateFilter: (v: boolean | ((prev: boolean) => boolean)) => void
 }
 
-// Search + filter bar
+/**
+ * Filter bar — search + class + session + admission type (2 options only).
+ * Date Range filter removed per spec (visual clutter for normal usage).
+ * Admission Type simplified to: Fresh Admission | Existing Student.
+ */
 export function FilterBar({
-  searchQuery,
-  setSearchQuery,
-  selectedClass,
-  setSelectedClass,
-  selectedSession,
-  setSelectedSession,
-  selectedAdmissionType,
-  setSelectedAdmissionType,
-  dateFrom,
-  setDateFrom,
-  dateTo,
-  setDateTo,
-  showDateFilter,
-  setShowDateFilter,
+  searchQuery, setSearchQuery,
+  selectedClass, setSelectedClass,
+  selectedSession, setSelectedSession,
+  selectedAdmissionType, setSelectedAdmissionType,
 }: FilterBarProps) {
   return (
     <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
@@ -47,11 +33,11 @@ export function FilterBar({
           placeholder="Search name, admission no, parent, phone, aadhaar..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 text-xs"
+          className="pl-9 text-xs h-9"
         />
       </div>
       <Select value={selectedClass} onValueChange={setSelectedClass}>
-        <SelectTrigger className="text-xs w-full sm:w-40">
+        <SelectTrigger className="text-xs h-9 w-full sm:w-40">
           <SelectValue placeholder="All Classes" />
         </SelectTrigger>
         <SelectContent>
@@ -63,7 +49,7 @@ export function FilterBar({
         </SelectContent>
       </Select>
       <Select value={selectedSession} onValueChange={setSelectedSession}>
-        <SelectTrigger className="text-xs w-full sm:w-40">
+        <SelectTrigger className="text-xs h-9 w-full sm:w-40">
           <SelectValue placeholder="All Sessions" />
         </SelectTrigger>
         <SelectContent>
@@ -74,49 +60,15 @@ export function FilterBar({
         </SelectContent>
       </Select>
       <Select value={selectedAdmissionType} onValueChange={setSelectedAdmissionType}>
-        <SelectTrigger className="text-xs w-full sm:w-40">
+        <SelectTrigger className="text-xs h-9 w-full sm:w-44">
           <SelectValue placeholder="All Types" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="All">All Types</SelectItem>
-          <SelectItem value="fresh">Fresh</SelectItem>
-          <SelectItem value="transfer">Transfer</SelectItem>
-          <SelectItem value="readmission">Re-admission</SelectItem>
-          <SelectItem value="promotion">Promotion</SelectItem>
+          <SelectItem value="fresh">Fresh Admission</SelectItem>
+          <SelectItem value="existing">Existing Student</SelectItem>
         </SelectContent>
       </Select>
-      {/* Date Range filter */}
-      <div className="relative">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowDateFilter((v) => !v)}
-          className={cn('text-xs gap-1.5 h-9', (dateFrom || dateTo) && 'border-primary text-primary')}
-        >
-          <Calendar className="h-3.5 w-3.5" />
-          {dateFrom || dateTo ? `${dateFrom || '...'} → ${dateTo || '...'}` : 'Date Range'}
-        </Button>
-        {showDateFilter && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setShowDateFilter(false)} />
-            <div className="absolute right-0 top-full mt-1.5 z-50 rounded-xl border border-border bg-popover shadow-xl p-3 space-y-2 w-64">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Application Date Range</p>
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-muted-foreground">From</label>
-                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="text-xs h-8" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-muted-foreground">To</label>
-                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="text-xs h-8" />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={() => { setDateFrom(''); setDateTo('') }}>Clear</Button>
-                <Button size="sm" className="text-xs h-7 flex-1" onClick={() => setShowDateFilter(false)}>Apply</Button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
     </div>
   )
 }

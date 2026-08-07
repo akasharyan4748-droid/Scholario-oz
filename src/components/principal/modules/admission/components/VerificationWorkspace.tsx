@@ -7,9 +7,10 @@ import {
   useAdmissionStore,
   SectionKey,
 } from '@/lib/store/admission-store'
+import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 import { toast } from 'sonner'
 
-import { SECTIONS_CONFIG } from './verification/sections-config'
+import { getSectionsConfig } from './verification/sections-config'
 import { VerificationHeader } from './verification/VerificationHeader'
 import { VerificationSectionCard } from './verification/VerificationSectionCard'
 import { VerificationSidebar } from './verification/VerificationSidebar'
@@ -30,6 +31,8 @@ export function VerificationWorkspace({
   onOpenWizardToEdit,
 }: VerificationWorkspaceProps) {
   const store = useAdmissionStore()
+  const admissionSettings = useSchoolSettingsStore((s) => s.admissionSettings)
+  const featureFlags = admissionSettings.featureFlags
   const app = store.applications.find((a) => a.id === appId)
 
   const [overallRemarks, setOverallRemarks] = useState(app?.generalRemarks || '')
@@ -45,6 +48,15 @@ export function VerificationWorkspace({
       </div>
     )
   }
+
+  // Build the verification checklist once, honoring admission feature flags.
+  // Settings like enableMedical / enablePreviousSchool / enableStudentPhoto
+  // actually hide the corresponding sections — they're not visual-only.
+  const visibleSections = getSectionsConfig({
+    enableMedical: featureFlags.enableMedical,
+    enablePreviousSchool: featureFlags.enablePreviousSchool,
+    enableStudentPhoto: featureFlags.enableStudentPhoto,
+  })
 
   const sectionReviews = app.sectionReviews || {}
 
@@ -113,14 +125,14 @@ export function VerificationWorkspace({
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-sm tracking-tight flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              9-Section Official Verification Checklist
+              {visibleSections.length}-Section Official Verification Checklist
             </h3>
             <span className="text-xs text-muted-foreground font-mono">
-              {9 - flaggedCount} / 9 Sections Verified
+              {visibleSections.length - flaggedCount} / {visibleSections.length} Sections Verified
             </span>
           </div>
 
-          {SECTIONS_CONFIG.map(({ key, title, icon }) => {
+          {visibleSections.map(({ key, title, icon }) => {
             const review = sectionReviews[key] || { status: 'Complete', remarks: '' }
             return (
               <VerificationSectionCard

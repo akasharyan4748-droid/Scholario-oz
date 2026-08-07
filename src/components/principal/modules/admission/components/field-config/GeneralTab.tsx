@@ -6,7 +6,6 @@ import {
 } from '@/components/principal/modules/shared/settings-primitives'
 import { useDirtyState } from '@/components/principal/modules/shared/use-settings-dirty'
 import { Input } from '@/components/ui/input'
-import { toast } from 'sonner'
 import {
   Lock, SlidersHorizontal, Stethoscope, Bus, Award, FileStack,
 } from 'lucide-react'
@@ -15,67 +14,74 @@ import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 /**
  * GeneralTab — broad Admission Settings.
  *
- * Settings split into two categories:
- *  - "Soft" (Privacy, Duplicate Detection, Rejection Retention, Custom Fields):
- *    tracked in local draft, committed via the global ActionBar at page level.
- *  - "Immediate" (Medical, Transport, Hostel, Scholarship, Fee Waiver, Photos):
- *    applied instantly with toast confirmation — they take effect at once.
+ * Per spec: EVERY setting must trigger the global dirty state and reveal
+ * the sticky Save/Discard bar. So all toggles are tracked in a local
+ * draft and committed only when the user clicks Save. Nothing applies
+ * immediately — the user always gets a chance to Discard.
  */
 export function GeneralTab() {
   const store = useSchoolSettingsStore()
   const settings = store.admissionSettings
   const flags = settings.featureFlags
 
-  // Draft state for soft settings
+  // Draft state for ALL settings on this tab (single source of truth).
   const initial = useMemo(() => ({
     showPersonalDataOnLetter: settings.showPersonalDataOnLetter,
     dupEnabled: settings.duplicateDetection.enabled,
     retentionDays: settings.rejectionRetentionDays || 60,
     enableCustomFields: flags.enableCustomFields,
+    enableMedical: flags.enableMedical,
+    enableTransport: flags.enableTransport,
+    enableHostel: flags.enableHostel,
+    enableScholarship: flags.enableScholarship,
+    enableFeeWaiver: flags.enableFeeWaiver,
+    enableStudentPhoto: flags.enableStudentPhoto,
+    enableParentPhoto: flags.enableParentPhoto,
+    enableSignature: flags.enableSignature,
   }), [settings.showPersonalDataOnLetter, settings.duplicateDetection.enabled,
-       settings.rejectionRetentionDays, flags.enableCustomFields])
+       settings.rejectionRetentionDays, flags])
 
   const [draft, setDraft] = useState(initial)
-  const [saving, setSaving] = useState(false)
 
-  // Re-sync when store catches up from elsewhere
+  // Re-sync when store catches up from elsewhere (e.g. after Save).
   useEffect(() => { setDraft(initial) }, [initial])
 
-  // Compute dirty by JSON compare
+  // Compute dirty by JSON compare — any change in any field flips this.
   const dirty = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(initial),
     [draft, initial]
   )
 
-  // Stable save + discard fns (recreated only when draft/initial changes)
+  // Save commits every draft field to the real store at once.
   const save = useCallback(async () => {
-    setSaving(true)
-    try {
-      store.updateAdmissionSettings({
-        showPersonalDataOnLetter: draft.showPersonalDataOnLetter,
-        rejectionRetentionDays: draft.retentionDays,
-      })
-      store.updateDuplicateDetection({ enabled: draft.dupEnabled })
-      store.updateAdmissionFeatureFlags({ enableCustomFields: draft.enableCustomFields } as any)
-    } finally {
-      setSaving(false)
-    }
+    store.updateAdmissionSettings({
+      showPersonalDataOnLetter: draft.showPersonalDataOnLetter,
+      rejectionRetentionDays: draft.retentionDays,
+    })
+    store.updateDuplicateDetection({ enabled: draft.dupEnabled })
+    store.updateAdmissionFeatureFlags({
+      enableCustomFields: draft.enableCustomFields,
+      enableMedical: draft.enableMedical,
+      enableTransport: draft.enableTransport,
+      enableHostel: draft.enableHostel,
+      enableScholarship: draft.enableScholarship,
+      enableFeeWaiver: draft.enableFeeWaiver,
+      enableStudentPhoto: draft.enableStudentPhoto,
+      enableParentPhoto: draft.enableParentPhoto,
+      enableSignature: draft.enableSignature,
+    } as any)
   }, [draft, store])
 
   const discard = useCallback(() => {
     setDraft(initial)
   }, [initial])
 
-  // Register this tab's dirty + commit fns with the global provider
+  // Register this tab's dirty + commit fns with the global provider.
   useDirtyState('admission-general', dirty, save, discard)
 
-  // Immediate-effect toggles
-  const toggleImmediate = (key: keyof typeof flags) => {
-    store.updateAdmissionFeatureFlags({ [key]: !flags[key] } as any)
-    toast.success(`${FLAG_LABELS[key]} ${flags[key] ? 'disabled' : 'enabled'}`)
-  }
-
-  void saving
+  // Helper to flip a single draft boolean.
+  const toggle = (key: keyof typeof draft) => (v: boolean) =>
+    setDraft((prev) => ({ ...prev, [key]: v }))
 
   return (
     <SettingsCard>
@@ -91,41 +97,41 @@ export function GeneralTab() {
         <ToggleRow
           label="Enable Duplicate Detection"
           checked={draft.dupEnabled}
-          onCheckedChange={(v) => setDraft({ ...draft, dupEnabled: v })}
+          onCheckedChange={toggle('dupEnabled')}
         />
       </SettingsCardSection>
 
       <SettingsCardSection title="Medical" icon={Stethoscope}>
-        <ToggleRow label="Medical Section" checked={flags.enableMedical}
-          onCheckedChange={() => toggleImmediate('enableMedical')} />
+        <ToggleRow label="Medical Section" checked={draft.enableMedical}
+          onCheckedChange={toggle('enableMedical')} />
       </SettingsCardSection>
 
       <SettingsCardSection title="Transport & Hostel" icon={Bus}>
-        <ToggleRow label="Transport Facility" checked={flags.enableTransport}
-          onCheckedChange={() => toggleImmediate('enableTransport')} />
-        <ToggleRow label="Hostel Facility" checked={flags.enableHostel}
-          onCheckedChange={() => toggleImmediate('enableHostel')} />
+        <ToggleRow label="Transport Facility" checked={draft.enableTransport}
+          onCheckedChange={toggle('enableTransport')} />
+        <ToggleRow label="Hostel Facility" checked={draft.enableHostel}
+          onCheckedChange={toggle('enableHostel')} />
       </SettingsCardSection>
 
       <SettingsCardSection title="Financial" icon={Award}>
-        <ToggleRow label="Scholarship" checked={flags.enableScholarship}
-          onCheckedChange={() => toggleImmediate('enableScholarship')} />
-        <ToggleRow label="Fee Waiver" checked={flags.enableFeeWaiver}
-          onCheckedChange={() => toggleImmediate('enableFeeWaiver')} />
+        <ToggleRow label="Scholarship" checked={draft.enableScholarship}
+          onCheckedChange={toggle('enableScholarship')} />
+        <ToggleRow label="Fee Waiver" checked={draft.enableFeeWaiver}
+          onCheckedChange={toggle('enableFeeWaiver')} />
       </SettingsCardSection>
 
       <SettingsCardSection title="Documents" icon={FileStack}>
-        <ToggleRow label="Student Photo" checked={flags.enableStudentPhoto}
-          onCheckedChange={() => toggleImmediate('enableStudentPhoto')} />
-        <ToggleRow label="Parent Photo" checked={flags.enableParentPhoto}
-          onCheckedChange={() => toggleImmediate('enableParentPhoto')} />
-        <ToggleRow label="Signature Upload" checked={flags.enableSignature}
-          onCheckedChange={() => toggleImmediate('enableSignature')} />
+        <ToggleRow label="Student Photo" checked={draft.enableStudentPhoto}
+          onCheckedChange={toggle('enableStudentPhoto')} />
+        <ToggleRow label="Parent Photo" checked={draft.enableParentPhoto}
+          onCheckedChange={toggle('enableParentPhoto')} />
+        <ToggleRow label="Signature Upload" checked={draft.enableSignature}
+          onCheckedChange={toggle('enableSignature')} />
       </SettingsCardSection>
 
       <SettingsCardSection title="Advanced" icon={SlidersHorizontal}>
         <ToggleRow label="Custom Fields" checked={draft.enableCustomFields}
-          onCheckedChange={(v) => setDraft({ ...draft, enableCustomFields: v })} />
+          onCheckedChange={toggle('enableCustomFields')} />
         <ValueRow label="Rejection Retention">
           <div className="flex items-center gap-2">
             <Input type="number" min={30} max={90} value={draft.retentionDays}
@@ -140,16 +146,4 @@ export function GeneralTab() {
       </SettingsCardSection>
     </SettingsCard>
   )
-}
-
-const FLAG_LABELS: Record<string, string> = {
-  enableMedical: 'Medical Section',
-  enableHostel: 'Hostel Facility',
-  enableTransport: 'Transport Facility',
-  enableScholarship: 'Scholarship',
-  enableFeeWaiver: 'Fee Waiver',
-  enableStudentPhoto: 'Student Photo',
-  enableParentPhoto: 'Parent Photo',
-  enableSignature: 'Signature Upload',
-  enableCustomFields: 'Custom Fields',
 }

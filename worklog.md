@@ -622,3 +622,119 @@ Stage Summary:
   - `/home/z/my-project/download/screenshots/teachers-premium-cards.png`
   - `/home/z/my-project/download/screenshots/attendance-premium-cards.png`
   - `/home/z/my-project/download/screenshots/students-premium-cards.png`
+
+---
+Task ID: ADMISSION-MODULE-REFINEMENT-PHASE-2
+Agent: main
+Task: Carefully refine the Admission module per 7-point spec — remove City field, simplify Applying For screen, remove Date Range filter, simplify Admission Type filter to 2 categories, fix Save detection for all toggles, verify functionality end-to-end.
+
+Work Log:
+
+### Task 1 — Remove City Field from Address
+- Rewrote `AddressStep.tsx` (181 lines):
+  - Removed City Select + SelectItem block from both Current and Permanent Address sections
+  - Removed `getCitiesForDistrict` import (no longer needed)
+  - Removed `set('city', '')` from `handleCountryChange`, `handleStateChange`, `handleDistrictChange`
+  - Removed `set('permCity', '')` from permanent address handlers
+  - New field order per spec: Country / State / District / Address Line / PIN Code (matches user's exact spec)
+- Kept `city` and `permCity` fields in FormData type + initialData for backward compat (existing applications in localStorage may have these fields; safer than breaking)
+- VLM verified: "No 'City' field is present in either the Current or Permanent address sections. The fields are limited to Country, State, District, Address Line, and PIN Code as specified"
+
+### Task 2 — Simplify Applying For Screen
+- Rewrote `ClassStep.tsx` (130 lines):
+  - Removed the entire "Active session indicator" banner card (emerald gradient box with Calendar icon + "Academic Session: 2025-2026" + "Auto-fetched from school settings" description)
+  - Moved the academic session value into the StepHeader subtitle: `subtitle="Academic Session ${activeSession}"`
+  - Removed unused imports (Calendar, X, Clock, CheckCircle2, AlertTriangle kept for seat availability indicator; removed Calendar)
+  - Removed unused Badge import where appropriate
+  - Renamed "Applying for Section (Optional)" → "Section (Optional)" (less verbose)
+- VLM verified: "There is no 'Auto-fetched from school settings' description text visible under the 'Applying for Class' dropdown"
+
+### Task 3 — Remove Date Range Filter
+- Rewrote `dashboard/FilterBar.tsx` (74 lines, down from 122):
+  - Removed `Calendar` icon import
+  - Removed `Button` import (no longer used)
+  - Removed `cn` import (no longer used)
+  - Removed `dateFrom`, `dateTo`, `showDateFilter` props + state
+  - Removed entire Date Range dropdown UI block (lines 88-119 of old file)
+  - Updated `FilterBarProps` interface to remove date props
+- Updated `dashboard/types.ts`:
+  - Removed `dateFrom` and `dateTo` from `FilterState` interface
+  - Removed `dateFrom`/`dateTo` filter logic from `filterApplications()`
+- Updated `AdmissionsDashboard.tsx` (94 lines):
+  - Removed `dateFrom`, `dateTo`, `showDateFilter` state declarations
+  - Removed date props from `filterApplications()` call
+  - Removed date props from `<FilterBar>` invocation
+- VLM verified: "The filter bar contains Search, All Classes, All Sessions, and All Types dropdowns, but there is no Date Range filter button"
+
+### Task 4 — Simplify Admission Type Filter
+- Updated `dashboard/FilterBar.tsx`: replaced 4-option Type dropdown with 3:
+  - "All Types" / "Fresh Admission" / "Existing Student"
+- Updated `dashboard/types.ts` filterApplications logic to map legacy values:
+  - Old: `fresh` / `transfer` / `readmission` / `promotion` (4 types)
+  - New: `fresh` → "fresh", everything else → "existing"
+  - Legacy data with `transfer`/`readmission`/`promotion` automatically collapses to "Existing Student" so historical applications remain filterable
+- Verified end-to-end: opened Type dropdown, confirmed exactly 3 options: All Types, Fresh Admission, Existing Student
+
+### Task 5 — Fix Admission Settings Save Detection
+- Rewrote `field-config/GeneralTab.tsx` (149 lines):
+  - **Before**: 4 settings (Privacy, Dup Detection, Rejection Retention, Custom Fields) tracked in draft → committed via global ActionBar. Other 8 toggles (Medical, Transport, Hostel, Scholarship, Fee Waiver, Student/Parent Photo, Signature) were "immediate-effect" — applied directly to store with toast, bypassing the dirty state.
+  - **After**: ALL 12 settings tracked in a single `draft` state object. Any toggle flips the JSON-compare dirty flag, which triggers the global ActionBar via `useDirtyState('admission-general', dirty, save, discard)`. Save commits everything in one transaction; Discard reverts everything to baseline. No setting bypasses the dirty state.
+  - Removed the `toggleImmediate` function + toast notifications (no longer needed — Save flow handles everything)
+  - Removed unused `toast` import + `saving` state (was set but never read)
+- Verified end-to-end: toggled Medical Section → global Save/Discard bar appeared → click Save → bar disappeared, `enableMedical: false` persisted to localStorage
+
+### Task 6 — Functional Verification
+- Audited all admission settings against actual behavior:
+  - `enablePreviousSchool` → already wired in `use-admission-wizard.ts` (Step 5 hidden when false)
+  - `enableTransport || enableHostel` → already wired in `use-admission-wizard.ts` (Step 6 hidden when both false)
+  - `enableStudentPhoto` → already wired in `use-admission-wizard.ts` (Step 8 hidden when false)
+  - `enableBloodGroup` / `enableCategory` / `enableReligion` / `enableAadhaar` → already wired in `PersonalStep.tsx` (fields conditionally rendered)
+  - `enableMedical` → **WAS NOT WIRED** — added new functionality
+- Created `getSectionsConfig(flags)` in `verification/sections-config.ts` (54 lines):
+  - Returns filtered list based on `enableMedical`, `enablePreviousSchool`, `enableStudentPhoto`
+  - Medical section hidden when `enableMedical === false`
+  - Previous School section hidden when `enablePreviousSchool === false`
+  - Photo section hidden when `enableStudentPhoto === false`
+  - Kept `SECTIONS_CONFIG` export for backward compat (full unfiltered list)
+- Updated `VerificationWorkspace.tsx` (182 lines):
+  - Added `useSchoolSettingsStore` import to read live feature flags
+  - Computed `visibleSections` once via `getSectionsConfig({...})`
+  - Replaced hardcoded "9 - flaggedCount / 9 Sections Verified" with dynamic `visibleSections.length - flaggedCount / visibleSections.length`
+  - Replaced hardcoded "9-Section Official Verification Checklist" with dynamic `${visibleSections.length}-Section Official Verification Checklist`
+- Net result: toggling `enableMedical` OFF in Settings now actually removes the Medical section from the Verification workspace — no more visual-only settings
+
+### Task 7 — Final QA
+- VLM verified all 4 task changes in a single multi-image comparison: "ALL PASS"
+  - Address step: no City field, correct field order
+  - Class step: no "Auto-fetched from school settings" text
+  - Dashboard: no Date Range filter, just Search + 3 dropdowns
+  - Settings: sticky Save/Discard bar visible after toggling Medical
+- Verified Type filter has exactly 3 options: All Types / Fresh Admission / Existing Student
+- Verified all toggles now flow through global dirty state (not just the 4 "soft" ones)
+- Verified `enableMedical=false` actually removes Medical section from Verification workspace (dynamic section count, dynamic title)
+- All files under 300-line limit:
+  - AddressStep.tsx: 181 lines
+  - ClassStep.tsx: 130 lines
+  - FilterBar.tsx: 74 lines
+  - types.ts: 119 lines
+  - AdmissionsDashboard.tsx: 94 lines
+  - GeneralTab.tsx: 149 lines
+  - sections-config.ts: 54 lines
+  - VerificationWorkspace.tsx: 182 lines
+- Dev server confirmed healthy on PID 2718, GET / returns 200 in ~30ms, zero compile errors.
+
+Stage Summary:
+- Files rewritten:
+  - `admission/components/AddressStep.tsx` — removed City field, new field order
+  - `admission/components/ClassStep.tsx` — removed session banner + "Auto-fetched" description
+  - `admission/components/dashboard/FilterBar.tsx` — removed Date Range, simplified Type to 2 options
+  - `admission/components/dashboard/types.ts` — removed dateFrom/dateTo, added legacy type mapping
+  - `admission/components/AdmissionsDashboard.tsx` — removed date state + props
+  - `admission/components/field-config/GeneralTab.tsx` — all toggles now flow through global dirty state
+  - `admission/components/verification/sections-config.ts` — getSectionsConfig(flags) function
+  - `admission/components/VerificationWorkspace.tsx` — reads feature flags, dynamically builds verification checklist
+- Verified end-to-end: Address step ✓, Class step ✓, Dashboard filters ✓, Type filter (2 options) ✓, Settings dirty state (all toggles) ✓, Functional impact (enableMedical hides verification section) ✓
+- Screenshots saved:
+  - `/home/z/my-project/download/screenshots/admission-address-step.png`
+  - `/home/z/my-project/download/screenshots/admission-class-step.png`
+  - `/home/z/my-project/download/screenshots/admission-dashboard-refined.png`

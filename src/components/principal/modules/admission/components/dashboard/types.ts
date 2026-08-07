@@ -35,8 +35,6 @@ export interface FilterState {
   selectedClass: string
   selectedSession: string
   selectedAdmissionType: string
-  dateFrom: string
-  dateTo: string
 }
 
 /**
@@ -75,19 +73,31 @@ export function computeStatusCounts(applications: AdmissionApplication[]): {
 }
 
 /**
- * Filter applications by tab, class, session, type, date range, and global search.
+ * Filter applications by tab, class, session, admission type, and global search.
+ *
+ * Admission type mapping (per spec — only 2 categories in UI):
+ *   "fresh"     → Fresh Admission (new student joining from outside)
+ *   "existing"  → Existing Student (transfer / re-admission / promotion
+ *                 from within the school or another branch)
+ *
+ * Old data may still carry `transfer` / `readmission` / `promotion` —
+ * we collapse all of those to "existing" so historical applications
+ * remain filterable.
  */
 export function filterApplications(applications: AdmissionApplication[], state: FilterState): AdmissionApplication[] {
-  const { activeTab, searchQuery, selectedClass, selectedSession, selectedAdmissionType, dateFrom, dateTo } = state
+  const { activeTab, searchQuery, selectedClass, selectedSession, selectedAdmissionType } = state
   return applications.filter((app) => {
     // "Submitted" tab shows both Submitted AND Under Review
     if (activeTab === 'Submitted' && app.status !== 'Submitted' && app.status !== 'Under Review') return false
     if (activeTab !== 'All' && activeTab !== 'Submitted' && app.status !== activeTab) return false
     if (selectedClass !== 'All' && app.className !== selectedClass) return false
     if (selectedSession !== 'All' && app.academicSession !== selectedSession) return false
-    if (selectedAdmissionType !== 'All' && (app.formData.admissionType || 'fresh') !== selectedAdmissionType) return false
-    if (dateFrom && app.date && new Date(app.date) < new Date(dateFrom)) return false
-    if (dateTo && app.date && new Date(app.date) > new Date(dateTo)) return false
+    if (selectedAdmissionType !== 'All') {
+      const rawType = app.formData.admissionType || 'fresh'
+      // Map legacy values to the new 2-category system
+      const normalized = rawType === 'fresh' ? 'fresh' : 'existing'
+      if (normalized !== selectedAdmissionType) return false
+    }
     if (searchQuery.trim()) {
       // Global search across admission no, name, parent, phone, aadhaar, previous school
       const q = searchQuery.toLowerCase()
