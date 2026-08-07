@@ -16,6 +16,8 @@ export function NavigationControls({
   onBack,
   onNext,
   onSubmit,
+  submitLabel = 'Submit Application',
+  submitIcon: SubmitIcon = Sparkles,
 }: {
   visibleSteps: WizardStep[]
   step: number
@@ -23,6 +25,8 @@ export function NavigationControls({
   onBack: () => void
   onNext: () => void
   onSubmit: () => void
+  submitLabel?: string
+  submitIcon?: React.ComponentType<{ className?: string }>
 }) {
   return (
     <GlassCard className="p-3 sm:p-4">
@@ -52,7 +56,7 @@ export function NavigationControls({
             onClick={onSubmit}
             className="bg-primary hover:bg-primary/90 text-primary-foreground min-w-[150px] font-medium shadow-md shadow-primary/20"
           >
-            <Sparkles className="h-4 w-4" /> Submit Application
+            <SubmitIcon className="h-4 w-4" /> {submitLabel}
           </Button>
         )}
       </div>

@@ -67,8 +67,8 @@ export function Step1BasicInfo({ form, setF }: StepProps) {
 
       <div className="pt-3 border-t border-border">
         <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Residential Address</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-          <div className="sm:col-span-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div className="sm:col-span-2">
             <Label className="text-xs font-semibold">Address Line</Label>
             <Input value={form.currentAddress} onChange={(e) => setF('currentAddress', e.target.value)} placeholder="House no, street, area" className="mt-1.5 h-10" />
           </div>
@@ -81,8 +81,12 @@ export function Step1BasicInfo({ form, setF }: StepProps) {
             <Input value={form.state} onChange={(e) => setF('state', e.target.value)} placeholder="e.g. Haryana" className="mt-1.5 h-10" />
           </div>
           <div>
-            <Label className="text-xs font-semibold">Pincode</Label>
+            <Label className="text-xs font-semibold">PIN Code</Label>
             <Input value={form.pincode} onChange={(e) => setF('pincode', e.target.value)} placeholder="e.g. 122001" className="mt-1.5 h-10" />
+          </div>
+          <div>
+            <Label className="text-xs font-semibold">Country</Label>
+            <Input value="India" readOnly disabled className="mt-1.5 h-10 bg-muted/50 cursor-not-allowed text-muted-foreground" />
           </div>
         </div>
       </div>

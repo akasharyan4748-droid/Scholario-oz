@@ -79,6 +79,7 @@ export interface AddTeacherForm {
   salary: number; bankName: string; accountNo: string; ifscCode: string; branchName: string
   inchargePosition: string; classTeacherRole: string; assistantClassTeacherRole: string
   selectedClasses: string[]; selectedSubjects: string[]; remarks: string
+  photoDataUrl: string; signatureDataUrl: string
 }
 
 export const initialFormState: AddTeacherForm = {
@@ -126,6 +127,8 @@ export const initialFormState: AddTeacherForm = {
   selectedClasses: [],
   selectedSubjects: [],
   remarks: '',
+  photoDataUrl: '',
+  signatureDataUrl: '',
 }
 
 /**
