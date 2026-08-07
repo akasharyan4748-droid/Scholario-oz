@@ -1,7 +1,6 @@
 'use client'
 
 import { RefreshCw, FileCheck } from 'lucide-react'
-import { GlassCard } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import type { TeacherRecord } from '@/lib/store/teachers-store'
 import { gradientFor } from './shared'
@@ -13,46 +12,47 @@ interface Props {
 }
 
 /**
- * Appointment Letters tab — repository of every faculty member's official
- * appointment letter with regenerate / view actions.
+ * Appointment Letters tab — clean list of faculty appointment letters
+ * with regenerate + view actions. No outer GlassCard wrapper, no
+ * descriptive paragraph.
  */
 export function AppointmentLettersTab({ teachers, onViewLetter, onRegenerate }: Props) {
   return (
-    <GlassCard className="p-4 sm:p-6 space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h3 className="font-display font-bold text-base">Faculty Official Appointment Letters Repository</h3>
-          <p className="text-xs text-muted-foreground">Official appointment letters with school logo, terms, Principal signature & seal.</p>
-        </div>
-      </div>
-
-      <div className="divide-y divide-border rounded-xl border border-border overflow-hidden">
-        {teachers.map((t) => (
-          <div key={t.id} className="p-4 bg-card/40 hover:bg-card/70 transition-colors flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${gradientFor(t.id)} font-bold text-white`}>
-                {t.avatar}
-              </div>
-              <div>
-                <h4 className="font-bold text-sm text-foreground">{t.name}</h4>
-                <p className="text-xs text-muted-foreground">{t.designation} · {t.department}</p>
-                <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                  Ref: {t.appointmentLetter?.id || 'Pending Generation'}
-                </p>
-              </div>
+    <div className="rounded-lg border border-border/60 overflow-hidden divide-y divide-border/40">
+      {teachers.map((t) => (
+        <div
+          key={t.id}
+          className="px-4 py-3 bg-card hover:bg-muted/30 transition-colors flex items-center justify-between gap-3 flex-wrap"
+        >
+          {/* Teacher identity — avatar + name + meta */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${gradientFor(t.id)} font-semibold text-white text-sm`}>
+              {t.avatar}
             </div>
-
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => onRegenerate(t.id)} className="text-xs">
-                <RefreshCw className="h-3.5 w-3.5" /> Regenerate
-              </Button>
-              <Button size="sm" onClick={() => onViewLetter(t)} className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white">
-                <FileCheck className="h-3.5 w-3.5" /> View / Download Letter
-              </Button>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-foreground truncate">{t.name}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {t.designation} · {t.department}
+              </p>
             </div>
           </div>
-        ))}
-      </div>
-    </GlassCard>
+
+          {/* Letter ref — muted mono */}
+          <p className="text-[10px] text-muted-foreground font-mono hidden sm:block">
+            Ref: {t.appointmentLetter?.id || 'Pending'}
+          </p>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => onRegenerate(t.id)} className="text-xs h-8">
+              <RefreshCw className="h-3.5 w-3.5" /> Regenerate
+            </Button>
+            <Button size="sm" onClick={() => onViewLetter(t)} className="text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white">
+              <FileCheck className="h-3.5 w-3.5" /> View
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }

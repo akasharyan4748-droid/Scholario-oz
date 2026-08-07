@@ -106,25 +106,23 @@ export function TeachersModule() {
         />
       )}
 
-      {/* ADD TEACHER WIZARD */}
+      {/* ADD TEACHER WIZARD — clean single container, no GlassCard wrapper */}
       {s.activeTab === 'add' && (
         <div className="space-y-4">
-          <Button variant="outline" size="sm" onClick={() => s.setActiveTab('directory')} className="gap-1 text-xs w-fit">
-            <ChevronLeft className="h-4 w-4" /> Back to Directory
+          <Button variant="outline" size="sm" onClick={() => s.setActiveTab('directory')} className="gap-1 text-xs w-fit h-8">
+            <ChevronLeft className="h-3.5 w-3.5" /> Back to Directory
           </Button>
 
-          <GlassCard className="p-4 sm:p-6">
-            <AddTeacherWizard
-              onSuccess={(newTeacher) => {
-                s.addTeacher(newTeacher)
-                s.setActiveTab('directory')
-                toast.success(`Teacher ${newTeacher.name} Registered!`, {
-                  description: `Employee ID: ${newTeacher.employeeId} · Credentials & Appointment Letter ready.`,
-                })
-              }}
-              onCancel={() => s.setActiveTab('directory')}
-            />
-          </GlassCard>
+          <AddTeacherWizard
+            onSuccess={(newTeacher) => {
+              s.addTeacher(newTeacher)
+              s.setActiveTab('directory')
+              toast.success(`Teacher ${newTeacher.name} Registered!`, {
+                description: `Employee ID: ${newTeacher.employeeId} · Credentials & Appointment Letter ready.`,
+              })
+            }}
+            onCancel={() => s.setActiveTab('directory')}
+          />
         </div>
       )}
 

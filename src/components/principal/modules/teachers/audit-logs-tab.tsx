@@ -1,10 +1,8 @@
 'use client'
 
-import { FileSpreadsheet } from 'lucide-react'
-import { GlassCard } from '@/components/shared/ui'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { formatDate } from '@/lib/format'
+import { formatRelativeTime, formatDate } from '@/lib/format'
 import type { AuditLogItem } from '@/lib/store/teachers-store'
 
 interface Props {
@@ -12,48 +10,64 @@ interface Props {
 }
 
 /**
- * Activity Audit Logs tab — immutable audit trail of teacher lifecycle events.
+ * Audit Logs — concise activity feed (GitHub Activity / Linear style).
+ *
+ * No large heading, no descriptive paragraph. Each event is a compact
+ * row with: status badge · teacher name · action · time · actor.
  */
 export function AuditLogsTab({ auditLogs }: Props) {
-  return (
-    <GlassCard className="p-4 sm:p-6 space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h3 className="font-display font-bold text-base">Teacher Lifecycle Activity & Audit Trail</h3>
-          <p className="text-xs text-muted-foreground">Immutable audit records for teacher registration, position assignments, emergency overrides, and salary updates.</p>
-        </div>
-        <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
-          {auditLogs.length} Logged Events
-        </Badge>
+  if (auditLogs.length === 0) {
+    return (
+      <div className="py-10 text-center">
+        <p className="text-sm text-muted-foreground">No activity yet</p>
       </div>
+    )
+  }
 
-      <div className="divide-y divide-border rounded-xl border border-border overflow-hidden">
-        {auditLogs.map((log) => (
-          <div key={log.id} className="p-3.5 bg-card/40 hover:bg-card/70 transition-colors flex items-start justify-between gap-3 flex-wrap">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    'text-[10px] font-semibold',
-                    log.isEmergencyOverride
-                      ? 'border-rose-500/50 bg-rose-500/10 text-rose-700 dark:text-rose-300'
-                      : 'border-primary/30 bg-primary/10 text-primary'
-                  )}
-                >
-                  {log.category}
-                </Badge>
-                <span className="font-bold text-xs text-foreground">{log.targetTeacherName}</span>
-                <span className="text-xs text-muted-foreground">by {log.actorName} ({log.actorRole})</span>
-              </div>
-              <p className="text-xs text-muted-foreground font-mono bg-muted/40 p-1.5 rounded">{log.details}</p>
+  return (
+    <div className="rounded-lg border border-border/60 overflow-hidden divide-y divide-border/40">
+      {auditLogs.map((log) => {
+        const isEmergency = log.isEmergencyOverride
+        return (
+          <div
+            key={log.id}
+            className="px-4 py-3 bg-card hover:bg-muted/30 transition-colors flex items-center gap-3 flex-wrap"
+          >
+            {/* Status badge — color-coded by category */}
+            <Badge
+              variant="outline"
+              className={cn(
+                'text-[10px] font-semibold shrink-0',
+                isEmergency
+                  ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+              )}
+            >
+              {log.category}
+            </Badge>
+
+            {/* Teacher + actor — single line */}
+            <div className="flex items-baseline gap-1.5 min-w-0 flex-1">
+              <span className="font-semibold text-sm text-foreground truncate">{log.targetTeacherName}</span>
+              <span className="text-xs text-muted-foreground">·</span>
+              <span className="text-xs text-muted-foreground truncate">{log.actorName}</span>
             </div>
-            <div className="text-right text-[11px] text-muted-foreground shrink-0 font-mono">
-              {formatDate(log.timestamp)}
-            </div>
+
+            {/* Action details — muted mono, truncated */}
+            <p className="text-xs text-muted-foreground font-mono truncate max-w-[40%] hidden sm:block">
+              {log.details}
+            </p>
+
+            {/* Time — relative + absolute on hover */}
+            <span
+              className="text-[11px] text-muted-foreground font-mono shrink-0 ml-auto"
+              title={formatDate(log.timestamp)}
+            >
+              {formatRelativeTime(log.timestamp)}
+            </span>
           </div>
-        ))}
-      </div>
-    </GlassCard>
+        )
+      })}
+    </div>
   )
 }

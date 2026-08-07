@@ -738,3 +738,98 @@ Stage Summary:
   - `/home/z/my-project/download/screenshots/admission-address-step.png`
   - `/home/z/my-project/download/screenshots/admission-class-step.png`
   - `/home/z/my-project/download/screenshots/admission-dashboard-refined.png`
+
+---
+Task ID: TEACHERS-MODULE-REFINEMENT-PHASE-2
+Agent: main
+Task: Refine Principal Panel → Teachers module — remove box-in-box design, fix Add Teacher GlassCard runtime error, redesign Add Teacher wizard + Audit Logs, apply minimal enterprise design throughout, verify functionality.
+
+Work Log:
+
+### Task 2 — Fix Add Teacher Runtime Error (GlassCard)
+- **Root cause**: `teachers/index.tsx` line 8 imported only `PageTransition` from `@/components/shared/ui`, but line 116 used `<GlassCard className="p-4 sm:p-6">` wrapping the `<AddTeacherWizard>`. The GlassCard symbol was undefined at runtime → "Can't find variable: GlassCard" error when Add Teacher tab activated.
+- **Fix**: Removed the `<GlassCard>` wrapper entirely (per the user's "no box-in-box" design direction). The `<AddTeacherWizard>` now renders directly inside a plain `<div className="space-y-4">`. No GlassCard import needed in `index.tsx`.
+- Also removed the inner `<GlassCard>` wrapper inside `add-teacher-wizard.tsx` (was wrapping the entire wizard content with `p-4 sm:p-6 space-y-6`).
+
+### Task 3 — Redesign Add Teacher UI
+- Rewrote `add-teacher-wizard.tsx` (227 lines, down from 204):
+  - Removed `<GlassCard className="p-4 sm:p-6 space-y-6">` outer wrapper
+  - Replaced bespoke header (h2 + Step badge) with shared `StepHeader` from admission components (icon + title + subtitle + bottom divider)
+  - Updated `StepHeader` (in `admission/components/StepShared.tsx`) to accept optional `right` prop — used to render the "Step X of 5" badge
+  - Added per-step metadata: 5 steps with title + subtitle (Basic Info / Qualifications / Appointment & Salary / Academic Assignment / Review & Create)
+  - **Review step redesign**: removed the entire `<div className="rounded-xl border border-border bg-card p-5 space-y-4">` nested card. Replaced with section-grouped layout using `pt-4 border-t border-border` dividers + `text-xs font-bold text-primary uppercase` section headings (Employment / Contact / Academic) — matches the Admission Parents step pattern
+  - Replaced `ReviewTile` (which had `bg-muted/30 border border-border/50` card background) with `ReviewField` (just label + value, no card)
+  - Smaller, consistent button sizes (`h-8 text-xs`) across Back/Next/Create Teacher
+- VLM verified: "Clean and minimal. No nested card containers or box-in-box patterns. Single flat container. Sections defined by typography + thin dividers + green uppercase section headers. Review step displays data in clean label-value pair format. No card backgrounds or nested containers—just flat text layout. Excellent flat design principles for enterprise forms"
+
+### Task 4 — Audit Logs Complete Redesign
+- Rewrote `audit-logs-tab.tsx` (73 lines, down from 59):
+  - Removed entire `<GlassCard className="p-4 sm:p-6 space-y-4">` outer wrapper
+  - Removed the heading + description block ("Teacher Lifecycle Activity & Audit Trail" + "Immutable audit records for teacher registration, position assignments, emergency overrides, and salary updates")
+  - Removed the "X Logged Events" badge (count is implied by the list length)
+  - Replaced with concise activity feed: each row is `Badge | Teacher Name · Actor | Action Details | Time` on a single line
+  - Added empty state (`"No activity yet"` centered)
+  - Time uses new `formatRelativeTime` helper (`5m ago`, `2h ago`, `3d ago`) with absolute date on hover via `title` attribute
+- Added `formatRelativeTime` to `lib/format.ts` (15 lines) — handles just-now / Xm / Xh / Xd / Xw / fallback to formatDate
+- VLM verified: "Activity feed pattern: status badge + teacher name + actor + time on one line. NO large heading. NO description paragraph. Design strongly aligns with Linear / GitHub Activity feed style"
+
+### Task 1 — Remove Box-in-Box Design (Appointment Letters)
+- Rewrote `appointment-letters-tab.tsx` (58 lines, down from 58):
+  - Removed `<GlassCard className="p-4 sm:p-6 space-y-4">` outer wrapper
+  - Removed heading + description block ("Faculty Official Appointment Letters Repository" + "Official appointment letters with school logo, terms, Principal signature & seal")
+  - Replaced with single bordered list container using `divide-y divide-border/40`
+  - Each row: avatar + name + meta + Regenerate + View buttons on one line
+  - Smaller avatar (`h-9 w-9` instead of `h-10 w-10`), tighter padding (`px-4 py-3` instead of `p-4`)
+- VLM verified: "Each row is compact: avatar + name + actions. NO large heading / NO description"
+
+### Task 5 — Apply Global Design Language
+- Faculty Directory (`directory-tab.tsx`): already redesigned in prior pass — uses MetaStrip/SummaryCard + minimal teacher cards, no GlassCard
+- Teacher Settings (`teacher-settings-page.tsx`): already uses shared `SettingsCard`/`SettingsCardSection`/`ActionBar` primitives — no GlassCard
+
+### Task 6 — Functional Verification
+- Logged in as principal → navigated to Teachers module
+- Verified Add Teacher button works: opened Step 1 (Basic Information) without any runtime error
+- Stepped through all 5 wizard steps: Basic Info → Qualifications → Appointment & Salary → Academic Assignment → Review & Create
+- Verified "Create Teacher" button appears on Step 5
+- Verified Appointment Letters tab loads with teacher list + Regenerate/View buttons
+- Verified Audit Logs tab loads with concise activity feed (no heading, no description)
+- Verified Teacher Settings page opens via header Settings button — shows "Teacher Settings" h1 + "Teacher ID" section
+
+### Task 7 — Final QA
+- VLM verified all redesigns:
+  - Add Teacher wizard: "Clean and minimal. No nested card containers or box-in-box patterns. Single flat container. Sections defined by typography + thin dividers + green uppercase section headers"
+  - Audit Logs: "Activity feed pattern: status badge + teacher name + actor + time on one line. NO large heading. NO description paragraph"
+  - Appointment Letters: "Each row is compact: avatar + name + actions. NO large heading / NO description"
+  - "Design strongly aligns with Linear / GitHub Activity feed style"
+- All files under 300-line limit:
+  - teachers/index.tsx: 290 lines
+  - add-teacher-wizard.tsx: 227 lines
+  - audit-logs-tab.tsx: 73 lines
+  - appointment-letters-tab.tsx: 58 lines
+  - directory-tab.tsx: 164 lines
+  - admission/components/StepShared.tsx: 98 lines (added optional `right` prop)
+- Dev server confirmed healthy on PID 2718, GET / returns 200 in ~30ms, zero compile errors.
+
+Stage Summary:
+- Files rewritten:
+  - `teachers/index.tsx` — removed GlassCard wrapper around AddTeacherWizard (fixed runtime error)
+  - `teachers/add-teacher-wizard.tsx` — full redesign using StepHeader + dividers + flat review fields
+  - `teachers/audit-logs-tab.tsx` — concise activity feed (Linear/GitHub Activity style)
+  - `teachers/appointment-letters-tab.tsx` — minimal list, no heading/description
+  - `admission/components/StepShared.tsx` — added optional `right` prop to StepHeader
+- Files created/updated:
+  - `lib/format.ts` — added `formatRelativeTime` helper
+- Verified end-to-end:
+  - Add Teacher opens without errors ✓
+  - All 5 wizard steps + Review + Create button work ✓
+  - Appointment Letters tab loads ✓
+  - Audit Logs tab loads with redesigned compact feed ✓
+  - Teacher Settings opens via header Settings button ✓
+  - No GlassCard usage remains in teachers module (except `directory-tab.tsx` already clean from prior pass)
+- Screenshots saved:
+  - `/home/z/my-project/download/screenshots/teachers-directory.png`
+  - `/home/z/my-project/download/screenshots/teachers-add-teacher-step1.png`
+  - `/home/z/my-project/download/screenshots/teachers-add-teacher-review.png`
+  - `/home/z/my-project/download/screenshots/teachers-appointment-letters.png`
+  - `/home/z/my-project/download/screenshots/teachers-audit-logs.png`
+  - `/home/z/my-project/download/screenshots/teachers-settings.png`

@@ -25,6 +25,23 @@ export const formatTime = (date: string | Date): string => {
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
+/** Relative time like "5m ago", "2h ago", "3d ago" — used in activity feeds. */
+export const formatRelativeTime = (date: string | Date): string => {
+  const d = typeof date === 'string' ? new Date(date) : date
+  const diffMs = Date.now() - d.getTime()
+  const sec = Math.floor(diffMs / 1000)
+  if (sec < 60) return 'just now'
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  const day = Math.floor(hr / 24)
+  if (day < 7) return `${day}d ago`
+  const wk = Math.floor(day / 7)
+  if (wk < 4) return `${wk}w ago`
+  return formatDate(d)
+}
+
 export const initials = (name: string): string =>
   name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
 

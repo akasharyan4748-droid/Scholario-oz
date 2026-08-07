@@ -13,16 +13,24 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 /** Standard step header — icon + title + subtitle with a bottom divider. */
-export function StepHeader({ title, subtitle, icon }: { title: string; subtitle: string; icon: ReactNode }) {
+export function StepHeader({
+  title, subtitle, icon, right,
+}: {
+  title: string
+  subtitle: string
+  icon: ReactNode
+  right?: ReactNode
+}) {
   return (
     <div className="flex items-center gap-3 mb-5 pb-3 border-b border-border">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
         {icon}
       </div>
-      <div>
+      <div className="flex-1 min-w-0">
         <h2 className="font-display text-base font-bold text-foreground">{title}</h2>
         <p className="text-xs text-muted-foreground">{subtitle}</p>
       </div>
+      {right && <div className="shrink-0">{right}</div>}
     </div>
   )
 }
