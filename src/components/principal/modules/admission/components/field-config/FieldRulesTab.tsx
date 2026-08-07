@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
-  SettingsCard, SettingsCardSection, ToggleRow,
+  SettingsCard, SettingsCardSection,
 } from '@/components/principal/modules/shared/settings-primitives'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
+import { useDirtyState } from '@/components/principal/modules/shared/use-settings-dirty'
 import { FIELD_SECTIONS } from './types'
 
 function FieldRow({
@@ -24,15 +25,11 @@ function FieldRow({
       <div className="flex items-center gap-5 shrink-0">
         <label className="flex items-center gap-1.5 cursor-pointer">
           <Switch checked={visible} onCheckedChange={onToggleVisible} />
-          <span className={cn('text-[11px]', visible ? 'text-foreground' : 'text-muted-foreground')}>
-            Visible
-          </span>
+          <span className={cn('text-[11px]', visible ? 'text-foreground' : 'text-muted-foreground')}>Visible</span>
         </label>
         <label className={cn('flex items-center gap-1.5', required ? 'cursor-pointer' : 'cursor-not-allowed opacity-60')}>
           <Switch disabled={!visible} checked={required} onCheckedChange={onToggleRequired} />
-          <span className={cn('text-[11px]', required ? 'text-foreground' : 'text-muted-foreground')}>
-            Required
-          </span>
+          <span className={cn('text-[11px]', required ? 'text-foreground' : 'text-muted-foreground')}>Required</span>
         </label>
       </div>
     </div>
@@ -43,28 +40,42 @@ export function FieldRulesTab() {
   const store = useSchoolSettingsStore()
   const fieldRules = store.admissionSettings.fieldRules || []
 
-  const handleToggleVisible = (fieldKey: string) => {
-    const updatedRules = fieldRules.map((rule) =>
-      rule.fieldKey === fieldKey ? { ...rule, visible: !rule.visible } : rule
-    )
-    store.updateAdmissionSettings({ fieldRules: updatedRules })
-  }
+  const initial = useMemo(() => fieldRules.map((r) => ({ ...r })), [JSON.stringify(fieldRules)])
+  const [draft, setDraft] = useState(initial)
+  useEffect(() => { setDraft(initial) }, [initial])
 
-  const handleToggleRequired = (fieldKey: string) => {
-    const updatedRules = fieldRules.map((rule) =>
-      rule.fieldKey === fieldKey ? { ...rule, required: !rule.required } : rule
-    )
-    store.updateAdmissionSettings({ fieldRules: updatedRules })
+  const dirty = useMemo(
+    () => JSON.stringify(draft) !== JSON.stringify(initial),
+    [draft, initial]
+  )
+
+  const save = useCallback(async () => {
+    store.updateAdmissionSettings({ fieldRules: draft })
+  }, [draft, store])
+
+  const discard = useCallback(() => { setDraft(initial) }, [initial])
+
+  useDirtyState('admission-fields', dirty, save, discard)
+
+  const toggleVisible = (fieldKey: string) => {
+    setDraft((prev) => prev.map((r) =>
+      r.fieldKey === fieldKey ? { ...r, visible: !r.visible } : r
+    ))
+  }
+  const toggleRequired = (fieldKey: string) => {
+    setDraft((prev) => prev.map((r) =>
+      r.fieldKey === fieldKey ? { ...r, required: !r.required } : r
+    ))
   }
 
   const grouped = useMemo(() => {
-    const map: Record<string, typeof fieldRules> = {}
-    for (const rule of fieldRules) {
+    const map: Record<string, typeof draft> = {}
+    for (const rule of draft) {
       const k = rule.section || 'Other'
       ;(map[k] = map[k] || []).push(rule)
     }
     return map
-  }, [fieldRules])
+  }, [draft])
 
   const knownIds = FIELD_SECTIONS.map((s) => s.id)
   const extras = Object.keys(grouped).filter((k) => !knownIds.includes(k))
@@ -82,8 +93,8 @@ export function FieldRulesTab() {
                 label={rule.label}
                 visible={rule.visible}
                 required={rule.required}
-                onToggleVisible={() => handleToggleVisible(rule.fieldKey)}
-                onToggleRequired={() => handleToggleRequired(rule.fieldKey)}
+                onToggleVisible={() => toggleVisible(rule.fieldKey)}
+                onToggleRequired={() => toggleRequired(rule.fieldKey)}
               />
             ))}
           </SettingsCardSection>
@@ -101,8 +112,8 @@ export function FieldRulesTab() {
                 label={rule.label}
                 visible={rule.visible}
                 required={rule.required}
-                onToggleVisible={() => handleToggleVisible(rule.fieldKey)}
-                onToggleRequired={() => handleToggleRequired(rule.fieldKey)}
+                onToggleVisible={() => toggleVisible(rule.fieldKey)}
+                onToggleRequired={() => toggleRequired(rule.fieldKey)}
               />
             ))}
           </SettingsCardSection>

@@ -426,3 +426,74 @@ Stage Summary:
   - `/home/z/my-project/download/screenshots/admission-settings-page-seats.png`
   - `/home/z/my-project/download/screenshots/admission-settings-page-fields.png`
   - `/home/z/my-project/download/screenshots/teacher-settings-general.png`
+
+---
+Task ID: GLOBAL-DIRTY-STATE-PERSONAL-REDESIGN
+Agent: main
+Task: Implement global dirty-state system (sticky Save/Discard appears when ANY tab changes, persists across tab switches). Redesign PersonalStep to match Parents step's clean layout (single container, dividers, no card-in-card).
+
+Work Log:
+- Designed global dirty-state architecture using React Context:
+  - `SettingsDirtyProvider` holds a `Map<id, TabRegistration>` of all tabs (id, dirty, save, discard)
+  - Aggregate `dirty = some(tab => tab.dirty)` recomputed on every provider render
+  - `saveAll` runs every registered tab's `save()` in parallel, then rerenders
+  - `discardAll` runs every registered tab's `discard()` in parallel, then rerenders
+- Created `useSettingsDirty()` hook for page-level consumers (reads `dirty`, `saveAll`, `discardAll`).
+- Created `useDirtyState(id, dirty, save, discard)` hook for tab-level consumers:
+  - Registers on mount, unregisters on unmount
+  - Re-registers when `dirty` flips (triggers provider re-render via `rerender()`)
+  - Fns kept in ref so we always have the latest without re-triggering effect
+  - Dedupes registration in provider: only re-renders when `dirty` actually changes
+- Refactored `AdmissionSettingsPage.tsx`:
+  - Wraps everything in `<SettingsDirtyProvider>`
+  - Renders all 3 tabs (GeneralTab, SeatCapacityTab, FieldRulesTab) but hides inactive ones with `className="hidden"` — keeps tabs mounted so dirty state persists across switches
+  - Single global `<ActionBar>` at the bottom watches `dirty` from the provider
+- Refactored `GeneralTab`, `SeatCapacityTab`, `FieldRulesTab` to call `useDirtyState('admission-{tab}', dirty, save, discard)`:
+  - Each tab manages its own local draft state via `useState`
+  - Computes `dirty = JSON.stringify(draft) !== JSON.stringify(initial)` via `useMemo`
+  - Stable `save` and `discard` callbacks via `useCallback`
+  - Registration auto-cleans up on unmount
+- Applied same pattern to `TeacherSettingsPage.tsx` (General/Documents/Integration tabs).
+- Redesigned `PersonalStep.tsx` to match `ParentsStep.tsx` layout philosophy:
+  - Single container (no rounded-xl border wrapping each section)
+  - Section headings: `text-xs font-bold text-primary uppercase tracking-wider` (same as Parents step)
+  - Sections separated by `pt-3 border-t border-border` (same pattern as Parents step)
+  - Removed card-in-card nesting — no more `rounded-xl border bg-card p-4 shadow-sm` wrappers
+  - Removed redundant decorative elements (bullet dots, "marked with * are required" notice, badges with checkmarks)
+  - Government ID section: kept the Aadhaar validity indicator inline (text-only, no Badge component) — preserves functionality without visual clutter
+  - All conditional logic preserved: `enableBloodGroup`, `enableCategory`, `enableReligion`, `enableAadhaar` flags still gate fields
+
+- End-to-end test results:
+  - **Cross-tab dirty persistence**: Changed Nursery capacity 30→31 on Seats tab → ActionBar appeared → switched to Fields tab → ActionBar STAYED visible → switched to General tab → ActionBar STILL visible. Bar only disappeared after Save or Discard.
+  - **Save flow**: Changed capacity 30→31→32→33 on Seats tab → Save → bar disappeared → persisted to localStorage (`scholario_school_settings_v1` → `seatCapacity[0].capacity = 31`)
+  - **Discard flow**: Changed capacity 31→32 on Seats tab → bar appeared → clicked Discard Changes → value reverted to 31 → bar disappeared
+  - **PersonalStep layout**: VLM confirmed "clean single-container layout with section dividers, NOT bordered cards/boxes", "NO visible card borders around individual sections", "subtle dividers + generous whitespace", "matches the clean minimal aesthetic of Parents form", "modern enterprise SaaS dashboard patterns where the form feels like one cohesive document rather than a collection of separate widgets"
+
+- File sizes (all under 300-line spec):
+  - shared/use-settings-dirty.tsx: 126 lines
+  - shared/settings-primitives.tsx: 226 lines
+  - AdmissionSettingsPage.tsx: 83 lines
+  - GeneralTab.tsx: 155 lines
+  - SeatCapacityTab.tsx: 112 lines
+  - FieldRulesTab.tsx: 124 lines
+  - PersonalStep.tsx: 147 lines
+  - teacher-settings-page.tsx: 232 lines
+
+Stage Summary:
+- Files created:
+  - `src/components/principal/modules/shared/use-settings-dirty.tsx` — global dirty-state Context + hooks
+- Files rewritten:
+  - `AdmissionSettingsPage.tsx` — wraps in provider, renders all tabs mounted (hidden when inactive), single global ActionBar
+  - `field-config/GeneralTab.tsx` — uses useDirtyState, removed local ActionBar
+  - `field-config/SeatCapacityTab.tsx` — uses useDirtyState, tracks draft seat capacities
+  - `field-config/FieldRulesTab.tsx` — uses useDirtyState, tracks draft field rules
+  - `teachers/teacher-settings-page.tsx` — same global dirty-state pattern
+  - `admission/components/PersonalStep.tsx` — full redesign matching Parents layout (single container, headings + dividers, no card-in-card)
+- Verified end-to-end:
+  - Global dirty bar appears when ANY setting changes on ANY tab ✓
+  - Bar persists across tab switches (because tabs stay mounted via CSS hidden) ✓
+  - Save commits all tabs in parallel, persists to localStorage, bar disappears ✓
+  - Discard reverts all tabs to baseline, bar disappears ✓
+  - PersonalStep no longer uses card-in-card — matches Parents aesthetic ✓
+- Screenshots saved:
+  - `/home/z/my-project/download/screenshots/admission-personal-step.png`
