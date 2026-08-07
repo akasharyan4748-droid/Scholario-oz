@@ -1,44 +1,44 @@
 'use client'
 
-// Principal Dashboard — modular composition root.
+// Principal Dashboard — minimal composition root.
 //
-// The original monolithic `dashboard.tsx` (1174 lines) has been split across
-// focused files inside this directory. This `index.tsx` is the entry point
-// that re-exports the public `PrincipalDashboard` symbol used by
-// `principal-panel.tsx` and composes the sub-sections in their original
-// visual order. No UI/UX was changed in the refactor — only the file layout.
+// Reduced from 11 stacked sections to 7 focused ones:
+//   1. WelcomeBanner — minimal greeting + date
+//   2. KpiRow — 8 cross-module stats in one compact strip
+//   3. LiveAlerts — priority items needing action
+//   4. ChartsRow1 — revenue vs expenses (the dashboard's primary chart)
+//   5. QuickActionsRow — primary navigation shortcuts
+//   6. RecentAdmissions — newest applications needing review
+//   7. EventsRow — upcoming calendar
+//
+// Removed (per spec: "avoid duplicate analytics"):
+//   - QuickStats (weekly trends duplicated KpiRow's purpose)
+//   - ChartsRow2 (attendance trend duplicated the Attendance module's analytics)
+//   - SecondaryKpiRow (operational noise; if needed, lives in respective modules)
+//   - QuickInsights (decorative, not actionable)
 
 import { WelcomeBanner } from './shared'
-import { KpiRow, SecondaryKpiRow } from './kpi-row'
-import { QuickStats } from './quick-stats'
+import { KpiRow } from './kpi-row'
 import { LiveAlerts } from './live-alerts'
-import { QuickInsights } from './insights'
-import { ChartsRow1, ChartsRow2 } from './charts-row'
+import { ChartsRow1 } from './charts-row'
 import { QuickActionsRow } from './quick-actions'
 import { EventsRow } from './events-row'
 import { RecentAdmissions } from './recent-admissions'
 
 export function PrincipalDashboard() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <WelcomeBanner />
       <KpiRow />
-      <QuickStats />
       <LiveAlerts />
-      <QuickInsights />
       <ChartsRow1 />
-      <ChartsRow2 />
       <QuickActionsRow />
-      <SecondaryKpiRow />
-      <EventsRow />
       <RecentAdmissions />
+      <EventsRow />
     </div>
   )
 }
 
-// Backwards-compatible alias. The task brief referred to this module as
-// `DashboardModule`; we keep the original `PrincipalDashboard` name (the
-// export actually consumed by `principal-panel.tsx`) and also surface the
-// alias so both import styles resolve.
 export const DashboardModule = PrincipalDashboard
 export default PrincipalDashboard
+

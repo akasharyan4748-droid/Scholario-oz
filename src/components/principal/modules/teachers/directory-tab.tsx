@@ -1,12 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import {
-  Users, UserCheck, Wallet, Search, CalendarDays,
-  ChevronRight, Shield,
-} from 'lucide-react'
-import { GlassCard } from '@/components/shared/ui'
-import { KpiCard } from '@/components/shared/kpi-card'
+import { Search, Shield } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
@@ -34,146 +29,146 @@ interface Props {
 }
 
 /**
- * Faculty Directory tab — KPI cards + search/filter bar + teacher grid.
+ * Faculty Directory tab — clean inline filter bar + minimal teacher cards.
+ * Removed: oversized KPI cards, heavy GlassCard filter container, card-in-card.
  */
 export function DirectoryTab({
-  teachers, filteredTeachers,
-  search, setSearch, dept, setDept, statusFilter, setStatusFilter,
+  filteredTeachers, search, setSearch, dept, setDept, statusFilter, setStatusFilter,
   totalTeachers, activeTeachersCount, onLeaveCount, avgAttendance, totalSalary,
   onOpenProfile,
 }: Props) {
+  // Slim meta strip instead of 4 KPI cards
+  const metaStats = [
+    { label: 'Total', value: totalTeachers, hint: `${activeTeachersCount} active` },
+    { label: 'On leave', value: onLeaveCount },
+    { label: 'Attendance', value: `${avgAttendance}%` },
+    { label: 'Payroll', value: formatINR(totalSalary, true) },
+  ]
+
   return (
     <div className="space-y-4">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard label="Total Teachers" value={totalTeachers} icon={<Users className="h-5 w-5" />} trend={1.2} trendLabel={`${activeTeachersCount} Active`} accent="emerald" delay={0} />
-        <KpiCard label="On Leave Today" value={onLeaveCount} icon={<CalendarDays className="h-5 w-5" />} trendLabel="Substitutes ready" accent="amber" delay={0.05} />
-        <KpiCard label="Avg Attendance" value={avgAttendance} suffix="%" icon={<UserCheck className="h-5 w-5" />} trend={0.6} trendLabel="Last 30 days" accent="cyan" delay={0.1} />
-        <KpiCard label="Monthly Payroll" value={totalSalary} format={(n) => formatINR(n, true)} icon={<Wallet className="h-5 w-5" />} trend={2.1} trendLabel="Direct Bank Transfer" accent="violet" delay={0.15} />
+      {/* Meta strip — replaces 4 KPI cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/60 rounded-lg overflow-hidden">
+        {metaStats.map((s) => (
+          <div key={s.label} className="bg-card px-4 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
+            <p className="text-lg font-semibold text-foreground tabular-nums leading-tight mt-0.5">{s.value}</p>
+            {s.hint && <p className="text-[10px] text-muted-foreground mt-0.5">{s.hint}</p>}
+          </div>
+        ))}
       </div>
 
-      {/* Filters Bar */}
-      <GlassCard className="p-3 sm:p-4">
-        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by teacher name, ID, designation, or subject…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={dept} onValueChange={setDept}>
-              <SelectTrigger className="w-[170px]">
-                <SelectValue placeholder="All Departments" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {departments.map((d) => (
-                  <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="On Leave">On Leave</SelectItem>
-                <SelectItem value="Probation">Probation</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs py-1.5 px-3">
-              {filteredTeachers.length} faculty members
-            </Badge>
-          </div>
+      {/* Inline filter row — no GlassCard wrapper */}
+      <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center justify-between">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search name, ID, designation…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-9"
+          />
         </div>
-      </GlassCard>
+        <div className="flex items-center gap-2">
+          <Select value={dept} onValueChange={setDept}>
+            <SelectTrigger className="w-[160px] h-9 text-xs"><SelectValue placeholder="All Departments" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map((d) => (
+                <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[120px] h-9 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="Active">Active</SelectItem>
+              <SelectItem value="On Leave">On Leave</SelectItem>
+              <SelectItem value="Probation">Probation</SelectItem>
+            </SelectContent>
+          </Select>
+          <Badge variant="secondary" className="bg-muted text-muted-foreground text-xs py-1.5 px-3 h-9 flex items-center">
+            {filteredTeachers.length}
+          </Badge>
+        </div>
+      </div>
 
-      {/* Teacher Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {/* Teacher grid — minimal cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {filteredTeachers.map((t, i) => {
           const pendingPosCount = t.positions.filter((p) => p.status === 'Pending Acceptance').length
-
           return (
             <motion.div
               key={t.id}
-              initial={{ opacity: 0, y: 16, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.3, delay: Math.min(i * 0.03, 0.3) }}
-              whileHover={{ y: -4 }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, delay: Math.min(i * 0.02, 0.2) }}
+              whileHover={{ y: -2 }}
               onClick={() => onOpenProfile(t)}
-              className="cursor-pointer"
+              className="cursor-pointer rounded-lg border border-border/60 bg-card p-4 hover:border-emerald-500/40 hover:shadow-sm transition-all"
             >
-              <GlassCard className="p-4 h-full flex flex-col justify-between relative overflow-hidden group">
+              {/* Header row: avatar + name + status dot */}
+              <div className="flex items-start gap-3">
+                <div className={cn('relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white font-semibold text-sm', gradientFor(t.id))}>
+                  {t.avatar}
+                  <span className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card',
+                    t.status === 'Active' ? 'bg-emerald-500' : 'bg-amber-500')} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-foreground truncate">{t.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{t.designation}</p>
+                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                    <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px] py-0 px-1.5">
+                      {t.department}
+                    </Badge>
+                    {pendingPosCount > 0 && (
+                      <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300 text-[9px] py-0 px-1.5">
+                        {pendingPosCount} pending
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Subjects */}
+              {t.subjects.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-3">
+                  {t.subjects.slice(0, 3).map((s) => (
+                    <span key={s} className="inline-flex items-center rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Stats row — compact */}
+              <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-border/40 text-xs">
                 <div>
-                  <div className="flex items-start gap-3">
-                    <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${gradientFor(t.id)} font-bold text-white shadow-md`}>
-                      {t.avatar}
-                      <span className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-background ${t.status === 'Active' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-sm truncate group-hover:text-primary transition-colors">{t.name}</h3>
-                      <p className="text-xs text-muted-foreground truncate">{t.designation}</p>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px] py-0">
-                          {t.department}
-                        </Badge>
-                        {pendingPosCount > 0 && (
-                          <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[9px] py-0">
-                            {pendingPosCount} Pending Approval
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Subjects & Positions Pills */}
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {t.subjects.slice(0, 3).map((s) => (
-                      <span key={s} className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        {s}
-                      </span>
-                    ))}
-                    {t.positions.filter((p) => p.status === 'Active').slice(0, 2).map((p) => (
-                      <span key={p.id} className="inline-flex items-center rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 text-[10px] font-medium">
-                        <Shield className="h-2.5 w-2.5 mr-1" /> {p.positionTitle}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Quick Details */}
-                  <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-border">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">Exp</p>
-                      <p className="font-semibold text-xs mt-0.5">{t.totalExperience} yrs</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">Attendance</p>
-                      <p className={cn('font-semibold text-xs mt-0.5', t.attendance >= 95 ? 'text-emerald-600' : 'text-amber-600')}>
-                        {t.attendance}%
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">Salary</p>
-                      <p className="font-semibold text-xs mt-0.5">{formatINR(t.salary, true)}</p>
-                    </div>
-                  </div>
+                  <p className="text-[10px] text-muted-foreground">Exp</p>
+                  <p className="font-medium text-foreground">{t.totalExperience}y</p>
                 </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Att.</p>
+                  <p className={cn('font-medium', t.attendance >= 95 ? 'text-emerald-600' : 'text-amber-600')}>
+                    {t.attendance}%
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Salary</p>
+                  <p className="font-medium text-foreground">{formatINR(t.salary, true)}</p>
+                </div>
+              </div>
 
-                <div className="mt-3 pt-2 border-t border-border/50 flex items-center justify-between text-[11px]">
-                  <span className="font-mono text-muted-foreground">{t.employeeId}</span>
-                  <span className="text-primary font-medium flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                    Profile & Actions <ChevronRight className="h-3 w-3" />
+              {/* Footer */}
+              <div className="mt-2 pt-2 border-t border-border/40 flex items-center justify-between text-[10px]">
+                <span className="font-mono text-muted-foreground">{t.employeeId}</span>
+                {t.positions.filter((p) => p.status === 'Active').slice(0, 1).map((p) => (
+                  <span key={p.id} className="inline-flex items-center text-emerald-700 dark:text-emerald-300 font-medium">
+                    <Shield className="h-2.5 w-2.5 mr-1" /> {p.positionTitle}
                   </span>
-                </div>
-              </GlassCard>
+                ))}
+              </div>
             </motion.div>
           )
         })}

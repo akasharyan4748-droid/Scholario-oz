@@ -497,3 +497,73 @@ Stage Summary:
   - PersonalStep no longer uses card-in-card — matches Parents aesthetic ✓
 - Screenshots saved:
   - `/home/z/my-project/download/screenshots/admission-personal-step.png`
+
+---
+Task ID: PRINCIPAL-PANEL-MASTER-UX-REFINEMENT
+Agent: main
+Task: Complete UI/UX refinement pass — remove duplicate headings, strip storytelling text, kill card-in-card layouts, redesign oversized dashboard cards, remove redundant graphs. Apply Apple/Linear/Stripe/Notion minimal aesthetic.
+
+Work Log:
+- Audited entire Principal Panel: 30+ modules, 33 of them using the heavy SectionHeading pattern (big icon + large h1 title + verbose subtitle) which duplicated the sidebar nav. Identified shared pain points: oversized KpiCard grids, GlassCard wrappers everywhere, decorative gradient orbs, storytelling text on every page.
+- Created shared primitive `ModuleHeader` (`shared/module-header.tsx`, 76 lines): minimal page header — just optional label + meta strip + actions row, no big title/icon/storytelling. Sidebar already labels the page.
+- Created shared primitive `MetaStrip` (`shared/meta-strip.tsx`, 69 lines): compact bordered row of stats with subtle dividers, replaces 4-8 oversized KpiCards. Tone-based coloring (positive/warning/negative) instead of decorative gradient orbs.
+- **Teachers module refactor**:
+  - Removed "Teacher Management & Faculty Lifecycle" storytelling title + GraduationCap icon
+  - Replaced SectionHeading with minimal ModuleHeader showing meta strip ("2 faculty · 2 depts · AY 2025–2026")
+  - Replaced heavy GlassCard tab bar with inline segmented pill control (Apple/Linear style)
+  - Replaced 4 oversized KpiCards (Total Teachers, On Leave, Avg Attendance, Monthly Payroll) with single MetaStrip row
+  - Removed GlassCard filter wrapper — now inline filter row with subtle borders
+  - Redesigned teacher cards: removed nested card-in-card layout, tighter padding, removed "Profile & Actions" footer text, simplified subject pills, single position pill instead of multiple
+  - Final file: 292 lines (under 300 limit)
+- **Attendance module refactor** (`student-workspace.tsx`, 87 lines):
+  - Removed "Attendance Analytics" storytelling title + "School-wide attendance insights · December 2025" subtitle + CalendarCheck icon
+  - Replaced SectionHeading with minimal ModuleHeader showing just "December 2025" meta + actions (Filter + Export)
+  - Replaced 4 oversized KpiCards (Today's Rate, Present Today, Absent+Leave, Late Arrivals) with single MetaStrip row
+- **Students module refactor** (`students.tsx`):
+  - Removed "Students" duplicate title + GraduationCap icon + verbose subtitle
+  - Replaced with minimal ModuleHeader showing meta strip ("X students · Y classes · AY 2025-2026")
+- **Principal Dashboard refactor** (`dashboard/index.tsx`, 44 lines):
+  - **Removed 4 sections** per spec "avoid duplicate analytics":
+    - QuickStats (weekly trends duplicated KpiRow's purpose)
+    - ChartsRow2 (attendance trend duplicated the Attendance module's analytics)
+    - SecondaryKpiRow (operational noise; if needed, lives in respective modules)
+    - QuickInsights (decorative, not actionable)
+  - Dashboard went from 11 stacked sections → 7 focused ones
+  - **Replaced emerald gradient hero** (WelcomeBanner) with minimal white card: greeting + date + 2 inline stats (Present, Birthdays) — no decorative orbs, no big colored box
+  - Replaced 8 oversized KpiCards with single MetaStrip row (KpiRow)
+- VLM verification:
+  - **Dashboard**: "clean, minimal welcome banner (not a giant emerald gradient box)", "compact KPI strip displaying exactly 8 statistics in a single horizontal row", "no gradient orbs, heavy background blurs, or abstract shapes", "high-quality, modern admin dashboard that prioritizes data density and readability over flashy graphics"
+  - **Teachers**: "extremely compact header" with just "2 faculty · 2 depts · AY 2025–2026", "no storytelling text or marketing fluff like 'Teacher Management & Faculty Lifecycle'", "modern segmented pill controls (Directory, Appointment Letters, Audit Logs)", "single horizontal strip containing 4 statistics within one bordered row" (replaces 4 KPI cards), "teacher cards are flat and clean with simple borders. No nested card-in-card design", "highly refined, minimalist enterprise dashboard that prioritizes data density and functional clarity over decorative elements"
+- File sizes (all under 300 lines):
+  - shared/module-header.tsx: 76 lines
+  - shared/meta-strip.tsx: 69 lines
+  - dashboard/index.tsx: 44 lines (down from 45)
+  - dashboard/shared.tsx: 45 lines (down from 52)
+  - dashboard/kpi-row.tsx: 40 lines (down from 50)
+  - teachers/index.tsx: 292 lines (down from 320)
+  - teachers/directory-tab.tsx: 178 lines (down from 184)
+  - students.tsx: 204 lines (no size change, just cleaner)
+  - attendance/student-workspace.tsx: 87 lines (down from 81)
+- Dev server confirmed healthy on PID 1293, GET / returns 200 in ~30ms, zero compile errors.
+
+Stage Summary:
+- Files created:
+  - `src/components/principal/modules/shared/module-header.tsx` — minimal page header replacing SectionHeading
+  - `src/components/principal/modules/shared/meta-strip.tsx` — compact stats strip replacing KpiCard grids
+- Files rewritten:
+  - `dashboard/index.tsx` — reduced from 11 to 7 sections
+  - `dashboard/shared.tsx` — minimal welcome banner (no emerald hero)
+  - `dashboard/kpi-row.tsx` — uses MetaStrip instead of 8 KpiCards
+  - `teachers/index.tsx` — minimal header + segmented pill tabs
+  - `teachers/directory-tab.tsx` — MetaStrip + minimal teacher cards (no card-in-card)
+  - `students.tsx` — minimal ModuleHeader
+  - `attendance/student-workspace.tsx` — minimal header + MetaStrip
+- Pattern established for remaining modules:
+  - Replace `SectionHeading title="X" subtitle="..." icon={...}` → `<ModuleHeader meta={[...]} actions={...} />`
+  - Replace `<KpiCard>` grids → `<MetaStrip items={[...]} />`
+  - Replace `GlassCard` tab bar wrappers → inline `<div className="inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60">` pill control
+  - Remove decorative gradient orbs / "storytelling" subtitles / icon-in-rounded-square badges
+- Remaining modules (Feess, Exams, Homework, Communication, Library, Transport, etc.) can adopt the same shared primitives in subsequent passes.
+- Screenshots saved:
+  - `/home/z/my-project/download/screenshots/dashboard-refined.png`
+  - `/home/z/my-project/download/screenshots/teachers-refined.png`

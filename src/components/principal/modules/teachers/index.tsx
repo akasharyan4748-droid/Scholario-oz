@@ -2,10 +2,10 @@
 
 import { useState } from 'react'
 import {
-  GraduationCap, Users, UserPlus, FileCheck, FileSpreadsheet,
-  ChevronLeft, SlidersHorizontal,
+  UserPlus, FileCheck, FileSpreadsheet,
+  ChevronLeft, SlidersHorizontal, Users,
 } from 'lucide-react'
-import { GlassCard, SectionHeading, PageTransition } from '@/components/shared/ui'
+import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
@@ -14,6 +14,7 @@ import { departments, school } from '@/lib/mock/school'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
+import { ModuleHeader } from '../shared/module-header'
 import { useTeachersState } from './use-teachers-state'
 import { useTeachersActions } from './use-teachers-actions'
 import { DirectoryTab } from './directory-tab'
@@ -33,7 +34,7 @@ import {
 import { WorkloadAllocationModal } from './workload-modal'
 
 const TABS = [
-  { id: 'directory', label: 'Faculty Directory', icon: Users } as const,
+  { id: 'directory', label: 'Directory', icon: Users } as const,
   { id: 'letters', label: 'Appointment Letters', icon: FileCheck } as const,
   { id: 'logs', label: 'Audit Logs', icon: FileSpreadsheet } as const,
 ]
@@ -53,68 +54,40 @@ export function TeachersModule() {
   }
 
   return (
-    <PageTransition className="space-y-6">
-      <SectionHeading
-        title="Teacher Management & Faculty Lifecycle"
-        subtitle={`${s.totalTeachers} faculty members · ${departments.length} departments · Academic Year ${school.academicYear}`}
-        icon={<GraduationCap className="h-5 w-5" />}
-        action={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsSettingsOpen(true)}
-              className="text-xs gap-1.5"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Settings
+    <PageTransition className="space-y-4">
+      <ModuleHeader
+        meta={[`${s.totalTeachers} faculty`, `${departments.length} depts`, `AY ${school.academicYear}`]}
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setIsSettingsOpen(true)} className="text-xs gap-1.5 h-8">
+              <SlidersHorizontal className="h-3.5 w-3.5" /> Settings
             </Button>
-            <Button
-              onClick={() => s.setActiveTab('add')}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-md shadow-emerald-500/20"
-            >
-              <UserPlus className="h-4 w-4" /> Add Teacher
+            <Button size="sm" onClick={() => s.setActiveTab('add')} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 h-8">
+              <UserPlus className="h-3.5 w-3.5" /> Add Teacher
             </Button>
-          </div>
+          </>
         }
       />
 
-      {/* Primary Module Navigation Tabs */}
-      <GlassCard className="p-2 sm:p-3">
-        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar">
-          {TABS.map((tab) => {
-            const Icon = tab.icon
-            const isCurrent = s.activeTab === tab.id
-            const badge = tab.id === 'directory' ? s.totalTeachers : tab.id === 'logs' ? s.auditLogs.length : undefined
-            return (
-              <button
-                key={tab.id}
-                onClick={() => s.setActiveTab(tab.id)}
-                className={cn(
-                  'flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all',
-                  isCurrent
-                    ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20 font-bold'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{tab.label}</span>
-                {badge !== undefined && (
-                  <Badge
-                    variant="secondary"
-                    className={cn(
-                      'ml-1 text-[10px] px-1.5 py-0',
-                      isCurrent ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    {badge}
-                  </Badge>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </GlassCard>
+      {/* Segmented tabs — pill style */}
+      <div className="inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60">
+        {TABS.map((tab) => {
+          const Icon = tab.icon
+          const isCurrent = s.activeTab === tab.id
+          const badge = tab.id === 'directory' ? s.totalTeachers : tab.id === 'logs' ? s.auditLogs.length : undefined
+          return (
+            <button key={tab.id} onClick={() => s.setActiveTab(tab.id)}
+              className={cn('flex items-center gap-1.5 px-3.5 rounded-full text-xs font-medium whitespace-nowrap transition-all',
+                isCurrent ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+              <Icon className="h-3.5 w-3.5" />
+              <span>{tab.label}</span>
+              {badge !== undefined && (
+                <Badge variant="secondary" className="ml-0.5 text-[10px] px-1.5 py-0 bg-muted/80 text-muted-foreground">{badge}</Badge>
+              )}
+            </button>
+          )
+        })}
+      </div>
 
       {/* TAB 1: FACULTY DIRECTORY */}
       {s.activeTab === 'directory' && (

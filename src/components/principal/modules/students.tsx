@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { GraduationCap, LayoutGrid, Users, Layers, RotateCcw, ShieldCheck, Bus } from 'lucide-react'
-import { SectionHeading, PageTransition } from '@/components/shared/ui'
+import { LayoutGrid, Users, Layers, RotateCcw, ShieldCheck, Bus } from 'lucide-react'
+import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,7 @@ import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useStudentsStore, getVirtualOccupied, type StudentRecord } from '@/lib/store/students-store'
+import { ModuleHeader } from './shared/module-header'
 import { OverviewTab } from './students/overview-tab'
 import { DirectoryTab } from './students/directory-tab'
 import { ClassesTab } from './students/classes-tab'
@@ -79,10 +80,8 @@ export function StudentsModule({ initialTab = 'overview' }: StudentsModuleProps)
 
   return (
     <PageTransition className="space-y-4">
-      <SectionHeading
-        title="Students"
-        subtitle={`${formatNumber(totalStudents)} Students · ${store.classes.length} Classes · Academic Year ${school.academicYear}`}
-        icon={<GraduationCap className="h-5 w-5" />}
+      <ModuleHeader
+        meta={[`${formatNumber(totalStudents)} students`, `${store.classes.length} classes`, `AY ${school.academicYear}`]}
       />
 
       <AnimatePresence mode="wait">

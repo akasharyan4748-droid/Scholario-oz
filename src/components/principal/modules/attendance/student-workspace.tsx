@@ -1,19 +1,17 @@
 'use client'
 
-// Student attendance workspace — the primary surface for the Attendance module.
-// Holds the page heading, KPI strip, and composes the chart/heatmap/report/
-// insights sections exported from sibling files.
+// Student attendance workspace — primary surface for the Attendance module.
 
 import { useState } from 'react'
-import { CalendarCheck, UserCheck, UserX, Clock, Download, Filter } from 'lucide-react'
-import { SectionHeading, PageTransition } from '@/components/shared/ui'
-import { KpiCard } from '@/components/shared/kpi-card'
+import { Download, Filter } from 'lucide-react'
+import { PageTransition } from '@/components/shared/ui'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { attendanceOverview } from '@/lib/mock/attendance'
 import { classList } from '@/lib/mock/school'
 import { formatNumber } from '@/lib/format'
 import { toast } from 'sonner'
+import { ModuleHeader } from '../shared/module-header'
 import { OverviewCharts } from './overview-charts'
 import { AttendanceHeatmap } from './heatmap'
 import { ClassReport } from './class-report'
@@ -28,6 +26,14 @@ export function StudentWorkspace() {
   const absent = attendanceOverview.today.absent + attendanceOverview.today.leave
   const late = attendanceOverview.today.late
 
+  // Compact meta strip — replaces 4 oversized KpiCards
+  const metaStats = [
+    { label: "Today's rate", value: `${todaysRate.toFixed(1)}%`, hint: 'vs yesterday +0.8' },
+    { label: 'Present', value: formatNumber(present), hint: `of ${formatNumber(attendanceOverview.today.total)}` },
+    { label: 'Absent + leave', value: absent, hint: 'lower than weekly avg' },
+    { label: 'Late arrivals', value: late, hint: 'within 15 min window' },
+  ]
+
   const handleExport = () => {
     toast.success('Attendance report exported', {
       description: `December_2025_Attendance_Report.xlsx · ${formatNumber(attendanceOverview.today.total)} students`,
@@ -35,15 +41,13 @@ export function StudentWorkspace() {
   }
 
   return (
-    <PageTransition className="space-y-6">
-      <SectionHeading
-        title="Attendance Analytics"
-        subtitle="School-wide attendance insights · December 2025"
-        icon={<CalendarCheck className="h-5 w-5" />}
-        action={
-          <div className="flex items-center gap-2">
+    <PageTransition className="space-y-4">
+      <ModuleHeader
+        meta={[`December 2025`]}
+        actions={
+          <>
             <Select value={classFilter} onValueChange={setClassFilter}>
-              <SelectTrigger className="w-[150px] hidden sm:flex">
+              <SelectTrigger className="w-[150px] h-8 text-xs hidden sm:flex">
                 <Filter className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
@@ -56,19 +60,22 @@ export function StudentWorkspace() {
                 })}
               </SelectContent>
             </Select>
-            <Button onClick={handleExport} variant="outline" className="bg-card/40">
+            <Button onClick={handleExport} variant="outline" size="sm" className="h-8 text-xs">
               <Download className="h-3.5 w-3.5" /> Export
             </Button>
-          </div>
+          </>
         }
       />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard label="Today's Rate" value={todaysRate} suffix="%" decimals={1} icon={<CalendarCheck className="h-5 w-5" />} trend={0.8} trendLabel="vs yesterday" accent="emerald" delay={0} />
-        <KpiCard label="Present Today" value={present} icon={<UserCheck className="h-5 w-5" />} trend={1.2} trendLabel={`${formatNumber(present)} of ${formatNumber(attendanceOverview.today.total)}`} accent="cyan" delay={0.05} />
-        <KpiCard label="Absent + Leave" value={absent} icon={<UserX className="h-5 w-5" />} trend={-2.4} trendLabel="Lower than weekly avg" accent="rose" delay={0.1} />
-        <KpiCard label="Late Arrivals" value={late} icon={<Clock className="h-5 w-5" />} trend={0.5} trendLabel="Within 15 min window" accent="amber" delay={0.15} />
+      {/* Compact meta strip — replaces 4 KpiCards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/60 rounded-lg overflow-hidden">
+        {metaStats.map((s) => (
+          <div key={s.label} className="bg-card px-4 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
+            <p className="text-lg font-semibold text-foreground tabular-nums leading-tight mt-0.5">{s.value}</p>
+            {s.hint && <p className="text-[10px] text-muted-foreground mt-0.5">{s.hint}</p>}
+          </div>
+        ))}
       </div>
 
       <OverviewCharts todaysRate={todaysRate} />
