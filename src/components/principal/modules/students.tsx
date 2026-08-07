@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useStudentsStore, getVirtualOccupied, type StudentRecord } from '@/lib/store/students-store'
 import { ModuleHeader } from './shared/module-header'
+import { SegmentedTabs } from './shared/segmented-tabs'
 import { OverviewTab } from './students/overview-tab'
 import { DirectoryTab } from './students/directory-tab'
 import { ArchivedTab } from './students/archived-tab'
@@ -81,6 +82,17 @@ export function StudentsModule({ initialTab = 'overview' }: StudentsModuleProps)
     <PageTransition className="space-y-4">
       <ModuleHeader
         meta={[`${formatNumber(totalStudents)} students`, `${store.classes.length} classes`, `AY ${school.academicYear}`]}
+        actions={
+          <SegmentedTabs
+            tabs={[
+              { value: 'overview', label: 'Overview' },
+              { value: 'directory', label: 'Directory' },
+              { value: 'archived', label: 'Archived' },
+            ]}
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as StudentsTabKey)}
+          />
+        }
       />
 
       <AnimatePresence mode="wait">

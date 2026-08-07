@@ -77,15 +77,7 @@ const navGroups: NavGroup[] = [
     items: [
       { key: 'admission', label: 'Admissions', icon: <UserPlus className="h-4.5 w-4.5" /> },
       { key: 'teachers', label: 'Teachers', icon: <GraduationCap className="h-4.5 w-4.5" /> },
-      {
-        key: 'students',
-        label: 'Students',
-        icon: <School className="h-4.5 w-4.5" />,
-        children: [
-          { key: 'students:overview', label: 'Overview', icon: <LayoutGrid className="h-3.5 w-3.5" /> },
-          { key: 'students:directory', label: 'Directory', icon: <Users className="h-3.5 w-3.5" /> },
-        ],
-      },
+      { key: 'students', label: 'Students', icon: <School className="h-4.5 w-4.5" /> },
       { key: 'classes', label: 'Classes', icon: <Layers className="h-4.5 w-4.5" /> },
       { key: 'timetable', label: 'Timetable', icon: <Clock className="h-4.5 w-4.5" /> },
       { key: 'attendance', label: 'Attendance', icon: <CalendarCheck className="h-4.5 w-4.5" /> },
