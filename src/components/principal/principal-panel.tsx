@@ -10,13 +10,12 @@ import {
 import { AppShell, type NavGroup } from '@/components/shell/app-shell'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { useAdmissionStore } from '@/lib/store/admission-store'
-import type { StudentsTabKey } from './modules/students'
+
 
 import { PrincipalDashboard } from './modules/dashboard'
 import { AdmissionModule } from './modules/admission'
 import { TeachersModule } from './modules/teachers'
-import { StudentsModule } from './modules/students'
-import { ClassesModule } from './modules/classes'
+import { StudentsClassesModule, type UnifiedTab } from './modules/students-classes'
 import { TimetableModule } from './modules/timetable'
 import { AttendanceModule } from './modules/attendance'
 import { FeesModule } from './modules/fees'
@@ -40,11 +39,11 @@ const moduleRegistry: Record<string, React.ComponentType<any>> = {
   dashboard: PrincipalDashboard,
   admission: AdmissionModule,
   teachers: TeachersModule,
-  students: StudentsModule,
-  'students:overview': StudentsModule,
-  'students:directory': StudentsModule,
-  'students:classes': StudentsModule,
-  classes: ClassesModule,
+  students: StudentsClassesModule,
+  'students:overview': StudentsClassesModule,
+  'students:directory': StudentsClassesModule,
+  'students:classes': StudentsClassesModule,
+  classes: StudentsClassesModule,
   timetable: TimetableModule,
   attendance: AttendanceModule,
   fees: FeesModule,
@@ -77,8 +76,7 @@ const navGroups: NavGroup[] = [
     items: [
       { key: 'admission', label: 'Admissions', icon: <UserPlus className="h-4.5 w-4.5" /> },
       { key: 'teachers', label: 'Teachers', icon: <GraduationCap className="h-4.5 w-4.5" /> },
-      { key: 'students', label: 'Students', icon: <School className="h-4.5 w-4.5" /> },
-      { key: 'classes', label: 'Classes', icon: <Layers className="h-4.5 w-4.5" /> },
+      { key: 'students', label: 'Students & Classes', icon: <School className="h-4.5 w-4.5" /> },
       { key: 'timetable', label: 'Timetable', icon: <Clock className="h-4.5 w-4.5" /> },
       { key: 'attendance', label: 'Attendance', icon: <CalendarCheck className="h-4.5 w-4.5" /> },
       { key: 'exams', label: 'Examinations', icon: <FileText className="h-4.5 w-4.5" /> },
@@ -137,25 +135,23 @@ export function PrincipalPanel() {
 
   const ActiveModule = moduleRegistry[active] ?? PrincipalDashboard
 
-  let initialStudentTab: StudentsTabKey = 'overview'
-  if (active === 'students:directory') {
-    initialStudentTab = 'directory'
-  } else if (active === 'students:archived') {
-    initialStudentTab = 'archived'
-  }
+  let initialTab: UnifiedTab = 'overview'
+  if (active === 'students:directory') initialTab = 'directory'
+  else if (active === 'students:classes' || active === 'classes') initialTab = 'classes'
+  else if (active === 'students:archived') initialTab = 'archived'
 
-  const isStudentModule = active.startsWith('students:')
+  const isStudentModule = active === 'students' || active.startsWith('students:') || active === 'classes'
 
   return (
     <AppShell
       groups={groups}
-      activeKey={active}
+      activeKey={isStudentModule ? 'students' : active}
       onNavigate={setActive}
       role="principal"
       roleLabel="Principal · Admin"
     >
       {isStudentModule ? (
-        <StudentsModule initialTab={initialStudentTab} />
+        <StudentsClassesModule initialTab={initialTab} />
       ) : (
         <ActiveModule />
       )}

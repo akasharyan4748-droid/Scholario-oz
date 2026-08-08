@@ -2,13 +2,14 @@
 
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Search, LayoutGrid, Filter, ChevronRight, X } from 'lucide-react'
-import { GlassCard, StatusBadge, GradientAvatar } from '@/components/shared/ui'
+import { Search, LayoutGrid, List, ChevronRight, X } from 'lucide-react'
+import { StatusBadge, GradientAvatar } from '@/components/shared/ui'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import type { StudentRecord, ClassRecord } from '@/lib/store/students-store'
+import { SearchFilterBar, type FilterConfig } from '../shared/search-filter-bar'
 
 export function StudentCard({ student, onClick }: { student: StudentRecord; onClick: () => void }) {
   const warningBadges: React.ReactNode[] = []
@@ -17,7 +18,7 @@ export function StudentCard({ student, onClick }: { student: StudentRecord; onCl
   if (student.academics.overallPercent < 60) warningBadges.push(<Badge key="grd" variant="secondary" className="text-[9px] bg-rose-500/10 text-rose-700 dark:text-rose-300">At Risk</Badge>)
 
   return (
-    <GlassCard className="p-3.5 cursor-pointer hover:shadow-md transition-all group" hover={false} onClick={onClick}>
+    <div className="rounded-lg border border-border/60 bg-card p-3.5 cursor-pointer hover:border-emerald-500/40 hover:shadow-sm transition-all group" onClick={onClick}>
       <div className="flex items-start gap-3">
         <GradientAvatar name={student.name} initials={student.avatar} size="md" />
         <div className="flex-1 min-w-0">
@@ -31,7 +32,7 @@ export function StudentCard({ student, onClick }: { student: StudentRecord; onCl
         <Badge variant="secondary" className="text-[10px]">{student.academics.overallGrade}</Badge>
       </div>
       {warningBadges.length > 0 && <div className="flex items-center gap-1 mt-2 flex-wrap">{warningBadges}</div>}
-    </GlassCard>
+    </div>
   )
 }
 
@@ -47,37 +48,47 @@ export function DirectoryTab({ students, classes, onStudentClick }: { students: 
     return matchesSearch && (classFilter === 'all' || s.classId === classFilter) && (feeFilter === 'all' || s.feeStatus === feeFilter)
   }), [students, search, classFilter, feeFilter])
 
+  const classFilterConfig: FilterConfig = {
+    id: 'class', value: classFilter, onChange: setClassFilter,
+    placeholder: 'All Classes', width: 'w-[160px]',
+    options: [{ value: 'all', label: 'All Classes' }, ...classes.map((c) => ({ value: c.id, label: c.name }))],
+  }
+  const feeFilterConfig: FilterConfig = {
+    id: 'fee', value: feeFilter, onChange: setFeeFilter,
+    placeholder: 'All Fees', width: 'w-[120px]',
+    options: [
+      { value: 'all', label: 'All Fees' },
+      { value: 'Paid', label: 'Paid' },
+      { value: 'Partial', label: 'Partial' },
+      { value: 'Pending', label: 'Pending' },
+    ],
+  }
+
+  const viewToggle = (
+    <div className="flex items-center gap-1 rounded-lg border border-border p-0.5 h-9">
+      <button onClick={() => setView('grid')} className={cn('h-7 w-7 flex items-center justify-center rounded-md text-xs transition-all', view === 'grid' ? 'bg-white dark:bg-white/10 shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}><LayoutGrid className="h-3.5 w-3.5" /></button>
+      <button onClick={() => setView('list')} className={cn('h-7 w-7 flex items-center justify-center rounded-md text-xs transition-all', view === 'list' ? 'bg-white dark:bg-white/10 shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}><List className="h-3.5 w-3.5" /></button>
+    </div>
+  )
+
   return (
-    <div className="space-y-4">
-      <GlassCard className="p-3 sm:p-4">
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, admission no, roll, phone, parent, house…" className="pl-9 h-9 text-xs" />
-            {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>}
-          </div>
-          <Select value={classFilter} onValueChange={setClassFilter}>
-            <SelectTrigger className="w-full sm:w-40 h-9 text-xs"><SelectValue placeholder="Class" /></SelectTrigger>
-            <SelectContent className="max-h-72"><SelectItem value="all">All Classes</SelectItem>{classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-          </Select>
-          <Select value={feeFilter} onValueChange={setFeeFilter}>
-            <SelectTrigger className="w-full sm:w-32 h-9 text-xs"><SelectValue placeholder="Fee" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">All Fees</SelectItem><SelectItem value="Paid">Paid</SelectItem><SelectItem value="Partial">Partial</SelectItem><SelectItem value="Pending">Pending</SelectItem></SelectContent>
-          </Select>
-          <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-            <button onClick={() => setView('grid')} className={cn('h-8 w-8 flex items-center justify-center rounded-md text-xs', view === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}><LayoutGrid className="h-3.5 w-3.5" /></button>
-            <button onClick={() => setView('list')} className={cn('h-8 w-8 flex items-center justify-center rounded-md text-xs', view === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}><Filter className="h-3.5 w-3.5" /></button>
-          </div>
-        </div>
-        <div className="flex items-center justify-between mt-2.5 text-xs text-muted-foreground"><span>{filtered.length} of {students.length} students</span></div>
-      </GlassCard>
+    <div className="space-y-3">
+      {/* Universal SearchFilterBar — no box-in-box */}
+      <SearchFilterBar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search name, admission no, roll, phone, parent…"
+        filters={[classFilterConfig, feeFilterConfig]}
+        actions={viewToggle}
+      />
+
+      <p className="text-xs text-muted-foreground">{filtered.length} of {students.length} students</p>
 
       {filtered.length === 0 ? (
-        <GlassCard className="p-12 flex flex-col items-center justify-center text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground mb-3"><Search className="h-5 w-5" /></div>
-          <h3 className="font-semibold text-sm">No students found</h3>
-          <p className="text-xs text-muted-foreground mt-1">Try adjusting your search or filters.</p>
-        </GlassCard>
+        <div className="py-12 text-center">
+          <Search className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No students found. Try adjusting your search.</p>
+        </div>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {filtered.slice(0, 60).map((s, i) => (
@@ -87,27 +98,25 @@ export function DirectoryTab({ students, classes, onStudentClick }: { students: 
           ))}
         </div>
       ) : (
-        <GlassCard className="p-0 overflow-hidden">
-          <div className="max-h-[600px] overflow-y-auto">
-            {filtered.slice(0, 100).map((s) => (
-              <button key={s.id} onClick={() => onStudentClick(s)} className="w-full flex items-center gap-3 p-3 hover:bg-accent/30 transition-colors border-b border-border last:border-0 text-left">
-                <GradientAvatar name={s.name} initials={s.avatar} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium truncate">{s.name}</p>
-                    <span className="text-[10px] font-mono text-muted-foreground">{s.admissionNo}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{s.className} · Sec {s.section} · Roll {s.rollNo}</p>
+        <div className="rounded-lg border border-border/60 overflow-hidden divide-y divide-border/40">
+          {filtered.slice(0, 100).map((s) => (
+            <button key={s.id} onClick={() => onStudentClick(s)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors text-left bg-card">
+              <GradientAvatar name={s.name} initials={s.avatar} size="sm" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium truncate">{s.name}</p>
+                  <span className="text-[10px] font-mono text-muted-foreground">{s.admissionNo}</span>
                 </div>
-                <div className="hidden sm:flex items-center gap-3 shrink-0">
-                  <span className={cn('text-xs font-semibold', s.attendance >= 90 ? 'text-emerald-600' : s.attendance >= 75 ? 'text-amber-600' : 'text-rose-600')}>{s.attendance}%</span>
-                  {s.feeStatus === 'Paid' ? <StatusBadge status="Paid" variant="success" /> : s.feeStatus === 'Partial' ? <StatusBadge status="Partial" variant="warning" /> : <StatusBadge status="Pending" variant="danger" />}
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-              </button>
-            ))}
-          </div>
-        </GlassCard>
+                <p className="text-xs text-muted-foreground">{s.className} · Sec {s.section} · Roll {s.rollNo}</p>
+              </div>
+              <div className="hidden sm:flex items-center gap-3 shrink-0">
+                <span className={cn('text-xs font-semibold', s.attendance >= 90 ? 'text-emerald-600' : s.attendance >= 75 ? 'text-amber-600' : 'text-rose-600')}>{s.attendance}%</span>
+                {s.feeStatus === 'Paid' ? <StatusBadge status="Paid" variant="success" /> : s.feeStatus === 'Partial' ? <StatusBadge status="Partial" variant="warning" /> : <StatusBadge status="Pending" variant="danger" />}
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </button>
+          ))}
+        </div>
       )}
       {filtered.length > 60 && view === 'grid' && <p className="text-xs text-muted-foreground text-center">Showing first 60 of {filtered.length} results.</p>}
     </div>

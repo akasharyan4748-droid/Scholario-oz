@@ -24,7 +24,7 @@ import { toast } from 'sonner'
 
 type Tab = 'overview' | 'directory' | 'archived'
 
-export function ClassesModule() {
+export function ClassesModule({ embedded = false }: { embedded?: boolean }) {
   const [tab, setTab] = useState<Tab>('overview')
   const [selectedClass, setSelectedClass] = useState<ClassRecord | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -62,28 +62,26 @@ export function ClassesModule() {
     return <ClassDetailsPage cls={selectedClass} onBack={() => setSelectedClass(null)} store={store} />
   }
 
-  return (
-    <PageTransition className="space-y-4">
-      <ModuleHeader
-        meta={[`${stats.totalClasses} active classes`, `${stats.totalSections} sections`]}
-        actions={
-          <>
-            <SegmentedTabs
-              tabs={[
-                { value: 'overview', label: 'Overview' },
-                { value: 'directory', label: 'Directory' },
-                { value: 'archived', label: 'Archived', badge: stats.archivedCount || undefined },
-              ]}
-              value={tab}
-              onValueChange={(v) => setTab(v as Tab)}
-            />
-            <Button size="sm" onClick={() => setAddOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 h-8">
-              <Plus className="h-3.5 w-3.5" /> Add Class
-            </Button>
-          </>
-        }
+  const classesHeader = (
+    <div className="flex items-center justify-between gap-3 mb-4">
+      <SegmentedTabs
+        tabs={[
+          { value: 'overview', label: 'Overview' },
+          { value: 'directory', label: 'Directory' },
+          { value: 'archived', label: 'Archived', badge: stats.archivedCount || undefined },
+        ]}
+        value={tab}
+        onValueChange={(v) => setTab(v as Tab)}
       />
+      <Button size="sm" onClick={() => setAddOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 h-8">
+        <Plus className="h-3.5 w-3.5" /> Add Class
+      </Button>
+    </div>
+  )
 
+  const classesContent = (
+    <>
+      {classesHeader}
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
           {tab === 'overview' && <OverviewTab classes={classes.filter((c) => c.status === 'Active')} stats={stats} onOpenClass={setSelectedClass} />}
@@ -91,8 +89,18 @@ export function ClassesModule() {
           {tab === 'archived' && <ArchivedTab classes={classes.filter((c) => c.status === 'Archived')} onOpenClass={setSelectedClass} />}
         </motion.div>
       </AnimatePresence>
-
       <AddClassDialog open={addOpen} onClose={() => setAddOpen(false)} />
+    </>
+  )
+
+  if (embedded) {
+    return <div className="space-y-4">{classesContent}</div>
+  }
+
+  return (
+    <PageTransition className="space-y-4">
+      <ModuleHeader meta={[`${stats.totalClasses} active classes`, `${stats.totalSections} sections`]} />
+      {classesContent}
     </PageTransition>
   )
 }
