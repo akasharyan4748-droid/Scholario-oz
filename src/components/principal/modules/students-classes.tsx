@@ -16,10 +16,11 @@ import { ModuleHeader } from './shared/module-header'
 import { SegmentedTabs } from './shared/segmented-tabs'
 import { OverviewTab } from './students/overview-tab'
 import { DirectoryTab } from './students/directory-tab'
-import { ArchivedTab } from './students/archived-tab'
 import { StudentProfileSheet } from './students/student-profile'
 import { ClassesView } from './classes'
 import { ClassDetailsPage } from './classes/class-details'
+import { AddClassPage } from './classes/add-class-page'
+import { ArchivedView } from './classes/archived-view'
 
 export type UnifiedTab = 'overview' | 'directory' | 'classes' | 'archived'
 
@@ -27,6 +28,7 @@ export function StudentsClassesModule({ initialTab = 'overview' }: { initialTab?
   const store = useStudentsStore()
   const [activeTab, setActiveTab] = useState<UnifiedTab>(initialTab)
   const [selectedClass, setSelectedClass] = useState<ClassRecord | null>(null)
+  const [showAddClass, setShowAddClass] = useState(false)
   const [profileStudent, setProfileStudent] = useState<StudentRecord | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
   const [archiveTarget, setArchiveTarget] = useState<StudentRecord | null>(null)
@@ -62,13 +64,12 @@ export function StudentsClassesModule({ initialTab = 'overview' }: { initialTab?
 
   // ─── CLASS DETAILS: full-page, no parent tabs ───
   if (selectedClass) {
-    return (
-      <ClassDetailsPage
-        cls={selectedClass}
-        onBack={() => setSelectedClass(null)}
-        store={store}
-      />
-    )
+    return <ClassDetailsPage cls={selectedClass} onBack={() => setSelectedClass(null)} store={store} />
+  }
+
+  // ─── ADD CLASS: full-page, no parent tabs ───
+  if (showAddClass) {
+    return <AddClassPage onBack={() => setShowAddClass(false)} onCreated={() => { setShowAddClass(false); setActiveTab('classes') }} />
   }
 
   return (
@@ -98,15 +99,13 @@ export function StudentsClassesModule({ initialTab = 'overview' }: { initialTab?
             <DirectoryTab students={store.students.filter((s) => s.status === 'Active')} classes={store.classes} onStudentClick={openProfile} />
           )}
           {activeTab === 'classes' && (
-            <ClassesView onOpenClass={setSelectedClass} />
+            <ClassesView onOpenClass={setSelectedClass} onAddClass={() => setShowAddClass(true)} />
           )}
           {activeTab === 'archived' && (
-            <UnifiedArchivedView
+            <ArchivedView
               archivedStudents={store.students.filter((s) => s.status === 'Archived')}
-              archivedClasses={store.classes.filter((c) => c.status === 'Archived')}
               onRestoreStudent={handleRestore}
               onViewStudent={openProfile}
-              onOpenClass={setSelectedClass}
             />
           )}
         </motion.div>
@@ -168,86 +167,5 @@ export function StudentsClassesModule({ initialTab = 'overview' }: { initialTab?
         </DialogContent>
       </Dialog>
     </PageTransition>
-  )
-}
-
-/* ============================================================
-   UNIFIED ARCHIVED VIEW — Students + Classes with session selector
-   ============================================================ */
-function UnifiedArchivedView({
-  archivedStudents, archivedClasses, onRestoreStudent, onViewStudent, onOpenClass,
-}: {
-  archivedStudents: StudentRecord[]
-  archivedClasses: ClassRecord[]
-  onRestoreStudent: (s: StudentRecord) => void
-  onViewStudent: (s: StudentRecord) => void
-  onOpenClass: (c: ClassRecord) => void
-}) {
-  const [session, setSession] = useState('2025-2026')
-
-  return (
-    <div className="space-y-4">
-      {/* Session selector — compact, secondary */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">Academic Session:</span>
-        <Select value={session} onValueChange={setSession}>
-          <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="2025-2026">2025–2026</SelectItem>
-            <SelectItem value="2024-2025">2024–2025</SelectItem>
-            <SelectItem value="2023-2024">2023–2024</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Archived Students */}
-      <div>
-        <h3 className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Archived Students ({archivedStudents.length})</h3>
-        {archivedStudents.length > 0 ? (
-          <div className="rounded-lg border border-border/60 overflow-hidden divide-y divide-border/40">
-            {archivedStudents.map((s) => (
-              <div key={s.id} className="px-4 py-2.5 bg-card hover:bg-muted/30 transition-colors flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground text-xs font-semibold">{s.avatar}</div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm text-foreground truncate">{s.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{s.admissionNo} · {s.className}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => onViewStudent(s)}>View</Button>
-                  <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => onRestoreStudent(s)}>Restore</Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground py-4">No archived students for {session}.</p>
-        )}
-      </div>
-
-      {/* Archived Classes */}
-      <div className="pt-3 border-t border-border">
-        <h3 className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Archived Classes ({archivedClasses.length})</h3>
-        {archivedClasses.length > 0 ? (
-          <div className="rounded-lg border border-border/60 overflow-hidden divide-y divide-border/40">
-            {archivedClasses.map((c) => (
-              <div key={c.id} onClick={() => onOpenClass(c)} className="px-4 py-2.5 bg-card hover:bg-muted/30 transition-colors cursor-pointer flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground text-xs font-semibold">{c.name.slice(0, 2)}</div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm text-foreground truncate">{c.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{c.level} · {c.sections.length} sections</p>
-                  </div>
-                </div>
-                <Badge variant="secondary" className="text-[10px] bg-muted text-muted-foreground">Archived</Badge>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground py-4">No archived classes for {session}.</p>
-        )}
-      </div>
-    </div>
   )
 }

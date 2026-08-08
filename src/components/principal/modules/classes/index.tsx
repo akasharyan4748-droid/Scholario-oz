@@ -5,10 +5,6 @@ import { motion } from 'framer-motion'
 import { Layers, Users, AlertTriangle, Plus, MapPin, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { useStudentsStore, getVirtualOccupied } from '@/lib/store/students-store'
 import type { ClassRecord } from '@/lib/store/students-store'
@@ -17,12 +13,12 @@ import { SearchFilterBar, type FilterConfig } from '../shared/search-filter-bar'
 import { toast } from 'sonner'
 
 /**
- * ClassesView — flat class management page (no sub-tabs).
- * Shows: summary cards + search/filter + class grid + Add Class.
+ * ClassesView — flat class management page (no sub-tabs, no dialog).
+ * Shows: summary cards + search/filter + class grid + Add Class button.
  * Opening a class calls onOpenClass (handled by parent).
+ * Add Class calls onAddClass (opens full-page workflow in parent).
  */
-export function ClassesView({ onOpenClass }: { onOpenClass: (c: ClassRecord) => void }) {
-  const [addOpen, setAddOpen] = useState(false)
+export function ClassesView({ onOpenClass, onAddClass }: { onOpenClass: (c: ClassRecord) => void; onAddClass: () => void }) {
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
   const store = useStudentsStore()
@@ -83,7 +79,7 @@ export function ClassesView({ onOpenClass }: { onOpenClass: (c: ClassRecord) => 
         placeholder="Search class, section, or room…"
         filters={[filterConfig]}
         actions={
-          <Button size="sm" onClick={() => setAddOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 h-9">
+          <Button size="sm" onClick={onAddClass} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 h-9">
             <Plus className="h-3.5 w-3.5" /> Add Class
           </Button>
         }
@@ -151,57 +147,6 @@ export function ClassesView({ onOpenClass }: { onOpenClass: (c: ClassRecord) => 
       {filtered.length === 0 && (
         <div className="py-10 text-center"><p className="text-sm text-muted-foreground">No classes found matching your search.</p></div>
       )}
-
-      <AddClassDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
-  )
-}
-
-/* ============================================================
-   ADD CLASS DIALOG
-   ============================================================ */
-function AddClassDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [form, setForm] = useState({
-    name: '', section: 'A', academicYear: '2025-2026', capacity: 40,
-    medium: 'English', shift: 'Morning', room: '', building: 'Main', floor: '',
-    classTeacher: '', assistantTeacher: '', remarks: '',
-  })
-  const setF = (k: string, v: any) => setForm((p) => ({ ...p, [k]: v }))
-  const handleSave = () => {
-    if (!form.name.trim()) { toast.error('Class name is required'); return }
-    toast.success(`Class ${form.name} created`); onClose()
-    setForm({ name: '', section: 'A', academicYear: '2025-2026', capacity: 40, medium: 'English', shift: 'Morning', room: '', building: 'Main', floor: '', classTeacher: '', assistantTeacher: '', remarks: '' })
-  }
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Add New Class</DialogTitle><DialogDescription>Create a new class with sections, capacity, and teacher assignments.</DialogDescription></DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <div><Label className="text-xs font-semibold">Class Name</Label><Input value={form.name} onChange={(e) => setF('name', e.target.value)} placeholder="e.g. Class 6" className="mt-1.5 h-9" /></div>
-            <div><Label className="text-xs font-semibold">Section</Label><Input value={form.section} onChange={(e) => setF('section', e.target.value)} placeholder="e.g. A" className="mt-1.5 h-9" /></div>
-            <div><Label className="text-xs font-semibold">Academic Year</Label><Input value={form.academicYear} onChange={(e) => setF('academicYear', e.target.value)} placeholder="2025-2026" className="mt-1.5 h-9" /></div>
-            <div><Label className="text-xs font-semibold">Capacity</Label><Input type="number" value={form.capacity} onChange={(e) => setF('capacity', parseInt(e.target.value) || 40)} placeholder="40" className="mt-1.5 h-9" /></div>
-            <div><Label className="text-xs font-semibold">Medium</Label><Select value={form.medium} onValueChange={(v) => setF('medium', v)}><SelectTrigger className="mt-1.5 h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="English">English</SelectItem><SelectItem value="Hindi">Hindi</SelectItem><SelectItem value="Bilingual">Bilingual</SelectItem></SelectContent></Select></div>
-            <div><Label className="text-xs font-semibold">Shift</Label><Select value={form.shift} onValueChange={(v) => setF('shift', v)}><SelectTrigger className="mt-1.5 h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Morning">Morning</SelectItem><SelectItem value="Afternoon">Afternoon</SelectItem></SelectContent></Select></div>
-            <div><Label className="text-xs font-semibold">Room Number</Label><Input value={form.room} onChange={(e) => setF('room', e.target.value)} placeholder="e.g. F2-09" className="mt-1.5 h-9" /></div>
-            <div><Label className="text-xs font-semibold">Building</Label><Input value={form.building} onChange={(e) => setF('building', e.target.value)} placeholder="e.g. Main" className="mt-1.5 h-9" /></div>
-            <div><Label className="text-xs font-semibold">Floor</Label><Input value={form.floor} onChange={(e) => setF('floor', e.target.value)} placeholder="e.g. 2" className="mt-1.5 h-9" /></div>
-          </div>
-          <div className="pt-3 border-t border-border">
-            <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Teacher Assignments</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label className="text-xs font-semibold">Class Teacher</Label><Input value={form.classTeacher} onChange={(e) => setF('classTeacher', e.target.value)} placeholder="Search teacher…" className="mt-1.5 h-9" /></div>
-              <div><Label className="text-xs font-semibold">Assistant Class Teacher</Label><Input value={form.assistantTeacher} onChange={(e) => setF('assistantTeacher', e.target.value)} placeholder="Search teacher…" className="mt-1.5 h-9" /></div>
-            </div>
-          </div>
-          <div className="pt-3 border-t border-border"><Label className="text-xs font-semibold">Remarks</Label><Input value={form.remarks} onChange={(e) => setF('remarks', e.target.value)} placeholder="Optional notes about this class…" className="mt-1.5 h-9" /></div>
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" onClick={onClose} className="h-8 text-xs">Cancel</Button>
-          <Button size="sm" onClick={handleSave} className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white">Create Class</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
   )
 }
