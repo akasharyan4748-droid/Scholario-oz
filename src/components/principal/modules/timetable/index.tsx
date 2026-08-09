@@ -30,6 +30,7 @@ import {
   useTimetableStore,
   detectConflicts,
   countAllConflicts,
+  getConflictedSlotIds,
   type DayType,
   type TimetableSlot,
   type TimetableChange,
@@ -115,6 +116,7 @@ export function TimetableModule() {
   }, [displaySlots, selectedClass, selectedTeacher, selectedRoom])
 
   const globalConflictCount = useMemo(() => countAllConflicts(displaySlots), [displaySlots])
+  const conflictedSlotIds = useMemo(() => getConflictedSlotIds(displaySlots), [displaySlots])
   const hasPendingPublish = pendingChanges.length > 0
 
   // ── Handlers ──
@@ -454,6 +456,7 @@ export function TimetableModule() {
         filteredSlots={filteredSlots}
         editMode={editMode}
         publications={publications}
+        conflictedSlotIds={conflictedSlotIds}
         onEditSlot={handleEditSlot}
         onDuplicateSlot={(slot) => {
           // Duplicate in draft

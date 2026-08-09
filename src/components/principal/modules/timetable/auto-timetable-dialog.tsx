@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { CLASSES, DAYS, ROOMS } from './data'
+import { countAllConflicts } from './timetable-store'
 import { teachers } from '@/lib/mock/teachers'
 import { subjects } from '@/lib/mock/school'
 import { useState } from 'react'
@@ -43,8 +44,10 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
   const handleGenerate = () => {
     setGenerating(true)
 
-    // Simple auto-generation: for each class × day × period, assign a subject + teacher
-    // using a round-robin approach. Respect existing assignments.
+    // Simple auto-generation: for each class × day × period, assign a subject + teacher.
+    // Brief section 6 + 37 + 38: Generator must NOT create fake conflicts.
+    // Only teacher double-booking and class-slot collisions are real conflicts.
+    // Room reuse is NOT a conflict (Brief section 1 + 40).
     const generated: TimetableSlot[] = [...existingSlots]
     let assignedCount = 0
     let conflictCount = 0
@@ -54,57 +57,43 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
     for (const className of targetClasses) {
       for (const day of DAYS) {
         for (const period of periods) {
-          // Skip if already assigned
+          // Skip if already assigned (class-slot already filled)
           const existing = generated.find(
             (s) => s.className === className && s.day === day && s.period === period
           )
           if (existing) continue
 
-          // Pick a subject (round-robin from class's subjects)
+          // Pick a subject (round-robin from subject list)
           const classSubjects = subjects.slice(0, 6).map((s) => s.name)
           const subjectIdx = (period + day.length + className.length) % classSubjects.length
           const subject = classSubjects[subjectIdx]
 
-          // Pick a teacher (round-robin, skip if already teaching this period)
+          // Pick a teacher — ONLY from teachers NOT already teaching in this day+period
+          // This prevents teacher double-booking (Brief section 4 + 37)
           const availableTeachers = activeTeachers.filter(
             (t) => !generated.some((s) => s.day === day && s.period === period && s.teacherId === t.id)
           )
           if (availableTeachers.length === 0) {
-            conflictCount++
+            // No available teacher — skip this slot (leave empty, NOT a conflict)
             continue
           }
-          const teacherIdx = (period + day.length) % availableTeachers.length
+          const teacherIdx = (period + day.length + className.length) % availableTeachers.length
           const teacher = availableTeachers[teacherIdx]
 
-          // Pick a room (use existing class room or round-robin)
+          // Room: use the class's existing room (room reuse is NOT a conflict)
           const existingClassSlot = generated.find((s) => s.className === className)
           const room = existingClassSlot?.room || ROOMS[period % ROOMS.length]
-
-          // Check room conflict
-          const roomConflict = generated.some(
-            (s) => s.day === day && s.period === period && s.room === room
-          )
-          if (roomConflict) {
-            // Try another room
-            const freeRoom = ROOMS.find(
-              (r) => !generated.some((s) => s.day === day && s.period === period && s.room === r)
-            )
-            if (!freeRoom) {
-              conflictCount++
-              continue
-            }
-          }
 
           generated.push({
             id: `auto-${Date.now()}-${className}-${day}-${period}`,
             day,
             period,
-            time: periods.indexOf(period) >= 0 ? `${period}:00` : '08:30 AM',
+            time: '08:30 AM - 09:15 AM', // placeholder — will use PERIODS time display
             className,
             subject,
             teacherId: teacher.id,
             teacherName: teacher.name,
-            room: existingClassSlot?.room || ROOMS[period % ROOMS.length],
+            room,
             type: 'Lecture',
           })
           assignedCount++
@@ -112,7 +101,13 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
       }
     }
 
-    const emptyCount = targetClasses.length * DAYS.length * periods.length - assignedCount - conflictCount
+    // Validate the generated timetable with the SAME conflict engine (Brief section 37)
+    // Re-use countAllConflicts from the store to verify
+    // (imported at the top of this file)
+    const actualConflicts = countAllConflicts(generated)
+    conflictCount = actualConflicts
+
+    const emptyCount = targetClasses.length * DAYS.length * periods.length - assignedCount
 
     setTimeout(() => {
       setGenerating(false)

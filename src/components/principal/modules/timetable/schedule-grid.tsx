@@ -28,6 +28,7 @@ interface ScheduleGridProps {
   filteredSlots: TimetableSlot[]
   editMode: boolean
   publications: PublishedVersion[]
+  conflictedSlotIds: Set<string>
   onEditSlot: (slot: TimetableSlot) => void
   onDuplicateSlot: (slot: TimetableSlot) => void
   onRemoveSlot: (slot: TimetableSlot) => void
@@ -40,6 +41,7 @@ export function ScheduleGrid({
   filteredSlots,
   editMode,
   publications,
+  conflictedSlotIds,
   onEditSlot,
   onDuplicateSlot,
   onRemoveSlot,
@@ -139,6 +141,7 @@ export function ScheduleGrid({
                               teacherName={resolveTeacherName(slot)}
                               editMode={editMode}
                               publications={publications}
+                              isConflicted={conflictedSlotIds.has(slot.id)}
                               onEdit={() => onEditSlot(slot)}
                               onDuplicate={() => onDuplicateSlot(slot)}
                               onRemove={() => onRemoveSlot(slot)}
@@ -218,6 +221,7 @@ export function ScheduleGrid({
                     slot={slot}
                     teacherName={resolveTeacherName(slot)}
                     publications={publications}
+                    isConflicted={conflictedSlotIds.has(slot.id)}
                     editMode={editMode}
                     onEdit={() => onEditSlot(slot)}
                     onRemove={() => onRemoveSlot(slot)}
@@ -237,11 +241,12 @@ export function ScheduleGrid({
 /* Brief section 8 + 9 + 10: Subject prominent, teacher+room with       */
 /*   small icons, tiny × in edit mode (visible only in edit mode).     */
 /* ------------------------------------------------------------------ */
-function SlotCard({ slot, teacherName, editMode, publications, onEdit, onDuplicate, onRemove }: {
+function SlotCard({ slot, teacherName, editMode, publications, isConflicted, onEdit, onDuplicate, onRemove }: {
   slot: TimetableSlot
   teacherName: string
   editMode: boolean
   publications: PublishedVersion[]
+  isConflicted: boolean
   onEdit: () => void
   onDuplicate: () => void
   onRemove: () => void
@@ -258,7 +263,9 @@ function SlotCard({ slot, teacherName, editMode, publications, onEdit, onDuplica
           ? 'border-violet-500/20 bg-violet-500/5 hover:border-violet-500/40'
           : isSports
           ? 'border-teal-500/20 bg-teal-500/5 hover:border-teal-500/40'
-          : 'border-primary/20 bg-primary/5 hover:border-primary/40'
+          : 'border-primary/20 bg-primary/5 hover:border-primary/40',
+        // Conflict corner-glow (Brief section 9 + 11): subtle animated rose glow
+        isConflicted && 'ring-1 ring-rose-400/40 shadow-[0_0_8px_rgba(244,63,94,0.15)]'
       )}
       onClick={editMode ? onEdit : undefined}
     >
@@ -304,10 +311,11 @@ function SlotCard({ slot, teacherName, editMode, publications, onEdit, onDuplica
 /* ------------------------------------------------------------------ */
 /* MobileSlotCard — touch-friendly card for phone/tablet               */
 /* ------------------------------------------------------------------ */
-function MobileSlotCard({ slot, teacherName, publications, editMode, onEdit, onRemove }: {
+function MobileSlotCard({ slot, teacherName, publications, isConflicted, editMode, onEdit, onRemove }: {
   slot: TimetableSlot
   teacherName: string
   publications: PublishedVersion[]
+  isConflicted: boolean
   editMode: boolean
   onEdit: () => void
   onRemove: () => void
@@ -324,7 +332,8 @@ function MobileSlotCard({ slot, teacherName, publications, editMode, onEdit, onR
           ? 'border-violet-500/20 bg-violet-500/5'
           : isSports
           ? 'border-teal-500/20 bg-teal-500/5'
-          : 'border-primary/20 bg-primary/5'
+          : 'border-primary/20 bg-primary/5',
+        isConflicted && 'ring-1 ring-rose-400/40 shadow-[0_0_8px_rgba(244,63,94,0.15)]'
       )}
       onClick={editMode ? onEdit : undefined}
     >

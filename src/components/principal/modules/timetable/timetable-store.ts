@@ -187,13 +187,15 @@ export function formatTimeAgo(isoTimestamp: string, now: number = Date.now()): s
 
 /**
  * Conflict detection — checks if a given assignment would create a
- * teacher, room, or class double-booking.
+ * teacher or class-slot double-booking.
  *
- * Brief section 1 + 2 + 3: ONE PERIOD ≠ ONE CLASS. Multiple classes can
- * run simultaneously in the same period. Conflicts are resource-based:
- *   - CLASS conflict: same day + period + class (scoped to class column)
- *   - TEACHER conflict: same day + period + teacher (school-wide)
- *   - ROOM conflict: same day + period + room (school-wide)
+ * Brief section 1 + 40: Room reuse is NOT a conflict unless the room is
+ * explicitly configured as restricted. For the current data model, rooms
+ * are NOT restricted — multiple classes can share a room in the same period.
+ *
+ * Conflicts that DO count:
+ *   - TEACHER conflict: same teacher assigned to 2+ classes in same period
+ *   - CLASS conflict: same class already has an assignment in this period
  */
 export function detectConflicts(
   slots: TimetableSlot[],
@@ -204,28 +206,76 @@ export function detectConflicts(
   const teacherConflict = slots.find(
     (s) => s.day === form.day && s.period === form.period && s.teacherId === form.teacherId && s.id !== excludeSlotId
   )
-  // Room conflict (school-wide): same room occupied by another class in same period
-  const roomConflict = slots.find(
-    (s) => s.day === form.day && s.period === form.period && s.room === form.room && s.id !== excludeSlotId
-  )
   // Class conflict (scoped to class column): this class already has an assignment in this period
   const classConflict = slots.find(
     (s) => s.day === form.day && s.period === form.period && s.className === form.className && s.id !== excludeSlotId
   )
-  return { teacherConflict, roomConflict, classConflict, hasConflict: Boolean(teacherConflict || roomConflict || classConflict) }
+  // Room conflict is NOT counted (Brief section 1 + 40) — rooms are not restricted
+  return { teacherConflict, roomConflict: undefined, classConflict, hasConflict: Boolean(teacherConflict || classConflict) }
 }
 
+/**
+ * Count UNIQUE actual conflicts across all slots.
+ *
+ * Brief section 7: One teacher double-booked in 3 classes = 1 conflict event,
+ * NOT 2. We count unique collision groups, not pairwise conflicts.
+ *
+ * Brief section 1 + 40: Room reuse does NOT count as a conflict.
+ */
 export function countAllConflicts(slots: TimetableSlot[]): number {
-  const teacherSlots = new Map<string, number>()
-  const roomSlots = new Map<string, number>()
+  // Teacher conflicts: group by day+period+teacher, count groups with >1
+  const teacherGroups = new Map<string, number>()
   for (const s of slots) {
-    const tKey = `${s.day}-${s.period}-${s.teacherId}`
-    teacherSlots.set(tKey, (teacherSlots.get(tKey) || 0) + 1)
-    const rKey = `${s.day}-${s.period}-${s.room}`
-    roomSlots.set(rKey, (roomSlots.get(rKey) || 0) + 1)
+    const key = `${s.day}-${s.period}-${s.teacherId}`
+    teacherGroups.set(key, (teacherGroups.get(key) || 0) + 1)
   }
-  let count = 0
-  teacherSlots.forEach((c) => { if (c > 1) count += c - 1 })
-  roomSlots.forEach((c) => { if (c > 1) count += c - 1 })
-  return count
+  let teacherConflicts = 0
+  teacherGroups.forEach((count) => { if (count > 1) teacherConflicts++ })
+
+  // Class-slot conflicts: group by day+period+class, count groups with >1
+  const classGroups = new Map<string, number>()
+  for (const s of slots) {
+    const key = `${s.day}-${s.period}-${s.className}`
+    classGroups.set(key, (classGroups.get(key) || 0) + 1)
+  }
+  let classConflicts = 0
+  classGroups.forEach((count) => { if (count > 1) classConflicts++ })
+
+  return teacherConflicts + classConflicts
+}
+
+/**
+ * Get the set of slot IDs that are involved in conflicts (for corner-glow).
+ * Brief section 9 + 11: Both cards in the same conflict get the same glow.
+ */
+export function getConflictedSlotIds(slots: TimetableSlot[]): Set<string> {
+  const conflicted = new Set<string>()
+
+  // Teacher conflicts: mark ALL slots sharing the same day+period+teacher
+  const teacherGroups = new Map<string, TimetableSlot[]>()
+  for (const s of slots) {
+    const key = `${s.day}-${s.period}-${s.teacherId}`
+    if (!teacherGroups.has(key)) teacherGroups.set(key, [])
+    teacherGroups.get(key)!.push(s)
+  }
+  teacherGroups.forEach((group) => {
+    if (group.length > 1) {
+      group.forEach((s) => conflicted.add(s.id))
+    }
+  })
+
+  // Class-slot conflicts: mark ALL slots sharing the same day+period+class
+  const classGroups = new Map<string, TimetableSlot[]>()
+  for (const s of slots) {
+    const key = `${s.day}-${s.period}-${s.className}`
+    if (!classGroups.has(key)) classGroups.set(key, [])
+    classGroups.get(key)!.push(s)
+  }
+  classGroups.forEach((group) => {
+    if (group.length > 1) {
+      group.forEach((s) => conflicted.add(s.id))
+    }
+  })
+
+  return conflicted
 }
