@@ -15,7 +15,7 @@
  * Brief section 4: after Archive confirm, slot is immediately vacant +
  *   selectable. NO pencil/archive icon beside vacant slots.
  *
- * Brief section 5 + 6: "Archived" button opens compact ArchivedTeachersSheet.
+ * Brief section 5 + 6: "Archived" button opens ArchivedTeachersPanel (universal).
  *   Restore returns teacher to active pool. Delete is permanent (stronger confirm).
  *
  * Brief section 9 + 21 + 10: existing values hydrate into edit mode.
@@ -42,7 +42,7 @@ import { useTeachersMockStore } from '@/lib/store/teachers-mock-store'
 import { SegmentedTabs } from '../../shared/segmented-tabs'
 import { EntityCard } from '../../shared/entity-card'
 import { TeacherAssignmentControl } from './teacher-assignment-control'
-import { ArchivedTeachersSheet } from './archived-teachers-sheet'
+import { ArchivedTeachersPanel } from './archived-teachers-panel'
 import { toast } from 'sonner'
 
 type Mode = 'separate' | 'merged'
@@ -388,7 +388,7 @@ export function ClassTeachers({ cls }: { cls: ClassRecord }) {
         </section>
       )}
 
-      <ArchivedTeachersSheet open={archivedDialogOpen} onOpenChange={setArchivedDialogOpen} />
+      <ArchivedTeachersPanel open={archivedDialogOpen} onOpenChange={setArchivedDialogOpen} />
     </div>
   )
 }

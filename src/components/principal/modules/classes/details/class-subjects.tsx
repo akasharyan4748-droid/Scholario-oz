@@ -22,7 +22,7 @@
  *   `text-xs font-bold text-primary mb-3 uppercase tracking-wider`
  */
 import { useState, useMemo } from 'react'
-import { BookOpen, Plus, Archive, Pencil, Search, RotateCcw, Trash2 } from 'lucide-react'
+import { BookOpen, Plus, Archive, Pencil, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +31,7 @@ import { useStudentsStore } from '@/lib/store/students-store'
 import type { ClassRecord } from '@/lib/store/students-store'
 import { SUBJECTS_BY_LEVEL } from '@/lib/store/students-store/constants'
 import { SubjectCard } from './subject-card'
+import { ArchivedSubjectsPanel } from './archived-subjects-panel'
 import { ConfirmDialog } from '../../shared/confirm-dialog'
 import { toast } from 'sonner'
 
@@ -47,8 +48,6 @@ export function ClassSubjects({ cls }: { cls: ClassRecord }) {
   const [addOpen, setAddOpen] = useState(false)
   const [archiveTarget, setArchiveTarget] = useState<string | null>(null)
   const [archivedOpen, setArchivedOpen] = useState(false)
-  const [restoreTarget, setRestoreTarget] = useState<string | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   const handleAdd = (subject: string) => {
     if (liveClass.subjects.includes(subject)) {
@@ -67,18 +66,12 @@ export function ClassSubjects({ cls }: { cls: ClassRecord }) {
     setArchiveTarget(null)
   }
 
-  const handleRestore = () => {
-    if (!restoreTarget) return
-    restoreClassSubject(liveClass.id, restoreTarget)
-    toast.success(`${restoreTarget} restored`)
-    setRestoreTarget(null)
+  const handleRestore = (subject: string) => {
+    restoreClassSubject(liveClass.id, subject)
   }
 
-  const handleDelete = () => {
-    if (!deleteTarget) return
-    deleteArchivedSubject(liveClass.id, deleteTarget)
-    toast.success(`${deleteTarget} permanently deleted`)
-    setDeleteTarget(null)
+  const handleDelete = (subject: string) => {
+    deleteArchivedSubject(liveClass.id, subject)
   }
 
   const archivedCount = liveClass.archivedSubjects?.length ?? 0
@@ -154,37 +147,13 @@ export function ClassSubjects({ cls }: { cls: ClassRecord }) {
         onConfirm={handleArchive}
       />
 
-      {/* Restore confirmation */}
-      <ConfirmDialog
-        open={!!restoreTarget}
-        onOpenChange={(o) => !o && setRestoreTarget(null)}
-        title={`Restore ${restoreTarget}?`}
-        description={`${restoreTarget} will return to the active subjects for ${liveClass.name}.`}
-        tone="primary"
-        icon={RotateCcw}
-        confirmLabel="Restore Subject"
-        onConfirm={handleRestore}
-      />
-
-      {/* Permanent delete confirmation */}
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title={`Permanently delete ${deleteTarget}?`}
-        description={`This cannot be undone. The subject "${deleteTarget}" will be permanently removed from the archive and cannot be restored.`}
-        tone="destructive"
-        icon={Trash2}
-        confirmLabel="Delete Forever"
-        onConfirm={handleDelete}
-      />
-
-      {/* Archived subjects recovery dialog */}
-      <ArchivedSubjectsDialog
+      {/* Archived subjects recovery panel (universal) */}
+      <ArchivedSubjectsPanel
         open={archivedOpen}
         onOpenChange={setArchivedOpen}
         cls={liveClass}
-        onRestore={(s) => setRestoreTarget(s)}
-        onDelete={(s) => setDeleteTarget(s)}
+        onRestore={handleRestore}
+        onDelete={handleDelete}
       />
     </div>
   )
@@ -245,65 +214,6 @@ function AddSubjectDialog({ open, onOpenChange, existingSubjects, onAdd, cls }: 
               </button>
             ))}
           </div>
-        </div>
-        <DialogFooter><Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Close</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/* ArchivedSubjectsDialog — recovery UI for archived subjects         */
-/* Brief section 33 + 34: NOT a fake toast-only archive. Real recovery. */
-/* ------------------------------------------------------------------ */
-function ArchivedSubjectsDialog({ open, onOpenChange, cls, onRestore, onDelete }: {
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  cls: ClassRecord
-  onRestore: (subject: string) => void
-  onDelete: (subject: string) => void
-}) {
-  const archived = cls.archivedSubjects ?? []
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-sm font-semibold flex items-center gap-2">
-            <Archive className="h-4 w-4 text-muted-foreground" />
-            Archived Subjects
-          </DialogTitle>
-          <DialogDescription className="text-xs">
-            {archived.length === 0
-              ? `No archived subjects for ${cls.name}.`
-              : `${archived.length} archived subject${archived.length === 1 ? '' : 's'} for ${cls.name}. Restore to return to active list.`}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="py-2 max-h-80 overflow-y-auto">
-          {archived.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-6">No archived subjects.</p>
-          ) : (
-            <div className="rounded-lg border border-border/60 divide-y divide-border/30">
-              {archived.map((a) => (
-                <div key={a.name} className="px-3 py-2 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{a.name}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 mr-1.5">{a.name.substring(0, 3).toUpperCase()}</Badge>
-                      Archived {new Date(a.archivedAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 text-emerald-600" onClick={() => onRestore(a.name)}>
-                      <RotateCcw className="h-3 w-3" /> Restore
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 text-rose-600 hover:bg-rose-500/10" onClick={() => onDelete(a.name)}>
-                      <Trash2 className="h-3 w-3" /> Delete
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
         <DialogFooter><Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Close</Button></DialogFooter>
       </DialogContent>
