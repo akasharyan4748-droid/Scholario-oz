@@ -3,58 +3,87 @@
 /**
  * ClassTeachers — class & section teacher assignment.
  *
- * Brief section 16 (Terminology):
- *   - "Class Teacher" + "Assistant Class Teacher" (no "Class Teaching Team").
+ * Brief section 3 + 4 + 5 + 6: Normal mode is an information view
+ * (entity cards, not a form). Edit mode is a refined transition where
+ * the same entity cards become editable via SearchableSelect. No
+ * crude collection of large dropdown forms.
  *
- * Brief section 19 / 20 (Normal view + Edit mode):
- *   - Normal mode: clean avatar + name + employeeId · department.
- *   - Edit mode: selector becomes editable; same visual language as Subjects.
+ * Brief section 7 + 8 + 16: Use simple terminology:
+ *   - "Class Teacher"
+ *   - "Assistant Class Teacher"
+ *   - For section: "Section Teacher" + "Assistant"
+ * Avoid "Class Teaching Team" / "Section Assignments" / etc.
  *
- * Brief section 21 (Existing values must hydrate into edit state):
- *   - `buildInitialState()` reads from canonical cls state.
- *   - `enterEdit()` pre-populates `pending` with that state.
+ * Brief section 9 + 21: Existing values MUST hydrate into edit mode.
+ *   buildInitialState() reads from canonical cls state.
+ *   enterEdit() pre-populates pending with that state.
  *
- * Brief section 22 (Real data persistence):
- *   - `save()` writes through the canonical students-store actions
- *     `updateClassTeacher` and `updateSectionTeacher`.
+ * Brief section 18: Replace ≠ Archive. Replacing a teacher keeps the
+ *   old teacher active globally — only the class relationship changes.
  *
- * Brief section 26 (Inline × must not bypass safety):
- *   - The inline × on the selected teacher chip has been removed.
- *   - Removal happens only via the explicit "Remove" button → confirmation dialog.
+ * Brief section 19 + 20 + 27: NO inline × destructive button on the
+ *   selected chip. Removal happens only via explicit "Remove" button
+ *   → universal ConfirmDialog.
  *
- * Brief section 39 (No box-inside-box):
- *   - Section blocks use a thin top divider, not a wrapping card.
+ * Brief section 22 + 35 + 37: Save writes through canonical store
+ *   actions; all 4 relationship types (class teacher, class assistant,
+ *   section teacher, section assistant) persist; mutations propagate
+ *   live to Overview + header badges.
+ *
+ * Brief section 23 + 24 + 25: Uses the shared `SearchableSelect` —
+ *   a polished, reusable SCHOLARIO control. Search Input has a stable
+ *   `key` so it is NEVER recreated during rerenders (cursor bug fix).
  */
 import { useState } from 'react'
-import { Pencil, ChevronDown, Search, UserX } from 'lucide-react'
+import { Pencil, UserX, RotateCcw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useStudentsStore } from '@/lib/store/students-store'
 import type { ClassRecord } from '@/lib/store/students-store'
 import { getTeacherById, teachers } from '@/lib/mock/teachers'
+import { SegmentedTabs } from '../../shared/segmented-tabs'
+import { SearchableSelect, type SearchableSelectOption } from '../../shared/searchable-select'
+import { ConfirmDialog } from '../../shared/confirm-dialog'
+import { EntityCard } from '../../shared/entity-card'
 import { toast } from 'sonner'
 
 type Mode = 'separate' | 'merged'
 
 /**
  * Pending state shape.
- * Keys:
- *   - 'class_teacher'      → class-level Class Teacher
- *   - 'assistant'          → class-level Assistant Class Teacher (currently informational)
- *   - 'section_teacher|<secId>' → section-level Class Teacher
- *   - 'assistant|<secId>'  → section-level Assistant (currently informational)
+ *   'class_teacher'                  → class-level Class Teacher
+ *   'class_assistant'                → class-level Assistant Class Teacher
+ *   'section_teacher|<secId>'        → section-level Class Teacher
+ *   'section_assistant|<secId>'      → section-level Assistant Class Teacher
  */
 type PendingMap = Record<string, string>
 
+/* ------------------------------------------------------------------ */
+/* Build teacher options for SearchableSelect                          */
+/* ------------------------------------------------------------------ */
+function buildTeacherOptions(excludeId?: string): SearchableSelectOption[] {
+  return teachers
+    .filter((t) => t.status === 'Active')
+    .filter((t) => t.id !== excludeId)
+    .map((t) => ({
+      id: t.id,
+      label: t.name,
+      avatar: t.avatar,
+      meta: `${t.employeeId} · ${t.department}`,
+    }))
+}
+
+/* ------------------------------------------------------------------ */
+/* ClassTeachers — main component                                     */
+/* ------------------------------------------------------------------ */
 export function ClassTeachers({ cls }: { cls: ClassRecord }) {
-  // Subscribe to the canonical class so external mutations reflect here.
+  // Subscribe to canonical class so external mutations reflect here.
   const liveClass = useStudentsStore((s) => s.getClassById(cls.id)) ?? cls
   const updateClassTeacher = useStudentsStore((s) => s.updateClassTeacher)
+  const updateClassAssistantTeacher = useStudentsStore((s) => s.updateClassAssistantTeacher)
   const updateSectionTeacher = useStudentsStore((s) => s.updateSectionTeacher)
+  const updateSectionAssistantTeacher = useStudentsStore((s) => s.updateSectionAssistantTeacher)
 
   const [mode, setMode] = useState<Mode>('separate')
   const [editMode, setEditMode] = useState(false)
@@ -62,11 +91,14 @@ export function ClassTeachers({ cls }: { cls: ClassRecord }) {
   const [removals, setRemovals] = useState<string[]>([])
   const [confirmRemove, setConfirmRemove] = useState<{ key: string; label: string; name: string } | null>(null)
 
+  // Build initial pending state from canonical class assignments.
   const buildInitialState = (): PendingMap => {
     const state: PendingMap = {}
     if (liveClass.classTeacherId) state['class_teacher'] = liveClass.classTeacherId
+    if (liveClass.assistantTeacherId) state['class_assistant'] = liveClass.assistantTeacherId
     liveClass.sections.forEach((sec) => {
       if (sec.classTeacherId) state[`section_teacher|${sec.id}`] = sec.classTeacherId
+      if (sec.assistantTeacherId) state[`section_assistant|${sec.id}`] = sec.assistantTeacherId
     })
     return state
   }
@@ -117,15 +149,34 @@ export function ClassTeachers({ cls }: { cls: ClassRecord }) {
       changeCount++
     }
 
-    // Section Teachers (separate mode only saves section-level assignments)
+    // Class Assistant
+    const classAssistantNext = removals.includes('class_assistant')
+      ? null
+      : (pending['class_assistant'] ?? initial['class_assistant'] ?? null)
+    if ((initial['class_assistant'] ?? null) !== (classAssistantNext ?? null)) {
+      updateClassAssistantTeacher(liveClass.id, classAssistantNext)
+      changeCount++
+    }
+
+    // Section Teachers + Assistants
     liveClass.sections.forEach((sec) => {
-      const key = `section_teacher|${sec.id}`
-      const nextId = removals.includes(key)
+      const teacherKey = `section_teacher|${sec.id}`
+      const teacherNext = removals.includes(teacherKey)
         ? null
-        : (pending[key] ?? initial[key] ?? null)
-      const prevId = initial[key] ?? null
-      if ((prevId ?? null) !== (nextId ?? null)) {
-        updateSectionTeacher(liveClass.id, sec.id, nextId)
+        : (pending[teacherKey] ?? initial[teacherKey] ?? null)
+      const teacherPrev = initial[teacherKey] ?? null
+      if ((teacherPrev ?? null) !== (teacherNext ?? null)) {
+        updateSectionTeacher(liveClass.id, sec.id, teacherNext)
+        changeCount++
+      }
+
+      const assistantKey = `section_assistant|${sec.id}`
+      const assistantNext = removals.includes(assistantKey)
+        ? null
+        : (pending[assistantKey] ?? initial[assistantKey] ?? null)
+      const assistantPrev = initial[assistantKey] ?? null
+      if ((assistantPrev ?? null) !== (assistantNext ?? null)) {
+        updateSectionAssistantTeacher(liveClass.id, sec.id, assistantNext)
         changeCount++
       }
     })
@@ -147,28 +198,14 @@ export function ClassTeachers({ cls }: { cls: ClassRecord }) {
     <div className="space-y-5">
       {/* Mode toggle + Edit */}
       <div className="flex items-center justify-between gap-2">
-        <div className="inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60">
-          <button
-            type="button"
-            onClick={() => setMode('separate')}
-            className={cn(
-              'px-4 rounded-full text-xs font-medium transition-all',
-              mode === 'separate' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Separate by section
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('merged')}
-            className={cn(
-              'px-4 rounded-full text-xs font-medium transition-all',
-              mode === 'merged' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Merged (class-wide)
-          </button>
-        </div>
+        <SegmentedTabs
+          tabs={[
+            { value: 'separate', label: 'Separate by section' },
+            { value: 'merged', label: 'Merged (class-wide)' },
+          ]}
+          value={mode}
+          onValueChange={(v) => setMode(v as Mode)}
+        />
         {!editMode ? (
           <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={enterEdit}>
             <Pencil className="h-3 w-3" /> Edit
@@ -176,144 +213,161 @@ export function ClassTeachers({ cls }: { cls: ClassRecord }) {
         ) : (
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={exitEdit}>Cancel</Button>
-            <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-600" onClick={save} disabled={!hasChanges}>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-emerald-600 disabled:saturate-50"
+              onClick={save}
+              disabled={!hasChanges}
+            >
               Save Changes
             </Button>
           </div>
         )}
       </div>
 
-      {/* Class-level: Class Teacher + Assistant */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <TeacherField
-          label="Class Teacher"
-          teacherId={resolveTeacherId('class_teacher', liveClass.classTeacherId)}
-          editMode={editMode}
-          isRemoved={removals.includes('class_teacher')}
-          onSet={(v) => setP('class_teacher', v)}
-          onMarkRem={() => setConfirmRemove({
-            key: 'class_teacher',
-            label: 'Class Teacher',
-            name: getTeacherById(liveClass.classTeacherId || '')?.name ?? 'Teacher',
-          })}
-          onUnmarkRem={() => unmarkRem('class_teacher')}
-        />
-        <TeacherField
-          label="Assistant Class Teacher"
-          teacherId={resolveTeacherId('assistant', null)}
-          editMode={editMode}
-          isRemoved={removals.includes('assistant')}
-          onSet={(v) => setP('assistant', v)}
-          onMarkRem={() => setConfirmRemove({ key: 'assistant', label: 'Assistant Class Teacher', name: 'Teacher' })}
-          onUnmarkRem={() => unmarkRem('assistant')}
-        />
-      </div>
-
-      <div className="border-t border-border/40" />
+      {/* Class-level: Class Teacher + Assistant Class Teacher */}
+      <section>
+        <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Class Teacher</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <TeacherField
+            label="Class Teacher"
+            teacherId={resolveTeacherId('class_teacher', liveClass.classTeacherId)}
+            editMode={editMode}
+            pickerId="class_teacher"
+            isRemoved={removals.includes('class_teacher')}
+            onSet={(v) => setP('class_teacher', v)}
+            onMarkRem={() => setConfirmRemove({
+              key: 'class_teacher',
+              label: 'Class Teacher',
+              name: getTeacherById(liveClass.classTeacherId || '')?.name ?? 'Teacher',
+            })}
+            onUnmarkRem={() => unmarkRem('class_teacher')}
+          />
+          <TeacherField
+            label="Assistant Class Teacher"
+            teacherId={resolveTeacherId('class_assistant', liveClass.assistantTeacherId)}
+            editMode={editMode}
+            pickerId="class_assistant"
+            isRemoved={removals.includes('class_assistant')}
+            onSet={(v) => setP('class_assistant', v)}
+            onMarkRem={() => setConfirmRemove({
+              key: 'class_assistant',
+              label: 'Assistant Class Teacher',
+              name: getTeacherById(liveClass.assistantTeacherId || '')?.name ?? 'Teacher',
+            })}
+            onUnmarkRem={() => unmarkRem('class_assistant')}
+          />
+        </div>
+      </section>
 
       {/* Section rows (separate mode) */}
       {mode === 'separate' && (
-        <div className="space-y-4">
-          {liveClass.sections.map((sec) => (
-            <div key={sec.id}>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted text-foreground text-[10px] font-semibold">{sec.name}</div>
-                <span className="text-xs font-medium text-foreground">Section {sec.name}</span>
-                <span className="text-[10px] text-muted-foreground">Room {sec.room || liveClass.room}</span>
+        <section>
+          <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Sections</p>
+          <div className="space-y-4">
+            {liveClass.sections.map((sec) => (
+              <div key={sec.id}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted text-foreground text-[10px] font-semibold">{sec.name}</div>
+                  <span className="text-xs font-medium text-foreground">Section {sec.name}</span>
+                  <span className="text-[10px] text-muted-foreground">Room {sec.room || liveClass.room}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-8">
+                  <TeacherField
+                    label="Section Teacher"
+                    teacherId={resolveTeacherId(`section_teacher|${sec.id}`, sec.classTeacherId)}
+                    editMode={editMode}
+                    pickerId={`section_teacher|${sec.id}`}
+                    isRemoved={removals.includes(`section_teacher|${sec.id}`)}
+                    onSet={(v) => setP(`section_teacher|${sec.id}`, v)}
+                    onMarkRem={() => setConfirmRemove({
+                      key: `section_teacher|${sec.id}`,
+                      label: 'Section Teacher',
+                      name: getTeacherById(sec.classTeacherId || '')?.name ?? 'Teacher',
+                    })}
+                    onUnmarkRem={() => unmarkRem(`section_teacher|${sec.id}`)}
+                  />
+                  <TeacherField
+                    label="Assistant"
+                    teacherId={resolveTeacherId(`section_assistant|${sec.id}`, sec.assistantTeacherId)}
+                    editMode={editMode}
+                    pickerId={`section_assistant|${sec.id}`}
+                    isRemoved={removals.includes(`section_assistant|${sec.id}`)}
+                    onSet={(v) => setP(`section_assistant|${sec.id}`, v)}
+                    onMarkRem={() => setConfirmRemove({
+                      key: `section_assistant|${sec.id}`,
+                      label: 'Assistant',
+                      name: getTeacherById(sec.assistantTeacherId || '')?.name ?? 'Teacher',
+                    })}
+                    onUnmarkRem={() => unmarkRem(`section_assistant|${sec.id}`)}
+                  />
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-8">
-                <TeacherField
-                  label="Section Teacher"
-                  teacherId={resolveTeacherId(`section_teacher|${sec.id}`, sec.classTeacherId)}
-                  editMode={editMode}
-                  isRemoved={removals.includes(`section_teacher|${sec.id}`)}
-                  onSet={(v) => setP(`section_teacher|${sec.id}`, v)}
-                  onMarkRem={() => setConfirmRemove({
-                    key: `section_teacher|${sec.id}`,
-                    label: 'Section Teacher',
-                    name: getTeacherById(sec.classTeacherId || '')?.name ?? 'Teacher',
-                  })}
-                  onUnmarkRem={() => unmarkRem(`section_teacher|${sec.id}`)}
-                />
-                <TeacherField
-                  label="Assistant"
-                  teacherId={resolveTeacherId(`assistant|${sec.id}`, null)}
-                  editMode={editMode}
-                  isRemoved={removals.includes(`assistant|${sec.id}`)}
-                  onSet={(v) => setP(`assistant|${sec.id}`, v)}
-                  onMarkRem={() => setConfirmRemove({ key: `assistant|${sec.id}`, label: 'Assistant', name: 'Teacher' })}
-                  onUnmarkRem={() => unmarkRem(`assistant|${sec.id}`)}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Merged (class-wide) mode */}
       {mode === 'merged' && (
-        <div className="space-y-1.5">
-          {liveClass.sections.map((sec) => {
-            const secTeacher = sec.classTeacherId ? getTeacherById(sec.classTeacherId) : null
-            return (
-              <div key={sec.id} className="flex items-center justify-between py-1.5 border-t border-border/30 first:border-t-0">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-5 w-5 items-center justify-center rounded bg-muted text-foreground text-[9px] font-semibold">{sec.name}</div>
-                  <span className="text-xs text-muted-foreground">Section {sec.name}</span>
+        <section>
+          <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Sections</p>
+          <div className="space-y-1.5">
+            {liveClass.sections.map((sec) => {
+              const secTeacher = sec.classTeacherId ? getTeacherById(sec.classTeacherId) : null
+              return (
+                <div key={sec.id} className="flex items-center justify-between py-1.5 border-t border-border/30 first:border-t-0">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-5 w-5 items-center justify-center rounded bg-muted text-foreground text-[9px] font-semibold">{sec.name}</div>
+                    <span className="text-xs text-muted-foreground">Section {sec.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {secTeacher ? (
+                      <>
+                        <Badge variant="outline" className="text-[8px] text-amber-600 border-amber-500/30">OVERRIDE</Badge>
+                        <span className="text-xs text-foreground">{secTeacher.name}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Badge variant="outline" className="text-[8px] text-muted-foreground">INHERITED</Badge>
+                        <span className="text-xs text-muted-foreground">Uses class teacher</span>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {secTeacher ? (
-                    <>
-                      <Badge variant="outline" className="text-[8px] text-amber-600 border-amber-500/30">OVERRIDE</Badge>
-                      <span className="text-xs text-foreground">{secTeacher.name}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Badge variant="outline" className="text-[8px] text-muted-foreground">INHERITED</Badge>
-                      <span className="text-xs text-muted-foreground">Uses class teacher</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        </section>
       )}
 
-      {/* Remove confirmation dialog */}
-      <Dialog open={!!confirmRemove} onOpenChange={(o) => !o && setConfirmRemove(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-semibold">Remove {confirmRemove?.label}?</DialogTitle>
-            <DialogDescription className="text-xs">
-              {confirmRemove?.name} will no longer be assigned to {liveClass.name}.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setConfirmRemove(null)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                if (confirmRemove) { markRem(confirmRemove.key); setConfirmRemove(null) }
-              }}
-            >
-              Remove
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Universal Remove confirmation */}
+      <ConfirmDialog
+        open={!!confirmRemove}
+        onOpenChange={(o) => !o && setConfirmRemove(null)}
+        title={`Remove ${confirmRemove?.label}?`}
+        description={`${confirmRemove?.name} will no longer be assigned to ${liveClass.name}. The teacher remains active globally and can be reassigned elsewhere.`}
+        tone="destructive"
+        icon={UserX}
+        confirmLabel="Remove"
+        onConfirm={() => {
+          if (confirmRemove) { markRem(confirmRemove.key); setConfirmRemove(null) }
+        }}
+      />
     </div>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* TeacherField — read mode shows avatar+name; edit mode shows picker  */
+/* TeacherField — read mode shows EntityCard; edit mode shows          */
+/*   SearchableSelect + Remove button. Visual consistency between the  */
+/*   two modes is the entire point of the brief (sections 4 + 5).      */
 /* ------------------------------------------------------------------ */
-function TeacherField({ label, teacherId, editMode, isRemoved, onSet, onMarkRem, onUnmarkRem }: {
+function TeacherField({ label, teacherId, editMode, pickerId, isRemoved, onSet, onMarkRem, onUnmarkRem }: {
   label: string
   teacherId: string
   editMode: boolean
+  pickerId: string
   isRemoved: boolean
   onSet: (v: string) => void
   onMarkRem: () => void
@@ -323,9 +377,11 @@ function TeacherField({ label, teacherId, editMode, isRemoved, onSet, onMarkRem,
 
   if (isRemoved) {
     return (
-      <div className="flex items-center justify-between py-1">
+      <div className="flex items-center justify-between py-1 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3">
         <span className="text-xs font-medium text-rose-600">{label} — marked for removal</span>
-        <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={onUnmarkRem}>Undo</Button>
+        <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={onUnmarkRem}>
+          <RotateCcw className="h-3 w-3" /> Undo
+        </Button>
       </div>
     )
   }
@@ -333,10 +389,16 @@ function TeacherField({ label, teacherId, editMode, isRemoved, onSet, onMarkRem,
   if (editMode) {
     return (
       <div className="space-y-1.5">
-        <p className="text-[10px] font-medium text-muted-foreground">{label}</p>
-        <TeacherPicker selectedId={teacherId} onSelect={onSet} placeholder={`Select ${label}`} />
+        <p className="text-[10px] font-semibold text-foreground">{label}</p>
+        <SearchableSelect
+          pickerId={pickerId}
+          selectedId={teacherId}
+          onSelect={onSet}
+          placeholder={`Select ${label}`}
+          options={buildTeacherOptions()}
+        />
         {teacherId && (
-          <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 text-rose-600 p-0" onClick={onMarkRem}>
+          <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 text-rose-600 p-0 hover:bg-rose-500/10" onClick={onMarkRem}>
             <UserX className="h-3 w-3" /> Remove
           </Button>
         )}
@@ -344,125 +406,26 @@ function TeacherField({ label, teacherId, editMode, isRemoved, onSet, onMarkRem,
     )
   }
 
-  // Read mode — clean avatar + name + meta row
-  return (
-    <div className="flex items-center gap-2 py-1">
-      {teacher ? (
-        <>
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-foreground text-[10px] font-semibold">
-            {teacher.avatar}
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] text-muted-foreground">{label}</p>
-            <p className="text-sm font-medium text-foreground truncate">{teacher.name}</p>
-            <p className="text-[10px] text-muted-foreground">{teacher.employeeId} · {teacher.department}</p>
-          </div>
-        </>
-      ) : (
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/50 text-muted-foreground">
-            <UserX className="h-3.5 w-3.5" />
-          </div>
-          <div>
-            <p className="text-[10px] text-muted-foreground">{label}</p>
-            <p className="text-sm text-muted-foreground/60 italic">Vacant</p>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/* TeacherPicker — premium searchable picker, pre-populated display    */
-/* ------------------------------------------------------------------ */
-function TeacherPicker({ selectedId, onSelect, placeholder }: {
-  selectedId: string
-  onSelect: (id: string) => void
-  placeholder: string
-}) {
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
-  const selected = teachers.find((t) => t.id === selectedId)
-
-  const filtered = (() => {
-    const q = search.toLowerCase()
-    return teachers.filter((t) =>
-      t.status === 'Active' &&
-      (t.name.toLowerCase().includes(q) ||
-        t.employeeId.toLowerCase().includes(q) ||
-        (t.department || '').toLowerCase().includes(q))
+  // Read mode — clean EntityCard representation.
+  // Same visual family as SubjectCard (brief section 3 + 26).
+  if (teacher) {
+    return (
+      <EntityCard
+        leading={teacher.avatar}
+        title={teacher.name}
+        metadata={`${teacher.employeeId} · ${teacher.department}`}
+        secondary={<span className="text-[10px] text-muted-foreground">{label}</span>}
+      />
     )
-  })()
+  }
 
-  // Trigger button: shows the selected teacher as a chip (pre-populated),
-  // or shows the placeholder text when vacant. Either way, clicking opens
-  // the same Popover. Brief section 26: NO inline × destructive action —
-  // only the explicit Remove button (in TeacherField) handles removal.
-  const trigger = selected ? (
-    <div className="flex items-center justify-between w-full gap-2 rounded-lg border border-border bg-card p-2 hover:border-primary/40 transition-colors text-left">
-      <div className="flex items-center gap-2 min-w-0">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-foreground text-[10px] font-semibold">
-          {selected.avatar}
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground truncate leading-tight">{selected.name}</p>
-          <p className="text-[10px] text-muted-foreground leading-tight">{selected.employeeId} · {selected.department}</p>
-        </div>
-      </div>
-      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-    </div>
-  ) : (
-    <div className="flex items-center justify-between w-full h-9 px-3 rounded-lg border border-border bg-card text-xs text-muted-foreground hover:border-primary/40 transition-colors">
-      <span>{placeholder}</span>
-      <ChevronDown className="h-3.5 w-3.5" />
-    </div>
-  )
-
+  // Vacant state — same EntityCard but in 'vacant' tone (dashed border, italic title).
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button type="button" className="block w-full text-left">
-          {trigger}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align="start" sideOffset={4}>
-        <div className="p-2 border-b border-border">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search teachers…"
-              className="pl-8 h-8 text-xs bg-card"
-              autoFocus
-            />
-          </div>
-        </div>
-        <div className="max-h-56 overflow-y-auto divide-y divide-border/30">
-          {filtered.length === 0 ? (
-            <p className="px-3 py-4 text-xs text-muted-foreground text-center">No teachers found.</p>
-          ) : filtered.slice(0, 30).map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => { onSelect(t.id); setOpen(false); setSearch('') }}
-              className="w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-muted/40 transition-colors"
-            >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-foreground text-[10px] font-semibold">
-                {t.avatar}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate leading-tight">{t.name}</p>
-                <p className="text-[10px] text-muted-foreground leading-tight">{t.employeeId} · {t.department}</p>
-              </div>
-              {selectedId === t.id && (
-                <span className="text-[10px] text-emerald-600 font-medium shrink-0">Selected</span>
-              )}
-            </button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+    <EntityCard
+      tone="vacant"
+      leading={<UserX className="h-3.5 w-3.5" />}
+      title={label}
+      secondary={<span className="text-[10px] text-muted-foreground">Vacant</span>}
+    />
   )
 }

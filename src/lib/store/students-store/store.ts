@@ -72,11 +72,29 @@ export const useStudentsStore = create<StudentsState>()((set, get) => ({
       ),
     }))
   },
+  updateClassAssistantTeacher: (classId, teacherId) => {
+    set((state) => ({
+      classes: state.classes.map((c) =>
+        c.id === classId
+          ? { ...c, assistantTeacherId: teacherId ?? undefined }
+          : c
+      ),
+    }))
+  },
   updateSectionTeacher: (classId, sectionId, teacherId) => {
     set((state) => ({
       classes: state.classes.map((c) =>
         c.id === classId
           ? { ...c, sections: c.sections.map((s) => s.id === sectionId ? { ...s, classTeacherId: teacherId ?? undefined } : s) }
+          : c
+      ),
+    }))
+  },
+  updateSectionAssistantTeacher: (classId, sectionId, teacherId) => {
+    set((state) => ({
+      classes: state.classes.map((c) =>
+        c.id === classId
+          ? { ...c, sections: c.sections.map((s) => s.id === sectionId ? { ...s, assistantTeacherId: teacherId ?? undefined } : s) }
           : c
       ),
     }))
@@ -92,9 +110,55 @@ export const useStudentsStore = create<StudentsState>()((set, get) => ({
   },
   archiveClassSubject: (classId, subject) => {
     set((state) => ({
+      classes: state.classes.map((c) => {
+        if (c.id !== classId) return c
+        if (!c.subjects.includes(subject)) return c
+        // Move to archivedSubjects (preserve timestamp). Avoid duplicate entries.
+        const already = c.archivedSubjects.some((a) => a.name === subject)
+        return {
+          ...c,
+          subjects: c.subjects.filter((s) => s !== subject),
+          archivedSubjects: already
+            ? c.archivedSubjects
+            : [{ name: subject, archivedAt: new Date().toISOString() }, ...c.archivedSubjects],
+        }
+      }),
+    }))
+  },
+  restoreClassSubject: (classId, subject) => {
+    set((state) => ({
+      classes: state.classes.map((c) => {
+        if (c.id !== classId) return c
+        if (!c.archivedSubjects.some((a) => a.name === subject)) return c
+        return {
+          ...c,
+          subjects: c.subjects.includes(subject) ? c.subjects : [...c.subjects, subject],
+          archivedSubjects: c.archivedSubjects.filter((a) => a.name !== subject),
+        }
+      }),
+    }))
+  },
+  deleteArchivedSubject: (classId, subject) => {
+    set((state) => ({
       classes: state.classes.map((c) =>
-        c.id === classId ? { ...c, subjects: c.subjects.filter((s) => s !== subject) } : c
+        c.id === classId
+          ? { ...c, archivedSubjects: c.archivedSubjects.filter((a) => a.name !== subject) }
+          : c
       ),
+    }))
+  },
+  updateSubjectTeacher: (classId, subject, teacherId) => {
+    set((state) => ({
+      classes: state.classes.map((c) => {
+        if (c.id !== classId) return c
+        const next = { ...c.subjectTeachers }
+        if (teacherId) {
+          next[subject] = teacherId
+        } else {
+          delete next[subject]
+        }
+        return { ...c, subjectTeachers: next }
+      }),
     }))
   },
   getStudentById: (id) => get().students.find((s) => s.id === id),

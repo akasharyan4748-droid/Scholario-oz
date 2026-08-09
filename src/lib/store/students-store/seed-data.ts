@@ -66,11 +66,82 @@ function genStudents(): StudentRecord[] {
 }
 
 function genClasses(): ClassRecord[] {
-  return CLASS_DEFS.map((c) => ({
-    id: c.id, name: c.name, grade: c.grade, level: c.level,
-    sections: c.sections.map((s) => ({ id: `${c.id}-${s}`, name: s, classId: c.id, capacity: c.capacity, classTeacherId: c.classTeacherId, room: c.room })),
-    capacity: c.capacity, classTeacherId: c.classTeacherId, subjects: SUBJECTS_BY_LEVEL[c.level], room: c.room, status: 'Active' as const,
-  }))
+  // For each seed class, derive a sensible Assistant Class Teacher
+  // (different from the Class Teacher) and a per-subject teacher map
+  // (based on the canonical subjects for that level + teacher pool).
+  const ASSISTANT_BY_CLASS: Record<string, string> = {
+    'C01': 'T-005', // Priya Nair's colleague — Meera Krishnan
+    'C03': 'T-002', // Sunita Rao's colleague — Priya Nair
+    'C05': 'T-011', // Rohan Mehta's colleague — Kavita Joshi
+    'C07': 'T-023', // Deepa Menon's colleague — Vikram Singh
+    'C09': 'T-032', // Neha Gupta's colleague — Anjali Desai
+    'C11': 'T-029', // Anjali Desai's colleague — Suresh Pillai
+    'C12': 'T-038', // Rajesh Khanna's colleague — Pooja Bhatt
+    'C13': 'T-041', // Pooja Bhatt's colleague — Arjun Kapoor
+    'C14': 'T-044', // Arjun Kapoor's colleague — Shalini Agarwal
+    'C15': 'T-050', // Shalini Agarwal's colleague — Lakshmi Venkat
+  }
+  // Per-section assistant overrides (mostly undefined → uses class-level assistant).
+  // Section-level Class Teacher overrides are populated so "Separate by section"
+  // mode shows distinct teachers per section.
+  const SECTION_TEACHERS: Record<string, string> = {
+    'C05-A': 'T-014', // Rohan Mehta
+    'C05-B': 'T-011', // Kavita Joshi
+    'C05-C': 'T-017', // Amit Verma
+    'C07-A': 'T-020', // Deepa Menon
+    'C07-B': 'T-023', // Vikram Singh
+    'C09-A': 'T-026', // Neha Gupta
+    'C09-B': 'T-032', // Anjali Desai
+    'C11-A': 'T-029', // Suresh Pillai
+    'C11-B': 'T-032', // Anjali Desai
+    'C12-A': 'T-035', // Rajesh Khanna
+    'C12-B': 'T-038', // Pooja Bhatt
+    'C13-A': 'T-038', // Pooja Bhatt
+    'C13-B': 'T-041', // Arjun Kapoor
+    'C14-Sci-A': 'T-041',
+    'C14-Com-A': 'T-044',
+    'C15-Sci-A': 'T-041',
+    'C15-Com-A': 'T-044',
+    'C01-A': 'T-002',
+    'C01-B': 'T-005',
+    'C03-A': 'T-008',
+    'C03-B': 'T-002',
+  }
+  const SECTION_ASSISTANTS: Record<string, string> = {
+    'C05-A': 'T-011', // Kavita Joshi as Section A assistant
+    'C07-A': 'T-023',
+    'C09-A': 'T-032',
+  }
+  return CLASS_DEFS.map((c) => {
+    const subjects = SUBJECTS_BY_LEVEL[c.level]
+    // Subject teacher map — for the first 3 subjects, assign the class teacher;
+    // for the rest, rotate through a small pool of related teachers.
+    const subjectTeachers: Record<string, string> = {}
+    const altPool = ['T-011', 'T-014', 'T-017', 'T-020', 'T-023']
+    subjects.forEach((subj, i) => {
+      subjectTeachers[subj] = i % 2 === 0 ? c.classTeacherId : altPool[i % altPool.length]
+    })
+    return {
+      id: c.id, name: c.name, grade: c.grade, level: c.level,
+      sections: c.sections.map((s) => ({
+        id: `${c.id}-${s}`,
+        name: s,
+        classId: c.id,
+        capacity: c.capacity,
+        classTeacherId: SECTION_TEACHERS[`${c.id}-${s}`] ?? c.classTeacherId,
+        assistantTeacherId: SECTION_ASSISTANTS[`${c.id}-${s}`],
+        room: c.room,
+      })),
+      capacity: c.capacity,
+      classTeacherId: c.classTeacherId,
+      assistantTeacherId: ASSISTANT_BY_CLASS[c.id],
+      subjects,
+      archivedSubjects: [],
+      subjectTeachers,
+      room: c.room,
+      status: 'Active' as const,
+    }
+  })
 }
 
 export const SS: StudentRecord[] = genStudents()

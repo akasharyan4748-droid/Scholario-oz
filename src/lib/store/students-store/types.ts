@@ -74,7 +74,15 @@ export interface SectionRecord {
   classId: string
   capacity: number
   classTeacherId?: string
+  /** Section-level Assistant Class Teacher (real persisted assignment). */
+  assistantTeacherId?: string
   room: string
+}
+
+/** Archived subject within a class — preserved for restore. */
+export interface ArchivedSubject {
+  name: string
+  archivedAt: string
 }
 
 export interface ClassRecord {
@@ -85,7 +93,13 @@ export interface ClassRecord {
   sections: SectionRecord[]
   capacity: number
   classTeacherId: string
+  /** Class-level Assistant Class Teacher (real persisted assignment). */
+  assistantTeacherId?: string
   subjects: string[]
+  /** Subjects archived from this class — preserved for restore. */
+  archivedSubjects: ArchivedSubject[]
+  /** Per-subject teacher assignment map (subject name → teacher ID). */
+  subjectTeachers: Record<string, string>
   room: string
   status: 'Active' | 'Archived'
 }
@@ -146,12 +160,22 @@ export interface StudentsState {
   assignHouseCaptain: (id: string, sid: string, role: 'captain' | 'vice') => void
   /** Replace the class-level Class Teacher. Pass null/undefined to clear. */
   updateClassTeacher: (classId: string, teacherId: string | null) => void
+  /** Replace the class-level Assistant Class Teacher. Pass null/undefined to clear. */
+  updateClassAssistantTeacher: (classId: string, teacherId: string | null) => void
   /** Replace a section's Class Teacher. Pass null/undefined to clear. */
   updateSectionTeacher: (classId: string, sectionId: string, teacherId: string | null) => void
+  /** Replace a section's Assistant Class Teacher. Pass null/undefined to clear. */
+  updateSectionAssistantTeacher: (classId: string, sectionId: string, teacherId: string | null) => void
   /** Add a subject to a class (no-op if already allocated). */
   addClassSubject: (classId: string, subject: string) => void
-  /** Archive a subject from a class — removes it from active allocation. */
+  /** Archive a subject from a class — moves it to archivedSubjects for recovery. */
   archiveClassSubject: (classId: string, subject: string) => void
+  /** Restore a previously-archived subject — moves it back to active subjects. */
+  restoreClassSubject: (classId: string, subject: string) => void
+  /** Permanently delete an archived subject (no recovery). */
+  deleteArchivedSubject: (classId: string, subject: string) => void
+  /** Assign / replace a teacher for a specific subject in a class. */
+  updateSubjectTeacher: (classId: string, subject: string, teacherId: string | null) => void
   getStudentById: (id: string) => StudentRecord | undefined
   getClassById: (id: string) => ClassRecord | undefined
   getClassStudents: (classId: string) => StudentRecord[]

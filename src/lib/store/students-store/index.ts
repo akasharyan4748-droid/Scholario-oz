@@ -15,6 +15,7 @@ export type {
   StudentRecord,
   SectionRecord,
   ClassRecord,
+  ArchivedSubject,
   House,
   PromotionRecord,
   TransferRecord,
