@@ -15,7 +15,7 @@
  * Brief section 33: On mobile, switches to card-based layout.
  */
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, MapPin, UserCheck, Coffee, CalendarDays, Copy, Trash2 } from 'lucide-react'
+import { Plus, MapPin, UserCheck, Coffee, CalendarDays, Copy, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getTeacherById } from '@/lib/mock/teachers'
 import { CLASSES, PERIODS, type DayType, type TimetableSlot } from './data'
@@ -233,7 +233,9 @@ export function ScheduleGrid({
 }
 
 /* ------------------------------------------------------------------ */
-/* SlotCard — desktop table cell with contextual actions              */
+/* SlotCard — desktop table cell with polished subject card design     */
+/* Brief section 8 + 9 + 10: Subject prominent, teacher+room with       */
+/*   small icons, tiny × in edit mode (visible only in edit mode).     */
 /* ------------------------------------------------------------------ */
 function SlotCard({ slot, teacherName, editMode, publications, onEdit, onDuplicate, onRemove }: {
   slot: TimetableSlot
@@ -251,9 +253,7 @@ function SlotCard({ slot, teacherName, editMode, publications, onEdit, onDuplica
     <div
       className={cn(
         'group relative rounded-lg border p-2 transition-all',
-        editMode
-          ? 'cursor-pointer hover:shadow-sm'
-          : 'cursor-default',
+        editMode ? 'cursor-pointer hover:shadow-sm' : 'cursor-default',
         isLab
           ? 'border-violet-500/20 bg-violet-500/5 hover:border-violet-500/40'
           : isSports
@@ -262,9 +262,10 @@ function SlotCard({ slot, teacherName, editMode, publications, onEdit, onDuplica
       )}
       onClick={editMode ? onEdit : undefined}
     >
-      {/* Change indicator (data-driven, 72h TTL) */}
+      {/* Change indicator (data-driven, 72h TTL, old → new) */}
       <ChangeIndicator slotId={slot.id} publications={publications} />
 
+      {/* Subject — primary */}
       <div className="flex items-start justify-between gap-1">
         <span className={cn(
           'font-bold text-[11px] truncate',
@@ -272,43 +273,29 @@ function SlotCard({ slot, teacherName, editMode, publications, onEdit, onDuplica
         )}>
           {slot.subject}
         </span>
-        {/* Contextual actions — only in edit mode, only on hover */}
+        {/* Tiny × — visible only in edit mode (Brief section 10 + 12) */}
         {editMode && (
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={onEdit}
-              title="Edit"
-              aria-label="Edit slot"
-              className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
-            >
-              <Copy className="h-2.5 w-2.5 rotate-90" />
-            </button>
-            <button
-              onClick={onDuplicate}
-              title="Duplicate"
-              aria-label="Duplicate slot"
-              className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
-            >
-              <Copy className="h-2.5 w-2.5" />
-            </button>
-            <button
-              onClick={onRemove}
-              title="Remove"
-              aria-label="Remove slot"
-              className="p-1 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-            >
-              <Trash2 className="h-2.5 w-2.5" />
-            </button>
-          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove() }}
+            title="Remove assignment"
+            aria-label="Remove assignment"
+            className="p-0.5 -mr-0.5 -mt-0.5 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
+          >
+            <X className="h-2.5 w-2.5" />
+          </button>
         )}
       </div>
+
+      {/* Teacher — secondary */}
       <p className="text-[10px] font-medium text-foreground mt-1 flex items-center gap-0.5">
         <UserCheck className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
-        {teacherName}
+        <span className="truncate">{teacherName}</span>
       </p>
+
+      {/* Room — tertiary */}
       <p className="text-[9px] text-muted-foreground mt-0.5 flex items-center gap-0.5">
         <MapPin className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
-        {slot.room}
+        <span className="truncate">{slot.room}</span>
       </p>
     </div>
   )

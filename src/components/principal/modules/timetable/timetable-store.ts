@@ -78,6 +78,8 @@ interface TimetableStoreState {
   removeSlot: (id: string) => void
   duplicateSlot: (id: string, overrides?: Partial<TimetableSlot>) => void
   recordChange: (change: Omit<TimetableChange, 'id' | 'publishedAt'>) => void
+  /** Remove a pending change by id (Brief section 13+14+18: × on each change in publish dialog). */
+  removePendingChange: (changeId: string) => void
   publish: (publishedBy: string) => PublishedVersion | null
   hasPendingPublish: () => boolean
   resetToSeed: () => void
@@ -108,6 +110,10 @@ export const useTimetableStore = create<TimetableStoreState>()(
             ...state.pendingChanges,
             { ...change, id: `chg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, publishedAt: new Date().toISOString() },
           ],
+        })),
+      removePendingChange: (changeId) =>
+        set((state) => ({
+          pendingChanges: state.pendingChanges.filter((c) => c.id !== changeId),
         })),
       publish: (publishedBy) => {
         const state = get()
@@ -179,14 +185,33 @@ export function formatTimeAgo(isoTimestamp: string, now: number = Date.now()): s
   return `${diffDays}d ago`
 }
 
+/**
+ * Conflict detection — checks if a given assignment would create a
+ * teacher, room, or class double-booking.
+ *
+ * Brief section 1 + 2 + 3: ONE PERIOD ≠ ONE CLASS. Multiple classes can
+ * run simultaneously in the same period. Conflicts are resource-based:
+ *   - CLASS conflict: same day + period + class (scoped to class column)
+ *   - TEACHER conflict: same day + period + teacher (school-wide)
+ *   - ROOM conflict: same day + period + room (school-wide)
+ */
 export function detectConflicts(
   slots: TimetableSlot[],
   form: { day: DayType; period: number; teacherId: string; room: string; className: string },
   excludeSlotId?: string
 ) {
-  const teacherConflict = slots.find((s) => s.day === form.day && s.period === form.period && s.teacherId === form.teacherId && s.id !== excludeSlotId)
-  const roomConflict = slots.find((s) => s.day === form.day && s.period === form.period && s.room === form.room && s.id !== excludeSlotId)
-  const classConflict = slots.find((s) => s.day === form.day && s.period === form.period && s.className === form.className && s.id !== excludeSlotId)
+  // Teacher conflict (school-wide): same teacher assigned to another class in same period
+  const teacherConflict = slots.find(
+    (s) => s.day === form.day && s.period === form.period && s.teacherId === form.teacherId && s.id !== excludeSlotId
+  )
+  // Room conflict (school-wide): same room occupied by another class in same period
+  const roomConflict = slots.find(
+    (s) => s.day === form.day && s.period === form.period && s.room === form.room && s.id !== excludeSlotId
+  )
+  // Class conflict (scoped to class column): this class already has an assignment in this period
+  const classConflict = slots.find(
+    (s) => s.day === form.day && s.period === form.period && s.className === form.className && s.id !== excludeSlotId
+  )
   return { teacherConflict, roomConflict, classConflict, hasConflict: Boolean(teacherConflict || roomConflict || classConflict) }
 }
 

@@ -1,16 +1,17 @@
 'use client'
 
 /**
- * PublishDialog — compact confirmation surface for publishing timetable changes.
+ * PublishDialog — compact premium publish confirmation.
  *
- * Brief section 13: "Keep it short. No giant confirmation modal."
- * Brief section 14: Show a compact summary of what will be published.
- * Brief section 15: After publish, show subtle success feedback.
- * Brief section 27: Publish disappears after successful publication.
+ * Brief section 16 + 17 + 18: Each pending change has a tiny × to remove
+ *   it from the publication batch. Tooltip: "Remove from update".
+ *
+ * Brief section 13 + 14: Removing a change restores the published state
+ *   for that item. If all changes removed, Publish Update disappears.
+ *
  * Brief section 33: Disabled if conflicts exist.
  */
-import { Upload, AlertTriangle, Check } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { Upload, AlertTriangle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -22,12 +23,14 @@ export function PublishDialog({
   changes,
   conflictCount,
   onPublish,
+  onRemoveChange,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   changes: TimetableChange[]
   conflictCount: number
   onPublish: () => void
+  onRemoveChange: (changeId: string) => void
 }) {
   const canPublish = conflictCount === 0 && changes.length > 0
 
@@ -37,14 +40,14 @@ export function PublishDialog({
         <DialogHeader className="px-4 pt-4 pb-3 border-b border-border">
           <DialogTitle className="text-sm font-semibold flex items-center gap-2">
             <Upload className="h-4 w-4 text-emerald-600" />
-            Publish timetable update?
+            Publish update?
           </DialogTitle>
           <DialogDescription className="text-[10px]">
             {changes.length} change{changes.length === 1 ? '' : 's'} will be shared with affected students and teachers.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Conflict guard (Brief section 33) */}
+        {/* Conflict guard */}
         {conflictCount > 0 && (
           <div className="mx-4 mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 flex items-start gap-2 text-rose-700 dark:text-rose-300">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
@@ -55,22 +58,42 @@ export function PublishDialog({
           </div>
         )}
 
-        {/* Change summary (Brief section 14) */}
+        {/* Change list with × on each (Brief section 16 + 18) */}
         <div className="p-4 max-h-64 overflow-y-auto">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
             {changes.length} timetable change{changes.length === 1 ? '' : 's'}
           </p>
           <div className="space-y-1.5">
             {changes.map((change) => (
-              <div key={change.id} className="rounded-lg border border-border/60 bg-card p-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-semibold text-muted-foreground">{change.context}</span>
-                  <ChangeTypeBadge type={change.type} />
+              <div key={change.id} className="rounded-lg border border-border/60 bg-card p-2 flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-semibold text-muted-foreground">{change.context}</span>
+                    <ChangeTypeBadge type={change.type} />
+                  </div>
+                  <p className="text-xs text-foreground mt-0.5 truncate">
+                    {change.changeLabel || change.summary}
+                  </p>
                 </div>
-                <p className="text-xs text-foreground mt-0.5">{change.summary}</p>
+                {/* Tiny × — remove from publication batch */}
+                <button
+                  onClick={() => onRemoveChange(change.id)}
+                  title="Remove from update"
+                  aria-label="Remove from update"
+                  className="p-1 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
+                >
+                  <X className="h-3 w-3" />
+                </button>
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Notification info */}
+        <div className="px-4 pb-2">
+          <p className="text-[9px] text-muted-foreground italic">
+            Students and affected teachers will be notified.
+          </p>
         </div>
 
         <DialogFooter className="px-4 py-3 border-t border-border">
@@ -83,7 +106,7 @@ export function PublishDialog({
             onClick={onPublish}
             disabled={!canPublish}
           >
-            <Upload className="h-3.5 w-3.5" /> Publish Update
+            <Upload className="h-3.5 w-3.5" /> Publish
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -91,9 +114,6 @@ export function PublishDialog({
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* ChangeTypeBadge — small colored badge per change type              */
-/* ------------------------------------------------------------------ */
 function ChangeTypeBadge({ type }: { type: TimetableChange['type'] }) {
   const config: Record<TimetableChange['type'], { label: string; className: string }> = {
     teacher_changed: { label: 'Teacher', className: 'bg-blue-500/10 text-blue-700 dark:text-blue-300' },

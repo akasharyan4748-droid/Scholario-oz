@@ -85,9 +85,15 @@ export function SlotEditorDialog({
           <div className="mx-4 mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 flex items-start gap-1.5 text-amber-700 dark:text-amber-300">
             <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
             <div className="text-[10px] space-y-0.5">
-              {conflictInfo.teacherConflict && <p>Teacher already assigned to {conflictInfo.teacherConflict.className}.</p>}
-              {conflictInfo.roomConflict && <p>Room {conflictInfo.roomConflict.room} occupied by {conflictInfo.roomConflict.className}.</p>}
-              {conflictInfo.classConflict && <p>{conflictInfo.classConflict.className} already has a period here.</p>}
+              {conflictInfo.teacherConflict && (
+                <p>⚠ Teacher unavailable — {conflictInfo.teacherConflict.teacherName} is teaching {conflictInfo.teacherConflict.className} in this period.</p>
+              )}
+              {conflictInfo.roomConflict && (
+                <p>⚠ Room occupied — {conflictInfo.roomConflict.room} is being used by {conflictInfo.roomConflict.className}.</p>
+              )}
+              {conflictInfo.classConflict && (
+                <p>⚠ Period already assigned — {conflictInfo.classConflict.className} already has {conflictInfo.classConflict.subject} in this period.</p>
+              )}
             </div>
           </div>
         )}

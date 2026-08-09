@@ -17,7 +17,7 @@
  *   - Cancel: discards draftSlots (store unchanged), confirms if unsaved
  */
 import { useState, useMemo, useEffect } from 'react'
-import { Download, Pencil, Upload, AlertCircle, Check } from 'lucide-react'
+import { Download, Pencil, Upload, AlertCircle, Check, CalendarClock } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import {
@@ -42,6 +42,7 @@ import { FiltersBar } from './filters-bar'
 import { ScheduleGrid } from './schedule-grid'
 import { SlotEditorDialog, type MinimalSlotForm } from './slot-editor-dialog'
 import { PublishDialog } from './publish-dialog'
+import { AutoTimetableDialog } from './auto-timetable-dialog'
 import { ConfirmDialog } from '../shared/confirm-dialog'
 import { Trash2, AlertTriangle } from 'lucide-react'
 
@@ -54,6 +55,7 @@ export function TimetableModule() {
   const updateSlotAction = useTimetableStore((s) => s.updateSlot)
   const removeSlotAction = useTimetableStore((s) => s.removeSlot)
   const recordChange = useTimetableStore((s) => s.recordChange)
+  const removePendingChange = useTimetableStore((s) => s.removePendingChange)
   const publish = useTimetableStore((s) => s.publish)
 
   // ── Draft state (local — only mutated during edit mode) ──
@@ -73,6 +75,7 @@ export function TimetableModule() {
   const [removeTarget, setRemoveTarget] = useState<Slot | null>(null)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
+  const [autoOpen, setAutoOpen] = useState(false)
 
   // Sync draft when entering edit mode
   useEffect(() => {
@@ -373,6 +376,17 @@ export function TimetableModule() {
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     Editing
                   </span>
+                  {/* Auto Timetable — only in edit mode (Brief section 29) */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                    onClick={() => setAutoOpen(true)}
+                    title="Auto timetable"
+                    aria-label="Auto timetable"
+                  >
+                    <CalendarClock className="h-4 w-4" />
+                  </Button>
                 </>
               )}
               {globalConflictCount > 0 && hasUnsavedChanges && (
@@ -499,6 +513,18 @@ export function TimetableModule() {
         changes={pendingChanges}
         conflictCount={globalConflictCount}
         onPublish={handlePublish}
+        onRemoveChange={removePendingChange}
+      />
+
+      {/* Auto Timetable */}
+      <AutoTimetableDialog
+        open={autoOpen}
+        onOpenChange={setAutoOpen}
+        existingSlots={draftSlots}
+        onGenerate={(generated) => {
+          setDraftSlots(generated)
+          setHasUnsavedChanges(true)
+        }}
       />
     </PageTransition>
   )
