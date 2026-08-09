@@ -3,36 +3,31 @@
 /**
  * ScheduleGrid — the hero of the Timetable workspace.
  *
- * Brief section 22: Premium planning grid on desktop. Contextual hover
- * actions (Edit / Duplicate / Remove) that appear only on hover.
+ * Brief section 5 + 6 + 7: Two clear states:
+ *   VIEW MODE: clean, calm, slots show subject/teacher/room. Empty periods
+ *     show subtle "+" Assign (but the page feels primarily like a viewer).
+ *   EDIT MODE: empty periods become clearly actionable, existing slots
+ *     become editable on click via a contextual Popover editor.
  *
- * Brief section 33: On mobile, switches to card-based layout (Day selector
- * → Period cards) instead of forcing a desktop table into a tiny screen.
+ * Brief section 20-25: Change indicators on affected slots (data-driven,
+ *   72h TTL, only on published-affected entries).
  *
- * Brief section 11: Slot states — ASSIGNED (subject + teacher + room),
- * EMPTY (+ Assign Period), BREAK (warm styling).
- *
- * Brief section 12: Click behavior — assigned → edit, empty → add, break →
- * no action (breaks are fixed).
+ * Brief section 33: On mobile, switches to card-based layout.
  */
-import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Edit2, Copy, Trash2, Plus, MapPin, UserCheck, Coffee, CalendarDays } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { Plus, MapPin, UserCheck, Coffee, CalendarDays, Copy, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getTeacherById } from '@/lib/mock/teachers'
-import {
-  CLASSES,
-  PERIODS,
-  type DayType,
-  type TimetableSlot,
-} from './data'
+import { CLASSES, PERIODS, type DayType, type TimetableSlot } from './data'
+import { type PublishedVersion } from './timetable-store'
+import { ChangeIndicator } from './change-indicator'
 
 interface ScheduleGridProps {
   selectedDay: DayType
   selectedClass: string
   filteredSlots: TimetableSlot[]
+  editMode: boolean
+  publications: PublishedVersion[]
   onEditSlot: (slot: TimetableSlot) => void
   onDuplicateSlot: (slot: TimetableSlot) => void
   onRemoveSlot: (slot: TimetableSlot) => void
@@ -43,6 +38,8 @@ export function ScheduleGrid({
   selectedDay,
   selectedClass,
   filteredSlots,
+  editMode,
+  publications,
   onEditSlot,
   onDuplicateSlot,
   onRemoveSlot,
@@ -54,7 +51,6 @@ export function ScheduleGrid({
 
   const daySlots = filteredSlots.filter((s) => s.day === selectedDay)
 
-  // Resolve teacher name from teacherId for display
   const resolveTeacherName = (slot: TimetableSlot) => {
     if (slot.teacherName) return slot.teacherName
     const t = getTeacherById(slot.teacherId)
@@ -72,6 +68,12 @@ export function ScheduleGrid({
             {selectedClass === 'all' ? 'All Classes' : selectedClass} · {daySlots.length} periods
           </span>
         </div>
+        {editMode && (
+          <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Editing
+          </span>
+        )}
       </div>
 
       {/* Desktop: table grid (hidden on mobile) */}
@@ -116,7 +118,10 @@ export function ScheduleGrid({
                   <motion.tr
                     key={`period-${p.number}`}
                     initial={false}
-                    className="hover:bg-accent/20 transition-colors border-t border-border/40"
+                    className={cn(
+                      'border-t border-border/40 transition-colors',
+                      editMode ? 'hover:bg-accent/20' : ''
+                    )}
                   >
                     <td className="p-2.5 shrink-0">
                       <p className="text-[10px] font-bold text-foreground">{p.name}</p>
@@ -132,17 +137,29 @@ export function ScheduleGrid({
                             <SlotCard
                               slot={slot}
                               teacherName={resolveTeacherName(slot)}
+                              editMode={editMode}
+                              publications={publications}
                               onEdit={() => onEditSlot(slot)}
                               onDuplicate={() => onDuplicateSlot(slot)}
                               onRemove={() => onRemoveSlot(slot)}
                             />
                           ) : (
                             <button
-                              onClick={() => onAssignPeriod(selectedDay, p.number)}
-                              className="w-full h-14 rounded-lg border border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 flex flex-col items-center justify-center gap-0.5 text-muted-foreground hover:text-primary transition-all group"
+                              onClick={() => editMode && onAssignPeriod(selectedDay, p.number)}
+                              className={cn(
+                                'w-full rounded-lg border flex flex-col items-center justify-center gap-0.5 transition-all group',
+                                editMode
+                                  ? 'h-14 border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary cursor-pointer'
+                                  : 'h-14 border-transparent text-muted-foreground/30 cursor-default'
+                              )}
+                              disabled={!editMode}
                             >
-                              <Plus className="h-3 w-3 group-hover:scale-110 transition-transform" />
-                              <span className="text-[9px] font-medium">Assign</span>
+                              {editMode ? (
+                                <>
+                                  <Plus className="h-3 w-3 group-hover:scale-110 transition-transform" />
+                                  <span className="text-[9px] font-medium">Assign</span>
+                                </>
+                              ) : null}
                             </button>
                           )}
                         </td>
@@ -181,19 +198,27 @@ export function ScheduleGrid({
                 </div>
               </div>
               {periodSlots.length === 0 ? (
-                <button
-                  onClick={() => onAssignPeriod(selectedDay, p.number)}
-                  className="w-full py-2.5 rounded-lg border border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 flex items-center justify-center gap-1 text-muted-foreground hover:text-primary transition-all"
-                >
-                  <Plus className="h-3 w-3" />
-                  <span className="text-[10px] font-medium">Assign period</span>
-                </button>
+                editMode ? (
+                  <button
+                    onClick={() => onAssignPeriod(selectedDay, p.number)}
+                    className="w-full py-2.5 rounded-lg border border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 flex items-center justify-center gap-1 text-muted-foreground hover:text-primary transition-all"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span className="text-[10px] font-medium">Assign period</span>
+                  </button>
+                ) : (
+                  <div className="w-full py-2.5 rounded-lg border border-dashed border-border/20 text-center text-[9px] text-muted-foreground/30">
+                    Empty
+                  </div>
+                )
               ) : (
                 periodSlots.map((slot) => (
                   <MobileSlotCard
                     key={slot.id}
                     slot={slot}
                     teacherName={resolveTeacherName(slot)}
+                    publications={publications}
+                    editMode={editMode}
                     onEdit={() => onEditSlot(slot)}
                     onRemove={() => onRemoveSlot(slot)}
                   />
@@ -208,11 +233,13 @@ export function ScheduleGrid({
 }
 
 /* ------------------------------------------------------------------ */
-/* SlotCard — desktop table cell with contextual hover actions        */
+/* SlotCard — desktop table cell with contextual actions              */
 /* ------------------------------------------------------------------ */
-function SlotCard({ slot, teacherName, onEdit, onDuplicate, onRemove }: {
+function SlotCard({ slot, teacherName, editMode, publications, onEdit, onDuplicate, onRemove }: {
   slot: TimetableSlot
   teacherName: string
+  editMode: boolean
+  publications: PublishedVersion[]
   onEdit: () => void
   onDuplicate: () => void
   onRemove: () => void
@@ -223,15 +250,21 @@ function SlotCard({ slot, teacherName, onEdit, onDuplicate, onRemove }: {
   return (
     <div
       className={cn(
-        'group relative rounded-lg border p-2 transition-all cursor-pointer',
+        'group relative rounded-lg border p-2 transition-all',
+        editMode
+          ? 'cursor-pointer hover:shadow-sm'
+          : 'cursor-default',
         isLab
           ? 'border-violet-500/20 bg-violet-500/5 hover:border-violet-500/40'
           : isSports
           ? 'border-teal-500/20 bg-teal-500/5 hover:border-teal-500/40'
-          : 'border-primary/20 bg-primary/5 hover:border-primary/40 hover:shadow-sm'
+          : 'border-primary/20 bg-primary/5 hover:border-primary/40'
       )}
-      onClick={onEdit}
+      onClick={editMode ? onEdit : undefined}
     >
+      {/* Change indicator (data-driven, 72h TTL) */}
+      <ChangeIndicator slotId={slot.id} publications={publications} />
+
       <div className="flex items-start justify-between gap-1">
         <span className={cn(
           'font-bold text-[11px] truncate',
@@ -239,33 +272,35 @@ function SlotCard({ slot, teacherName, onEdit, onDuplicate, onRemove }: {
         )}>
           {slot.subject}
         </span>
-        {/* Contextual actions — only visible on hover */}
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={onEdit}
-            title="Edit"
-            aria-label="Edit slot"
-            className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
-          >
-            <Edit2 className="h-2.5 w-2.5" />
-          </button>
-          <button
-            onClick={onDuplicate}
-            title="Duplicate"
-            aria-label="Duplicate slot"
-            className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
-          >
-            <Copy className="h-2.5 w-2.5" />
-          </button>
-          <button
-            onClick={onRemove}
-            title="Remove"
-            aria-label="Remove slot"
-            className="p-1 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-          >
-            <Trash2 className="h-2.5 w-2.5" />
-          </button>
-        </div>
+        {/* Contextual actions — only in edit mode, only on hover */}
+        {editMode && (
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={onEdit}
+              title="Edit"
+              aria-label="Edit slot"
+              className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+            >
+              <Copy className="h-2.5 w-2.5 rotate-90" />
+            </button>
+            <button
+              onClick={onDuplicate}
+              title="Duplicate"
+              aria-label="Duplicate slot"
+              className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+            >
+              <Copy className="h-2.5 w-2.5" />
+            </button>
+            <button
+              onClick={onRemove}
+              title="Remove"
+              aria-label="Remove slot"
+              className="p-1 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+            >
+              <Trash2 className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        )}
       </div>
       <p className="text-[10px] font-medium text-foreground mt-1 flex items-center gap-0.5">
         <UserCheck className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
@@ -282,9 +317,11 @@ function SlotCard({ slot, teacherName, onEdit, onDuplicate, onRemove }: {
 /* ------------------------------------------------------------------ */
 /* MobileSlotCard — touch-friendly card for phone/tablet               */
 /* ------------------------------------------------------------------ */
-function MobileSlotCard({ slot, teacherName, onEdit, onRemove }: {
+function MobileSlotCard({ slot, teacherName, publications, editMode, onEdit, onRemove }: {
   slot: TimetableSlot
   teacherName: string
+  publications: PublishedVersion[]
+  editMode: boolean
   onEdit: () => void
   onRemove: () => void
 }) {
@@ -294,15 +331,18 @@ function MobileSlotCard({ slot, teacherName, onEdit, onRemove }: {
   return (
     <div
       className={cn(
-        'rounded-lg border p-2.5 active:scale-[0.98] transition-transform cursor-pointer',
+        'relative rounded-lg border p-2.5 transition-all',
+        editMode ? 'cursor-pointer active:scale-[0.98]' : '',
         isLab
           ? 'border-violet-500/20 bg-violet-500/5'
           : isSports
           ? 'border-teal-500/20 bg-teal-500/5'
           : 'border-primary/20 bg-primary/5'
       )}
-      onClick={onEdit}
+      onClick={editMode ? onEdit : undefined}
     >
+      <ChangeIndicator slotId={slot.id} publications={publications} />
+
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <p className={cn(
@@ -313,13 +353,15 @@ function MobileSlotCard({ slot, teacherName, onEdit, onRemove }: {
           </p>
           <p className="text-[10px] text-muted-foreground mt-0.5">{slot.className}</p>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onRemove() }}
-          className="p-1.5 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
-          aria-label="Remove slot"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        {editMode && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove() }}
+            className="p-1.5 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
+            aria-label="Remove slot"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
       <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-border/30">
         <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
