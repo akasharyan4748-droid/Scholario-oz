@@ -29,7 +29,7 @@ import { BookOpen, Users, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getVirtualOccupied, useStudentsStore } from '@/lib/store/students-store'
 import type { ClassRecord } from '@/lib/store/students-store'
-import { getTeacherById } from '@/lib/mock/teachers'
+import { useTeachersMockStore } from '@/lib/store/teachers-mock-store'
 import { SummaryCard, SummaryCardGrid } from '../../shared/summary-card'
 import { SubjectCard } from './subject-card'
 
@@ -38,8 +38,14 @@ export function ClassOverview({ cls }: { cls: ClassRecord }) {
   // subject, reassign a teacher, etc.) reflect here immediately.
   // Brief section 35 + 37.
   const liveClass = useStudentsStore((s) => s.getClassById(cls.id)) ?? cls
+  const teachers = useTeachersMockStore((s) => s.teachers)
   const cap = liveClass.capacity * liveClass.sections.length
   const enr = liveClass.sections.reduce((a, s) => a + getVirtualOccupied(s.id, s.capacity), 0)
+
+  const findTeacher = (id: string | null | undefined) => {
+    if (!id) return undefined
+    return teachers.find((t) => t.id === id)
+  }
 
   return (
     <div className="space-y-6">
@@ -59,8 +65,8 @@ export function ClassOverview({ cls }: { cls: ClassRecord }) {
             const over = count > s.capacity
             const fillPct = s.capacity > 0 ? Math.round((count / s.capacity) * 100) : 0
             const sFull = !over && fillPct >= 90
-            const secTeacher = s.classTeacherId ? getTeacherById(s.classTeacherId) : null
-            const secAssistant = s.assistantTeacherId ? getTeacherById(s.assistantTeacherId) : null
+            const secTeacher = findTeacher(s.classTeacherId)
+            const secAssistant = findTeacher(s.assistantTeacherId)
             return (
               <div key={s.id} className="py-3 border-t border-border/40 first:border-t-0 first:pt-0">
                 <div className="flex items-center justify-between gap-3">
@@ -90,10 +96,14 @@ export function ClassOverview({ cls }: { cls: ClassRecord }) {
                 {/* Compact teacher metadata — single muted line per role */}
                 <div className="mt-1.5 pl-9 space-y-0.5">
                   <p className="text-[10px] text-muted-foreground">
-                    Class Teacher: <span className="text-foreground font-medium">{secTeacher?.name ?? '—'}</span>
+                    Class Teacher: <span className="text-foreground font-medium">
+                      {secTeacher && !secTeacher.archived ? secTeacher.name : '—'}
+                    </span>
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    Assistant Class Teacher: <span className="text-foreground font-medium">{secAssistant?.name ?? '—'}</span>
+                    Assistant Class Teacher: <span className="text-foreground font-medium">
+                      {secAssistant && !secAssistant.archived ? secAssistant.name : '—'}
+                    </span>
                   </p>
                 </div>
               </div>

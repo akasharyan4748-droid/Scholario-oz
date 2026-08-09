@@ -19,6 +19,10 @@ export interface Teacher {
   status: 'Active' | 'On Leave'
   bloodGroup: string
   address: string
+  /** When true, teacher is archived — hidden from active selectors, recoverable via Archived Teachers. */
+  archived?: boolean
+  /** ISO timestamp of when the teacher was archived. */
+  archivedAt?: string
 }
 
 export const teachers: Teacher[] = [

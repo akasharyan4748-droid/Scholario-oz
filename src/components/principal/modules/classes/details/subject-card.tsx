@@ -20,7 +20,7 @@ import { BookOpen, Archive } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { EntityCard } from '../../shared/entity-card'
 import { SUBJECTS_BY_LEVEL } from '@/lib/store/students-store/constants'
-import { getTeacherById } from '@/lib/mock/teachers'
+import { useTeachersMockStore } from '@/lib/store/teachers-mock-store'
 import type { ClassRecord } from '@/lib/store/students-store'
 
 export interface SubjectCardProps {
@@ -41,7 +41,9 @@ export function SubjectCard({ subject, cls, manageable = false, onArchive, class
   const category = levelSubjects.includes(subject) ? 'Core' : 'Elective'
   const code = subject.substring(0, 3).toUpperCase()
   const teacherId = cls.subjectTeachers?.[subject]
-  const teacher = teacherId ? getTeacherById(teacherId) : null
+  const teacher = useTeachersMockStore((s) =>
+    teacherId ? s.teachers.find((t) => t.id === teacherId) : undefined
+  )
 
   return (
     <EntityCard
@@ -54,7 +56,7 @@ export function SubjectCard({ subject, cls, manageable = false, onArchive, class
           <span className="text-[10px] text-muted-foreground">{category}</span>
         </>
       }
-      metadata={teacher ? `${teacher.name} · ${teacher.employeeId}` : 'No teacher assigned'}
+      metadata={teacher && !teacher.archived ? `${teacher.name} · ${teacher.employeeId}` : 'No teacher assigned'}
       action={
         manageable && onArchive ? (
           <button
