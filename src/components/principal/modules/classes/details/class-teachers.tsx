@@ -15,7 +15,7 @@
  * Brief section 4: after Archive confirm, slot is immediately vacant +
  *   selectable. NO pencil/archive icon beside vacant slots.
  *
- * Brief section 5 + 6: "Archived" button opens compact ArchivedTeachersDialog.
+ * Brief section 5 + 6: "Archived" button opens compact ArchivedTeachersSheet.
  *   Restore returns teacher to active pool. Delete is permanent (stronger confirm).
  *
  * Brief section 9 + 21 + 10: existing values hydrate into edit mode.
@@ -388,7 +388,7 @@ export function ClassTeachers({ cls }: { cls: ClassRecord }) {
         </section>
       )}
 
-      <ArchivedTeachersDialog open={archivedDialogOpen} onOpenChange={setArchivedDialogOpen} />
+      <ArchivedTeachersSheet open={archivedDialogOpen} onOpenChange={setArchivedDialogOpen} />
     </div>
   )
 }
