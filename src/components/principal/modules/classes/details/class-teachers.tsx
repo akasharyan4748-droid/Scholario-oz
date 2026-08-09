@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { UserCheck, Users, Pencil, ChevronDown, Search, Check, X, UserX } from 'lucide-react'
+import { useState } from 'react'
+import { Pencil, Check, X, ChevronDown, Search, UserX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -11,69 +11,76 @@ import { cn } from '@/lib/utils'
 import type { ClassRecord } from '@/lib/store/students-store'
 import { getTeacherById, teachers } from '@/lib/mock/teachers'
 import { toast } from 'sonner'
+import { useMemo } from 'react'
 
 type Mode = 'separate' | 'merged'
 
-/**
- * ClassTeachers — teacher assignment management.
- * Supports: Separate mode (independent per-section) and Merged mode (class default + overrides).
- * One global Save Changes for all modifications.
- */
 export function ClassTeachers({ cls }: { cls: ClassRecord }) {
   const [mode, setMode] = useState<Mode>('separate')
-  const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({})
-  const [removeTargets, setRemoveTargets] = useState<string[]>([])
-  const [confirmRemove, setConfirmRemove] = useState<{ key: string; label: string; teacherName: string } | null>(null)
+  const [editMode, setEditMode] = useState(false)
+  const [pending, setPending] = useState<Record<string, string>>({})
+  const [removals, setRemovals] = useState<string[]>([])
+  const [confirmRemove, setConfirmRemove] = useState<{ key: string; label: string; name: string } | null>(null)
 
-  const hasChanges = Object.keys(pendingChanges).length > 0 || removeTargets.length > 0
-  const setPending = (key: string, teacherId: string) => setPendingChanges((p) => ({ ...p, [key]: teacherId }))
-  const clearPending = (key: string) => setPendingChanges((p) => { const n = { ...p }; delete n[key]; return n })
-  const markRemoval = (key: string) => { setRemoveTargets((p) => [...p, key]); setPendingChanges((p) => { const n = { ...p }; delete n[key]; return n }) }
-  const unmarkRemoval = (key: string) => setRemoveTargets((p) => p.filter((k) => k !== key))
-  const cancelAll = () => { setPendingChanges({}); setRemoveTargets([]) }
+  const hasChanges = Object.keys(pending).length > 0 || removals.length > 0
+  const setP = (k: string, v: string) => setPending((p) => ({ ...p, [k]: v }))
+  const clearP = (k: string) => setPending((p) => { const n = { ...p }; delete n[k]; return n })
+  const markRem = (k: string) => { setRemovals((p) => [...p, k]); setPending((p) => { const n = { ...p }; delete n[k]; return n }) }
+  const unmarkRem = (k: string) => setRemovals((p) => p.filter((x) => x !== k))
 
-  const saveAll = () => {
-    let count = 0
-    Object.entries(pendingChanges).forEach(() => count++)
-    removeTargets.forEach(() => count++)
-    if (count > 0) toast.success(`${count} assignment(s) updated`)
-    cancelAll()
+  const enterEdit = () => { setEditMode(true); setPending({}); setRemovals([]) }
+  const exitEdit = () => { setEditMode(false); setPending({}); setRemovals([]) }
+  const save = () => {
+    const c = Object.keys(pending).length + removals.length
+    if (c > 0) toast.success(`${c} assignment(s) updated`)
+    exitEdit()
   }
 
   return (
-    <div className="space-y-4">
-      {/* Mode selector */}
-      <div className="flex items-center justify-center">
+    <div className="space-y-5">
+      {/* Mode toggle */}
+      <div className="flex items-center justify-between gap-2">
         <div className="inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60">
           <button onClick={() => setMode('separate')} className={cn('px-4 rounded-full text-xs font-medium transition-all', mode === 'separate' ? 'bg-white dark:bg-white/10 shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>Separate by section</button>
           <button onClick={() => setMode('merged')} className={cn('px-4 rounded-full text-xs font-medium transition-all', mode === 'merged' ? 'bg-white dark:bg-white/10 shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>Merged (class-wide)</button>
         </div>
+        {!editMode ? (
+          <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={enterEdit}><Pencil className="h-3 w-3" /> Edit</Button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={exitEdit}>Cancel</Button>
+            <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={save} disabled={!hasChanges}>Save Changes</Button>
+          </div>
+        )}
       </div>
 
-      {/* Class Teaching Team */}
-      <div className="rounded-lg border border-border/60 bg-card p-4">
+      {/* Class Teaching Team — flat rows, no nested cards */}
+      <div>
         <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Class Teaching Team</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <AssignmentSlot label="Class Teacher" cls={cls} role="class_teacher" sectionId={null} pendingChanges={pendingChanges} removeTargets={removeTargets} onSetPending={setPending} onClearPending={clearPending} onMarkRemoval={markRemoval} onUnmarkRemoval={unmarkRemoval} onConfirmRemove={setConfirmRemove} />
-          <AssignmentSlot label="Assistant Class Teacher" cls={cls} role="assistant" sectionId={null} pendingChanges={pendingChanges} removeTargets={removeTargets} onSetPending={setPending} onClearPending={clearPending} onMarkRemoval={markRemoval} onUnmarkRemoval={unmarkRemoval} onConfirmRemove={setConfirmRemove} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <TeacherRow label="Class Teacher" teacherId={cls.classTeacherId} editMode={editMode} pending={pending} removals={removals} onSet={(v) => setP('class_teacher|null', v)} onClear={() => clearP('class_teacher|null')} onMarkRem={() => setConfirmRemove({ key: 'class_teacher|null', label: 'Class Teacher', name: getTeacherById(cls.classTeacherId)?.name || 'Teacher' })} onUnmarkRem={() => unmarkRem('class_teacher|null')} onConfirmRemove={setConfirmRemove} />
+          <TeacherRow label="Assistant" teacherId={null} editMode={editMode} pending={pending} removals={removals} onSet={(v) => setP('assistant|null', v)} onClear={() => clearP('assistant|null')} onMarkRem={() => setConfirmRemove({ key: 'assistant|null', label: 'Assistant', name: 'Teacher' })} onUnmarkRem={() => unmarkRem('assistant|null')} onConfirmRemove={setConfirmRemove} />
         </div>
       </div>
 
-      {/* Section Assignments */}
+      {/* Divider */}
+      <div className="border-t border-border/40" />
+
+      {/* Section Assignments — flat rows */}
       {mode === 'separate' && (
-        <div className="rounded-lg border border-border/60 bg-card p-4">
+        <div>
           <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Section Assignments</p>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {cls.sections.map((sec) => (
-              <div key={sec.id} className="rounded-lg border border-border/60 bg-background/50 p-3">
+              <div key={sec.id}>
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary text-xs font-semibold">{sec.name}</div>
-                  <p className="text-sm font-semibold text-foreground">Section {sec.name}</p>
-                  <Badge variant="outline" className="text-[8px] ml-auto">{mode === 'separate' ? 'DIRECT' : 'INHERIT'}</Badge>
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-primary/10 text-primary text-[10px] font-semibold">{sec.name}</div>
+                  <span className="text-xs font-semibold text-foreground">Section {sec.name}</span>
+                  <Badge variant="outline" className="text-[8px] text-muted-foreground">DIRECT</Badge>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <AssignmentSlot label="Section Teacher" cls={cls} role="section_teacher" sectionId={sec.id} pendingChanges={pendingChanges} removeTargets={removeTargets} onSetPending={setPending} onClearPending={clearPending} onMarkRemoval={markRemoval} onUnmarkRemoval={unmarkRemoval} onConfirmRemove={setConfirmRemove} />
-                  <AssignmentSlot label="Assistant" cls={cls} role="assistant" sectionId={sec.id} pendingChanges={pendingChanges} removeTargets={removeTargets} onSetPending={setPending} onClearPending={clearPending} onMarkRemoval={markRemoval} onUnmarkRemoval={unmarkRemoval} onConfirmRemove={setConfirmRemove} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-8">
+                  <TeacherRow label="Section Teacher" teacherId={sec.classTeacherId} editMode={editMode} pending={pending} removals={removals} onSet={(v) => setP(`section_teacher|${sec.id}`, v)} onClear={() => clearP(`section_teacher|${sec.id}`)} onMarkRem={() => setConfirmRemove({ key: `section_teacher|${sec.id}`, label: 'Section Teacher', name: getTeacherById(sec.classTeacherId || '')?.name || 'Teacher' })} onUnmarkRem={() => unmarkRem(`section_teacher|${sec.id}`)} onConfirmRemove={setConfirmRemove} />
+                  <TeacherRow label="Assistant" teacherId={null} editMode={editMode} pending={pending} removals={removals} onSet={(v) => setP(`assistant|${sec.id}`, v)} onClear={() => clearP(`assistant|${sec.id}`)} onMarkRem={() => setConfirmRemove({ key: `assistant|${sec.id}`, label: 'Assistant', name: 'Teacher' })} onUnmarkRem={() => unmarkRem(`assistant|${sec.id}`)} onConfirmRemove={setConfirmRemove} />
                 </div>
               </div>
             ))}
@@ -81,20 +88,22 @@ export function ClassTeachers({ cls }: { cls: ClassRecord }) {
         </div>
       )}
 
-      {/* Merged mode: sections show inherited */}
+      {/* Merged mode: section inheritance summary */}
       {mode === 'merged' && (
-        <div className="rounded-lg border border-border/60 bg-card p-4">
+        <div>
           <p className="text-xs font-bold text-primary mb-3 uppercase tracking-wider">Section Inheritance</p>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {cls.sections.map((sec) => {
               const secTeacher = sec.classTeacherId ? getTeacherById(sec.classTeacherId) : null
-              const isOverride = !!secTeacher
               return (
-                <div key={sec.id} className="flex items-center justify-between py-1.5 border-t border-border/40 first:border-t-0">
-                  <div className="flex items-center gap-2"><div className="flex h-6 w-6 items-center justify-center rounded bg-primary/10 text-primary text-[9px] font-semibold">{sec.name}</div><span className="text-xs text-muted-foreground">Section {sec.name}</span></div>
+                <div key={sec.id} className="flex items-center justify-between py-1.5 border-t border-border/30 first:border-t-0">
                   <div className="flex items-center gap-2">
-                    {isOverride ? (
-                      <><Badge variant="outline" className="text-[8px] text-amber-600 border-amber-500/30">OVERRIDE</Badge><span className="text-xs text-foreground">{secTeacher?.name}</span></>
+                    <div className="flex h-5 w-5 items-center justify-center rounded bg-primary/10 text-primary text-[9px] font-semibold">{sec.name}</div>
+                    <span className="text-xs text-muted-foreground">Section {sec.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {secTeacher ? (
+                      <><Badge variant="outline" className="text-[8px] text-amber-600 border-amber-500/30">OVERRIDE</Badge><span className="text-xs text-foreground">{secTeacher.name}</span></>
                     ) : (
                       <><Badge variant="outline" className="text-[8px] text-muted-foreground">INHERITED</Badge><span className="text-xs text-muted-foreground">Uses class teacher</span></>
                     )}
@@ -106,27 +115,16 @@ export function ClassTeachers({ cls }: { cls: ClassRecord }) {
         </div>
       )}
 
-      {/* Global Save bar */}
-      {hasChanges && (
-        <div className="sticky bottom-0 left-0 right-0 z-30 -mx-4 px-4 py-3 bg-background/95 backdrop-blur border-t border-border flex items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">{Object.keys(pendingChanges).length + removeTargets.length} change(s) pending</span>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={cancelAll}>Cancel</Button>
-            <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={saveAll}>Save Changes</Button>
-          </div>
-        </div>
-      )}
-
-      {/* Remove Confirmation */}
+      {/* Remove confirmation */}
       <Dialog open={!!confirmRemove} onOpenChange={(o) => !o && setConfirmRemove(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">Remove {confirmRemove?.label}?</DialogTitle>
-            <DialogDescription className="text-xs">{confirmRemove?.teacherName} will no longer be assigned to {cls.name}.</DialogDescription>
+            <DialogDescription className="text-xs">{confirmRemove?.name} will no longer be assigned to {cls.name}.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setConfirmRemove(null)}>Cancel</Button>
-            <Button variant="destructive" size="sm" onClick={() => { if (confirmRemove) { markRemoval(confirmRemove.key); setConfirmRemove(null) } }}>Remove</Button>
+            <Button variant="destructive" size="sm" onClick={() => { if (confirmRemove) { markRem(confirmRemove.key); setConfirmRemove(null) } }}>Remove</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -134,86 +132,83 @@ export function ClassTeachers({ cls }: { cls: ClassRecord }) {
   )
 }
 
-/* AssignmentSlot — read-mostly with pencil edit */
-function AssignmentSlot({ label, cls, role, sectionId, pendingChanges, removeTargets, onSetPending, onClearPending, onMarkRemoval, onUnmarkRemoval, onConfirmRemove }: {
-  label: string; cls: ClassRecord; role: string; sectionId: string | null
-  pendingChanges: Record<string, string>; removeTargets: string[]
-  onSetPending: (k: string, v: string) => void; onClearPending: (k: string) => void; onMarkRemoval: (k: string) => void; onUnmarkRemoval: (k: string) => void
-  onConfirmRemove: (val: { key: string; label: string; teacherName: string }) => void
+/* TeacherRow — flat row, no card border. Editable only in editMode. */
+function TeacherRow({ label, teacherId, editMode, pending, removals, onSet, onClear, onMarkRem, onUnmarkRem, onConfirmRemove }: {
+  label: string; teacherId: string | null | undefined; editMode: boolean
+  pending: Record<string, string>; removals: string[]
+  onSet: (v: string) => void; onClear: () => void; onMarkRem: () => void; onUnmarkRem: () => void
+  onConfirmRemove: (v: { key: string; label: string; name: string }) => void
 }) {
-  const key = `${role}|${sectionId || 'null'}`
-  const [editing, setEditing] = useState(false)
-  const currentId = sectionId ? cls.sections.find((s) => s.id === sectionId)?.classTeacherId : cls.classTeacherId
-  const teacher = currentId ? getTeacherById(currentId) : null
-  const pendingId = pendingChanges[key]
-  const isMarkedForRemoval = removeTargets.includes(key)
+  const key = `${label}`
+  const teacher = teacherId ? getTeacherById(teacherId) : null
+  const pendingId = pending[`${label}|null`] || pending[`${label}`]
+  const isRemoved = removals.includes(`${label}|null`) || removals.includes(`${label}`)
 
-  if (isMarkedForRemoval) {
+  if (isRemoved) {
     return (
-      <div className="rounded-lg border border-rose-500/40 bg-rose-500/5 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div><p className="text-xs font-semibold text-rose-600">{label} — marked for removal</p><p className="text-[10px] text-muted-foreground mt-0.5">{teacher?.name} will be removed on Save</p></div>
-          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onUnmarkRemoval(key)}>Undo</Button>
+      <div className="flex items-center justify-between py-1">
+        <span className="text-xs font-semibold text-rose-600">{label} — marked for removal</span>
+        <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={onUnmarkRem}>Undo</Button>
+      </div>
+    )
+  }
+
+  if (editMode) {
+    return (
+      <div className="space-y-1.5">
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
+        <TeacherPicker selectedId={pendingId || ''} onSelect={onSet} placeholder={`Select ${label}`} />
+        <div className="flex items-center gap-2">
+          {teacherId && <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 text-rose-600" onClick={onMarkRem}><UserX className="h-3 w-3" /> Remove</Button>}
+          <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={onClear}>Clear</Button>
         </div>
       </div>
     )
   }
 
-  if (editing) {
-    return (
-      <div className="rounded-lg border border-primary/40 bg-background/50 p-3">
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">{label}</p>
-        <TeacherSelector teachers={teachers} selectedId={pendingId || ''} onSelect={(id) => onSetPending(key, id)} excludeId={currentId} placeholder={`Select ${label}`} />
-        <div className="flex items-center justify-end gap-2 mt-2">
-          {currentId && <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 text-rose-600" onClick={() => { onConfirmRemove({ key, label, teacherName: teacher?.name || 'Teacher' }) }}><UserX className="h-3 w-3" /> Remove</Button>}
-          <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => { setEditing(false); onClearPending(key) }}>Cancel</Button>
-        </div>
-      </div>
-    )
-  }
-
-  if (teacher) {
-    return (
-      <div className="rounded-lg border border-border/60 bg-background/50 p-3 group">
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">{label}</p>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-xs font-semibold">{teacher.avatar}</div>
-            <div className="min-w-0"><p className="text-sm font-medium text-foreground truncate">{teacher.name}</p><p className="text-[10px] text-muted-foreground">{teacher.employeeId} · {teacher.department}</p></div>
-          </div>
-          <button onClick={() => { setEditing(true); if (currentId) onSetPending(key, currentId) }} className="text-muted-foreground hover:text-primary p-1.5 rounded-md hover:bg-muted/60 transition-colors shrink-0" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
-        </div>
-      </div>
-    )
-  }
-
+  // Read mode — clean, no borders, no pencils
   return (
-    <div className="rounded-lg border border-border/60 bg-background/50 p-3">
-      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">{label}</p>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground italic">Vacant</span>
-        <button onClick={() => { setEditing(true) }} className="flex items-center justify-between h-8 px-3 rounded-lg border border-border bg-white text-xs text-muted-foreground hover:border-primary/40 transition-colors"><span>Assign</span><ChevronDown className="h-3.5 w-3.5 ml-1.5" /></button>
+    <div className="flex items-center justify-between gap-2 py-1">
+      <div className="flex items-center gap-2 min-w-0">
+        {teacher ? (
+          <>
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary text-[10px] font-semibold">{teacher.avatar}</div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{teacher.name}</p>
+              <p className="text-[10px] text-muted-foreground">{teacher.employeeId} · {teacher.department}</p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground text-[10px]"><UserX className="h-3.5 w-3.5" /></div>
+            <div><p className="text-sm text-muted-foreground italic">{label}</p><p className="text-[10px] text-muted-foreground/60">Vacant</p></div>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
-/* TeacherSelector — compact dropdown with search + conflict tags */
-function TeacherSelector({ teachers, selectedId, onSelect, excludeId, placeholder }: {
-  teachers: any[]; selectedId: string; onSelect: (id: string) => void; excludeId?: string; placeholder: string
+/* TeacherPicker — premium searchable command-style picker */
+function TeacherPicker({ selectedId, onSelect, placeholder }: {
+  selectedId: string; onSelect: (id: string) => void; placeholder: string
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const selected = teachers.find((t) => t.id === selectedId)
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return teachers.filter((t) => t.status === 'Active' && (t.name.toLowerCase().includes(q) || t.employeeId.toLowerCase().includes(q) || (t.department || '').toLowerCase().includes(q)))
-  }, [teachers, search])
+  }, [search])
 
   if (selected) {
     return (
       <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-white p-2">
-        <div className="flex items-center gap-2 min-w-0"><div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary text-[10px] font-semibold">{selected.avatar}</div><div className="min-w-0"><p className="text-sm font-medium text-foreground truncate leading-tight">{selected.name}</p><p className="text-[10px] text-muted-foreground leading-tight">{selected.employeeId} · {selected.department}</p></div></div>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary text-[10px] font-semibold">{selected.avatar}</div>
+          <div className="min-w-0"><p className="text-sm font-medium text-foreground truncate leading-tight">{selected.name}</p><p className="text-[10px] text-muted-foreground leading-tight">{selected.employeeId} · {selected.department}</p></div>
+        </div>
         <button type="button" onClick={() => onSelect('')} className="text-muted-foreground hover:text-rose-600 p-1"><X className="h-3.5 w-3.5" /></button>
       </div>
     )
@@ -222,12 +217,21 @@ function TeacherSelector({ teachers, selectedId, onSelect, excludeId, placeholde
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="flex items-center justify-between w-full h-8 px-3 rounded-lg border border-border bg-white text-xs text-muted-foreground hover:border-primary/40 transition-colors"><span>{placeholder}</span><ChevronDown className="h-3.5 w-3.5" /></button>
+        <button type="button" className="flex items-center justify-between w-full h-9 px-3 rounded-lg border border-border bg-white text-xs text-muted-foreground hover:border-primary/40 transition-colors">
+          <span>{placeholder}</span><ChevronDown className="h-3.5 w-3.5" />
+        </button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align="start">
-        <div className="p-2 border-b border-border"><div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search teacher…" className="pl-8 h-8 text-xs bg-white" autoFocus /></div></div>
+      <PopoverContent className="w-72 p-0" align="start" sideOffset={4}>
+        <div className="p-2 border-b border-border">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search teachers…" className="pl-8 h-8 text-xs bg-white" autoFocus />
+          </div>
+        </div>
         <div className="max-h-56 overflow-y-auto divide-y divide-border/30">
-          {filtered.length === 0 ? <p className="px-3 py-3 text-xs text-muted-foreground text-center">No teachers found.</p> : filtered.slice(0, 30).map((t) => (
+          {filtered.length === 0 ? (
+            <p className="px-3 py-4 text-xs text-muted-foreground text-center">No teachers found.</p>
+          ) : filtered.slice(0, 30).map((t) => (
             <button key={t.id} type="button" onClick={() => { onSelect(t.id); setOpen(false); setSearch('') }} className="w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-muted/40 transition-colors">
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary text-[10px] font-semibold">{t.avatar}</div>
               <div className="flex-1 min-w-0"><p className="text-sm font-medium text-foreground truncate leading-tight">{t.name}</p><p className="text-[10px] text-muted-foreground leading-tight">{t.employeeId} · {t.department}</p></div>
