@@ -3,32 +3,21 @@
 /**
  * TimetableModule — Principal's master scheduling workspace.
  *
- * Brief section 5 + 27 + 34: Two clear states + 3-tier state model:
+ * Brief section 7 + 10 + 11 + 45: Four-tier state model:
  *
- *   VIEW MODE (default):
- *     [ Export ] [ ✎ Edit ]
- *     Clean, calm — empty periods show subtle "+" but page feels like a viewer.
+ *   VIEW: [ Export ] [ ✎ Edit ]
+ *   EDIT (no changes): [ Export ] [ Cancel ] ● Editing
+ *   EDIT (unsaved changes): [ Export ] [ Cancel ] [ Apply Changes ]
+ *   PENDING PUBLISH (after Apply): [ Export ] [ Publish Update N ] [ ✎ Edit ]
+ *   PUBLISHED: [ Export ] [ ✎ Edit ] (+ change indicators on affected slots)
  *
- *   EDIT MODE:
- *     [ Editing... ] [ Cancel ] [ Save Changes ]
- *     Empty periods become actionable, existing slots editable on click.
- *
- *   AFTER SAVE (pending publish):
- *     [ Export ] [ ↑ Publish Update ]
- *     Changes saved to master but not yet published to users.
- *
- *   AFTER PUBLISH:
- *     [ Export ]
- *     Back to calm normal state. Change indicators appear on affected slots
- *     for 72 hours.
- *
- * Brief section 32: Cancel discards only UNSAVED edits — saved pending
- *   publish changes are preserved.
- *
- * Brief section 33: Publish disabled if conflicts exist.
+ * Draft state architecture (Brief section 27 + 49):
+ *   - Edit mode mutates `draftSlots` (local React state, NOT the store)
+ *   - Apply Changes: commits draftSlots → store, records changes, exits edit mode
+ *   - Cancel: discards draftSlots (store unchanged), confirms if unsaved
  */
-import { useState, useMemo } from 'react'
-import { Download, Pencil, Upload, X, AlertCircle } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Download, Pencil, Upload, AlertCircle, Check } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import {
@@ -42,185 +31,278 @@ import {
   detectConflicts,
   countAllConflicts,
   type DayType,
-  type TimetableFormState,
   type TimetableSlot,
   type TimetableChange,
 } from './timetable-store'
 import { teachers } from '@/lib/mock/teachers'
-import { initialFormState } from './data'
+import { PERIODS, type TimetableSlot as Slot } from './data'
 import { toast } from 'sonner'
 import { OverviewCards } from './overview-cards'
 import { FiltersBar } from './filters-bar'
 import { ScheduleGrid } from './schedule-grid'
-import { SlotEditorDialog } from './slot-editor-dialog'
+import { SlotEditorDialog, type MinimalSlotForm } from './slot-editor-dialog'
 import { PublishDialog } from './publish-dialog'
 import { ConfirmDialog } from '../shared/confirm-dialog'
-import { Trash2 } from 'lucide-react'
+import { Trash2, AlertTriangle } from 'lucide-react'
 
 export function TimetableModule() {
   // ── Store subscriptions ──
   const slots = useTimetableStore((s) => s.slots)
   const pendingChanges = useTimetableStore((s) => s.pendingChanges)
   const publications = useTimetableStore((s) => s.publications)
-  const addSlot = useTimetableStore((s) => s.addSlot)
-  const updateSlot = useTimetableStore((s) => s.updateSlot)
-  const removeSlot = useTimetableStore((s) => s.removeSlot)
-  const duplicateSlot = useTimetableStore((s) => s.duplicateSlot)
+  const addSlotAction = useTimetableStore((s) => s.addSlot)
+  const updateSlotAction = useTimetableStore((s) => s.updateSlot)
+  const removeSlotAction = useTimetableStore((s) => s.removeSlot)
   const recordChange = useTimetableStore((s) => s.recordChange)
   const publish = useTimetableStore((s) => s.publish)
+
+  // ── Draft state (local — only mutated during edit mode) ──
+  const [draftSlots, setDraftSlots] = useState<Slot[]>(slots)
+  const [editMode, setEditMode] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
   // ── UI state ──
   const [selectedClass, setSelectedClass] = useState<string>('Class 2-A')
   const [selectedTeacher, setSelectedTeacher] = useState<string>('all')
   const [selectedRoom, setSelectedRoom] = useState<string>('all')
   const [selectedDay, setSelectedDay] = useState<DayType>('Monday')
-
-  const [editMode, setEditMode] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
-  const [editingSlot, setEditingSlot] = useState<TimetableSlot | null>(null)
-  const [form, setForm] = useState<TimetableFormState>(initialFormState)
-  const [removeTarget, setRemoveTarget] = useState<TimetableSlot | null>(null)
+  const [editingSlot, setEditingSlot] = useState<{ id: string; subject: string; teacherId: string } | null>(null)
+  const [editorContext, setEditorContext] = useState({ day: 'Monday' as DayType, period: 1, periodName: 'Period 1', time: '08:30 AM - 09:15 AM', className: 'Class 2-A', room: 'Room 102' })
+  const [minimalForm, setMinimalForm] = useState<MinimalSlotForm>({ subject: '', teacherId: '' })
+  const [removeTarget, setRemoveTarget] = useState<Slot | null>(null)
+  const [discardOpen, setDiscardOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
 
+  // Sync draft when entering edit mode
+  useEffect(() => {
+    if (editMode) {
+      setDraftSlots(slots)
+      setHasUnsavedChanges(false)
+    }
+  }, [editMode, slots])
+
   // ── Derived state ──
+  // In edit mode, display draftSlots; otherwise display store slots
+  const displaySlots = editMode ? draftSlots : slots
+
   const conflictInfo = useMemo(
-    () => detectConflicts(slots, form, editingSlot?.id),
-    [slots, form, editingSlot]
+    () => {
+      // For the editor: check against draftSlots (not the store)
+      if (!editorOpen) return { hasConflict: false, teacherConflict: undefined, roomConflict: undefined, classConflict: undefined }
+      const ctx = editorContext
+      return detectConflicts(draftSlots, {
+        day: ctx.day,
+        period: ctx.period,
+        teacherId: minimalForm.teacherId,
+        room: ctx.room,
+        className: ctx.className,
+      }, editingSlot?.id)
+    },
+    [draftSlots, editorOpen, editorContext, minimalForm, editingSlot]
   )
 
   const filteredSlots = useMemo(() => {
-    return slots.filter((s) => {
+    return displaySlots.filter((s) => {
       const matchClass = selectedClass === 'all' || s.className === selectedClass
       const matchTeacher = selectedTeacher === 'all' || s.teacherId === selectedTeacher
       const matchRoom = selectedRoom === 'all' || s.room === selectedRoom
       return matchClass && matchTeacher && matchRoom
     })
-  }, [slots, selectedClass, selectedTeacher, selectedRoom])
+  }, [displaySlots, selectedClass, selectedTeacher, selectedRoom])
 
-  const globalConflictCount = useMemo(() => countAllConflicts(slots), [slots])
+  const globalConflictCount = useMemo(() => countAllConflicts(displaySlots), [displaySlots])
   const hasPendingPublish = pendingChanges.length > 0
 
   // ── Handlers ──
-  const handleOpenAdd = (day?: DayType, period?: number) => {
+  const handleEnterEdit = () => {
+    setDraftSlots(slots)
+    setHasUnsavedChanges(false)
+    setEditMode(true)
+  }
+
+  const handleExitEdit = () => {
+    if (hasUnsavedChanges) {
+      setDiscardOpen(true)
+    } else {
+      setEditMode(false)
+    }
+  }
+
+  const handleDiscard = () => {
+    setDraftSlots(slots)
+    setHasUnsavedChanges(false)
+    setEditMode(false)
+    setDiscardOpen(false)
+    setEditorOpen(false)
     setEditingSlot(null)
-    const next = { ...initialFormState }
-    if (day) next.day = day
-    if (period) next.period = period
-    if (selectedClass !== 'all') next.className = selectedClass
-    setForm(next)
+  }
+
+  const handleApplyChanges = () => {
+    // Commit draftSlots to the store + record changes
+    // Compare draftSlots with slots to detect what changed
+    const changes: Omit<TimetableChange, 'id' | 'publishedAt'>[] = []
+
+    // Detect added/modified slots
+    for (const draftSlot of draftSlots) {
+      const original = slots.find((s) => s.id === draftSlot.id)
+      if (!original) {
+        // New slot
+        changes.push({
+          slotId: draftSlot.id,
+          type: 'slot_added',
+          summary: `New period: ${draftSlot.subject}`,
+          context: `${draftSlot.className} · ${draftSlot.day} Period ${draftSlot.period}`,
+          changeLabel: `+ ${draftSlot.subject}`,
+        })
+      } else {
+        // Check for field changes
+        const teacherObj = teachers.find((t) => t.id === draftSlot.teacherId)
+        const newTeacherName = teacherObj?.name || draftSlot.teacherName
+        if (original.teacherId !== draftSlot.teacherId) {
+          const oldTeacher = teachers.find((t) => t.id === original.teacherId)
+          changes.push({
+            slotId: draftSlot.id, type: 'teacher_changed', summary: 'Teacher changed',
+            context: `${draftSlot.className} · Period ${draftSlot.period}`,
+            oldValue: original.teacherName, newValue: newTeacherName,
+            changeLabel: `${original.teacherName} → ${newTeacherName}`,
+          })
+        }
+        if (original.subject !== draftSlot.subject) {
+          changes.push({
+            slotId: draftSlot.id, type: 'subject_changed', summary: 'Subject changed',
+            context: `${draftSlot.className} · Period ${draftSlot.period}`,
+            oldValue: original.subject, newValue: draftSlot.subject,
+            changeLabel: `${original.subject} → ${draftSlot.subject}`,
+          })
+        }
+        if (original.room !== draftSlot.room) {
+          changes.push({
+            slotId: draftSlot.id, type: 'room_changed', summary: 'Room changed',
+            context: `${draftSlot.className} · Period ${draftSlot.period}`,
+            oldValue: original.room, newValue: draftSlot.room,
+            changeLabel: `${original.room} → ${draftSlot.room}`,
+          })
+        }
+        if (original.period !== draftSlot.period) {
+          changes.push({
+            slotId: draftSlot.id, type: 'period_changed', summary: 'Period changed',
+            context: draftSlot.className,
+            oldValue: `P${original.period}`, newValue: `P${draftSlot.period}`,
+            changeLabel: `P${original.period} → P${draftSlot.period}`,
+          })
+        }
+      }
+    }
+
+    // Detect removed slots
+    for (const original of slots) {
+      if (!draftSlots.find((s) => s.id === original.id)) {
+        changes.push({
+          slotId: original.id, type: 'slot_removed', summary: `Period removed: ${original.subject}`,
+          context: `${original.className} · ${original.day} Period ${original.period}`,
+          changeLabel: `− ${original.subject}`,
+        })
+      }
+    }
+
+    // Commit to store: replace slots with draftSlots
+    // We do this by removing all old slots and adding all draft slots
+    // But since we can't replace all at once, we'll use a batch approach
+    for (const oldSlot of slots) {
+      if (!draftSlots.find((s) => s.id === oldSlot.id)) {
+        removeSlotAction(oldSlot.id)
+      }
+    }
+    for (const draftSlot of draftSlots) {
+      const original = slots.find((s) => s.id === draftSlot.id)
+      if (!original) {
+        addSlotAction(draftSlot)
+      } else if (JSON.stringify(original) !== JSON.stringify(draftSlot)) {
+        updateSlotAction(draftSlot.id, draftSlot)
+      }
+    }
+
+    // Record changes
+    for (const change of changes) {
+      recordChange(change)
+    }
+
+    setEditMode(false)
+    setHasUnsavedChanges(false)
+    toast.success('Changes applied', {
+      description: changes.length > 0 ? `${changes.length} change${changes.length === 1 ? '' : 's'} ready to publish` : undefined,
+    })
+  }
+
+  const handleOpenAssign = (day: DayType, period: number, className: string) => {
+    const periodObj = PERIODS.find((p) => p.number === period)
+    // Auto-derive room from existing class slots
+    const existingClassSlot = draftSlots.find((s) => s.className === className)
+    const room = existingClassSlot?.room || 'Room 102'
+    setEditorContext({
+      day, period,
+      periodName: periodObj?.name || `Period ${period}`,
+      time: periodObj?.time || '08:30 AM - 09:15 AM',
+      className, room,
+    })
+    setEditingSlot(null)
+    setMinimalForm({ subject: '', teacherId: '' })
     setEditorOpen(true)
   }
 
-  const handleEditSlot = (slot: TimetableSlot) => {
-    setEditingSlot(slot)
-    setForm({
-      day: slot.day,
-      period: slot.period,
-      className: slot.className,
-      subject: slot.subject,
-      teacherId: slot.teacherId,
-      room: slot.room,
-      type: slot.type as 'Lecture' | 'Lab' | 'Sports',
+  const handleEditSlot = (slot: Slot) => {
+    const periodObj = PERIODS.find((p) => p.number === slot.period)
+    setEditorContext({
+      day: slot.day, period: slot.period,
+      periodName: periodObj?.name || `Period ${slot.period}`,
+      time: slot.time, className: slot.className, room: slot.room,
     })
+    setEditingSlot({ id: slot.id, subject: slot.subject, teacherId: slot.teacherId })
+    setMinimalForm({ subject: slot.subject, teacherId: slot.teacherId })
     setEditorOpen(true)
-  }
-
-  const handleDuplicateSlot = (slot: TimetableSlot) => {
-    duplicateSlot(slot.id)
-    toast.success('Slot duplicated', {
-      description: `${slot.subject} · ${slot.className} (${slot.day} P${slot.period})`,
-    })
   }
 
   const handleSaveSlot = () => {
-    if (conflictInfo.hasConflict) {
-      toast.error('Cannot save — conflict detected')
-      return
-    }
-    const periodObj = [
-      { number: 1, time: '08:30 AM - 09:15 AM' },
-      { number: 2, time: '09:15 AM - 10:00 AM' },
-      { number: 3, time: '10:00 AM - 10:45 AM' },
-      { number: 5, time: '11:00 AM - 11:45 AM' },
-      { number: 6, time: '11:45 AM - 12:30 PM' },
-      { number: 8, time: '01:15 PM - 02:00 PM' },
-      { number: 9, time: '02:00 PM - 02:45 PM' },
-    ].find((p) => p.number === form.period)
+    if (conflictInfo.hasConflict) return
 
-    const teacherObj = teachers.find((t) => t.id === form.teacherId)
+    const teacherObj = teachers.find((t) => t.id === minimalForm.teacherId)
     const teacherName = teacherObj?.name || 'Assigned Faculty'
+    const periodObj = PERIODS.find((p) => p.number === editorContext.period)
 
     if (editingSlot) {
-      // Detect what changed for the change record
-      const changes: Partial<Record<'teacher' | 'room' | 'period' | 'subject' | 'class', { from: string; to: string }>> = {}
-      if (editingSlot.teacherId !== form.teacherId) changes.teacher = { from: editingSlot.teacherName, to: teacherName }
-      if (editingSlot.room !== form.room) changes.room = { from: editingSlot.room, to: form.room }
-      if (editingSlot.period !== form.period) changes.period = { from: `Period ${editingSlot.period}`, to: `Period ${form.period}` }
-      if (editingSlot.subject !== form.subject) changes.subject = { from: editingSlot.subject, to: form.subject }
-      if (editingSlot.className !== form.className) changes.class = { from: editingSlot.className, to: form.className }
-
-      updateSlot(editingSlot.id, {
-        day: form.day,
-        period: form.period,
-        time: periodObj?.time || editingSlot.time,
-        className: form.className,
-        subject: form.subject,
-        teacherId: form.teacherId,
-        teacherName,
-        room: form.room,
-        type: form.type,
-      })
-
-      // Record changes for pending publish
-      if (changes.teacher) recordChange({ slotId: editingSlot.id, type: 'teacher_changed', summary: `Teacher changed: ${changes.teacher.from} → ${changes.teacher.to}`, context: `${form.className} · Period ${form.period}` })
-      if (changes.room) recordChange({ slotId: editingSlot.id, type: 'room_changed', summary: `Room changed: ${changes.room.from} → ${changes.room.to}`, context: `${form.className} · Period ${form.period}` })
-      if (changes.period) recordChange({ slotId: editingSlot.id, type: 'period_changed', summary: `Period changed: ${changes.period.from} → ${changes.period.to}`, context: form.className })
-      if (changes.subject) recordChange({ slotId: editingSlot.id, type: 'subject_changed', summary: `Subject changed: ${changes.subject.from} → ${changes.subject.to}`, context: form.className })
-      if (changes.class) recordChange({ slotId: editingSlot.id, type: 'class_changed', summary: `Class changed: ${changes.class.from} → ${changes.class.to}`, context: `Period ${form.period}` })
-
-      toast.success('Timetable slot updated')
+      // Update existing slot in draft
+      setDraftSlots((prev) => prev.map((s) =>
+        s.id === editingSlot.id
+          ? { ...s, subject: minimalForm.subject, teacherId: minimalForm.teacherId, teacherName }
+          : s
+      ))
     } else {
-      const newSlotId = `tt-${Date.now().toString().slice(-6)}`
-      const newSlot: TimetableSlot = {
-        id: newSlotId,
-        day: form.day,
-        period: form.period,
-        time: periodObj?.time || '08:30 AM - 09:15 AM',
-        className: form.className,
-        subject: form.subject,
-        teacherId: form.teacherId,
+      // Add new slot to draft
+      const newSlot: Slot = {
+        id: `tt-${Date.now().toString().slice(-6)}`,
+        day: editorContext.day,
+        period: editorContext.period,
+        time: periodObj?.time || editorContext.time,
+        className: editorContext.className,
+        subject: minimalForm.subject,
+        teacherId: minimalForm.teacherId,
         teacherName,
-        room: form.room,
-        type: form.type,
+        room: editorContext.room,
+        type: 'Lecture',
       }
-      addSlot(newSlot)
-      recordChange({ slotId: newSlotId, type: 'slot_added', summary: `New period: ${form.subject}`, context: `${form.className} · Period ${form.period}` })
-      toast.success('New period added', {
-        description: `${form.className} · ${form.subject} (${form.day} P${form.period})`,
-      })
+      setDraftSlots((prev) => [...prev, newSlot])
     }
+
+    setHasUnsavedChanges(true)
     setEditorOpen(false)
   }
 
   const handleRemoveSlot = () => {
     if (!removeTarget) return
-    recordChange({ slotId: removeTarget.id, type: 'slot_removed', summary: `Period removed: ${removeTarget.subject}`, context: `${removeTarget.className} · ${removeTarget.day} Period ${removeTarget.period}` })
-    removeSlot(removeTarget.id)
-    toast.success('Period removed')
+    setDraftSlots((prev) => prev.filter((s) => s.id !== removeTarget.id))
+    setHasUnsavedChanges(true)
     setRemoveTarget(null)
-  }
-
-  const handleEnterEdit = () => {
-    setEditMode(true)
-    setForm(initialFormState)
-  }
-
-  const handleExitEdit = () => {
-    // Cancel: discard only UNSAVED edits (Brief section 32).
-    // Saved pending publish changes remain in the store.
-    setEditMode(false)
-    setEditorOpen(false)
-    setEditingSlot(null)
   }
 
   const handlePublish = () => {
@@ -233,7 +315,6 @@ export function TimetableModule() {
       toast.success('Timetable published', {
         description: `${version.changeCount} change${version.changeCount === 1 ? '' : 's'} shared with affected users`,
       })
-      setEditMode(false)
       setPublishOpen(false)
     }
   }
@@ -265,31 +346,44 @@ export function TimetableModule() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => handleExport('class')} className="text-xs">
-                Class timetable
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('teacher')} className="text-xs">
-                Teacher timetable
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('master')} className="text-xs">
-                Master timetable
-              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('class')} className="text-xs">Class timetable</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('teacher')} className="text-xs">Teacher timetable</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('master')} className="text-xs">Master timetable</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           {editMode ? (
             <>
-              <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleExitEdit}>
-                Cancel
-              </Button>
-              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1 px-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Editing
-              </span>
+              {hasUnsavedChanges ? (
+                <>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleExitEdit}>Cancel</Button>
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={handleApplyChanges}
+                    disabled={globalConflictCount > 0}
+                  >
+                    <Check className="h-3.5 w-3.5" /> Apply Changes
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleExitEdit}>Cancel</Button>
+                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1 px-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Editing
+                  </span>
+                </>
+              )}
+              {globalConflictCount > 0 && hasUnsavedChanges && (
+                <span className="text-[10px] text-rose-600 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {globalConflictCount} conflict{globalConflictCount === 1 ? '' : 's'}
+                </span>
+              )}
             </>
           ) : hasPendingPublish ? (
             <>
-              {/* Publish action appears after save (Brief section 11 + 27) */}
               <Button
                 size="sm"
                 className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -303,12 +397,6 @@ export function TimetableModule() {
                   </span>
                 )}
               </Button>
-              {globalConflictCount > 0 && (
-                <span className="text-[10px] text-rose-600 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  {globalConflictCount} conflict{globalConflictCount === 1 ? '' : 's'}
-                </span>
-              )}
               <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" onClick={handleEnterEdit}>
                 <Pencil className="h-3.5 w-3.5" /> Edit
               </Button>
@@ -321,19 +409,19 @@ export function TimetableModule() {
         </div>
       </div>
 
-      {/* Pending publish banner (Brief section 29) */}
+      {/* Pending publish banner */}
       {hasPendingPublish && !editMode && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs font-medium text-foreground">
-              {pendingChanges.length} change{pendingChanges.length === 1 ? '' : 's'} ready to publish
+              {pendingChanges.length} timetable change{pendingChanges.length === 1 ? '' : 's'} ready to publish
             </span>
           </div>
         </div>
       )}
 
-      <OverviewCards slots={slots} conflictCount={globalConflictCount} />
+      <OverviewCards slots={displaySlots} conflictCount={globalConflictCount} />
 
       <FiltersBar
         selectedClass={selectedClass}
@@ -353,18 +441,29 @@ export function TimetableModule() {
         editMode={editMode}
         publications={publications}
         onEditSlot={handleEditSlot}
-        onDuplicateSlot={handleDuplicateSlot}
+        onDuplicateSlot={(slot) => {
+          // Duplicate in draft
+          const newSlot = { ...slot, id: `tt-${Date.now().toString().slice(-6)}` }
+          setDraftSlots((prev) => [...prev, newSlot])
+          setHasUnsavedChanges(true)
+          toast.success('Slot duplicated')
+        }}
         onRemoveSlot={(slot) => setRemoveTarget(slot)}
-        onAssignPeriod={handleOpenAdd}
+        onAssignPeriod={(day, period) => {
+          // Derive className from selectedClass filter
+          const className = selectedClass !== 'all' ? selectedClass : 'Class 2-A'
+          handleOpenAssign(day, period, className)
+        }}
       />
 
-      {/* Contextual slot editor (Dialog — handles nested searchable selects) */}
+      {/* Minimal slot editor */}
       <SlotEditorDialog
         open={editorOpen}
         onOpenChange={setEditorOpen}
+        context={editorContext}
         editingSlot={editingSlot}
-        form={form}
-        setForm={setForm}
+        form={minimalForm}
+        setForm={setMinimalForm}
         conflictInfo={conflictInfo}
         onSave={handleSaveSlot}
       />
@@ -374,11 +473,23 @@ export function TimetableModule() {
         open={!!removeTarget}
         onOpenChange={(o) => !o && setRemoveTarget(null)}
         title="Remove this period?"
-        description={`${removeTarget?.subject} · ${removeTarget?.className} · ${removeTarget?.day} Period ${removeTarget?.period}. This will remove the assignment from the master timetable.`}
+        description={`${removeTarget?.subject} · ${removeTarget?.className} · ${removeTarget?.day} Period ${removeTarget?.period}.`}
         tone="destructive"
         icon={Trash2}
         confirmLabel="Remove"
         onConfirm={handleRemoveSlot}
+      />
+
+      {/* Discard changes confirmation */}
+      <ConfirmDialog
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+        title="Discard changes?"
+        description="Your unsaved timetable edits will be lost."
+        tone="destructive"
+        icon={AlertTriangle}
+        confirmLabel="Discard"
+        onConfirm={handleDiscard}
       />
 
       {/* Publish confirmation */}
