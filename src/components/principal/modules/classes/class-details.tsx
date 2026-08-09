@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ArrowLeft, Layers, Users, BookOpen, MapPin, LayoutGrid, List } from 'lucide-react'
+import { ArrowLeft, LayoutGrid, List } from 'lucide-react'
 import { PageTransition, GradientAvatar } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { getVirtualOccupied } from '@/lib/store/students-store'
+import { getVirtualOccupied, useStudentsStore } from '@/lib/store/students-store'
 import type { ClassRecord, StudentRecord } from '@/lib/store/students-store'
 import { formatINR } from '@/lib/format'
 import { SegmentedTabs } from '../shared/segmented-tabs'
@@ -18,9 +18,14 @@ export function ClassDetailsPage({ cls, onBack, store, onStudentClick }: {
   cls: ClassRecord; onBack: () => void; store: any; onStudentClick?: (s: StudentRecord) => void
 }) {
   const [detailTab, setDetailTab] = useState('overview')
-  const students = useMemo(() => store.students.filter((s: any) => s.classId === cls.id), [store.students, cls.id])
-  const cap = cls.capacity * cls.sections.length
-  const enr = cls.sections.reduce((a, s) => a + getVirtualOccupied(s.id, s.capacity), 0)
+  // Subscribe to the canonical class so the header badges (subject count,
+  // occupancy, etc.) reflect mutations performed by the children tabs.
+  // Brief section 22 (Real data persistence) + section 33 (Subject archive
+  // must actually work) — the header is part of the same surface.
+  const liveClass = useStudentsStore((s) => s.getClassById(cls.id)) ?? cls
+  const students = useMemo(() => store.students.filter((s: any) => s.classId === liveClass.id), [store.students, liveClass.id])
+  const cap = liveClass.capacity * liveClass.sections.length
+  const enr = liveClass.sections.reduce((a, s) => a + getVirtualOccupied(s.id, s.capacity), 0)
   const pct = cap > 0 ? Math.round((enr / cap) * 100) : 0
 
   return (
@@ -28,24 +33,24 @@ export function ClassDetailsPage({ cls, onBack, store, onStudentClick }: {
       <div className="flex items-center gap-3 mb-4">
         <Button variant="ghost" size="sm" onClick={onBack} className="h-8 px-2 text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Button>
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-semibold text-sm">{cls.name.replace('Class ', 'C').replace('Pre-', 'P').slice(0, 3)}</div>
-          <div className="min-w-0"><h1 className="text-xl font-semibold tracking-tight text-foreground truncate">{cls.name}</h1><p className="text-xs text-muted-foreground truncate">{cls.level} · {cls.sections.length} sections · Room {cls.room}</p></div>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-semibold text-sm">{liveClass.name.replace('Class ', 'C').replace('Pre-', 'P').slice(0, 3)}</div>
+          <div className="min-w-0"><h1 className="text-xl font-semibold tracking-tight text-foreground truncate">{liveClass.name}</h1><p className="text-xs text-muted-foreground truncate">{liveClass.level} · {liveClass.sections.length} sections · Room {liveClass.room}</p></div>
         </div>
         <SegmentedTabs tabs={[{ value: 'overview', label: 'Overview' }, { value: 'students', label: 'Students', badge: students.length }, { value: 'subjects', label: 'Subjects' }, { value: 'teachers', label: 'Teachers' }]} value={detailTab} onValueChange={setDetailTab} />
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4">
-        <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px]">{cls.level}</Badge>
-        <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px]">{cls.sections.length} sections</Badge>
+        <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px]">{liveClass.level}</Badge>
+        <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px]">{liveClass.sections.length} sections</Badge>
         <Badge variant="secondary" className={cn('text-[10px]', pct >= 90 ? 'bg-amber-500/10 text-amber-700' : 'bg-emerald-500/10 text-emerald-700')}>{pct}% full</Badge>
-        <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px]">{cls.subjects.length} subjects</Badge>
+        <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px]">{liveClass.subjects.length} subjects</Badge>
       </div>
 
       <div className="space-y-4">
-        {detailTab === 'overview' && <ClassOverview cls={cls} />}
-        {detailTab === 'students' && <ClassStudentsTab students={students} cls={cls} onStudentClick={onStudentClick} />}
-        {detailTab === 'subjects' && <ClassSubjects cls={cls} />}
-        {detailTab === 'teachers' && <ClassTeachers cls={cls} />}
+        {detailTab === 'overview' && <ClassOverview cls={liveClass} />}
+        {detailTab === 'students' && <ClassStudentsTab students={students} cls={liveClass} onStudentClick={onStudentClick} />}
+        {detailTab === 'subjects' && <ClassSubjects cls={liveClass} />}
+        {detailTab === 'teachers' && <ClassTeachers cls={liveClass} />}
       </div>
     </PageTransition>
   )

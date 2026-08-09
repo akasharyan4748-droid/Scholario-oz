@@ -144,6 +144,14 @@ export interface StudentsState {
   executePromotion: (id: string, by: string) => void
   addHousePoints: (id: string, pts: number) => void
   assignHouseCaptain: (id: string, sid: string, role: 'captain' | 'vice') => void
+  /** Replace the class-level Class Teacher. Pass null/undefined to clear. */
+  updateClassTeacher: (classId: string, teacherId: string | null) => void
+  /** Replace a section's Class Teacher. Pass null/undefined to clear. */
+  updateSectionTeacher: (classId: string, sectionId: string, teacherId: string | null) => void
+  /** Add a subject to a class (no-op if already allocated). */
+  addClassSubject: (classId: string, subject: string) => void
+  /** Archive a subject from a class — removes it from active allocation. */
+  archiveClassSubject: (classId: string, subject: string) => void
   getStudentById: (id: string) => StudentRecord | undefined
   getClassById: (id: string) => ClassRecord | undefined
   getClassStudents: (classId: string) => StudentRecord[]

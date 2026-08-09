@@ -65,6 +65,38 @@ export const useStudentsStore = create<StudentsState>()((set, get) => ({
   assignHouseCaptain: (id, sid, role) => {
     set((state) => ({ houses: state.houses.map((h) => h.id === id ? (role === 'captain' ? { ...h, captainId: sid } : { ...h, viceCaptainId: sid }) : h) }))
   },
+  updateClassTeacher: (classId, teacherId) => {
+    set((state) => ({
+      classes: state.classes.map((c) =>
+        c.id === classId ? { ...c, classTeacherId: teacherId ?? '' } : c
+      ),
+    }))
+  },
+  updateSectionTeacher: (classId, sectionId, teacherId) => {
+    set((state) => ({
+      classes: state.classes.map((c) =>
+        c.id === classId
+          ? { ...c, sections: c.sections.map((s) => s.id === sectionId ? { ...s, classTeacherId: teacherId ?? undefined } : s) }
+          : c
+      ),
+    }))
+  },
+  addClassSubject: (classId, subject) => {
+    set((state) => ({
+      classes: state.classes.map((c) =>
+        c.id === classId && !c.subjects.includes(subject)
+          ? { ...c, subjects: [...c.subjects, subject] }
+          : c
+      ),
+    }))
+  },
+  archiveClassSubject: (classId, subject) => {
+    set((state) => ({
+      classes: state.classes.map((c) =>
+        c.id === classId ? { ...c, subjects: c.subjects.filter((s) => s !== subject) } : c
+      ),
+    }))
+  },
   getStudentById: (id) => get().students.find((s) => s.id === id),
   getClassById: (id) => get().classes.find((c) => c.id === id),
   getClassStudents: (classId) => get().students.filter((s) => s.classId === classId && s.status === 'Active'),
