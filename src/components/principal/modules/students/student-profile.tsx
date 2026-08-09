@@ -18,6 +18,7 @@ import {
   DocumentsTab, MedicalTab, ParentsTab, TransportTab,
   DisciplineTab, TimelineTab,
 } from './profile-tabs'
+import { StudentIdentityCodes } from './profile/identity-codes'
 
 interface Props {
   student: StudentRecord | null
@@ -108,7 +109,12 @@ export function StudentProfileSheet({ student, open, onOpenChange, onArchive, on
 
         {/* Tab Content — proper React conditional rendering */}
         <div className="flex-1 overflow-y-auto p-4 pb-6">
-          {activeTab === 'overview' && <OverviewTab student={student} />}
+          {activeTab === 'overview' && (
+            <div className="space-y-4">
+              <OverviewTab student={student} />
+              <StudentIdentityCodes student={student} />
+            </div>
+          )}
           {activeTab === 'academics' && <AcademicsTab student={student} />}
           {activeTab === 'attendance' && <AttendanceTab student={student} />}
           {activeTab === 'fees' && <FeesTab student={student} />}
