@@ -77,6 +77,7 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
   const [scope, setScope] = useState<string>('all')
   const [schoolStart, setSchoolStart] = useState('08:30 AM')
   const [schoolEnd, setSchoolEnd] = useState('02:45 PM')
+  const [numPeriods, setNumPeriods] = useState(7)
   const [generating, setGenerating] = useState(false)
 
   const activeTeachers = teachers.filter((t) => !t.archived && t.status === 'Active')
@@ -90,15 +91,10 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
     const endMin = timeToMinutes(schoolEnd)
     const totalMin = endMin - startMin
 
-    // Count periods and breaks from current structure
-    const periodRows = PERIODS.filter((p) => !p.isBreak)
+    // Use editable numPeriods + existing break structure
     const breakRows = PERIODS.filter((p) => p.isBreak)
-    const numPeriods = periodRows.length
-    const numBreaks = breakRows.length
-
-    // Distribute time: breaks get 15 min each, periods share the rest
-    const breakDuration = 15 // minutes per break (Short Break)
-    const lunchDuration = 45 // minutes for Lunch Break
+    const breakDuration = 15
+    const lunchDuration = 45
     const breakTimeTotal = breakRows.reduce((sum, b) => {
       const isLunch = b.name === 'Lunch Break'
       return sum + (isLunch ? lunchDuration : breakDuration)
@@ -106,18 +102,27 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
     const instructionalTime = totalMin - breakTimeTotal
     const periodDuration = Math.floor(instructionalTime / numPeriods)
 
-    // Build the row timing structure
+    // Build row timings: interleave periods and breaks based on existing break positions
     const rowTimings: { number: number; isBreak: boolean; breakType?: 'short' | 'lunch'; startTime: number; endTime: number }[] = []
     let currentTime = startMin
-    for (const p of PERIODS) {
-      if (p.isBreak) {
-        const isLunch = p.name === 'Lunch Break'
-        const duration = isLunch ? lunchDuration : breakDuration
-        rowTimings.push({ number: p.number, isBreak: true, breakType: isLunch ? 'lunch' : 'short', startTime: currentTime, endTime: currentTime + duration })
-        currentTime += duration
-      } else {
-        rowTimings.push({ number: p.number, isBreak: false, startTime: currentTime, endTime: currentTime + periodDuration })
-        currentTime += periodDuration
+    let periodCounter = 0
+    // Build a template: periods interleaved with breaks at sensible positions
+    // Place Short Break after ~1/3 of periods, Lunch Break after ~2/3
+    const shortBreakAfter = Math.floor(numPeriods / 3)
+    const lunchBreakAfter = Math.floor(numPeriods * 2 / 3)
+    for (let i = 0; i < numPeriods; i++) {
+      periodCounter++
+      rowTimings.push({ number: periodCounter, isBreak: false, startTime: currentTime, endTime: currentTime + periodDuration })
+      currentTime += periodDuration
+      // Insert Short Break after the right period
+      if (i === shortBreakAfter - 1 && breakRows.some(b => b.name === 'Short Break')) {
+        rowTimings.push({ number: 100, isBreak: true, breakType: 'short', startTime: currentTime, endTime: currentTime + breakDuration })
+        currentTime += breakDuration
+      }
+      // Insert Lunch Break after the right period
+      if (i === lunchBreakAfter - 1 && breakRows.some(b => b.name === 'Lunch Break')) {
+        rowTimings.push({ number: 101, isBreak: true, breakType: 'lunch', startTime: currentTime, endTime: currentTime + lunchDuration })
+        currentTime += lunchDuration
       }
     }
 
@@ -271,17 +276,34 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
             </div>
           </div>
 
-          {/* Structure (read-only) */}
+          {/* Number of Periods (editable) */}
           <div className="space-y-1">
-            <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Structure</label>
+            <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Number of periods</label>
+            <input
+              type="number"
+              min={1}
+              max={12}
+              value={numPeriods}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10)
+                if (!isNaN(v) && v >= 1 && v <= 12) setNumPeriods(v)
+              }}
+              className="h-8 w-full px-2.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+
+          {/* Break structure (read-only context) */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Breaks</label>
             <div className="h-8 px-2.5 flex items-center rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground">
-              {PERIODS.filter((p) => !p.isBreak).length} periods · {PERIODS.filter((p) => p.isBreak).length} breaks
+              {PERIODS.filter((p) => p.isBreak).length} breaks (Short + Lunch)
             </div>
           </div>
 
           {/* Summary stats */}
-          <div className="grid grid-cols-3 gap-2 pt-1">
+          <div className="grid grid-cols-4 gap-2 pt-1">
             <Stat label="Classes" value={targetClasses.length} />
+            <Stat label="Periods" value={numPeriods} />
             <Stat label="Subjects" value={subjects.length} />
             <Stat label="Teachers" value={activeTeachers.length} />
           </div>
