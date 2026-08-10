@@ -78,6 +78,8 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
   const [schoolStart, setSchoolStart] = useState('08:30 AM')
   const [schoolEnd, setSchoolEnd] = useState('02:45 PM')
   const [numPeriods, setNumPeriods] = useState(7)
+  const [numPeriodsInput, setNumPeriodsInput] = useState('7')
+  const [breakMode, setBreakMode] = useState<'none' | 'short' | 'lunch' | 'both'>('both')
   const [generating, setGenerating] = useState(false)
 
   const activeTeachers = teachers.filter((t) => !t.archived && t.status === 'Active')
@@ -91,36 +93,30 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
     const endMin = timeToMinutes(schoolEnd)
     const totalMin = endMin - startMin
 
-    // Use editable numPeriods + existing break structure
-    const breakRows = PERIODS.filter((p) => p.isBreak)
+    // Use editable numPeriods + configurable break structure
+    const includeShort = breakMode === 'short' || breakMode === 'both'
+    const includeLunch = breakMode === 'lunch' || breakMode === 'both'
     const breakDuration = 15
     const lunchDuration = 45
-    const breakTimeTotal = breakRows.reduce((sum, b) => {
-      const isLunch = b.name === 'Lunch Break'
-      return sum + (isLunch ? lunchDuration : breakDuration)
-    }, 0)
+    const breakTimeTotal = (includeShort ? breakDuration : 0) + (includeLunch ? lunchDuration : 0)
     const instructionalTime = totalMin - breakTimeTotal
     const periodDuration = Math.floor(instructionalTime / numPeriods)
 
-    // Build row timings: interleave periods and breaks based on existing break positions
+    // Build row timings: interleave periods and breaks
     const rowTimings: { number: number; isBreak: boolean; breakType?: 'short' | 'lunch'; startTime: number; endTime: number }[] = []
     let currentTime = startMin
     let periodCounter = 0
-    // Build a template: periods interleaved with breaks at sensible positions
-    // Place Short Break after ~1/3 of periods, Lunch Break after ~2/3
     const shortBreakAfter = Math.floor(numPeriods / 3)
     const lunchBreakAfter = Math.floor(numPeriods * 2 / 3)
     for (let i = 0; i < numPeriods; i++) {
       periodCounter++
       rowTimings.push({ number: periodCounter, isBreak: false, startTime: currentTime, endTime: currentTime + periodDuration })
       currentTime += periodDuration
-      // Insert Short Break after the right period
-      if (i === shortBreakAfter - 1 && breakRows.some(b => b.name === 'Short Break')) {
+      if (i === shortBreakAfter - 1 && includeShort) {
         rowTimings.push({ number: 100, isBreak: true, breakType: 'short', startTime: currentTime, endTime: currentTime + breakDuration })
         currentTime += breakDuration
       }
-      // Insert Lunch Break after the right period
-      if (i === lunchBreakAfter - 1 && breakRows.some(b => b.name === 'Lunch Break')) {
+      if (i === lunchBreakAfter - 1 && includeLunch) {
         rowTimings.push({ number: 101, isBreak: true, breakType: 'lunch', startTime: currentTime, endTime: currentTime + lunchDuration })
         currentTime += lunchDuration
       }
@@ -276,28 +272,44 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
             </div>
           </div>
 
-          {/* Number of Periods (editable) */}
+          {/* Number of Periods (truly editable) */}
           <div className="space-y-1">
             <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Number of periods</label>
             <input
               type="number"
               min={1}
               max={12}
-              value={numPeriods}
+              value={numPeriodsInput}
               onChange={(e) => {
-                const v = parseInt(e.target.value, 10)
+                const raw = e.target.value
+                setNumPeriodsInput(raw)
+                const v = parseInt(raw, 10)
                 if (!isNaN(v) && v >= 1 && v <= 12) setNumPeriods(v)
+              }}
+              onBlur={() => {
+                const v = parseInt(numPeriodsInput, 10)
+                if (isNaN(v) || v < 1) { setNumPeriods(1); setNumPeriodsInput('1') }
+                else if (v > 12) { setNumPeriods(12); setNumPeriodsInput('12') }
+                else setNumPeriods(v)
               }}
               className="h-8 w-full px-2.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
 
-          {/* Break structure (read-only context) */}
+          {/* Breaks (configurable) */}
           <div className="space-y-1">
             <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Breaks</label>
-            <div className="h-8 px-2.5 flex items-center rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground">
-              {PERIODS.filter((p) => p.isBreak).length} breaks (Short + Lunch)
-            </div>
+            <Select value={breakMode} onValueChange={(v) => setBreakMode(v as 'none' | 'short' | 'lunch' | 'both')}>
+              <SelectTrigger className="h-8 w-full text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="both">Short + Lunch</SelectItem>
+                <SelectItem value="short">Short Break only</SelectItem>
+                <SelectItem value="lunch">Lunch Break only</SelectItem>
+                <SelectItem value="none">No breaks</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Summary stats */}

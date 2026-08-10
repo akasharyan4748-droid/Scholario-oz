@@ -58,8 +58,8 @@ export function ScheduleGrid({
         )}
       </div>
 
-      {/* Desktop table */}
-      <div className="hidden lg:block rounded-lg border border-border/60 overflow-hidden">
+      {/* Desktop table — horizontally scrollable when columns overflow */}
+      <div className="hidden lg:block rounded-lg border border-border/60 overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
