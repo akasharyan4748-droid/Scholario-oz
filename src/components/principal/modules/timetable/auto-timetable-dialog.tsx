@@ -25,7 +25,7 @@ import { subjects } from '@/lib/mock/school'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import type { TimetableSlot } from './data'
-import { CompactTimePicker } from './compact-time-picker'
+import { CompactTimeControls, CompactTimeTrigger } from './compact-time-picker'
 
 interface AutoTimetableDialogProps {
   open: boolean
@@ -257,9 +257,9 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
           <div className="space-y-1">
             <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">School day</label>
             <div className="flex items-center gap-2">
-              <CompactTimePicker value={schoolStart} onChange={setSchoolStart} />
+              <CompactTimeControls value={schoolStart} onChange={setSchoolStart} />
               <span className="text-[10px] text-muted-foreground">→</span>
-              <CompactTimePicker value={schoolEnd} onChange={setSchoolEnd} />
+              <CompactTimeControls value={schoolEnd} onChange={setSchoolEnd} />
             </div>
           </div>
 

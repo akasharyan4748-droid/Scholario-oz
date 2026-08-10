@@ -18,7 +18,7 @@ import { useState } from 'react'
 import { Plus, MapPin, UserCheck, Coffee, CalendarDays, X, Clock, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CompactTimePicker } from './compact-time-picker'
+import { CompactTimeControls } from './compact-time-picker'
 import { cn } from '@/lib/utils'
 import { getTeacherById } from '@/lib/mock/teachers'
 import { CLASSES, PERIODS, type DayType, type TimetableSlot } from './data'
@@ -286,18 +286,18 @@ function RowOrBreak({
           className="bg-muted/20"
         >
           <td className="p-2.5 shrink-0 relative">
-            {/* × at TOP-LEFT of break row (Brief section 9) */}
+            {/* × at TOP-LEFT corner inside the break cell (Brief section 9) */}
             {editMode && (
               <button
                 onClick={() => onDeleteRow(row.number)}
-                className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full border border-border/60 bg-card text-muted-foreground hover:text-rose-500 hover:border-rose-400/40 transition-colors flex items-center justify-center shadow-sm z-10"
+                className="absolute top-0.5 left-0.5 h-3.5 w-3.5 rounded-full border border-border/60 bg-card text-muted-foreground hover:text-rose-500 hover:border-rose-400/40 transition-colors flex items-center justify-center shadow-sm z-10"
                 title="Delete break"
                 aria-label="Delete break"
               >
                 <X className="h-2 w-2" />
               </button>
             )}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 pl-4">
               <Coffee className="h-3 w-3 text-amber-500 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-bold text-foreground">{row.name}</p>
@@ -338,18 +338,18 @@ function RowOrBreak({
         className={cn('border-t border-border/40 transition-colors', editMode ? 'hover:bg-accent/20' : '')}
       >
         <td className="p-2.5 shrink-0 relative">
-          {/* × at TOP-LEFT of period row (Brief section 7-8) */}
+          {/* × at TOP-LEFT corner inside the period cell (Brief section 8-9) */}
           {editMode && (
             <button
               onClick={() => onDeleteRow(row.number)}
-              className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full border border-border/60 bg-card text-muted-foreground hover:text-rose-500 hover:border-rose-400/40 transition-colors flex items-center justify-center shadow-sm z-10"
+              className="absolute top-0.5 left-0.5 h-3.5 w-3.5 rounded-full border border-border/60 bg-card text-muted-foreground hover:text-rose-500 hover:border-rose-400/40 transition-colors flex items-center justify-center shadow-sm z-10"
               title="Delete period"
               aria-label="Delete period"
             >
               <X className="h-2 w-2" />
             </button>
           )}
-          <p className="text-[10px] font-bold text-foreground">{row.name}</p>
+          <p className="text-[10px] font-bold text-foreground pl-4">{row.name}</p>
           {editMode ? (
             <TimeEditor time={row.time} onSave={(newTime) => onEditRowTime(row.number, newTime)} />
           ) : (
@@ -425,8 +425,8 @@ function RowInsertDivider({
   return (
     <tr className="border-t border-border/20">
       <td colSpan={99} className="p-0 h-0 relative">
-        {/* + at LEFT of period column (Brief section 10-11) */}
-        <div className="absolute left-4 top-1/2 -translate-y-1/2">
+        {/* + centered on the divider, inside the period column (Brief section 12-13) */}
+        <div className="absolute left-6 top-1/2 -translate-y-1/2">
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
               <button
@@ -438,7 +438,7 @@ function RowInsertDivider({
                 <Plus className="h-2 w-2" />
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-36 p-1" align="start" sideOffset={4}>
+            <PopoverContent className="w-36 p-1" align="start" sideOffset={4} collisionPadding={8}>
               <button
                 onClick={() => { onInsert(afterRowNumber, 'period'); setOpen(false) }}
                 className="w-full px-2 py-1.5 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors text-[10px] rounded"
@@ -524,15 +524,14 @@ function RowInsertButton({
 }
 
 /* ------------------------------------------------------------------ */
-/* TimeEditor — compact inline time editor using CompactTimePicker     */
-/* Brief section 1-3: NO manual typing. 12-hour AM/PM dropdowns.      */
+/* TimeEditor — ONE compact popover with Start + End selects.           */
+/* Brief section 1-4: NO nested popovers. NO manual typing.             */
 /* ------------------------------------------------------------------ */
 function TimeEditor({ time, onSave }: {
   time: string
   onSave: (newTime: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  // Parse "08:30 AM - 09:15 AM" into start/end
   const parts = time.split(' - ')
   const [start, setStart] = useState(parts[0] || '08:30 AM')
   const [end, setEnd] = useState(parts[1] || '09:15 AM')
@@ -554,14 +553,14 @@ function TimeEditor({ time, onSave }: {
           {time}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-40 p-2" align="start" sideOffset={4}>
-        <div className="space-y-2">
-          <CompactTimePicker label="Start" value={start} onChange={setStart} />
-          <CompactTimePicker label="End" value={end} onChange={setEnd} />
-          <Button size="sm" className="w-full h-7 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleSave}>
-            Done
-          </Button>
+      <PopoverContent className="w-36 p-2" align="start" sideOffset={4} collisionPadding={8}>
+        <div className="flex items-center gap-3">
+          <CompactTimeControls label="Start" value={start} onChange={setStart} />
+          <CompactTimeControls label="End" value={end} onChange={setEnd} />
         </div>
+        <Button size="sm" className="w-full h-7 text-[10px] mt-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleSave}>
+          Done
+        </Button>
       </PopoverContent>
     </Popover>
   )
