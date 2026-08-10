@@ -46,7 +46,9 @@ import { SlotEditorDialog, type MinimalSlotForm } from './slot-editor-dialog'
 import { PublishDialog } from './publish-dialog'
 import { AutoTimetableDialog } from './auto-timetable-dialog'
 import { ConfirmDialog } from '../shared/confirm-dialog'
+import { exportTimetablePDF } from './timetable-pdf'
 import { Trash2, AlertTriangle } from 'lucide-react'
+import { CLASSES } from './data'
 
 export function TimetableModule() {
   // ── Store subscriptions ──
@@ -384,12 +386,14 @@ export function TimetableModule() {
   }
 
   const handleExport = (type: 'class' | 'teacher' | 'master') => {
-    const labels = {
-      class: `${selectedClass === 'all' ? 'All Classes' : selectedClass} timetable`,
-      teacher: 'Teacher timetable',
-      master: 'Master school timetable',
-    }
-    toast.success('Exporting PDF', { description: labels[type] })
+    const displaySlots = editMode ? draftSlots : slots
+    const displayRows = editMode ? draftRows : PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
+    const visibleClasses = type === 'class' && selectedClass !== 'all'
+      ? [selectedClass]
+      : type === 'master'
+      ? CLASSES
+      : CLASSES.filter((c) => selectedClass === 'all' || selectedClass === c)
+    exportTimetablePDF(displaySlots, displayRows, selectedDay, selectedClass, visibleClasses)
   }
 
   return (

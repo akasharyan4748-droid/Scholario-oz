@@ -61,12 +61,12 @@ export function ScheduleGrid({
       {/* Desktop table — clean bordered scroll container. touch-action: pan-x
           allows horizontal touch scroll but lets vertical gestures pass to the page. */}
       <div className="hidden lg:block rounded-lg border border-border/60 overflow-x-auto overflow-y-hidden overscroll-x-contain overscroll-y-none [touch-action:pan-x]">
-        <table className="text-left text-xs border-collapse">
+        <table className="text-left text-xs border-collapse w-full">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
               <th className="p-2.5 w-32 shrink-0 text-[10px] uppercase tracking-wider">Period</th>
               {visibleClasses.map((cls) => (
-                <th key={cls} className="p-2.5 min-w-[180px] border-l border-border/50 font-bold text-foreground text-[10px] uppercase tracking-wider">{cls}</th>
+                <th key={cls} className={cn('p-2.5 border-l border-border/50 font-bold text-foreground text-[10px] uppercase tracking-wider', visibleClasses.length === 1 ? 'w-full' : 'min-w-[180px]')}>{cls}</th>
               ))}
             </tr>
           </thead>
