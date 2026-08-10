@@ -1,72 +1,137 @@
 'use client'
 
-// Class-wise attendance report table — top 10 classes by rate, with
-// present/absent/late counts, mini progress bar, and status badge.
+/**
+ * ClassReport — class-wise attendance table.
+ *
+ * Brief section 11: keep the existing structure (Class / Total / Present /
+ * Absent / Late / Rate / Status). Refine:
+ *   - row spacing (compact)
+ *   - typography (tabular-nums for counts, small muted labels)
+ *   - status badges (restrained semantic styling, no oversize)
+ *   - thin progress bar (2px, not 6px)
+ *   - hover state (subtle bg, not full color)
+ *   - sticky header on tall viewports
+ *
+ * Brief section 17: reuses the existing Export button from parent
+ * — no separate "Export CSV" button competing with the page-level Export.
+ */
 
-import { Download, FileSpreadsheet } from 'lucide-react'
-import { GlassCard, StatusBadge } from '@/components/shared/ui'
-import { ProgressBar } from '@/components/shared/charts'
-import { Button } from '@/components/ui/button'
-import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
+import { motion, useReducedMotion } from 'framer-motion'
+import { FileSpreadsheet } from 'lucide-react'
+import { GlassCard } from '@/components/shared/ui'
 import { attendanceOverview } from '@/lib/mock/attendance'
+import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { classTotalForIndex } from './data'
 
-export function ClassReport({ onExport }: { onExport: () => void }) {
+export function ClassReport({ onExport: _onExport }: { onExport?: () => void }) {
+  const rows = attendanceOverview.byClass.slice(0, 10)
+
   return (
     <GlassCard className="p-3 sm:p-4 lg:p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="min-w-0">
           <h3 className="font-semibold text-sm flex items-center gap-2">
-            <FileSpreadsheet className="h-4 w-4 text-primary" />
+            <FileSpreadsheet className="h-4 w-4 text-primary shrink-0" />
             Class-wise Attendance Report
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Today's attendance by class · sorted by rate</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+            Today's attendance by class · sorted by rate
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={onExport}>
-          <Download className="h-3 w-3" /> Export CSV
-        </Button>
       </div>
+
       <div className="rounded-xl border border-border overflow-hidden">
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-xs">Class</TableHead>
-              <TableHead className="text-xs">Total</TableHead>
-              <TableHead className="text-xs">Present</TableHead>
-              <TableHead className="text-xs">Absent</TableHead>
-              <TableHead className="text-xs">Late</TableHead>
-              <TableHead className="text-xs w-32">Rate</TableHead>
-              <TableHead className="text-xs">Status</TableHead>
+          <TableHeader className="sticky top-0 bg-muted/40 backdrop-blur-sm z-10">
+            <TableRow className="border-b border-border hover:bg-transparent">
+              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5">Class</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 text-right">Total</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 text-right">Present</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 text-right">Absent</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 text-right">Late</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 w-32">Rate</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {attendanceOverview.byClass.slice(0, 10).map((row, i) => {
+            {rows.map((row, i) => {
               const total = classTotalForIndex(i)
               const presentCount = Math.round(total * row.rate / 100)
               const absentCount = total - presentCount - 2
               const lateCount = 2
               const pct = Math.round(row.rate)
-              const variant = pct >= 95 ? 'success' : pct >= 90 ? 'info' : pct >= 85 ? 'warning' : 'danger'
-              return (
-                <TableRow key={row.class}>
-                  <TableCell className="text-xs font-medium">{row.class}</TableCell>
-                  <TableCell className="text-xs font-mono">{total}</TableCell>
-                  <TableCell className="text-xs font-mono text-emerald-600 dark:text-emerald-400">{presentCount}</TableCell>
-                  <TableCell className="text-xs font-mono text-rose-600 dark:text-rose-400">{absentCount}</TableCell>
-                  <TableCell className="text-xs font-mono text-amber-600 dark:text-amber-400">{lateCount}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <ProgressBar value={pct} color={pct >= 95 ? 'oklch(0.65 0.16 162)' : pct >= 90 ? 'oklch(0.6 0.18 75)' : pct >= 85 ? 'oklch(0.7 0.15 75)' : 'oklch(0.62 0.2 25)'} height={6} />
-                      <span className="text-[10px] font-semibold w-8 text-right">{pct}%</span>
-                    </div>
-                  </TableCell>
-                  <TableCell><StatusBadge status={pct >= 95 ? 'Excellent' : pct >= 90 ? 'Good' : pct >= 85 ? 'Average' : 'At Risk'} variant={variant} dot /></TableCell>
-                </TableRow>
-              )
+              const status = pct >= 95 ? 'Excellent' : pct >= 90 ? 'Good' : pct >= 85 ? 'Average' : 'Needs Attention'
+              const statusColor = pct >= 95
+                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
+                : pct >= 90
+                ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20'
+                : pct >= 85
+                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20'
+              const barColor = pct >= 95
+                ? ATTENDANCE_COLORS.excellent
+                : pct >= 90
+                ? ATTENDANCE_COLORS.good
+                : pct >= 85
+                ? ATTENDANCE_COLORS.average
+                : ATTENDANCE_COLORS.atRisk
+              return <ClassRowItem key={row.class} row={row} idx={i} total={total} presentCount={presentCount} absentCount={absentCount} lateCount={lateCount} pct={pct} status={status} statusColor={statusColor} barColor={barColor} />
             })}
           </TableBody>
         </Table>
       </div>
     </GlassCard>
+  )
+}
+
+const ATTENDANCE_COLORS = {
+  excellent: 'oklch(0.65 0.16 162)',
+  good: 'oklch(0.55 0.13 220)',
+  average: 'oklch(0.75 0.15 75)',
+  atRisk: 'oklch(0.62 0.2 25)',
+}
+
+function ClassRowItem({
+  row, idx, total, presentCount, absentCount, lateCount, pct, status, statusColor, barColor,
+}: {
+  row: { class: string; rate: number }
+  idx: number
+  total: number
+  presentCount: number
+  absentCount: number
+  lateCount: number
+  pct: number
+  status: string
+  statusColor: string
+  barColor: string
+}) {
+  const reduce = useReducedMotion()
+  return (
+    <TableRow className="border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors text-xs">
+      <TableCell className="font-medium text-foreground py-2.5">{row.class}</TableCell>
+      <TableCell className="font-mono tabular-nums text-muted-foreground py-2.5 text-right">{total}</TableCell>
+      <TableCell className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400 py-2.5 text-right">{presentCount}</TableCell>
+      <TableCell className="font-mono tabular-nums text-rose-600 dark:text-rose-400 py-2.5 text-right">{absentCount}</TableCell>
+      <TableCell className="font-mono tabular-nums text-amber-600 dark:text-amber-400 py-2.5 text-right">{lateCount}</TableCell>
+      <TableCell className="py-2.5">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden">
+            <motion.div
+              initial={reduce ? false : { width: 0 }}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.6, delay: Math.min(idx * 0.04, 0.3), ease: [0.22, 1, 0.36, 1] }}
+              className="h-full rounded-full"
+              style={{ background: barColor }}
+            />
+          </div>
+          <span className="text-[10px] font-semibold tabular-nums w-8 text-right">{pct}%</span>
+        </div>
+      </TableCell>
+      <TableCell className="py-2.5">
+        <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${statusColor}`}>
+          {status}
+        </span>
+      </TableCell>
+    </TableRow>
   )
 }
