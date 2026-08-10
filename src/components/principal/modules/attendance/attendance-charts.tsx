@@ -128,36 +128,39 @@ export function TrendLine({
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
+      <AreaChart data={data} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.28} />
-            <stop offset="60%" stopColor={color} stopOpacity={0.10} />
+            <stop offset="0%" stopColor={color} stopOpacity={0.22} />
+            <stop offset="60%" stopColor={color} stopOpacity={0.08} />
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 4" stroke="var(--border)" vertical={false} opacity={0.45} />
+        {/* Brief §23: very subtle gridlines — 1-2 faint horizontal lines, no vertical */}
+        <CartesianGrid strokeDasharray="2 6" stroke="var(--border)" vertical={false} horizontal={true} opacity={0.3} />
+        {/* Brief §22: axis labels small, quiet, secondary */}
         <XAxis
           dataKey={xKey}
-          tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+          tick={{ fontSize: 9, fill: 'var(--muted-foreground)', opacity: 0.7 }}
           axisLine={false}
           tickLine={false}
           dy={6}
         />
         <YAxis
           domain={yDomain === 'auto' ? ['auto', 'auto'] : yDomain}
-          tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+          tick={{ fontSize: 9, fill: 'var(--muted-foreground)', opacity: 0.7 }}
           axisLine={false}
           tickLine={false}
-          width={36}
+          width={32}
           tickFormatter={(v) => `${v}%`}
           tickCount={3}
         />
         <Tooltip
           content={<AttendanceTooltip valueSuffix={valueSuffix} />}
-          cursor={{ stroke: color, strokeOpacity: 0.3, strokeWidth: 1, strokeDasharray: '3 3' }}
+          cursor={{ stroke: color, strokeOpacity: 0.25, strokeWidth: 1, strokeDasharray: '3 3' }}
+          isAnimationActive={false}
         />
-        {/* Average reference line */}
+        {/* Average reference line — even more subtle */}
         {averageValue != null && (
           <Line
             type="monotone"
@@ -165,6 +168,7 @@ export function TrendLine({
             stroke="var(--muted-foreground)"
             strokeWidth={1}
             strokeDasharray="4 4"
+            strokeOpacity={0.4}
             dot={false}
             isAnimationActive={false}
             name="__avg"
@@ -174,7 +178,7 @@ export function TrendLine({
           type="monotone"
           dataKey={yKey}
           stroke={color}
-          strokeWidth={2.25}
+          strokeWidth={2}
           fill={`url(#${gid})`}
           isAnimationActive={!reduce}
           animationDuration={650}
@@ -193,21 +197,17 @@ export function TrendLine({
 }
 
 /* ──────────────────────────────────────────────────────────
-   TodayBreakdownStack — Brief §3 (Phase 2): completely rethink
-   Today's Breakdown. Vertical stack layout that NEVER overflows
-   on iPad/tablet. Compact ring above + 4 status rows below.
+   TodayBreakdownStack — Brief §15-§16 (Phase 3): compact.
+   No giant card, no donut. Just: large percentage + thin composition
+   bar + 4 status rows. Reads at a glance.
 
    Structure:
-     ┌─────────────────────────┐
-     │      93.3%              │
-     │      PRESENT            │
-     │   (compact ring 100px)  │
-     ├─────────────────────────┤
-     │ ● Present   1,719  93.3%│
-     │ ● Late         18   1.0%│
-     │ ● Absent       96   5.2%│
-     │ ● Leave         9   0.5%│
-     └─────────────────────────┘
+     93.3%  PRESENT
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ (segmented composition bar)
+     ● Present   1,719   93.3%
+     ● Late         18    1.0%
+     ● Absent       96    5.2%
+     ● Leave         9    0.5%
    ────────────────────────────────────────────────────────── */
 export interface TodayBreakdownItem {
   name: string
@@ -226,19 +226,19 @@ export function TodayBreakdownStack({
   const total = data.reduce((sum, d) => sum + d.value, 0)
 
   return (
-    <div className="flex flex-col items-center gap-4 py-2 w-full">
-      {/* Center percentage — large focal value (Brief 3) */}
-      <div className="flex flex-col items-center text-center">
-        <span className="font-display text-4xl sm:text-5xl font-bold tabular-nums tracking-tight text-foreground leading-none">
+    <div className="space-y-3">
+      {/* Compact header row — large focal value + label, inline */}
+      <div className="flex items-baseline gap-2">
+        <span className="font-display text-3xl sm:text-4xl font-bold tabular-nums tracking-tight text-foreground leading-none">
           {centerValue}
         </span>
-        <span className="text-[10px] text-muted-foreground uppercase tracking-[0.18em] font-semibold mt-1.5">
+        <span className="text-[10px] text-muted-foreground uppercase tracking-[0.18em] font-semibold">
           {centerLabel}
         </span>
       </div>
 
-      {/* Thin segmented bar — visually communicates composition (compact, not giant) */}
-      <div className="w-full h-2 rounded-full overflow-hidden flex bg-muted/40">
+      {/* Thin segmented composition bar — Brief §16 */}
+      <div className="w-full h-1.5 rounded-full overflow-hidden flex bg-muted/40">
         {data.map((d, i) => {
           const pct = total > 0 ? (d.value / total) * 100 : 0
           if (pct === 0) return null
@@ -250,13 +250,14 @@ export function TodayBreakdownStack({
               transition={{ duration: 0.7, delay: 0.1 + i * 0.06, ease: [0.22, 1, 0.36, 1] }}
               className="h-full"
               style={{ background: d.color }}
+              title={`${d.name} · ${pct.toFixed(1)}%`}
             />
           )
         })}
       </div>
 
       {/* Status rows — count + % aligned, never overflows */}
-      <div className="w-full space-y-1">
+      <div className="space-y-1">
         {data.map((d) => {
           const pct = total > 0 ? (d.value / total) * 100 : 0
           return <RingLegendRow key={d.name} name={d.name} value={d.value} pct={pct} color={d.color} />

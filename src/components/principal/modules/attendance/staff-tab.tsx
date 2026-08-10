@@ -1,28 +1,43 @@
 'use client'
 
 /**
- * StaffAttendanceTab — Brief §13-§15 (Phase 2).
+ * StaffAttendanceTab — Phase 3 redesign.
  *
- * Staff attendance managed by Principal/Admin.
+ * Brief §1-§7 (Phase 3): semantic colors, count-up, Mark All Present,
+ * Submit Attendance with unsaved-changes detection, improved action states.
  *
- * Structure:
- *   - Staff summary (Present/Late/Absent/Leave counts)
- *   - Filters: date picker, department/role filter, search
- *   - Staff list table with status + check-in + marking controls
+ * Universal status system (Brief §7): STATUS_META from ./attendance-status
+ * is shared with student attendance + history.
  *
- * Marking workflow (Brief §14): inline action buttons per row — Mark
- * Present / Mark Late / Mark Absent / Mark Leave. Fast, no modal.
- *
- * Date control (Brief §15): date picker that controls which day's staff
- * records are shown.
+ * Workflow:
+ *   KPI summary (count-up + colored icons)
+ *   ↓
+ *   filters (date picker FIXED via universal DatePicker, role, search)
+ *   ↓
+ *   Mark All Present action (with lightweight confirmation)
+ *   ↓
+ *   Staff table (rows with filled selected state)
+ *   ↓
+ *   Unsaved changes indicator + Submit Attendance button
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion'
-import { Calendar, Search, Check, Clock, X, Coffee } from 'lucide-react'
+import { Search, Check, Clock, X, Coffee, CheckCheck, Upload, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import {
@@ -32,72 +47,50 @@ import {
   type StaffAttendanceRecord,
   type AttendanceStatus,
 } from '@/lib/mock/attendance'
-import { formatNumber } from '@/lib/format'
-import { ATTENDANCE_PALETTE } from './attendance-charts'
-
-const STATUS_META: Record<AttendanceStatus, {
-  label: string
-  color: string
-  bg: string
-  text: string
-  border: string
-  icon: React.ReactNode
-}> = {
-  present: {
-    label: 'Present',
-    color: ATTENDANCE_PALETTE.present,
-    bg: 'bg-emerald-500/10',
-    text: 'text-emerald-700 dark:text-emerald-300',
-    border: 'border-emerald-500/30',
-    icon: <Check className="h-3 w-3" />,
-  },
-  late: {
-    label: 'Late',
-    color: ATTENDANCE_PALETTE.late,
-    bg: 'bg-amber-500/10',
-    text: 'text-amber-700 dark:text-amber-300',
-    border: 'border-amber-500/30',
-    icon: <Clock className="h-3 w-3" />,
-  },
-  absent: {
-    label: 'Absent',
-    color: ATTENDANCE_PALETTE.absent,
-    bg: 'bg-rose-500/10',
-    text: 'text-rose-700 dark:text-rose-300',
-    border: 'border-rose-500/30',
-    icon: <X className="h-3 w-3" />,
-  },
-  leave: {
-    label: 'Leave',
-    color: ATTENDANCE_PALETTE.leave,
-    bg: 'bg-sky-500/10',
-    text: 'text-sky-700 dark:text-sky-300',
-    border: 'border-sky-500/30',
-    icon: <Coffee className="h-3 w-3" />,
-  },
-}
+import { AnimatedCounter } from '@/components/shared/animated-counter'
+import { toast } from 'sonner'
+import { STATUS_META, STATUS_ORDER, StatusBadge } from './attendance-status'
 
 const ROLES: StaffAttendanceRecord['role'][] = [
   'Teacher', 'Coordinator', 'Admin Staff', 'Librarian', 'Lab Assistant',
 ]
+
+const TONE_CLASSES = {
+  present: { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/5', border: 'border-border hover:border-emerald-500/40' },
+  late:    { text: 'text-amber-600 dark:text-amber-400',    bg: 'bg-amber-500/5',    border: 'border-border hover:border-amber-500/40' },
+  absent:  { text: 'text-rose-600 dark:text-rose-400',      bg: 'bg-rose-500/5',     border: 'border-border hover:border-rose-500/40' },
+  leave:   { text: 'text-sky-600 dark:text-sky-400',         bg: 'bg-sky-500/5',      border: 'border-border hover:border-sky-500/40' },
+} as const
 
 export function StaffAttendanceTab() {
   const reduce = useReducedMotion()
   const [selectedDate, setSelectedDate] = useState('2025-12-10')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
-  // Local draft state — principal can mark attendance inline
+  /** Local draft state — principal can mark attendance inline (Brief §3, §5). */
   const [draft, setDraft] = useState<StaffAttendanceRecord[] | null>(null)
+  /** Track the "submitted" state so we can show success + lock the submit button. */
+  const [submitted, setSubmitted] = useState(false)
+  /** Mark All Present confirmation dialog (Brief §28). */
+  const [markAllConfirmOpen, setMarkAllConfirmOpen] = useState(false)
+  /** Submitting state for the Submit button (Brief §4). */
+  const [submitting, setSubmitting] = useState(false)
+  /** Ref to scroll to the submit button on click (Brief §27). */
+  const submitRef = useRef<HTMLDivElement>(null)
 
-  // Load records for the selected date (deterministic per date)
-  const records = useMemo(() => {
-    if (selectedDate === '2025-12-10') {
-      // Today — use the canonical seeded data
-      return draft ?? staffAttendance
-    }
+  // Load records for the selected date (deterministic per date).
+  const baseRecords = useMemo(() => {
+    if (selectedDate === '2025-12-10') return staffAttendance
     return getStaffAttendanceForDate(selectedDate)
-  }, [selectedDate, draft])
+  }, [selectedDate])
 
+  // Reset draft + submitted state when date changes (Brief §15).
+  useEffect(() => {
+    setDraft(null)
+    setSubmitted(false)
+  }, [selectedDate])
+
+  const records = draft ?? baseRecords
   const summary = useMemo(() => getStaffAttendanceSummary(records), [records])
 
   const filtered = useMemo(() => {
@@ -113,12 +106,23 @@ export function StaffAttendanceTab() {
     })
   }, [records, roleFilter, search])
 
+  // Brief §5: detect unsaved changes by comparing draft vs base records.
+  const hasUnsavedChanges = useMemo(() => {
+    if (!draft) return false
+    if (draft.length !== baseRecords.length) return true
+    return draft.some((r, i) => {
+      const base = baseRecords[i]
+      return base.status !== r.status || base.checkIn !== r.checkIn
+    })
+  }, [draft, baseRecords])
+
+  // Brief §14: per-row marking. When marked absent/leave, clear check-in.
   const handleMark = (id: string, status: AttendanceStatus) => {
+    setSubmitted(false) // any change invalidates prior submission
     setDraft((prev) => {
-      const base = prev ?? records
+      const base = prev ?? baseRecords
       return base.map((r) => {
         if (r.id !== id) return r
-        // Brief §15: when marking absent/leave, clear check-in
         const checkIn = status === 'present'
           ? '08:30 AM'
           : status === 'late'
@@ -129,65 +133,78 @@ export function StaffAttendanceTab() {
     })
   }
 
-  const dateDisplay = useMemo(() => {
-    if (!selectedDate) return 'Today'
-    const d = new Date(selectedDate)
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-  }, [selectedDate])
+  // Brief §3 + §28: Mark All Present with lightweight confirmation.
+  const handleMarkAllPresent = () => {
+    setMarkAllConfirmOpen(false)
+    setSubmitted(false)
+    setDraft((prev) => {
+      const base = prev ?? baseRecords
+      return base.map((r) => ({ ...r, status: 'present' as AttendanceStatus, checkIn: '08:30 AM' }))
+    })
+    toast.success('All staff marked present', {
+      description: 'Review and submit attendance to confirm.',
+    })
+  }
+
+  // Brief §4: Submit Attendance — simulates submission (demo only).
+  const handleSubmit = () => {
+    if (!hasUnsavedChanges || submitting) return
+    setSubmitting(true)
+    // Simulate a network round-trip.
+    setTimeout(() => {
+      setSubmitting(false)
+      setSubmitted(true)
+      toast.success('Attendance submitted', {
+        description: `${summary.present} present · ${summary.late} late · ${summary.absent} absent · ${summary.leave} leave`,
+      })
+    }, 800)
+  }
 
   return (
     <PageTransition className="space-y-4">
-      {/* Compact summary row — Brief §13 */}
+      {/* Brief §2: Staff KPI cards with count-up + colored icon + tint */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StaffSummaryCard
-          label="Present"
-          value={summary.present}
-          total={summary.total}
-          icon={<Check className="h-3.5 w-3.5" />}
-          tone="emerald"
-        />
-        <StaffSummaryCard
-          label="Late"
-          value={summary.late}
-          total={summary.total}
-          icon={<Clock className="h-3.5 w-3.5" />}
-          tone="amber"
-        />
-        <StaffSummaryCard
-          label="Absent"
-          value={summary.absent}
-          total={summary.total}
-          icon={<X className="h-3.5 w-3.5" />}
-          tone="rose"
-        />
-        <StaffSummaryCard
-          label="Leave"
-          value={summary.leave}
-          total={summary.total}
-          icon={<Coffee className="h-3.5 w-3.5" />}
-          tone="sky"
-        />
+        {STATUS_ORDER.map((status, i) => {
+          const meta = STATUS_META[status]
+          const Icon = meta.icon
+          const value = summary[status]
+          const tone = TONE_CLASSES[status]
+          return (
+            <motion.div
+              key={status}
+              initial={reduce ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className={`rounded-xl border p-3 sm:p-4 transition-colors ${tone.bg} ${tone.border}`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                  {meta.label}
+                </span>
+                <Icon className={`h-3.5 w-3.5 ${tone.text}`} />
+              </div>
+              <p className={`font-display text-2xl sm:text-3xl font-bold tabular-nums tracking-tight ${tone.text}`}>
+                <AnimatedCounter value={value} duration={0.7} />
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {summary.total > 0 ? ((value / summary.total) * 100).toFixed(1) : '0.0'}% of {summary.total} staff
+              </p>
+            </motion.div>
+          )
+        })}
       </div>
 
-      {/* Filters + date picker */}
+      {/* Brief §15: Filters — date picker FIXED (universal DatePicker) */}
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Date picker — Brief §15 */}
-          <div className="relative">
-            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              type="date"
-              value={selectedDate}
-              max="2025-12-22"
-              onChange={(e) => {
-                setSelectedDate(e.target.value)
-                setDraft(null) // reset draft when date changes
-              }}
-              className="h-8 pl-8 pr-2 text-xs w-[150px]"
-            />
-          </div>
+          {/* Universal DatePicker — replaces the broken Input[type=date] + absolute icon */}
+          <DatePicker
+            value={selectedDate}
+            onChange={(v) => v && setSelectedDate(v)}
+            compact
+            className="w-[150px]"
+          />
 
-          {/* Role filter */}
           <Select value={roleFilter} onValueChange={setRoleFilter}>
             <SelectTrigger className="h-8 w-[160px] text-xs">
               <SelectValue placeholder="All Roles" />
@@ -200,7 +217,6 @@ export function StaffAttendanceTab() {
             </SelectContent>
           </Select>
 
-          {/* Search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input
@@ -210,14 +226,25 @@ export function StaffAttendanceTab() {
               className="h-8 pl-8 pr-3 text-xs w-[200px]"
             />
           </div>
+
+          {/* Brief §3: Mark All Present — soft action, not destructive */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => setMarkAllConfirmOpen(true)}
+          >
+            <CheckCheck className="h-3.5 w-3.5" />
+            Mark all present
+          </Button>
         </div>
 
         <span className="text-[10px] text-muted-foreground">
-          {dateDisplay} · {filtered.length} staff
+          {filtered.length} staff
         </span>
       </div>
 
-      {/* Staff attendance table — Brief §13 + §14 */}
+      {/* Brief §13 + §14: Staff table */}
       <div className="rounded-xl border border-border overflow-hidden bg-card">
         <Table>
           <TableHeader className="sticky top-0 bg-muted/40 backdrop-blur-sm z-10">
@@ -252,39 +279,103 @@ export function StaffAttendanceTab() {
           </TableBody>
         </Table>
       </div>
-    </PageTransition>
-  )
-}
 
-function StaffSummaryCard({
-  label, value, total, icon, tone,
-}: {
-  label: string
-  value: number
-  total: number
-  icon: React.ReactNode
-  tone: 'emerald' | 'amber' | 'rose' | 'sky'
-}) {
-  const toneClasses = {
-    emerald: { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/5', border: 'border-border hover:border-emerald-500/40' },
-    amber:   { text: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-500/5',    border: 'border-border hover:border-amber-500/40' },
-    rose:    { text: 'text-rose-600 dark:text-rose-400',       bg: 'bg-rose-500/5',     border: 'border-border hover:border-rose-500/40' },
-    sky:     { text: 'text-sky-600 dark:text-sky-400',          bg: 'bg-sky-500/5',      border: 'border-border hover:border-sky-500/40' },
-  }[tone]
-  const pct = total > 0 ? +((value / total) * 100).toFixed(1) : 0
-  return (
-    <div className={`rounded-xl border p-3 sm:p-4 transition-colors ${toneClasses.bg} ${toneClasses.border}`}>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">{label}</span>
-        <span className={toneClasses.text}>{icon}</span>
+      {/* Brief §4 + §5 + §27: Submit bar */}
+      <div ref={submitRef} className="flex items-center justify-between gap-3 flex-wrap pt-1">
+        {/* Brief §5: Unsaved changes indicator */}
+        <div className="flex items-center gap-2 text-xs">
+          <AnimatePresence mode="wait">
+            {submitted ? (
+              <motion.span
+                key="submitted"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Attendance submitted
+              </motion.span>
+            ) : hasUnsavedChanges ? (
+              <motion.span
+                key="unsaved"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium"
+              >
+                <AlertCircle className="h-3.5 w-3.5" />
+                Unsaved changes
+              </motion.span>
+            ) : (
+              <motion.span
+                key="saved"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="text-muted-foreground"
+              >
+                No pending changes
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Brief §4: Submit Attendance */}
+        <Button
+          size="sm"
+          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={handleSubmit}
+          disabled={!hasUnsavedChanges || submitting || submitted}
+        >
+          {submitting ? (
+            <>
+              <motion.span
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+              >
+                <Upload className="h-3.5 w-3.5" />
+              </motion.span>
+              Submitting…
+            </>
+          ) : submitted ? (
+            <>
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Submitted
+            </>
+          ) : (
+            <>
+              <Upload className="h-3.5 w-3.5" />
+              Submit Attendance
+            </>
+          )}
+        </Button>
       </div>
-      <p className={`font-display text-2xl sm:text-3xl font-bold tabular-nums tracking-tight ${toneClasses.text}`}>
-        {formatNumber(value)}
-      </p>
-      <p className="text-[10px] text-muted-foreground mt-1">
-        {pct}% of {total} staff
-      </p>
-    </div>
+
+      {/* Brief §28: Mark All Present confirmation */}
+      <AlertDialog open={markAllConfirmOpen} onOpenChange={setMarkAllConfirmOpen}>
+        <AlertDialogContent className="max-w-sm p-0 gap-0">
+          <AlertDialogHeader className="px-4 pt-4 pb-2">
+            <AlertDialogTitle className="text-sm font-semibold flex items-center gap-2">
+              <CheckCheck className="h-4 w-4 text-emerald-600" />
+              Mark all staff as Present?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[10px]">
+              This will overwrite the current attendance selections for all {baseRecords.length} staff members on this date.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="px-4 py-3">
+            <AlertDialogCancel className="h-8 text-xs">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleMarkAllPresent}
+            >
+              Mark all present
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </PageTransition>
   )
 }
 
@@ -296,7 +387,6 @@ function StaffRow({
   reduce: boolean | null
   onMark: (id: string, status: AttendanceStatus) => void
 }) {
-  const meta = STATUS_META[record.status]
   return (
     <motion.tr
       layout
@@ -315,26 +405,32 @@ function StaffRow({
       <TableCell className="py-2.5 hidden sm:table-cell text-muted-foreground">{record.role}</TableCell>
       <TableCell className="py-2.5 hidden md:table-cell text-muted-foreground">{record.department}</TableCell>
       <TableCell className="py-2.5">
-        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.bg} ${meta.border} ${meta.text}`}>
-          {meta.icon}
-          {meta.label}
-        </span>
+        <StatusBadge status={record.status} />
       </TableCell>
       <TableCell className="py-2.5 hidden sm:table-cell font-mono tabular-nums text-muted-foreground">
         {record.checkIn ?? '—'}
       </TableCell>
       <TableCell className="py-2.5">
         <div className="flex items-center justify-end gap-1">
-          <MarkButton id={record.id} status="present" current={record.status} onMark={onMark} />
-          <MarkButton id={record.id} status="late" current={record.status} onMark={onMark} />
-          <MarkButton id={record.id} status="absent" current={record.status} onMark={onMark} />
-          <MarkButton id={record.id} status="leave" current={record.status} onMark={onMark} />
+          {STATUS_ORDER.map((status) => (
+            <MarkButton
+              key={status}
+              id={record.id}
+              status={status}
+              current={record.status}
+              onMark={onMark}
+            />
+          ))}
         </div>
       </TableCell>
     </motion.tr>
   )
 }
 
+/**
+ * Brief §6: MarkButton with proper hover/press/selected states.
+ * Selected state = filled semantic color (not just tiny icon change).
+ */
 function MarkButton({
   id, status, current, onMark,
 }: {
@@ -344,6 +440,7 @@ function MarkButton({
   onMark: (id: string, status: AttendanceStatus) => void
 }) {
   const meta = STATUS_META[status]
+  const Icon = meta.icon
   const isActive = current === status
   return (
     <button
@@ -351,13 +448,13 @@ function MarkButton({
       title={`Mark ${meta.label}`}
       aria-label={`Mark ${meta.label}`}
       aria-pressed={isActive}
-      className={`h-7 w-7 rounded-md border flex items-center justify-center transition-all ${
+      className={`h-7 w-7 rounded-md border flex items-center justify-center transition-all duration-150 ${
         isActive
-          ? `${meta.bg} ${meta.border} ${meta.text}`
-          : 'border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+          ? `${meta.bgFilled} border-transparent text-white shadow-sm`
+          : `border-border bg-card text-muted-foreground hover:bg-muted/60 hover:${meta.text}`
       }`}
     >
-      {meta.icon}
+      <Icon className="h-3 w-3" />
     </button>
   )
 }

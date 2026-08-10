@@ -11,6 +11,8 @@ interface AnimatedCounterProps {
   suffix?: string
   className?: string
   format?: (n: number) => string
+  /** When true (default), re-animates whenever `value` changes (Brief §17). */
+  animateOnChange?: boolean
 }
 
 export function AnimatedCounter({
@@ -21,6 +23,7 @@ export function AnimatedCounter({
   suffix = '',
   className,
   format,
+  animateOnChange = true,
 }: AnimatedCounterProps) {
   const ref = useRef<HTMLSpanElement>(null)
   const inView = useInView(ref, { once: true, margin: '-40px' })
@@ -28,6 +31,8 @@ export function AnimatedCounter({
   const motionValue = useMotionValue(0)
   const spring = useSpring(motionValue, { duration: duration * 1000, bounce: 0 })
 
+  // Animate on first mount (when in view) AND on subsequent value changes
+  // (Brief §17: data-driven animation — KPI numbers re-count when data changes).
   useEffect(() => {
     if (inView) motionValue.set(value)
   }, [inView, value, motionValue])
@@ -37,6 +42,13 @@ export function AnimatedCounter({
       setDisplay(v)
     })
   }, [spring])
+
+  // When animateOnChange is true and value updates, re-trigger the spring.
+  useEffect(() => {
+    if (animateOnChange && inView) {
+      motionValue.set(value)
+    }
+  }, [value, animateOnChange, inView, motionValue])
 
   const formatted = format
     ? format(display)

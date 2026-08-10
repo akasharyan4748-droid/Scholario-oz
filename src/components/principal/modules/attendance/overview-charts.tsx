@@ -1,21 +1,23 @@
 'use client'
 
 /**
- * OverviewCharts — Phase 2 redesign.
+ * OverviewCharts — Phase 3 redesign.
  *
- * Brief section 4 (Phase 2): "remove the heavy card feel"
- * Brief section 8: shorter top overview (no duplicate class chart)
- * Brief section 10: class filter must control EVERYTHING
+ * Brief §10-§14 (Phase 3): "outside the box" — charts should feel like
+ * editorial analytics sitting naturally on the page, NOT dashboard boxes.
  *
- * Layout:
- *   Row 1: Today's Breakdown (1 col) + Weekly Trend (1 col)
- *   Row 2: Monthly Trend (full width, open section)
+ * Layout (Brief §8 — Phase 2, refined):
+ *   Row 1: Today's Breakdown (compact, no giant card) + Weekly Trend
+ *   Row 2: Monthly Trend (full-width open section)
  *
- * No Class-wise chart at the top — the Class-wise Attendance Report lower
- * on the page remains the authoritative source (Brief §7).
+ * Visual decisions:
+ *   - Remove ChartCard wrapper for trend charts — use plain section with
+ *     thin divider instead of bordered card.
+ *   - Today's Breakdown uses a compact inline layout (no oversized card).
+ *   - Trend chart heights reduced (160-180px from 240px).
+ *   - Subtle gridlines (1-2 faint horizontal lines, no vertical).
  */
 
-import { ChartCard } from '@/components/shared/charts'
 import {
   TrendLine,
   TodayBreakdownStack,
@@ -39,14 +41,12 @@ export function OverviewCharts({
   todaysRate, present, absent, late, leave, total,
   weeklyTrend, monthlyTrend,
 }: OverviewChartsProps) {
-  // Derive insights from REAL data (no fabrication — Brief §29 + §34)
   const weeklyInsight = deriveTrendInsight(weeklyTrend.map((d) => d.rate))
   const monthlyInsight = deriveTrendInsight(monthlyTrend.map((m) => m.rate))
 
   const monthlyAvg = monthlyTrend.reduce((s, m) => s + m.rate, 0) / Math.max(monthlyTrend.length, 1)
   const latestMonthly = monthlyTrend[monthlyTrend.length - 1]?.rate ?? 0
 
-  // Today's breakdown — uses the filter-aware numbers passed in
   const breakdownData = [
     { name: 'Present', value: present, color: ATTENDANCE_PALETTE.present },
     { name: 'Late',    value: late,    color: ATTENDANCE_PALETTE.late },
@@ -56,55 +56,76 @@ export function OverviewCharts({
 
   return (
     <>
-      {/* Row 1: Today's Breakdown + Weekly Trend — side-by-side on sm+, stack on mobile */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-        <ChartCard
-          title="Today's Breakdown"
-          subtitle="Attendance composition"
-        >
+      {/* Row 1: Today's Breakdown (compact) + Weekly Trend — side-by-side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        {/* Today's Breakdown — compact, no oversized card */}
+        <section className="py-2">
+          <div className="flex items-baseline justify-between gap-2 mb-3">
+            <div>
+              <h3 className="text-[10px] uppercase tracking-[0.18em] font-bold text-muted-foreground">
+                Today's Breakdown
+              </h3>
+              <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+                Attendance composition
+              </p>
+            </div>
+          </div>
           <TodayBreakdownStack
             data={breakdownData}
             centerValue={`${todaysRate}%`}
             centerLabel="Present"
           />
-        </ChartCard>
+        </section>
 
-        <ChartCard
-          title="Weekly Trend"
-          subtitle="Attendance rate · last 6 working days"
-          action={<InsightBadge insight={weeklyInsight} />}
-        >
+        {/* Weekly Trend — thin divider on the left for lg+, no card */}
+        <section className="py-2 lg:border-l lg:border-border/40 lg:pl-6">
+          <div className="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
+            <div className="min-w-0">
+              <h3 className="text-[10px] uppercase tracking-[0.18em] font-bold text-muted-foreground">
+                Weekly Trend
+              </h3>
+              <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+                Attendance rate · last 6 working days
+              </p>
+            </div>
+            <InsightBadge insight={weeklyInsight} />
+          </div>
           <TrendLine
             data={weeklyTrend.map((d) => ({ name: d.day, value: d.rate }))}
             xKey="name"
             yKey="value"
             color={ATTENDANCE_PALETTE.trend}
-            height={240}
+            height={170}
             yDomain={[80, 100]}
           />
-        </ChartCard>
+        </section>
       </div>
 
-      {/* Row 2: Monthly Trend — full width, open section (Brief §6) */}
-      <div className="rounded-xl border border-border/60 bg-card/30 p-4 sm:p-5">
-        <div className="flex items-start sm:items-center justify-between gap-3 mb-3 flex-col sm:flex-row">
+      {/* Thin horizontal divider — subtle, no heavy container */}
+      <div className="border-t border-border/40 my-2" />
+
+      {/* Row 2: Monthly Trend — full width, sits naturally on the page */}
+      <section className="py-2">
+        <div className="flex items-baseline justify-between gap-3 mb-3 flex-wrap">
           <div className="min-w-0">
-            <h3 className="font-semibold text-sm tracking-tight">Monthly Trend</h3>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+            <h3 className="text-[10px] uppercase tracking-[0.18em] font-bold text-muted-foreground">
+              Monthly Trend
+            </h3>
+            <p className="text-[10px] text-muted-foreground/80 mt-0.5">
               6-month attendance rate · long-term direction
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <div className="flex items-baseline gap-3 text-[10px] text-muted-foreground">
+            <div className="flex items-baseline gap-1.5">
               <span className="font-mono">6-mo avg</span>
               <span className="font-display font-bold tabular-nums text-foreground">{monthlyAvg.toFixed(1)}%</span>
             </div>
-            <div className="h-3 w-px bg-border" />
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <span className="text-muted-foreground/40">·</span>
+            <div className="flex items-baseline gap-1.5">
               <span className="font-mono">Latest</span>
               <span className="font-display font-bold tabular-nums text-foreground">{latestMonthly}%</span>
             </div>
-            <div className="h-3 w-px bg-border" />
+            <span className="text-muted-foreground/40">·</span>
             <InsightBadge insight={monthlyInsight} />
           </div>
         </div>
@@ -113,11 +134,11 @@ export function OverviewCharts({
           xKey="name"
           yKey="value"
           color={ATTENDANCE_PALETTE.monthly}
-          height={200}
+          height={160}
           yDomain={[88, 100]}
           averageValue={monthlyAvg}
         />
-      </div>
+      </section>
     </>
   )
 }

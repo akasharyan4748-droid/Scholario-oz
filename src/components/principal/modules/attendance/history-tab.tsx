@@ -18,16 +18,16 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion'
-import { Calendar, Search, ArrowLeft, Download, Eye } from 'lucide-react'
+import { Search, ArrowLeft, Download, Eye } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
 import {
   attendanceHistory,
   classSections,
@@ -102,30 +102,23 @@ export function AttendanceHistoryTab({ initialDate, initialClassId }: Attendance
       {/* Filters — Brief §16 */}
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Date range — Brief §20 */}
+          {/* Date range — Brief §20 — uses universal DatePicker */}
           <div className="flex items-center gap-1">
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                type="date"
-                value={fromDate}
-                max={toDate || '2025-12-22'}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="h-8 pl-8 pr-2 text-xs w-[140px]"
-              />
-            </div>
+            <DatePicker
+              value={fromDate}
+              onChange={(v) => setFromDate(v || '2025-12-01')}
+              compact
+              placeholder="From date"
+              className="w-[140px]"
+            />
             <span className="text-[10px] text-muted-foreground">to</span>
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                type="date"
-                value={toDate}
-                min={fromDate || '2025-12-01'}
-                max="2025-12-22"
-                onChange={(e) => setToDate(e.target.value)}
-                className="h-8 pl-8 pr-2 text-xs w-[140px]"
-              />
-            </div>
+            <DatePicker
+              value={toDate}
+              onChange={(v) => setToDate(v || '2025-12-22')}
+              compact
+              placeholder="To date"
+              className="w-[140px]"
+            />
           </div>
 
           {/* Class filter */}

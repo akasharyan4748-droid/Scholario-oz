@@ -18,18 +18,11 @@ import {
   classSections,
   attendanceOverview,
   type ClassSection,
-  type AttendanceStatus,
 } from '@/lib/mock/attendance'
 import { classList, school } from '@/lib/mock/school'
 import { formatNumber } from '@/lib/format'
 import { ATTENDANCE_PALETTE } from './attendance-charts'
-
-const STATUS_META = {
-  present: { label: 'Present', color: ATTENDANCE_PALETTE.present, bg: 'bg-emerald-500/10', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-500/30' },
-  late:    { label: 'Late',    color: ATTENDANCE_PALETTE.late,    bg: 'bg-amber-500/10',    text: 'text-amber-700 dark:text-amber-300',    border: 'border-amber-500/30' },
-  absent:  { label: 'Absent',  color: ATTENDANCE_PALETTE.absent,  bg: 'bg-rose-500/10',     text: 'text-rose-700 dark:text-rose-300',     border: 'border-rose-500/30' },
-  leave:   { label: 'Leave',   color: ATTENDANCE_PALETTE.leave,   bg: 'bg-sky-500/10',      text: 'text-sky-700 dark:text-sky-300',        border: 'border-sky-500/30' },
-} as const
+import { STATUS_META } from './attendance-status'
 
 export function AttendanceInsights({
   classFilter,
@@ -240,10 +233,10 @@ function LiveClassRoster({ section }: { section: ClassSection | null }) {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2 text-[10px]">
-            <StatusPill label="Present" count={section.present} meta={STATUS_META.present} />
-            <StatusPill label="Late" count={section.late} meta={STATUS_META.late} />
-            <StatusPill label="Absent" count={section.absent} meta={STATUS_META.absent} />
-            <StatusPill label="Leave" count={section.leave} meta={STATUS_META.leave} />
+            <StatusPill label="Present" count={section.present} status="present" />
+            <StatusPill label="Late" count={section.late} status="late" />
+            <StatusPill label="Absent" count={section.absent} status="absent" />
+            <StatusPill label="Leave" count={section.leave} status="leave" />
           </div>
           <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-semibold">
             {rate}% present
@@ -275,12 +268,13 @@ function LiveClassRoster({ section }: { section: ClassSection | null }) {
 }
 
 function StatusPill({
-  label, count, meta,
+  label, count, status,
 }: {
   label: string
   count: number
-  meta: { label: string; color: string; bg: string; text: string; border: string }
+  status: 'present' | 'late' | 'absent' | 'leave'
 }) {
+  const meta = STATUS_META[status]
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 ${meta.bg} ${meta.border} ${meta.text}`}>
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: meta.color }} />
