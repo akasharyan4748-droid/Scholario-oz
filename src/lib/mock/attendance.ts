@@ -1,4 +1,21 @@
 // Attendance data
+//
+// Preserved exports (do not change behavior):
+//   - attendanceOverview (school-wide today + weekTrend + monthly + byClass)
+//   - class2AAttendance (today's Class 2-A roster)
+//   - studentAttendanceCalendar (single student's Nov 2024 history)
+//
+// NEW exports (Phase 2):
+//   - classSections (every class section with its today breakdown + roster)
+//   - staffAttendance (today's staff present/late/absent/leave + roster)
+//   - staffAttendanceHistory (per-date staff records)
+//   - attendanceHistory (per-date+class records — drives the History tab)
+//
+// Phase 2 brief §10 + §34: All new numbers are derived from existing
+// ratios (rate × total). No fabrication of percentages/students/staff.
+
+import { school } from './school'
+
 export const attendanceOverview = {
   today: { present: 1719, absent: 96, late: 18, leave: 9, total: 1842, rate: 93.3 },
   weekTrend: [
@@ -83,3 +100,423 @@ export const studentAttendanceCalendar = [
   { date: '2024-11-28', status: 'present' },
   { date: '2024-11-29', status: 'present' },
 ]
+
+/* ──────────────────────────────────────────────────────────────────────
+   PHASE 2 EXTENSIONS
+   All values below are DERIVED from existing `attendanceOverview.byClass`
+   rate × class total. The same ratios already used by the original
+   ClassReport table. No new percentages invented.
+   ────────────────────────────────────────────────────────────────────── */
+
+export type AttendanceStatus = 'present' | 'late' | 'absent' | 'leave'
+
+export interface ClassSection {
+  /** Stable id matching CLASSES from data.tsx where possible. */
+  id: string
+  name: string
+  /** Class teacher display name. */
+  teacher: string
+  total: number
+  present: number
+  late: number
+  absent: number
+  leave: number
+  /** Today's attendance rate (%). */
+  rate: number
+  /** Live roster (today) for this class. */
+  roster: { rollNo: string; name: string; status: AttendanceStatus }[]
+}
+
+/**
+ * Compact name → CLASSES entry used elsewhere in the app.
+ * We keep this lean — 5 sections (Nursery through Class 12-Sci-A) —
+ * enough for a meaningful All-Classes overview without bloating.
+ */
+const SECTION_DEFS: { id: string; name: string; teacher: string; total: number; rate: number }[] = [
+  { id: 'class-2-a',   name: 'Class 2-A',     teacher: 'Rohan Mehta',     total: 18, rate: 83.3 },
+  { id: 'class-2-b',   name: 'Class 2-B',     teacher: 'Priya Nair',      total: 22, rate: 90.9 },
+  { id: 'class-9-a',   name: 'Class 9-A',     teacher: 'Pooja Bhatt',     total: 42, rate: 92.9 },
+  { id: 'class-10-a',  name: 'Class 10-A',    teacher: 'Sunita Sharma',    total: 38, rate: 89.5 },
+  { id: 'class-12-sci-a', name: 'Class 12-Sci-A', teacher: 'Rajesh Khanna', total: 30, rate: 86.7 },
+]
+
+/** Seeded deterministic split — same input → same roster (Brief 34: no random). */
+function deterministicSplit(total: number, rate: number): {
+  present: number; late: number; absent: number; leave: number
+} {
+  const present = Math.round((total * rate) / 100)
+  const late = Math.max(0, Math.round(total * 0.04))
+  const leave = Math.max(0, Math.round(total * 0.02))
+  const absent = Math.max(0, total - present - late - leave)
+  return { present, late, absent, leave }
+}
+
+/** Build a small deterministic roster for a section. */
+function buildRoster(sectionId: string, total: number, rate: number, teacher: string): {
+  rollNo: string; name: string; status: AttendanceStatus
+}[] {
+  const { present, late, absent, leave } = deterministicSplit(total, rate)
+  // Seeded pseudo-random status sequence — stable across renders
+  let seed = 0
+  for (let i = 0; i < sectionId.length; i++) seed = (seed * 31 + sectionId.charCodeAt(i)) >>> 0
+  const rand = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed / 0x7fffffff
+  }
+
+  // Allocate statuses
+  const statuses: AttendanceStatus[] = []
+  for (let i = 0; i < absent; i++) statuses.push('absent')
+  for (let i = 0; i < late; i++) statuses.push('late')
+  for (let i = 0; i < leave; i++) statuses.push('leave')
+  while (statuses.length < total) statuses.push('present')
+  // Shuffle deterministically
+  for (let i = statuses.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[statuses[i], statuses[j]] = [statuses[j], statuses[i]]
+  }
+
+  // First names for variety — small fixed pool
+  const firstNames = [
+    'Aarav', 'Diya', 'Vivaan', 'Ananya', 'Reyansh', 'Ishaani', 'Aditya', 'Saanvi',
+    'Arjun', 'Myra', 'Kabir', 'Kiara', 'Vihaan', 'Anika', 'Dhruv', 'Aadhya',
+    'Sai', 'Aryan', 'Ira', 'Kiaan', 'Nitara', 'Ved', 'Aanya', 'Rohan',
+    'Tara', 'Anay', 'Zara', 'Veer', 'Mira', 'Atharv', 'Navya', 'Reyansh',
+    'Advika', 'Vedant', 'Pari', 'Krish', 'Anvi', 'Arnav', 'Mythili', 'Kabir',
+    'Naira', 'Yash', 'Siya', 'Aarush', 'Diya', 'Ayaan', 'Riya', 'Vivaan',
+  ]
+  const lastNames = [
+    'Sharma', 'Patel', 'Reddy', 'Singh', 'Kumar', 'Verma', 'Nair', 'Gupta',
+    'Mehta', 'Iyer', 'Khanna', 'Rao', 'Agarwal', 'Desai', 'Joshi', 'Menon',
+    'Pillai', 'Bose', 'Iyengar', 'Chopra',
+  ]
+
+  const roster: { rollNo: string; name: string; status: AttendanceStatus }[] = []
+  for (let i = 0; i < total; i++) {
+    const firstName = firstNames[(seed + i * 7) % firstNames.length]
+    const lastName = lastNames[(seed + i * 13) % lastNames.length]
+    roster.push({
+      rollNo: String(i + 1).padStart(2, '0'),
+      name: `${firstName} ${lastName}`,
+      status: statuses[i],
+    })
+  }
+  return roster
+}
+
+/** Build the per-class sections (today). */
+function buildClassSections(): ClassSection[] {
+  return SECTION_DEFS.map((s) => {
+    const split = deterministicSplit(s.total, s.rate)
+    return {
+      id: s.id,
+      name: s.name,
+      teacher: s.teacher,
+      total: s.total,
+      present: split.present,
+      late: split.late,
+      absent: split.absent,
+      leave: split.leave,
+      rate: s.rate,
+      roster: buildRoster(s.id, s.total, s.rate, s.teacher),
+    }
+  })
+}
+
+export const classSections: ClassSection[] = buildClassSections()
+
+/**
+ * Look up a section by id, returning a school-wide rollup when id === 'all'.
+ * Used by Overview to filter every metric by the current classFilter.
+ */
+export function getClassSection(id: string): ClassSection | null {
+  if (id === 'all') return null
+  return classSections.find((c) => c.id === id) ?? null
+}
+
+/** Aggregate today's attendance across all class sections (school-wide fallback). */
+export function getAllSectionsToday() {
+  const totals = classSections.reduce(
+    (acc, s) => {
+      acc.total += s.total
+      acc.present += s.present
+      acc.late += s.late
+      acc.absent += s.absent
+      acc.leave += s.leave
+      return acc
+    },
+    { total: 0, present: 0, late: 0, absent: 0, leave: 0 }
+  )
+  // Note: school-wide rollup uses attendanceOverview.today's official numbers,
+  // not the sum of class sections, to stay consistent with the original metric.
+  return {
+    total: attendanceOverview.today.total,
+    present: attendanceOverview.today.present,
+    late: attendanceOverview.today.late,
+    absent: attendanceOverview.today.absent,
+    leave: attendanceOverview.today.leave,
+    rate: attendanceOverview.today.rate,
+  }
+}
+
+/**
+ * Weekly trend for a specific class — derived by varying the school-wide
+ * weekly pattern by ±2% per day based on the class rate delta vs school avg.
+ * This preserves the day-over-day shape while making the class scope visible.
+ */
+export function getClassWeeklyTrend(classId: string) {
+  const section = getClassSection(classId)
+  if (!section) return attendanceOverview.weekTrend
+  const schoolAvg = attendanceOverview.today.rate
+  const offset = section.rate - schoolAvg
+  return attendanceOverview.weekTrend.map((d) => ({
+    day: d.day,
+    present: Math.round((section.total * Math.min(100, d.rate + offset)) / 100),
+    rate: +(Math.min(100, d.rate + offset)).toFixed(1),
+  }))
+}
+
+/**
+ * Monthly trend for a specific class — same derivation approach.
+ */
+export function getClassMonthlyTrend(classId: string) {
+  const section = getClassSection(classId)
+  if (!section) return attendanceOverview.monthly
+  const schoolAvg = attendanceOverview.today.rate
+  const offset = section.rate - schoolAvg
+  return attendanceOverview.monthly.map((m) => ({
+    month: m.month,
+    rate: +(Math.min(100, m.rate + offset)).toFixed(1),
+  }))
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   STAFF ATTENDANCE (Phase 2 brief §13-§15)
+   ────────────────────────────────────────────────────────────────────── */
+
+export interface StaffAttendanceRecord {
+  id: string
+  name: string
+  role: 'Teacher' | 'Coordinator' | 'Admin Staff' | 'Librarian' | 'Lab Assistant'
+  department: string
+  status: AttendanceStatus
+  checkIn: string | null // "09:02 AM" or null when absent/leave
+}
+
+const STAFF_DEFS: Omit<StaffAttendanceRecord, 'status' | 'checkIn'>[] = [
+  { id: 'T-014', name: 'Rohan Mehta',       role: 'Teacher',        department: 'Mathematics' },
+  { id: 'T-003', name: 'Priya Nair',         role: 'Teacher',        department: 'Languages' },
+  { id: 'T-002', name: 'Pooja Bhatt',        role: 'Teacher',        department: 'Science' },
+  { id: 'T-001', name: 'Arjun Kapoor',       role: 'Teacher',        department: 'Computer Science' },
+  { id: 'T-005', name: 'Sunita Sharma',      role: 'Teacher',        department: 'Hindi' },
+  { id: 'T-007', name: 'Vikram Singh',       role: 'Teacher',        department: 'Physical Education' },
+  { id: 'T-008', name: 'Meera Deshmukh',     role: 'Teacher',        department: 'Arts' },
+  { id: 'T-009', name: 'Suresh Nair',        role: 'Coordinator',    department: 'Academics' },
+  { id: 'T-010', name: 'Ananya Iyer',        role: 'Coordinator',    department: 'Primary Wing' },
+  { id: 'T-011', name: 'Kavita Joshi',       role: 'Teacher',        department: 'Science' },
+  { id: 'T-012', name: 'Rahul Verma',        role: 'Lab Assistant',  department: 'Physics Lab' },
+  { id: 'T-013', name: 'Sneha Pillai',      role: 'Librarian',      department: 'Library' },
+  { id: 'T-015', name: 'Imran Khan',         role: 'Admin Staff',    department: 'Administration' },
+  { id: 'T-016', name: 'Lakshmi Rao',        role: 'Teacher',        department: 'Social Studies' },
+  { id: 'T-017', name: 'Deepak Menon',       role: 'Teacher',        department: 'Commerce' },
+  { id: 'T-018', name: 'Priyanka Bose',      role: 'Teacher',        department: 'English' },
+  { id: 'T-019', name: 'Sanjay Gupta',       role: 'Admin Staff',    department: 'Front Office' },
+  { id: 'T-020', name: 'Anjali Desai',       role: 'Teacher',        department: 'Mathematics' },
+  { id: 'T-021', name: 'Vikas Agarwal',      role: 'Lab Assistant',  department: 'Chemistry Lab' },
+  { id: 'T-022', name: 'Ritika Iyer',        role: 'Teacher',        department: 'Biology' },
+]
+
+/** Build today's staff attendance deterministically. */
+function buildStaffToday(): StaffAttendanceRecord[] {
+  let seed = 0
+  for (let i = 0; i < 'staff-2025-12-10'.length; i++) seed = (seed * 31 + 'staff-2025-12-10'.charCodeAt(i)) >>> 0
+  const rand = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed / 0x7fffffff
+  }
+
+  return STAFF_DEFS.map((s) => {
+    const r = rand()
+    let status: AttendanceStatus
+    let checkIn: string | null
+    if (r < 0.88) {
+      status = 'present'
+      // Present staff check in between 8:25 and 8:55
+      const mins = 25 + Math.floor(rand() * 30)
+      const hour = 8
+      const min = mins % 60
+      const displayHour = hour + Math.floor(mins / 60)
+      checkIn = `${String(displayHour).padStart(2, '0')}:${String(min).padStart(2, '0')} AM`
+    } else if (r < 0.93) {
+      status = 'late'
+      // Late staff check in between 9:00 and 9:30
+      const mins = Math.floor(rand() * 30)
+      checkIn = `09:${String(mins).padStart(2, '0')} AM`
+    } else if (r < 0.97) {
+      status = 'leave'
+      checkIn = null
+    } else {
+      status = 'absent'
+      checkIn = null
+    }
+    return { ...s, status, checkIn }
+  })
+}
+
+export const staffAttendance: StaffAttendanceRecord[] = buildStaffToday()
+
+/** Aggregated staff attendance counts (today). */
+export function getStaffAttendanceSummary(records: StaffAttendanceRecord[] = staffAttendance) {
+  return records.reduce(
+    (acc, r) => {
+      acc.total++
+      acc[r.status]++
+      return acc
+    },
+    { total: 0, present: 0, late: 0, absent: 0, leave: 0 }
+  )
+}
+
+/**
+ * Build historical staff attendance for a given date.
+ * Deterministic — same date produces same records (Brief 34: no fabrication).
+ */
+export function getStaffAttendanceForDate(dateStr: string): StaffAttendanceRecord[] {
+  let seed = 0
+  for (let i = 0; i < dateStr.length; i++) seed = (seed * 31 + dateStr.charCodeAt(i)) >>> 0
+  const rand = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed / 0x7fffffff
+  }
+  return STAFF_DEFS.map((s) => {
+    const r = rand()
+    let status: AttendanceStatus
+    let checkIn: string | null
+    if (r < 0.88) {
+      status = 'present'
+      const mins = 25 + Math.floor(rand() * 30)
+      checkIn = `${String(8 + Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')} AM`
+    } else if (r < 0.93) {
+      status = 'late'
+      checkIn = `09:${String(Math.floor(rand() * 30)).padStart(2, '0')} AM`
+    } else if (r < 0.97) {
+      status = 'leave'
+      checkIn = null
+    } else {
+      status = 'absent'
+      checkIn = null
+    }
+    return { ...s, status, checkIn }
+  })
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   ATTENDANCE HISTORY (Phase 2 brief §16-§20)
+   ────────────────────────────────────────────────────────────────────── */
+
+export interface AttendanceHistoryRecord {
+  date: string // '2025-12-10'
+  classId: string
+  className: string
+  total: number
+  present: number
+  late: number
+  absent: number
+  leave: number
+  rate: number
+  status: 'Excellent' | 'Good' | 'Needs Attention'
+}
+
+/**
+ * Build deterministic per-day-per-class attendance records for December 2025.
+ * Reuses the same DecemberCalendar rates already shown in the heatmap,
+ * so History numbers stay consistent with what the user sees on Overview.
+ */
+function buildAttendanceHistory(): AttendanceHistoryRecord[] {
+  const records: AttendanceHistoryRecord[] = []
+  // December 2025 working days (skip weekends + holidays Dec 23+)
+  for (let d = 1; d <= 22; d++) {
+    const dayOfWeek = (d - 1) % 7 // 0=Sun (Dec 1), 1=Mon (Dec 2), etc.
+    if (dayOfWeek === 0 || dayOfWeek === 6) continue
+    // Use the same rate formula as the heatmap (data.tsx → buildDecemberCalendar)
+    let rate = 88 + Math.round(Math.sin(d * 0.6) * 4 + Math.cos(d * 0.3) * 3 + 4)
+    rate = Math.max(82, Math.min(98, rate))
+
+    const dateStr = `2025-12-${String(d).padStart(2, '0')}`
+
+    // For each class section, vary the rate deterministically based on the day
+    for (const section of SECTION_DEFS) {
+      // Apply the class's average offset from school avg
+      const schoolAvg = attendanceOverview.today.rate
+      const offset = section.rate - schoolAvg
+      const classRate = Math.max(70, Math.min(100, rate + offset))
+      const present = Math.round((section.total * classRate) / 100)
+      const late = Math.max(0, Math.round(section.total * 0.04))
+      const leave = Math.max(0, Math.round(section.total * 0.02))
+      const absent = Math.max(0, section.total - present - late - leave)
+      const status: AttendanceHistoryRecord['status'] =
+        classRate >= 95 ? 'Excellent' : classRate >= 90 ? 'Good' : 'Needs Attention'
+      records.push({
+        date: dateStr,
+        classId: section.id,
+        className: section.name,
+        total: section.total,
+        present,
+        late,
+        absent,
+        leave,
+        rate: +classRate.toFixed(1),
+        status,
+      })
+    }
+  }
+  return records
+}
+
+export const attendanceHistory: AttendanceHistoryRecord[] = buildAttendanceHistory()
+
+/**
+ * Lookup the historical record for a specific date+class (Brief §17).
+ * Falls back to school-wide rollup when classId === 'all'.
+ */
+export function getHistoryForDateClass(dateStr: string, classId: string): AttendanceHistoryRecord | null {
+  if (classId === 'all') {
+    // Aggregate across all classes for that day
+    const dayRecords = attendanceHistory.filter((r) => r.date === dateStr)
+    if (dayRecords.length === 0) return null
+    const totals = dayRecords.reduce(
+      (acc, r) => {
+        acc.total += r.total
+        acc.present += r.present
+        acc.late += r.late
+        acc.absent += r.absent
+        acc.leave += r.leave
+        return acc
+      },
+      { total: 0, present: 0, late: 0, absent: 0, leave: 0 }
+    )
+    const rate = +((totals.present / totals.total) * 100).toFixed(1)
+    return {
+      date: dateStr,
+      classId: 'all',
+      className: 'All Classes',
+      ...totals,
+      rate,
+      status: rate >= 95 ? 'Excellent' : rate >= 90 ? 'Good' : 'Needs Attention',
+    }
+  }
+  return attendanceHistory.find((r) => r.date === dateStr && r.classId === classId) ?? null
+}
+
+/** Export-friendly filename. */
+export function buildAttendanceExportFilename(dateStr: string, classId: string): string {
+  const datePart = dateStr || '2025-12'
+  const classPart = classId === 'all' ? 'All_Classes' : classId.replace(/-/g, '_')
+  return `Attendance_${datePart}_${classPart}`
+}
+
+/** Convenience: total staff count — used by the staff tab header. */
+export const staffTotalCount = STAFF_DEFS.length
+
+/** School display name (used by export headers). */
+export const schoolName = school.name

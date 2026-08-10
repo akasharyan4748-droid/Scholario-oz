@@ -19,12 +19,47 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { FileSpreadsheet } from 'lucide-react'
 import { GlassCard } from '@/components/shared/ui'
-import { attendanceOverview } from '@/lib/mock/attendance'
+import { attendanceOverview, classSections } from '@/lib/mock/attendance'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { classTotalForIndex } from './data'
 
-export function ClassReport({ onExport: _onExport }: { onExport?: () => void }) {
-  const rows = attendanceOverview.byClass.slice(0, 10)
+export function ClassReport({ onExport: _onExport, classFilter = 'all' }: {
+  onExport?: () => void
+  classFilter?: string
+}) {
+  // Build the rows based on classFilter
+  let rows: { class: string; rate: number; total: number; present: number; late: number; absent: number; leave: number }[]
+  if (classFilter === 'all') {
+    // Show school-wide byClass list (existing behavior)
+    rows = attendanceOverview.byClass.slice(0, 10).map((r, i) => {
+      const total = classTotalForIndex(i)
+      const presentCount = Math.round(total * r.rate / 100)
+      const lateCount = 2
+      const absentCount = Math.max(0, total - presentCount - lateCount)
+      const leaveCount = Math.max(0, Math.round(total * 0.005))
+      return {
+        class: r.class,
+        rate: r.rate,
+        total,
+        present: presentCount,
+        late: lateCount,
+        absent: absentCount,
+        leave: leaveCount,
+      }
+    })
+  } else {
+    // Filter: show only the selected class section
+    const section = classSections.find((c) => c.id === classFilter)
+    rows = section ? [{
+      class: section.name,
+      rate: section.rate,
+      total: section.total,
+      present: section.present,
+      late: section.late,
+      absent: section.absent,
+      leave: section.leave,
+    }] : []
+  }
 
   return (
     <GlassCard className="p-3 sm:p-4 lg:p-5">
@@ -55,10 +90,6 @@ export function ClassReport({ onExport: _onExport }: { onExport?: () => void }) 
           </TableHeader>
           <TableBody>
             {rows.map((row, i) => {
-              const total = classTotalForIndex(i)
-              const presentCount = Math.round(total * row.rate / 100)
-              const absentCount = total - presentCount - 2
-              const lateCount = 2
               const pct = Math.round(row.rate)
               const status = pct >= 95 ? 'Excellent' : pct >= 90 ? 'Good' : pct >= 85 ? 'Average' : 'Needs Attention'
               const statusColor = pct >= 95
@@ -75,7 +106,7 @@ export function ClassReport({ onExport: _onExport }: { onExport?: () => void }) 
                 : pct >= 85
                 ? ATTENDANCE_COLORS.average
                 : ATTENDANCE_COLORS.atRisk
-              return <ClassRowItem key={row.class} row={row} idx={i} total={total} presentCount={presentCount} absentCount={absentCount} lateCount={lateCount} pct={pct} status={status} statusColor={statusColor} barColor={barColor} />
+              return <ClassRowItem key={row.class} idx={i} row={row} pct={pct} status={status} statusColor={statusColor} barColor={barColor} />
             })}
           </TableBody>
         </Table>
@@ -92,14 +123,10 @@ const ATTENDANCE_COLORS = {
 }
 
 function ClassRowItem({
-  row, idx, total, presentCount, absentCount, lateCount, pct, status, statusColor, barColor,
+  row, idx, pct, status, statusColor, barColor,
 }: {
-  row: { class: string; rate: number }
+  row: { class: string; rate: number; total: number; present: number; late: number; absent: number; leave: number }
   idx: number
-  total: number
-  presentCount: number
-  absentCount: number
-  lateCount: number
   pct: number
   status: string
   statusColor: string
@@ -109,10 +136,10 @@ function ClassRowItem({
   return (
     <TableRow className="border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors text-xs">
       <TableCell className="font-medium text-foreground py-2.5">{row.class}</TableCell>
-      <TableCell className="font-mono tabular-nums text-muted-foreground py-2.5 text-right">{total}</TableCell>
-      <TableCell className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400 py-2.5 text-right">{presentCount}</TableCell>
-      <TableCell className="font-mono tabular-nums text-rose-600 dark:text-rose-400 py-2.5 text-right">{absentCount}</TableCell>
-      <TableCell className="font-mono tabular-nums text-amber-600 dark:text-amber-400 py-2.5 text-right">{lateCount}</TableCell>
+      <TableCell className="font-mono tabular-nums text-muted-foreground py-2.5 text-right">{row.total}</TableCell>
+      <TableCell className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400 py-2.5 text-right">{row.present}</TableCell>
+      <TableCell className="font-mono tabular-nums text-rose-600 dark:text-rose-400 py-2.5 text-right">{row.absent}</TableCell>
+      <TableCell className="font-mono tabular-nums text-amber-600 dark:text-amber-400 py-2.5 text-right">{row.late}</TableCell>
       <TableCell className="py-2.5">
         <div className="flex items-center gap-2">
           <div className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden">

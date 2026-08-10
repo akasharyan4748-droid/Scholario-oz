@@ -1,23 +1,25 @@
 'use client'
 
 /**
- * AttendanceInsights — bottom-of-page highlight cards + Live Class Snapshot.
+ * AttendanceInsights — Best/Needs/Average cards + Live Class Snapshot.
  *
- * Brief section 12: Best Performing / Needs Attention / School Average
- *   - compact, balanced, micro-progress (NOT oversized progress bars)
+ * Brief §11 (Phase 2): Live Class Snapshot behavior is context-aware:
+ *   - All Classes selected → LIVE CLASS OVERVIEW (top 4-6 class summaries)
+ *   - Specific class selected → LIVE CLASS SNAPSHOT for that class's roster
  *
- * Brief section 13: Live Class Snapshot
- *   - compact student tiles, easy scanning
- *   - subtle hover feedback
- *   - keep the existing status system (PRESENT / ABSENT / LATE / LEAVE)
- *   - use the real class2AAttendance roster (Brief section 29: no fabrication)
+ * Brief §12: snapshot shows real-time status counts at the top, then grid.
  */
 
 import { motion, useReducedMotion } from 'framer-motion'
-import { TrendingUp, UserX, CalendarCheck, UserCheck } from 'lucide-react'
+import { TrendingUp, UserX, CalendarCheck, UserCheck, ArrowRight } from 'lucide-react'
 import { GlassCard } from '@/components/shared/ui'
 import { Badge } from '@/components/ui/badge'
-import { class2AAttendance } from '@/lib/mock/attendance'
+import {
+  classSections,
+  attendanceOverview,
+  type ClassSection,
+  type AttendanceStatus,
+} from '@/lib/mock/attendance'
 import { classList, school } from '@/lib/mock/school'
 import { formatNumber } from '@/lib/format'
 import { ATTENDANCE_PALETTE } from './attendance-charts'
@@ -26,13 +28,19 @@ const STATUS_META = {
   present: { label: 'Present', color: ATTENDANCE_PALETTE.present, bg: 'bg-emerald-500/10', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-500/30' },
   late:    { label: 'Late',    color: ATTENDANCE_PALETTE.late,    bg: 'bg-amber-500/10',    text: 'text-amber-700 dark:text-amber-300',    border: 'border-amber-500/30' },
   absent:  { label: 'Absent',  color: ATTENDANCE_PALETTE.absent,  bg: 'bg-rose-500/10',     text: 'text-rose-700 dark:text-rose-300',     border: 'border-rose-500/30' },
-  leave:   { label: 'Leave',   color: ATTENDANCE_PALETTE.leave,  bg: 'bg-sky-500/10',      text: 'text-sky-700 dark:text-sky-300',        border: 'border-sky-500/30' },
+  leave:   { label: 'Leave',   color: ATTENDANCE_PALETTE.leave,   bg: 'bg-sky-500/10',      text: 'text-sky-700 dark:text-sky-300',        border: 'border-sky-500/30' },
 } as const
 
-export function AttendanceInsights() {
+export function AttendanceInsights({
+  classFilter,
+  onViewAllClasses,
+}: {
+  classFilter: string
+  onViewAllClasses?: () => void
+}) {
   return (
     <>
-      {/* Brief 12: three compact, balanced cards with micro-progress */}
+      {/* Three compact insight cards (Brief §12 — Phase 1 preserved) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <InsightCard
           icon={<TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
@@ -60,8 +68,12 @@ export function AttendanceInsights() {
         />
       </div>
 
-      {/* Brief 13: Live Class Snapshot */}
-      <LiveClassSnapshot />
+      {/* Live Class Snapshot — context-aware (Brief §11) */}
+      {classFilter === 'all' ? (
+        <LiveClassOverview sections={classSections} onViewAll={onViewAllClasses} />
+      ) : (
+        <LiveClassRoster section={classSections.find((c) => c.id === classFilter) ?? null} />
+      )}
     </>
   )
 }
@@ -87,11 +99,10 @@ function InsightCard({
         <h4 className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">{title}</h4>
       </div>
       <div className="flex items-end justify-between gap-2 mb-2.5">
-        <p className="font-display text-xl sm:text-2xl font-bold text-foreground tracking-tight">{value}</p>
-        <span className="font-display text-sm font-bold tabular-nums" style={{ color }}>{rate}%</span>
+        <p className="font-display text-xl sm:text-2xl font-bold text-foreground tracking-tight truncate">{value}</p>
+        <span className="font-display text-sm font-bold tabular-nums shrink-0" style={{ color }}>{rate}%</span>
       </div>
-      <p className="text-[10px] text-muted-foreground mb-2">{sub}</p>
-      {/* Micro-progress: 2px thin track, no shimmer */}
+      <p className="text-[10px] text-muted-foreground mb-2 truncate">{sub}</p>
       <div className="h-1 rounded-full bg-muted/60 overflow-hidden">
         <motion.div
           initial={reduce ? false : { width: 0 }}
@@ -106,19 +117,18 @@ function InsightCard({
 }
 
 /* ──────────────────────────────────────────────────────────
-   LiveClassSnapshot — compact student tiles
-   Brief 13: keep PRESENT / ABSENT / LATE / LEAVE system
+   LiveClassOverview — Brief §11: when "All Classes" is selected
+   show top 4-6 class summaries, then "View all classes →" CTA.
    ────────────────────────────────────────────────────────── */
-function LiveClassSnapshot() {
+function LiveClassOverview({
+  sections, onViewAll,
+}: {
+  sections: ClassSection[]
+  onViewAll?: () => void
+}) {
   const reduce = useReducedMotion()
-
-  // Compute live stats from real roster (Brief 29)
-  const total = class2AAttendance.length
-  const present = class2AAttendance.filter((s) => s.status === 'present').length
-  const late = class2AAttendance.filter((s) => s.status === 'late').length
-  const absent = class2AAttendance.filter((s) => s.status === 'absent').length
-  const leave = class2AAttendance.filter((s) => s.status === 'leave').length
-  const rate = Math.round((present / total) * 1000) / 10
+  // Sort by rate desc, show top 6
+  const topSections = [...sections].sort((a, b) => b.rate - a.rate).slice(0, 6)
 
   return (
     <GlassCard className="p-3 sm:p-4 lg:p-5">
@@ -126,19 +136,114 @@ function LiveClassSnapshot() {
         <div className="min-w-0">
           <h3 className="font-semibold text-sm flex items-center gap-2">
             <UserCheck className="h-4 w-4 text-primary shrink-0" />
-            Live Class Snapshot — Class 2-A
+            Live Class Overview
           </h3>
           <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-            Today's roster · {total} students · Rohan Mehta (Class Teacher)
+            Top {topSections.length} classes by attendance rate · {sections.length} total
+          </p>
+        </div>
+        {onViewAll && (
+          <button
+            onClick={onViewAll}
+            className="text-[11px] font-semibold text-primary hover:underline underline-offset-2 flex items-center gap-1 transition-colors"
+          >
+            View all classes
+            <ArrowRight className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+        {topSections.map((s, i) => (
+          <motion.div
+            key={s.id}
+            initial={reduce ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: Math.min(i * 0.05, 0.3), duration: 0.3 }}
+            className="rounded-lg border border-border bg-card p-3"
+          >
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-foreground truncate">{s.name}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{s.teacher}</p>
+              </div>
+              <span className="font-display text-sm font-bold tabular-nums" style={{
+                color: s.rate >= 95 ? ATTENDANCE_PALETTE.present
+                  : s.rate >= 90 ? ATTENDANCE_PALETTE.late
+                  : ATTENDANCE_PALETTE.absent,
+              }}>
+                {s.rate}%
+              </span>
+            </div>
+            <div className="h-1 rounded-full bg-muted/60 overflow-hidden mb-2">
+              <motion.div
+                initial={reduce ? false : { width: 0 }}
+                animate={{ width: `${s.rate}%` }}
+                transition={{ duration: 0.6, delay: Math.min(i * 0.05, 0.3) + 0.1 }}
+                className="h-full rounded-full"
+                style={{
+                  background: s.rate >= 95 ? ATTENDANCE_PALETTE.present
+                    : s.rate >= 90 ? ATTENDANCE_PALETTE.late
+                    : ATTENDANCE_PALETTE.absent,
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <span><span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{s.present}</span> present</span>
+              <span className="text-muted-foreground/40">·</span>
+              <span><span className="font-semibold text-amber-600 dark:text-amber-400 tabular-nums">{s.late}</span> late</span>
+              <span className="text-muted-foreground/40">·</span>
+              <span><span className="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">{s.absent}</span> absent</span>
+              <span className="text-muted-foreground/40">·</span>
+              <span><span className="font-semibold text-sky-600 dark:text-sky-400 tabular-nums">{s.leave}</span> leave</span>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </GlassCard>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────
+   LiveClassRoster — Brief §11: specific class selected → show
+   that class's full roster in a compact grid.
+   Brief §12: status counts at top, then student grid.
+   ────────────────────────────────────────────────────────── */
+function LiveClassRoster({ section }: { section: ClassSection | null }) {
+  const reduce = useReducedMotion()
+
+  if (!section) {
+    return (
+      <GlassCard className="p-3 sm:p-4 lg:p-5">
+        <p className="text-xs text-muted-foreground text-center py-8">
+          No roster available for this class.
+        </p>
+      </GlassCard>
+    )
+  }
+
+  const rate = section.total > 0
+    ? +((section.present / section.total) * 100).toFixed(1)
+    : 0
+
+  return (
+    <GlassCard className="p-3 sm:p-4 lg:p-5">
+      <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <UserCheck className="h-4 w-4 text-primary shrink-0" />
+            Live Class Snapshot — {section.name}
+          </h3>
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+            Today's roster · {section.total} students · {section.teacher} (Class Teacher)
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Compact status legend */}
           <div className="flex items-center gap-2 text-[10px]">
-            <StatusPill label="Present" count={present} meta={STATUS_META.present} />
-            <StatusPill label="Late" count={late} meta={STATUS_META.late} />
-            <StatusPill label="Absent" count={absent} meta={STATUS_META.absent} />
-            <StatusPill label="Leave" count={leave} meta={STATUS_META.leave} />
+            <StatusPill label="Present" count={section.present} meta={STATUS_META.present} />
+            <StatusPill label="Late" count={section.late} meta={STATUS_META.late} />
+            <StatusPill label="Absent" count={section.absent} meta={STATUS_META.absent} />
+            <StatusPill label="Leave" count={section.leave} meta={STATUS_META.leave} />
           </div>
           <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-semibold">
             {rate}% present
@@ -146,16 +251,15 @@ function LiveClassSnapshot() {
         </div>
       </div>
 
-      {/* Compact student tiles — 9 cols on lg, denser on smaller screens */}
       <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-9 gap-1.5 sm:gap-2">
-        {class2AAttendance.map((s, i) => {
+        {section.roster.map((s, i) => {
           const meta = STATUS_META[s.status]
           return (
             <motion.div
               key={`${s.rollNo}-${i}`}
               initial={reduce ? false : { opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: Math.min(i * 0.025, 0.3), duration: 0.3 }}
+              transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.3 }}
               whileHover={!reduce ? { scale: 1.04, y: -1 } : undefined}
               title={`${s.name} · ${meta.label}`}
               className={`rounded-lg border p-1.5 text-center cursor-default transition-colors ${meta.bg} ${meta.border} ${meta.text}`}

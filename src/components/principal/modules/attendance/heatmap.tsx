@@ -1,18 +1,15 @@
 'use client'
 
 /**
- * AttendanceHeatmap — compact analytics calendar.
+ * AttendanceHeatmap — compact analytics calendar (Phase 2 refined).
  *
- * Brief section 9: Reduce cell height, restrained color scale,
- * feel like a premium analytics calendar (not a wall of large cards).
- *
- * Brief section 10: When a day is selected, the Selected Day card is
- * visually connected (renders INSIDE the heatmap card, not as a
- * separate unrelated card below).
+ * Brief section 9: reduce cell height, restrained color scale
+ * Brief section 19: Selected day card includes "View full attendance →"
+ *   CTA that navigates the user to the History tab.
  */
 
 import { motion, useReducedMotion } from 'framer-motion'
-import { CalendarCheck, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarCheck, ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react'
 import { GlassCard } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { decemberCalendar, rateColor } from './data'
@@ -21,21 +18,23 @@ import { CalendarLegend, SelectedDayPanel } from './shared'
 type HeatmapProps = {
   selectedDay: number | null
   setSelectedDay: (d: number | null) => void
+  /** Callback fired when user clicks "View full attendance →" */
+  onViewFullAttendance?: (day: number) => void
 }
 
-export function AttendanceHeatmap({ selectedDay, setSelectedDay }: HeatmapProps) {
+export function AttendanceHeatmap({ selectedDay, setSelectedDay, onViewFullAttendance }: HeatmapProps) {
   const reduce = useReducedMotion()
 
   return (
     <GlassCard className="p-3 sm:p-4 lg:p-5">
-      <div className="flex items-center justify-between mb-3 sm:mb-4">
+      <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
         <div className="min-w-0">
           <h3 className="font-semibold text-sm flex items-center gap-2">
             <CalendarCheck className="h-4 w-4 text-primary shrink-0" />
             December 2025 — Attendance Heatmap
           </h3>
           <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-            Tap a day to view details · Color intensity reflects attendance rate
+            Tap a day to view details · color intensity reflects attendance rate
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -49,7 +48,7 @@ export function AttendanceHeatmap({ selectedDay, setSelectedDay }: HeatmapProps)
         </div>
       </div>
 
-      {/* Compact calendar grid — non-square cells to save vertical space */}
+      {/* Compact calendar grid */}
       <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
           <div
@@ -90,9 +89,12 @@ export function AttendanceHeatmap({ selectedDay, setSelectedDay }: HeatmapProps)
 
       <CalendarLegend />
 
-      {/* Selected day details — visually connected to the heatmap (Brief 10) */}
+      {/* Selected day details — connected to heatmap with View Full Attendance CTA */}
       {selectedDay !== null && (
-        <SelectedDayPanel selectedDay={selectedDay} />
+        <SelectedDayPanel
+          selectedDay={selectedDay}
+          onViewFullAttendance={onViewFullAttendance ? () => onViewFullAttendance(selectedDay) : undefined}
+        />
       )}
     </GlassCard>
   )

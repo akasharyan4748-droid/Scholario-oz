@@ -14,10 +14,10 @@
  *  - Subtle 400–700ms reveal animations; respects prefers-reduced-motion
  */
 
-import { useId, useState } from 'react'
+import { useId } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import {
-  Area, AreaChart, CartesianGrid, Line, LineChart, Pie, PieChart, Cell,
+  Area, AreaChart, CartesianGrid, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { formatNumber } from '@/lib/format'
@@ -193,79 +193,76 @@ export function TrendLine({
 }
 
 /* ──────────────────────────────────────────────────────────
-   CompactRing — refined segmented ring for Today's Breakdown
-   Brief section 5: compact, center value focal, small aligned legend.
+   TodayBreakdownStack — Brief §3 (Phase 2): completely rethink
+   Today's Breakdown. Vertical stack layout that NEVER overflows
+   on iPad/tablet. Compact ring above + 4 status rows below.
+
+   Structure:
+     ┌─────────────────────────┐
+     │      93.3%              │
+     │      PRESENT            │
+     │   (compact ring 100px)  │
+     ├─────────────────────────┤
+     │ ● Present   1,719  93.3%│
+     │ ● Late         18   1.0%│
+     │ ● Absent       96   5.2%│
+     │ ● Leave         9   0.5%│
+     └─────────────────────────┘
    ────────────────────────────────────────────────────────── */
-interface CompactRingProps {
-  data: { name: string; value: number; color: string }[]
-  centerValue: string
-  centerLabel?: string
-  size?: number
+export interface TodayBreakdownItem {
+  name: string
+  value: number
+  color: string
 }
 
-export function CompactRing({
-  data, centerValue, centerLabel, size = 160,
-}: CompactRingProps) {
-  // Recharts Pie with innerRadius to render a segmented ring.
-  // We use small paddingAngle for clean separation.
-  const uid = useId().replace(/:/g, '')
+export function TodayBreakdownStack({
+  data, centerValue, centerLabel = 'PRESENT',
+}: {
+  data: TodayBreakdownItem[]
+  centerValue: string
+  centerLabel?: string
+}) {
   const reduce = useReducedMotion()
-
-  // Pre-compute totals for legend
   const total = data.reduce((sum, d) => sum + d.value, 0)
 
   return (
-    <div className="flex items-center gap-4 sm:gap-5">
-      <div className="relative shrink-0" style={{ width: size, height: size }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChartForRing data={data} reduce={reduce} />
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="font-display text-2xl sm:text-3xl font-bold tabular-nums tracking-tight">
-            {centerValue}
-          </span>
-          {centerLabel && (
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">
-              {centerLabel}
-            </span>
-          )}
-        </div>
+    <div className="flex flex-col items-center gap-4 py-2 w-full">
+      {/* Center percentage — large focal value (Brief 3) */}
+      <div className="flex flex-col items-center text-center">
+        <span className="font-display text-4xl sm:text-5xl font-bold tabular-nums tracking-tight text-foreground leading-none">
+          {centerValue}
+        </span>
+        <span className="text-[10px] text-muted-foreground uppercase tracking-[0.18em] font-semibold mt-1.5">
+          {centerLabel}
+        </span>
       </div>
-      <div className="flex-1 min-w-0 space-y-1.5">
+
+      {/* Thin segmented bar — visually communicates composition (compact, not giant) */}
+      <div className="w-full h-2 rounded-full overflow-hidden flex bg-muted/40">
+        {data.map((d, i) => {
+          const pct = total > 0 ? (d.value / total) * 100 : 0
+          if (pct === 0) return null
+          return (
+            <motion.div
+              key={d.name}
+              initial={reduce ? false : { width: 0 }}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.7, delay: 0.1 + i * 0.06, ease: [0.22, 1, 0.36, 1] }}
+              className="h-full"
+              style={{ background: d.color }}
+            />
+          )
+        })}
+      </div>
+
+      {/* Status rows — count + % aligned, never overflows */}
+      <div className="w-full space-y-1">
         {data.map((d) => {
           const pct = total > 0 ? (d.value / total) * 100 : 0
           return <RingLegendRow key={d.name} name={d.name} value={d.value} pct={pct} color={d.color} />
         })}
       </div>
     </div>
-  )
-}
-
-/** Recharts Pie rendered directly — single chart per ring. */
-function PieChartForRing({ data, reduce }: { data: any[]; reduce: boolean | null }) {
-  return (
-    <PieChart>
-      <Pie
-        data={data}
-        dataKey="value"
-        nameKey="name"
-        cx="50%"
-        cy="50%"
-        innerRadius="68%"
-        outerRadius="100%"
-        paddingAngle={2}
-        cornerRadius={6}
-        stroke="none"
-        isAnimationActive={!reduce}
-        animationDuration={650}
-        animationEasing="ease-out"
-      >
-        {data.map((entry: any, i: number) => (
-          <Cell key={i} fill={entry.color} />
-        ))}
-      </Pie>
-      <Tooltip content={<AttendanceTooltip valueSuffix="" valueLabel="Students" />} />
-    </PieChart>
   )
 }
 
@@ -285,95 +282,6 @@ function RingLegendRow({ name, value, pct, color }: {
         <span className="font-display font-semibold text-foreground">{formatNumber(value)}</span>
         <span className="text-[10px] text-muted-foreground w-10 text-right">{pct.toFixed(1)}%</span>
       </span>
-    </div>
-  )
-}
-
-/* ──────────────────────────────────────────────────────────
-   RankingList — compact class-wise attendance ranking
-   Brief section 8: thin elegant progress tracks, not giant bars.
-   Each row: class name, %, thin progress track, status badge.
-   ────────────────────────────────────────────────────────── */
-interface RankingRow {
-  name: string
-  value: number
-}
-interface RankingListProps {
-  data: RankingRow[]
-  /** Max rows visible before "View all" CTA. Default 8. */
-  maxRows?: number
-  /** Threshold for "Excellent" status. Default 95. */
-  excellentThreshold?: number
-  /** Threshold for "Good" status. Default 90. */
-  goodThreshold?: number
-}
-
-export function RankingList({
-  data, maxRows = 8, excellentThreshold = 95, goodThreshold = 90,
-}: RankingListProps) {
-  const [expanded, setExpanded] = useState(false)
-  const reduce = useReducedMotion()
-  const sorted = [...data].sort((a, b) => b.value - a.value)
-  const visible = expanded ? sorted : sorted.slice(0, maxRows)
-  const hidden = sorted.length - visible.length
-
-  return (
-    <div className="space-y-2.5">
-      {visible.map((row, i) => {
-        const pct = Math.round(row.value * 10) / 10
-        const isExcellent = pct >= excellentThreshold
-        const isGood = pct >= goodThreshold
-        const color = isExcellent
-          ? ATTENDANCE_PALETTE.present
-          : isGood
-          ? ATTENDANCE_PALETTE.late
-          : ATTENDANCE_PALETTE.absent
-        const status = isExcellent ? 'Excellent' : isGood ? 'Good' : 'Needs Attention'
-
-        return (
-          <motion.div
-            key={row.name}
-            initial={reduce ? false : { opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.4, delay: Math.min(i * 0.04, 0.3), ease: [0.22, 1, 0.36, 1] }}
-            className="group flex items-center gap-3"
-          >
-            <span className="text-xs font-mono text-muted-foreground w-5 text-right tabular-nums">{i + 1}</span>
-            <span className="text-xs font-medium text-foreground w-20 sm:w-24 truncate">{row.name}</span>
-            <div className="flex-1 h-1.5 rounded-full bg-muted/60 overflow-hidden">
-              <motion.div
-                initial={reduce ? false : { width: 0 }}
-                animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.7, delay: Math.min(i * 0.04, 0.3) + 0.1, ease: [0.22, 1, 0.36, 1] }}
-                className="h-full rounded-full"
-                style={{ background: color }}
-              />
-            </div>
-            <span className="text-xs font-display font-semibold tabular-nums text-foreground w-12 text-right">{pct}%</span>
-            <span className={`text-[10px] font-medium w-20 sm:w-24 text-right ${
-              isExcellent ? 'text-emerald-600 dark:text-emerald-400'
-              : isGood ? 'text-amber-600 dark:text-amber-400'
-              : 'text-rose-600 dark:text-rose-400'
-            }`}>{status}</span>
-          </motion.div>
-        )
-      })}
-      {hidden > 0 && !expanded && (
-        <button
-          onClick={() => setExpanded(true)}
-          className="mt-1 text-[11px] font-medium text-primary hover:underline underline-offset-2 transition-colors"
-        >
-          View all {sorted.length} classes
-        </button>
-      )}
-      {expanded && sorted.length > maxRows && (
-        <button
-          onClick={() => setExpanded(false)}
-          className="mt-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Show top {maxRows}
-        </button>
-      )}
     </div>
   )
 }

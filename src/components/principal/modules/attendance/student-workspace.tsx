@@ -1,23 +1,29 @@
 'use client'
 
 /**
- * StudentWorkspace — primary surface for the Attendance module.
+ * StudentWorkspace (Overview tab) — Brief §3-§12 (Phase 2).
  *
- * Brief section 4: refined compact KPI cards with primary number + contextual
- *   info + subtle visual indicator (no oversized cards, no bright color blocks).
+ * Brief §10: ALL metrics respect the classFilter — no school-wide numbers
+ * shown when a specific class is selected.
  *
- * Brief section 18: keep just `All Classes` filter + `Export` action (only
- *   controls that provide real value).
- *
- * Brief section 19: existing Export toast logic preserved (no break).
+ * Brief §11: Live Class Snapshot behavior is context-aware — handled in
+ * AttendanceInsights.
  */
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Download, Filter, CalendarCheck, UserCheck, UserX, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { attendanceOverview } from '@/lib/mock/attendance'
+import {
+  attendanceOverview,
+  classSections,
+  getClassSection,
+  getAllSectionsToday,
+  getClassWeeklyTrend,
+  getClassMonthlyTrend,
+  buildAttendanceExportFilename,
+} from '@/lib/mock/attendance'
 import { classList } from '@/lib/mock/school'
 import { formatNumber } from '@/lib/format'
 import { toast } from 'sonner'
@@ -27,31 +33,59 @@ import { AttendanceHeatmap } from './heatmap'
 import { ClassReport } from './class-report'
 import { AttendanceInsights } from './insights'
 
-export function StudentWorkspace() {
-  const [classFilter, setClassFilter] = useState('all')
+interface StudentWorkspaceProps {
+  classFilter: string
+  setClassFilter: (v: string) => void
+  onExport: () => void
+  onViewFullAttendance: (day: number) => void
+}
+
+export function StudentWorkspace({
+  classFilter, setClassFilter, onExport, onViewFullAttendance,
+}: StudentWorkspaceProps) {
   const [selectedDay, setSelectedDay] = useState<number | null>(10)
 
-  const todaysRate = attendanceOverview.today.rate
-  const present = attendanceOverview.today.present
-  const absent = attendanceOverview.today.absent + attendanceOverview.today.leave
-  const late = attendanceOverview.today.late
+  // Brief §10: derive ALL metrics from classFilter
+  const isAllClasses = classFilter === 'all'
+  const section = getClassSection(classFilter)
 
-  const handleExport = () => {
-    toast.success('Attendance report exported', {
-      description: `December_2025_Attendance_Report.xlsx · ${formatNumber(attendanceOverview.today.total)} students`,
-    })
-  }
+  const { todaysRate, present, absent, late, leave, total } = useMemo(() => {
+    if (isAllClasses || !section) {
+      const all = getAllSectionsToday()
+      return {
+        todaysRate: all.rate,
+        present: all.present,
+        absent: all.absent,
+        late: all.late,
+        leave: all.leave,
+        total: all.total,
+      }
+    }
+    return {
+      todaysRate: section.rate,
+      present: section.present,
+      absent: section.absent,
+      late: section.late,
+      leave: section.leave,
+      total: section.total,
+    }
+  }, [isAllClasses, section])
 
-  // Brief section 4: derived contextual info — uses REAL weekTrend data
-  const yesterdayRate = attendanceOverview.weekTrend[attendanceOverview.weekTrend.length - 2]?.rate ?? todaysRate
+  // Per-class weekly + monthly trends
+  const weeklyTrend = useMemo(() => getClassWeeklyTrend(classFilter), [classFilter])
+  const monthlyTrend = useMemo(() => getClassMonthlyTrend(classFilter), [classFilter])
+
+  // KPI contextual info — derived from REAL data
+  const yesterdayRate = weeklyTrend[weeklyTrend.length - 2]?.rate ?? todaysRate
   const wowDelta = +(todaysRate - yesterdayRate).toFixed(1)
-  const absentPct = +((absent / attendanceOverview.today.total) * 100).toFixed(1)
-  const latePct = +((late / attendanceOverview.today.total) * 100).toFixed(1)
+  const absentPct = total > 0 ? +((absent / total) * 100).toFixed(1) : 0
+  const latePct = total > 0 ? +((late / total) * 100).toFixed(1) : 0
 
   return (
     <PageTransition className="space-y-4">
+      {/* Brief §9: compact filters + export */}
       <ModuleHeader
-        meta={[`December 2025`]}
+        meta={[`December 2025`, isAllClasses ? 'All Classes' : (section?.name ?? '')]}
         actions={
           <>
             <Select value={classFilter} onValueChange={setClassFilter}>
@@ -61,21 +95,19 @@ export function StudentWorkspace() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Classes</SelectItem>
-                {classList.map((c) => {
-                  const id = typeof c === 'string' ? c : c.id
-                  const name = typeof c === 'string' ? c : c.name
-                  return <SelectItem key={id} value={id}>{name}</SelectItem>
-                })}
+                {classSections.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Button onClick={handleExport} variant="outline" size="sm" className="h-8 text-xs">
+            <Button onClick={onExport} variant="outline" size="sm" className="h-8 text-xs">
               <Download className="h-3.5 w-3.5" /> Export
             </Button>
           </>
         }
       />
 
-      {/* Brief 4: refined compact KPI cards */}
+      {/* Brief §4: refined compact KPI cards (filter-aware) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <RefinedKpi
           label="Today's Rate"
@@ -90,14 +122,14 @@ export function StudentWorkspace() {
           value={formatNumber(present)}
           icon={<UserCheck className="h-3.5 w-3.5" />}
           tone="cyan"
-          indicatorValue={`of ${formatNumber(attendanceOverview.today.total)} students`}
+          indicatorValue={`of ${formatNumber(total)} ${isAllClasses ? 'students' : 'in class'}`}
         />
         <RefinedKpi
           label="Absent + Leave"
-          value={formatNumber(absent)}
+          value={formatNumber(absent + leave)}
           icon={<UserX className="h-3.5 w-3.5" />}
           tone="rose"
-          indicatorValue={`${absentPct}% of students`}
+          indicatorValue={`${absentPct}% of ${isAllClasses ? 'students' : 'class'}`}
         />
         <RefinedKpi
           label="Late Arrivals"
@@ -108,17 +140,41 @@ export function StudentWorkspace() {
         />
       </div>
 
-      <OverviewCharts todaysRate={todaysRate} />
-      <AttendanceHeatmap selectedDay={selectedDay} setSelectedDay={setSelectedDay} />
-      <ClassReport onExport={handleExport} />
-      <AttendanceInsights />
+      {/* Charts row — now filter-aware */}
+      <OverviewCharts
+        todaysRate={todaysRate}
+        present={present}
+        absent={absent}
+        late={late}
+        leave={leave}
+        total={total}
+        weeklyTrend={weeklyTrend}
+        monthlyTrend={monthlyTrend}
+      />
+
+      <AttendanceHeatmap
+        selectedDay={selectedDay}
+        setSelectedDay={setSelectedDay}
+        onViewFullAttendance={onViewFullAttendance}
+      />
+
+      <ClassReport onExport={onExport} classFilter={classFilter} />
+
+      <AttendanceInsights
+        classFilter={classFilter}
+        onViewAllClasses={() => {
+          // Brief §11: View all classes → currently no full screen modal,
+          // could navigate to a dedicated page later. For now, switch filter
+          // back to all classes so all classes are visible.
+          setClassFilter('all')
+        }}
+      />
     </PageTransition>
   )
 }
 
 /* ──────────────────────────────────────────────────────────
    RefinedKpi — compact KPI card with contextual indicator
-   Brief 4: primary number + small contextual info + subtle visual indicator
    ────────────────────────────────────────────────────────── */
 type KpiTone = 'emerald' | 'cyan' | 'rose' | 'amber'
 
@@ -136,7 +192,6 @@ function RefinedKpi({
   value: string
   icon: React.ReactNode
   tone: KpiTone
-  /** Optional directional indicator (up/down arrow). */
   indicator?: 'up' | 'down'
   indicatorValue: string
 }) {
@@ -153,7 +208,7 @@ function RefinedKpi({
       <div className="flex items-center gap-1 mt-1.5 text-[10px] text-muted-foreground">
         {indicator === 'up' && <ArrowUpRight className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
         {indicator === 'down' && <ArrowDownRight className="h-3 w-3 text-rose-600 dark:text-rose-400" />}
-        <span>{indicatorValue}</span>
+        <span className="truncate">{indicatorValue}</span>
       </div>
     </div>
   )

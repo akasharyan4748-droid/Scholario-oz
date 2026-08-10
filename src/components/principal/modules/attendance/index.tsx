@@ -1,17 +1,85 @@
 'use client'
 
-// Attendance module entry point.
-//
-// `principal-panel.tsx` lazy-loads this file and reads the named
-// `AttendanceModule` export:
-//   import('./modules/attendance').then((m) => ({ default: m.AttendanceModule }))
-//
-// The module is currently 100% student-attendance focused, so the entry simply
-// renders `<StudentWorkspace />`. A future staff-workspace / settings modal
-// can be added here without touching the rest of the codebase.
+/**
+ * AttendanceModule — Phase 2 entry point.
+ *
+ * Brief §1: Three-section sub-navigation:
+ *   - Overview (student attendance + analytics)
+ *   - Teachers & Employees (staff attendance managed by Principal)
+ *   - History (past attendance records + downloads)
+ *
+ * Brief §10: Class filter is owned here and passed down to Overview +
+ * History so they stay in sync.
+ *
+ * Brief §19: Heatmap → "View full attendance" CTA navigates to History
+ * with the picked day pre-set.
+ */
 
+import { useState, useCallback } from 'react'
+import { PageTransition } from '@/components/shared/ui'
+import { toast } from 'sonner'
+import { formatNumber } from '@/lib/format'
+import { attendanceOverview, buildAttendanceExportFilename } from '@/lib/mock/attendance'
+import { AttendanceTabs, type AttendanceTab } from './attendance-tabs'
 import { StudentWorkspace } from './student-workspace'
+import { StaffAttendanceTab } from './staff-tab'
+import { AttendanceHistoryTab } from './history-tab'
 
 export function AttendanceModule() {
-  return <StudentWorkspace />
+  const [activeTab, setActiveTab] = useState<AttendanceTab>('overview')
+  // Shared class filter — used by Overview + History (Brief §10)
+  const [classFilter, setClassFilter] = useState<string>('all')
+  // History pre-fill — set when user clicks "View full attendance" (Brief §19)
+  const [historyInitialDate, setHistoryInitialDate] = useState<string | undefined>(undefined)
+  const [historyInitialClassId, setHistoryInitialClassId] = useState<string | undefined>(undefined)
+
+  // Brief §18: Export respects current tab + filter context
+  const handleExport = useCallback(() => {
+    const today = '2025-12-10'
+    const filename = buildAttendanceExportFilename(today, classFilter)
+    const totalStudents = classFilter === 'all'
+      ? attendanceOverview.today.total
+      : 18 // Per-class section size — placeholder for export description
+    toast.success('Attendance report exported', {
+      description: `${filename}.csv · ${formatNumber(totalStudents)} ${classFilter === 'all' ? 'students' : 'students in class'}`,
+    })
+  }, [classFilter])
+
+  // Brief §19: View full attendance from heatmap → switch to History tab
+  const handleViewFullAttendance = useCallback((day: number) => {
+    const dateStr = `2025-12-${String(day).padStart(2, '0')}`
+    setHistoryInitialDate(dateStr)
+    setHistoryInitialClassId(classFilter === 'all' ? undefined : classFilter)
+    setActiveTab('history')
+  }, [classFilter])
+
+  return (
+    <PageTransition className="space-y-4">
+      {/* Sub-navigation tabs */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <AttendanceTabs value={activeTab} onValueChange={setActiveTab} />
+      </div>
+
+      {/* Active tab content */}
+      {activeTab === 'overview' && (
+        <StudentWorkspace
+          classFilter={classFilter}
+          setClassFilter={setClassFilter}
+          onExport={handleExport}
+          onViewFullAttendance={handleViewFullAttendance}
+        />
+      )}
+
+      {activeTab === 'staff' && (
+        <StaffAttendanceTab />
+      )}
+
+      {activeTab === 'history' && (
+        <AttendanceHistoryTab
+          initialDate={historyInitialDate}
+          initialClassId={historyInitialClassId}
+        />
+      )}
+    </PageTransition>
+  )
 }

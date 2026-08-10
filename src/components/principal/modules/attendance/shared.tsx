@@ -3,23 +3,20 @@
 /**
  * Attendance shared presentational pieces.
  *
- * CalendarLegend — compact color legend strip below the heatmap.
- * SelectedDayPanel — connected detail panel for the picked day,
- *   rendered INSIDE the heatmap card (Brief section 10).
+ * CalendarLegend — compact color legend strip.
+ * SelectedDayPanel — Brief §10: connected to heatmap (renders inside).
+ *   Brief §19: includes "View full attendance →" CTA.
  *
- * Brief 1.7 + 1.8: derived counts use the canonical attendance ratio
- * (Brief section 29: do NOT fabricate data). The day's `rate` is the
- * only real per-day value; we compute proportional counts from the
- * school total using the same ratio as the original DayDetailCard.
+ * Brief §29 + §34: derived counts use day's `rate` × school total.
  */
 
 import { motion, useReducedMotion } from 'framer-motion'
+import { ArrowRight } from 'lucide-react'
 import { attendanceOverview } from '@/lib/mock/attendance'
 import { decemberCalendar } from './data'
 import { formatNumber } from '@/lib/format'
 import { ATTENDANCE_PALETTE } from './attendance-charts'
 
-/** Compact color-coded legend strip rendered beneath the heatmap. */
 export function CalendarLegend() {
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-muted-foreground pt-2.5 mt-2.5 border-t border-border">
@@ -44,23 +41,23 @@ export function CalendarLegend() {
 }
 
 /**
- * Compact detail panel rendered inside the heatmap card when a day is selected.
- * Brief section 10: visually connected — shares the heatmap's container.
- * Brief section 29: derived counts come from the day's `rate` × school total,
- *   using the same proportional split as the original code.
+ * SelectedDayPanel — Brief §10 (connected to heatmap) + §19 (View full CTA).
  */
-export function SelectedDayPanel({ selectedDay }: { selectedDay: number }) {
+export function SelectedDayPanel({
+  selectedDay,
+  onViewFullAttendance,
+}: {
+  selectedDay: number
+  onViewFullAttendance?: () => void
+}) {
   const reduce = useReducedMotion()
   const cell = decemberCalendar.find((c) => c.day === selectedDay)
   const rate = cell?.rate ?? 0
   const dateLabel = new Date(2025, 11, selectedDay).toLocaleDateString('en-IN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
+    weekday: 'long', day: 'numeric', month: 'long',
   })
 
-  // Brief 29: derived counts — same proportional computation as the
-  // original DayDetailCard (no fabricated numbers, no business-meaning change).
+  // Derived counts — same proportional computation as the original.
   const total = attendanceOverview.today.total
   const presentCount = Math.round(total * rate / 100)
   const lateCount = Math.round(total * 0.012)
@@ -74,12 +71,9 @@ export function SelectedDayPanel({ selectedDay }: { selectedDay: number }) {
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
       className="mt-3 rounded-lg border border-primary/30 bg-primary/5 overflow-hidden"
     >
-      {/* Header strip — connected to heatmap by primary border accent */}
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-primary/20 bg-primary/5">
         <div className="min-w-0">
-          <p className="text-[9px] uppercase tracking-wider font-semibold text-primary">
-            Selected Day
-          </p>
+          <p className="text-[9px] uppercase tracking-wider font-semibold text-primary">Selected Day</p>
           <p className="text-xs font-semibold text-foreground truncate">{dateLabel}</p>
         </div>
         <div className="flex items-baseline gap-1 shrink-0">
@@ -88,13 +82,25 @@ export function SelectedDayPanel({ selectedDay }: { selectedDay: number }) {
         </div>
       </div>
 
-      {/* Compact stats — 4 mini tiles, not oversized */}
       <div className="grid grid-cols-4 divide-x divide-border">
         <StatTile label="Present" value={presentCount} color={ATTENDANCE_PALETTE.present} />
         <StatTile label="Late" value={lateCount} color={ATTENDANCE_PALETTE.late} />
         <StatTile label="Absent" value={absentCount} color={ATTENDANCE_PALETTE.absent} />
         <StatTile label="Leave" value={leaveCount} color={ATTENDANCE_PALETTE.leave} />
       </div>
+
+      {/* Brief §19: View full attendance → CTA */}
+      {onViewFullAttendance && (
+        <div className="px-3 py-2 border-t border-primary/20 bg-primary/5">
+          <button
+            onClick={onViewFullAttendance}
+            className="text-[11px] font-semibold text-primary hover:underline underline-offset-2 flex items-center gap-1 transition-colors"
+          >
+            View full attendance
+            <ArrowRight className="h-3 w-3" />
+          </button>
+        </div>
+      )}
     </motion.div>
   )
 }
