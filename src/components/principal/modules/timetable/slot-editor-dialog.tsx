@@ -29,7 +29,27 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import { teachers } from '@/lib/mock/teachers'
 import { subjects } from '@/lib/mock/school'
-import { type DayType, type TimetableConflictInfo } from './data'
+import { SUBJECTS_BY_LEVEL } from '@/lib/store/students-store/constants'
+import { type DayType, type TimetableConflictInfo, CLASSES } from './data'
+
+/** Map timetable className → academic level for subject filtering */
+const CLASS_LEVELS: Record<string, string> = {
+  'Class 2-A': 'Primary', 'Class 2-B': 'Primary',
+  'Class 9-A': 'Secondary', 'Class 10-A': 'Secondary',
+  'Class 12-Sci-A': 'Senior Secondary',
+}
+
+/** Get valid subjects for a specific class (Brief section 7) */
+function getSubjectsForClass(className: string) {
+  const level = CLASS_LEVELS[className] || 'Primary'
+  const levelSubjects = SUBJECTS_BY_LEVEL[level] || []
+  // Merge with global subjects list for any extras
+  const allSubjectNames = new Set([...levelSubjects, ...subjects.map(s => s.name)])
+  return Array.from(allSubjectNames).map(name => {
+    const sub = subjects.find(s => s.name === name)
+    return { id: name, label: name, meta: sub?.code || name.substring(0, 3).toUpperCase() }
+  })
+}
 
 /** Minimal form — only what the Principal needs to choose. */
 export interface MinimalSlotForm {
@@ -106,12 +126,7 @@ export function SlotEditorDialog({
               value={form.subject}
               onChange={(v) => setForm((prev) => ({ ...prev, subject: v }))}
               placeholder="Select subject"
-              options={[
-                ...subjects.map((s) => ({ id: s.name, label: s.name, meta: s.code })),
-                ...['Hindi', 'Social Studies', 'Computer Science', 'Art & Craft', 'Physical Education']
-                  .filter((s) => !subjects.find((sub) => sub.name === s))
-                  .map((s) => ({ id: s, label: s, meta: '' })),
-              ]}
+              options={getSubjectsForClass(context.className)}
             />
           </Field>
 

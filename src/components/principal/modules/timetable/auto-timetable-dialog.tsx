@@ -26,11 +26,12 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import type { TimetableSlot } from './data'
 import { CompactTimeControls } from './compact-time-picker'
+import type { TimetableRow } from './schedule-grid'
 
 interface AutoTimetableDialogProps {
   open: boolean
   onOpenChange: (o: boolean) => void
-  onGenerate: (generatedSlots: TimetableSlot[]) => void
+  onGenerate: (generatedSlots: TimetableSlot[], generatedRows: TimetableRow[]) => void
   existingSlots: TimetableSlot[]
 }
 
@@ -102,22 +103,29 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
     const instructionalTime = totalMin - breakTimeTotal
     const periodDuration = Math.floor(instructionalTime / numPeriods)
 
-    // Build row timings: interleave periods and breaks
+    // Build row timings AND row structure (TimetableRow[])
     const rowTimings: { number: number; isBreak: boolean; breakType?: 'short' | 'lunch'; startTime: number; endTime: number }[] = []
+    const generatedRows: TimetableRow[] = []
     let currentTime = startMin
     let periodCounter = 0
-    const shortBreakAfter = Math.floor(numPeriods / 3)
-    const lunchBreakAfter = Math.floor(numPeriods * 2 / 3)
+    const shortBreakAfter = Math.max(1, Math.floor(numPeriods / 3))
+    const lunchBreakAfter = Math.max(1, Math.floor(numPeriods * 2 / 3))
     for (let i = 0; i < numPeriods; i++) {
       periodCounter++
+      const timeStr = `${minutesToTime(currentTime)} - ${minutesToTime(currentTime + periodDuration)}`
       rowTimings.push({ number: periodCounter, isBreak: false, startTime: currentTime, endTime: currentTime + periodDuration })
+      generatedRows.push({ number: periodCounter, name: `Period ${periodCounter}`, time: timeStr, isBreak: false })
       currentTime += periodDuration
       if (i === shortBreakAfter - 1 && includeShort) {
+        const breakTime = `${minutesToTime(currentTime)} - ${minutesToTime(currentTime + breakDuration)}`
         rowTimings.push({ number: 100, isBreak: true, breakType: 'short', startTime: currentTime, endTime: currentTime + breakDuration })
+        generatedRows.push({ number: 100, name: 'Short Break', time: breakTime, isBreak: true, breakType: 'short' })
         currentTime += breakDuration
       }
       if (i === lunchBreakAfter - 1 && includeLunch) {
+        const breakTime = `${minutesToTime(currentTime)} - ${minutesToTime(currentTime + lunchDuration)}`
         rowTimings.push({ number: 101, isBreak: true, breakType: 'lunch', startTime: currentTime, endTime: currentTime + lunchDuration })
+        generatedRows.push({ number: 101, name: 'Lunch Break', time: breakTime, isBreak: true, breakType: 'lunch' })
         currentTime += lunchDuration
       }
     }
@@ -216,7 +224,7 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
 
     setTimeout(() => {
       setGenerating(false)
-      onGenerate(generated)
+      onGenerate(generated, generatedRows)
       toast.success('Timetable generated', {
         description: `${assignedCount} periods assigned · ${actualConflicts} conflict${actualConflicts === 1 ? '' : 's'}`,
       })

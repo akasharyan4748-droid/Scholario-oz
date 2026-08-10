@@ -585,8 +585,9 @@ export function TimetableModule() {
         open={autoOpen}
         onOpenChange={setAutoOpen}
         existingSlots={draftSlots}
-        onGenerate={(generated) => {
+        onGenerate={(generated, generatedRows) => {
           setDraftSlots(generated)
+          setDraftRows(generatedRows)
           setHasUnsavedChanges(true)
         }}
       />
