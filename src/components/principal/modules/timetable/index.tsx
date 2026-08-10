@@ -58,6 +58,7 @@ export function TimetableModule() {
   const removeSlotAction = useTimetableStore((s) => s.removeSlot)
   const recordChange = useTimetableStore((s) => s.recordChange)
   const removePendingChange = useTimetableStore((s) => s.removePendingChange)
+  const cancelAllPendingChanges = useTimetableStore((s) => s.cancelAllPendingChanges)
   const publish = useTimetableStore((s) => s.publish)
 
   // ── Draft state (local — only mutated during edit mode) ──
@@ -578,6 +579,11 @@ export function TimetableModule() {
         conflictCount={globalConflictCount}
         onPublish={handlePublish}
         onRemoveChange={removePendingChange}
+        onCancelAll={() => {
+          cancelAllPendingChanges()
+          setPublishOpen(false)
+          toast.success('All changes cancelled — timetable restored to last published state')
+        }}
       />
 
       {/* Auto Timetable */}

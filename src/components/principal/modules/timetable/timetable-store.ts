@@ -78,8 +78,10 @@ interface TimetableStoreState {
   removeSlot: (id: string) => void
   duplicateSlot: (id: string, overrides?: Partial<TimetableSlot>) => void
   recordChange: (change: Omit<TimetableChange, 'id' | 'publishedAt'>) => void
-  /** Remove a pending change by id (Brief section 13+14+18: × on each change in publish dialog). */
+  /** Remove a pending change by id and revert that slot to its published state. */
   removePendingChange: (changeId: string) => void
+  /** Cancel ALL pending changes — restore slots to last published state. */
+  cancelAllPendingChanges: () => void
   publish: (publishedBy: string) => PublishedVersion | null
   hasPendingPublish: () => boolean
   resetToSeed: () => void
@@ -112,8 +114,32 @@ export const useTimetableStore = create<TimetableStoreState>()(
           ],
         })),
       removePendingChange: (changeId) =>
+        set((state) => {
+          const change = state.pendingChanges.find((c) => c.id === changeId)
+          if (!change) return state
+          // Revert the slot to its published state
+          const publishedSlot = state.publishedSlots.find((s) => s.id === change.slotId)
+          let slots = state.slots
+          if (publishedSlot) {
+            // Restore the published version
+            slots = slots.map((s) => (s.id === change.slotId ? publishedSlot : s))
+          } else if (change.type === 'slot_added') {
+            // Was added — remove it
+            slots = slots.filter((s) => s.id !== change.slotId)
+          } else if (change.type === 'slot_removed') {
+            // Was removed — re-add the published version
+            const originalPublished = state.publishedSlots.find((s) => s.id === change.slotId)
+            if (originalPublished) slots = [...slots, originalPublished]
+          }
+          return {
+            slots,
+            pendingChanges: state.pendingChanges.filter((c) => c.id !== changeId),
+          }
+        }),
+      cancelAllPendingChanges: () =>
         set((state) => ({
-          pendingChanges: state.pendingChanges.filter((c) => c.id !== changeId),
+          slots: [...state.publishedSlots],
+          pendingChanges: [],
         })),
       publish: (publishedBy) => {
         const state = get()

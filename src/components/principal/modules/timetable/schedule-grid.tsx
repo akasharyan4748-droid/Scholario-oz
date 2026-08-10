@@ -58,8 +58,9 @@ export function ScheduleGrid({
         )}
       </div>
 
-      {/* Desktop table — clean bordered scroll container */}
-      <div className="hidden lg:block rounded-lg border border-border/60 overflow-x-auto overscroll-x-contain">
+      {/* Desktop table — clean bordered scroll container. touch-action: pan-x
+          allows horizontal touch scroll but lets vertical gestures pass to the page. */}
+      <div className="hidden lg:block rounded-lg border border-border/60 overflow-x-auto overflow-y-hidden overscroll-x-contain overscroll-y-none [touch-action:pan-x]">
         <table className="text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">

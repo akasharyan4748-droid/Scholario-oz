@@ -24,6 +24,7 @@ export function PublishDialog({
   conflictCount,
   onPublish,
   onRemoveChange,
+  onCancelAll,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
@@ -31,6 +32,7 @@ export function PublishDialog({
   conflictCount: number
   onPublish: () => void
   onRemoveChange: (changeId: string) => void
+  onCancelAll: () => void
 }) {
   const canPublish = conflictCount === 0 && changes.length > 0
 
@@ -97,17 +99,31 @@ export function PublishDialog({
         </div>
 
         <DialogFooter className="px-4 py-3 border-t border-border">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-30 disabled:cursor-not-allowed"
-            onClick={onPublish}
-            disabled={!canPublish}
-          >
-            <Upload className="h-3.5 w-3.5" /> Publish
-          </Button>
+          <div className="flex items-center justify-between w-full gap-2">
+            {changes.length > 0 ? (
+              <button
+                onClick={onCancelAll}
+                className="text-[10px] text-muted-foreground hover:text-rose-500 transition-colors underline-offset-2 hover:underline"
+              >
+                Cancel all changes
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                onClick={onPublish}
+                disabled={!canPublish}
+              >
+                <Upload className="h-3.5 w-3.5" /> Publish
+              </Button>
+            </div>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
