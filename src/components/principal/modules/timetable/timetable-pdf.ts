@@ -26,6 +26,27 @@ export function exportTimetablePDF(
   const daySlots = slots.filter((s) => s.day === selectedDay)
   const isAllClasses = selectedClass === 'all'
   const title = isAllClasses ? 'Master Timetable' : `${selectedClass} Timetable`
+  _printTimetable(daySlots, rows, selectedDay, title, selectedClass, visibleClasses)
+}
+
+export function exportTeacherTimetablePDF(
+  slots: TimetableSlot[],
+  rows: TimetableRow[],
+  teacherId: string,
+  teacherName: string
+) {
+  const teacherSlots = slots.filter((s) => s.teacherId === teacherId)
+  _printTimetable(teacherSlots, rows, 'All Days', `${teacherName} Timetable`, teacherName, ['Subject', 'Class', 'Room'])
+}
+
+function _printTimetable(
+  daySlots: TimetableSlot[],
+  rows: TimetableRow[],
+  dayLabel: string,
+  title: string,
+  contextLabel: string,
+  columns: string[]
+) {
 
   const resolveTeacherName = (slot: TimetableSlot) =>
     slot.teacherName || getTeacherById(slot.teacherId)?.name || '—'
@@ -34,7 +55,7 @@ export function exportTimetablePDF(
 <html>
 <head>
 <meta charset="utf-8">
-<title>${title} — ${selectedDay}</title>
+<title>${title} — ${dayLabel}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; padding: 32px; color: #1a1a1a; }
@@ -60,26 +81,42 @@ export function exportTimetablePDF(
       <div class="school-name">${school.name}</div>
       <div class="timetable-title">${title}</div>
     </div>
-    <div class="day-info">${selectedDay}${isAllClasses ? '' : ' · ' + selectedClass}</div>
+    <div class="day-info">${dayLabel}${contextLabel === 'all' ? '' : ' · ' + contextLabel}</div>
   </div>
   <table>
     <thead>
       <tr>
         <th class="period-col">Period</th>
-        ${visibleClasses.map(cls => `<th>${cls}</th>`).join('')}
+        ${columns.map(col => `<th>${col}</th>`).join('')}
       </tr>
     </thead>
     <tbody>
       ${rows.map(row => {
         if (row.isBreak) {
-          return `<tr class="break-row"><td>${row.name}<br><span style="font-size:8px;color:#9ca3af">${row.time}</span></td><td colspan="${visibleClasses.length}" style="text-align:center;font-style:italic;color:#92400e">— ${row.name} (${row.time}) —</td></tr>`
+          return `<tr class="break-row"><td>${row.name}<br><span style="font-size:8px;color:#9ca3af">${row.time}</span></td><td colspan="${columns.length}" style="text-align:center;font-style:italic;color:#92400e">— ${row.name} (${row.time}) —</td></tr>`
         }
         return `<tr>
           <td class="period-col">${row.name}<br><span style="font-size:8px;color:#9ca3af">${row.time}</span></td>
-          ${visibleClasses.map(cls => {
-            const slot = daySlots.find(s => s.period === row.number && s.className === cls)
-            if (!slot) return '<td style="text-align:center;color:#d1d5db">—</td>'
-            return `<td><div class="subject">${slot.subject}</div><div class="teacher">${resolveTeacherName(slot)}</div><div class="room">${slot.room}</div></td>`
+          ${columns.map((col, ci) => {
+            // For class-based export: find slot by className
+            // For teacher-based export: columns are Subject, Class, Room
+            if (columns.length === 1) {
+              // Single class column
+              const slot = daySlots.find(s => s.period === row.number && s.className === col)
+              if (!slot) return '<td style="text-align:center;color:#d1d5db">—</td>'
+              return `<td><div class="subject">${slot.subject}</div><div class="teacher">${resolveTeacherName(slot)}</div><div class="room">${slot.room}</div></td>`
+            } else if (columns[0] === 'Subject') {
+              // Teacher export: find the slot for this teacher in this period
+              const slot = daySlots.find(s => s.period === row.number)
+              if (!slot) return '<td style="text-align:center;color:#d1d5db">—</td>'
+              if (ci === 0) return `<td><div class="subject">${slot.subject}</div></td>`
+              if (ci === 1) return `<td>${slot.className}</td>`
+              return `<td>${slot.room}</td>`
+            } else {
+              const slot = daySlots.find(s => s.period === row.number && s.className === col)
+              if (!slot) return '<td style="text-align:center;color:#d1d5db">—</td>'
+              return `<td><div class="subject">${slot.subject}</div><div class="teacher">${resolveTeacherName(slot)}</div><div class="room">${slot.room}</div></td>`
+            }
           }).join('')}
         </tr>`
       }).join('')}

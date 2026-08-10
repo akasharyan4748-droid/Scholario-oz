@@ -46,7 +46,8 @@ import { SlotEditorDialog, type MinimalSlotForm } from './slot-editor-dialog'
 import { PublishDialog } from './publish-dialog'
 import { AutoTimetableDialog } from './auto-timetable-dialog'
 import { ConfirmDialog } from '../shared/confirm-dialog'
-import { exportTimetablePDF } from './timetable-pdf'
+import { exportTimetablePDF, exportTeacherTimetablePDF } from './timetable-pdf'
+import { ExportTargetDialog } from './export-target-dialog'
 import { Trash2, AlertTriangle } from 'lucide-react'
 import { CLASSES } from './data'
 
@@ -84,6 +85,8 @@ export function TimetableModule() {
   const [discardOpen, setDiscardOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [autoOpen, setAutoOpen] = useState(false)
+  const [exportTargetOpen, setExportTargetOpen] = useState(false)
+  const [exportType, setExportType] = useState<'class' | 'teacher'>('class')
 
   // Sync draft when entering edit mode
   useEffect(() => {
@@ -386,14 +389,25 @@ export function TimetableModule() {
   }
 
   const handleExport = (type: 'class' | 'teacher' | 'master') => {
+    if (type === 'master') {
+      const displaySlots = editMode ? draftSlots : slots
+      const displayRows = editMode ? draftRows : PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
+      exportTimetablePDF(displaySlots, displayRows, selectedDay, 'all', CLASSES)
+    } else {
+      setExportType(type)
+      setExportTargetOpen(true)
+    }
+  }
+
+  const handleExportTarget = (target: string) => {
     const displaySlots = editMode ? draftSlots : slots
     const displayRows = editMode ? draftRows : PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
-    const visibleClasses = type === 'class' && selectedClass !== 'all'
-      ? [selectedClass]
-      : type === 'master'
-      ? CLASSES
-      : CLASSES.filter((c) => selectedClass === 'all' || selectedClass === c)
-    exportTimetablePDF(displaySlots, displayRows, selectedDay, selectedClass, visibleClasses)
+    if (exportType === 'class') {
+      exportTimetablePDF(displaySlots, displayRows, selectedDay, target, [target])
+    } else {
+      const teacher = teachers.find(t => t.id === target)
+      exportTeacherTimetablePDF(displaySlots, displayRows, target, teacher?.name || 'Teacher')
+    }
   }
 
   return (
@@ -600,6 +614,14 @@ export function TimetableModule() {
           setDraftRows(generatedRows)
           setHasUnsavedChanges(true)
         }}
+      />
+
+      {/* Export target selector */}
+      <ExportTargetDialog
+        open={exportTargetOpen}
+        onOpenChange={setExportTargetOpen}
+        exportType={exportType}
+        onExport={handleExportTarget}
       />
     </PageTransition>
   )
