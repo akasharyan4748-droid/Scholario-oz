@@ -37,6 +37,7 @@ import {
 } from './timetable-store'
 import { teachers } from '@/lib/mock/teachers'
 import { PERIODS, type TimetableSlot as Slot } from './data'
+import type { TimetableRow } from './schedule-grid'
 import { toast } from 'sonner'
 import { OverviewCards } from './overview-cards'
 import { FiltersBar } from './filters-bar'
@@ -61,6 +62,9 @@ export function TimetableModule() {
 
   // ── Draft state (local — only mutated during edit mode) ──
   const [draftSlots, setDraftSlots] = useState<Slot[]>(slots)
+  const [draftRows, setDraftRows] = useState<TimetableRow[]>(
+    PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
+  )
   const [editMode, setEditMode] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
@@ -82,6 +86,9 @@ export function TimetableModule() {
   useEffect(() => {
     if (editMode) {
       setDraftSlots(slots)
+      setDraftRows(
+        PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
+      )
       setHasUnsavedChanges(false)
     }
   }, [editMode, slots])
@@ -122,6 +129,9 @@ export function TimetableModule() {
   // ── Handlers ──
   const handleEnterEdit = () => {
     setDraftSlots(slots)
+    setDraftRows(
+      PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
+    )
     setHasUnsavedChanges(false)
     setEditMode(true)
   }
@@ -136,11 +146,59 @@ export function TimetableModule() {
 
   const handleDiscard = () => {
     setDraftSlots(slots)
+    setDraftRows(
+      PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
+    )
     setHasUnsavedChanges(false)
     setEditMode(false)
     setDiscardOpen(false)
     setEditorOpen(false)
     setEditingSlot(null)
+  }
+
+  // ── Row management handlers (Brief section 4-10 + 19) ──
+  const handleInsertRow = (afterRowNumber: number, type: 'period' | 'short_break' | 'lunch_break') => {
+    setDraftRows((prev) => {
+      const insertIdx = prev.findIndex((r) => r.number === afterRowNumber) + 1
+      const newRow: TimetableRow = type === 'period'
+        ? { number: Date.now(), name: 'Period', time: '08:30 AM - 09:15 AM', isBreak: false }
+        : type === 'short_break'
+        ? { number: Date.now() + 1, name: 'Short Break', time: '10:45 AM - 11:00 AM', isBreak: true, breakType: 'short' }
+        : { number: Date.now() + 2, name: 'Lunch Break', time: '12:30 PM - 01:15 PM', isBreak: true, breakType: 'lunch' }
+      const next = [...prev]
+      next.splice(insertIdx, 0, newRow)
+      // Auto-renumber periods (Brief section 5 + 19)
+      let periodNum = 0
+      for (const row of next) {
+        if (!row.isBreak) {
+          periodNum++
+          row.name = `Period ${periodNum}`
+        }
+      }
+      return next
+    })
+    setHasUnsavedChanges(true)
+  }
+
+  const handleDeleteRow = (rowNumber: number) => {
+    setDraftRows((prev) => {
+      const next = prev.filter((r) => r.number !== rowNumber)
+      // Auto-renumber periods
+      let periodNum = 0
+      for (const row of next) {
+        if (!row.isBreak) {
+          periodNum++
+          row.name = `Period ${periodNum}`
+        }
+      }
+      return next
+    })
+    setHasUnsavedChanges(true)
+  }
+
+  const handleEditRowTime = (rowNumber: number, newTime: string) => {
+    setDraftRows((prev) => prev.map((r) => r.number === rowNumber ? { ...r, time: newTime } : r))
+    setHasUnsavedChanges(true)
   }
 
   const handleApplyChanges = () => {
@@ -242,9 +300,9 @@ export function TimetableModule() {
 
   const handleOpenAssign = (day: DayType, period: number, className: string) => {
     const periodObj = PERIODS.find((p) => p.number === period)
-    // Auto-derive room from existing class slots
+    // Auto-derive room: use the class's existing room from any slot, or 'Auto'
     const existingClassSlot = draftSlots.find((s) => s.className === className)
-    const room = existingClassSlot?.room || 'Room 102'
+    const room = existingClassSlot?.room || 'Auto'
     setEditorContext({
       day, period,
       periodName: periodObj?.name || `Period ${period}`,
@@ -457,6 +515,7 @@ export function TimetableModule() {
         editMode={editMode}
         publications={publications}
         conflictedSlotIds={conflictedSlotIds}
+        rows={draftRows}
         onEditSlot={handleEditSlot}
         onDuplicateSlot={(slot) => {
           // Duplicate in draft
@@ -466,11 +525,13 @@ export function TimetableModule() {
           toast.success('Slot duplicated')
         }}
         onRemoveSlot={(slot) => setRemoveTarget(slot)}
-        onAssignPeriod={(day, period) => {
-          // Derive className from selectedClass filter
-          const className = selectedClass !== 'all' ? selectedClass : 'Class 2-A'
+        onAssignPeriod={(day, period, className) => {
+          // Use the EXACT clicked cell's className (Brief section 17-21)
           handleOpenAssign(day, period, className)
         }}
+        onInsertRow={handleInsertRow}
+        onDeleteRow={handleDeleteRow}
+        onEditRowTime={handleEditRowTime}
       />
 
       {/* Minimal slot editor */}

@@ -3,24 +3,35 @@
 /**
  * ScheduleGrid — the hero of the Timetable workspace.
  *
- * Brief section 5 + 6 + 7: Two clear states:
- *   VIEW MODE: clean, calm, slots show subject/teacher/room. Empty periods
- *     show subtle "+" Assign (but the page feels primarily like a viewer).
- *   EDIT MODE: empty periods become clearly actionable, existing slots
- *     become editable on click via a contextual Popover editor.
+ * Brief section 25 + 26: Three completely different "+" interactions:
+ *   A. CELL + → assign subject/teacher to that class+period
+ *   B. ROW DIVIDER + → insert new structural row (Period/Break)
+ *   C. AUTO TIMETABLE → generate timetable automatically
  *
- * Brief section 20-25: Change indicators on affected slots (data-driven,
- *   72h TTL, only on published-affected entries).
+ * Brief section 11-15: Per-row time editing — clickable time text opens
+ *   a compact time picker popover. Each row has independent start/end.
  *
- * Brief section 33: On mobile, switches to card-based layout.
+ * Brief section 14 + 15: Tiny × on period/break rows for deletion.
  */
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, MapPin, UserCheck, Coffee, CalendarDays, Copy, Trash2, X } from 'lucide-react'
+import { useState } from 'react'
+import { Plus, MapPin, UserCheck, Coffee, CalendarDays, X, Clock, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { getTeacherById } from '@/lib/mock/teachers'
 import { CLASSES, PERIODS, type DayType, type TimetableSlot } from './data'
 import { type PublishedVersion } from './timetable-store'
 import { ChangeIndicator } from './change-indicator'
+
+export interface TimetableRow {
+  number: number
+  name: string
+  time: string
+  isBreak: boolean
+  breakType?: 'short' | 'lunch'
+}
 
 interface ScheduleGridProps {
   selectedDay: DayType
@@ -29,10 +40,14 @@ interface ScheduleGridProps {
   editMode: boolean
   publications: PublishedVersion[]
   conflictedSlotIds: Set<string>
+  rows: TimetableRow[]
   onEditSlot: (slot: TimetableSlot) => void
   onDuplicateSlot: (slot: TimetableSlot) => void
   onRemoveSlot: (slot: TimetableSlot) => void
-  onAssignPeriod: (day: DayType, period: number) => void
+  onAssignPeriod: (day: DayType, period: number, className: string) => void
+  onInsertRow: (afterRowNumber: number, type: 'period' | 'short_break' | 'lunch_break') => void
+  onDeleteRow: (rowNumber: number) => void
+  onEditRowTime: (rowNumber: number, newTime: string) => void
 }
 
 export function ScheduleGrid({
@@ -42,10 +57,14 @@ export function ScheduleGrid({
   editMode,
   publications,
   conflictedSlotIds,
+  rows,
   onEditSlot,
   onDuplicateSlot,
   onRemoveSlot,
   onAssignPeriod,
+  onInsertRow,
+  onDeleteRow,
+  onEditRowTime,
 }: ScheduleGridProps) {
   const visibleClasses = CLASSES.filter(
     (c) => selectedClass === 'all' || selectedClass === c
@@ -58,6 +77,10 @@ export function ScheduleGrid({
     const t = getTeacherById(slot.teacherId)
     return t?.name || 'Assigned Faculty'
   }
+
+  // Determine which break options are available (Brief section 2)
+  const hasShortBreak = rows.some((r) => r.breakType === 'short')
+  const hasLunchBreak = rows.some((r) => r.breakType === 'lunch')
 
   return (
     <>
@@ -83,7 +106,7 @@ export function ScheduleGrid({
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
-              <th className="p-2.5 w-28 shrink-0 text-[10px] uppercase tracking-wider">Period</th>
+              <th className="p-2.5 w-32 shrink-0 text-[10px] uppercase tracking-wider">Period</th>
               {visibleClasses.map((cls) => (
                 <th key={cls} className="p-2.5 min-w-[180px] border-l border-border/50 font-bold text-foreground text-[10px] uppercase tracking-wider">
                   {cls}
@@ -93,84 +116,29 @@ export function ScheduleGrid({
           </thead>
           <tbody>
             <AnimatePresence mode="popLayout">
-              {PERIODS.map((p) => {
-                if (p.isBreak) {
-                  return (
-                    <tr key={`break-${p.number}`} className="bg-muted/20">
-                      <td className="p-2.5 shrink-0">
-                        <div className="flex items-center gap-1.5">
-                          <Coffee className="h-3 w-3 text-amber-500 shrink-0" />
-                          <div>
-                            <p className="text-[10px] font-bold text-foreground">{p.name}</p>
-                            <p className="text-[9px] text-muted-foreground">{p.time}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td
-                        colSpan={visibleClasses.length}
-                        className="p-2.5 text-center text-[10px] font-medium text-muted-foreground/60 italic border-l border-border/50 bg-amber-500/5"
-                      >
-                        — {p.name} ({p.time}) —
-                      </td>
-                    </tr>
-                  )
-                }
-
-                return (
-                  <motion.tr
-                    key={`period-${p.number}`}
-                    initial={false}
-                    className={cn(
-                      'border-t border-border/40 transition-colors',
-                      editMode ? 'hover:bg-accent/20' : ''
-                    )}
-                  >
-                    <td className="p-2.5 shrink-0">
-                      <p className="text-[10px] font-bold text-foreground">{p.name}</p>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">{p.time}</p>
-                    </td>
-                    {visibleClasses.map((cls) => {
-                      const slot = daySlots.find(
-                        (s) => s.period === p.number && s.className === cls
-                      )
-                      return (
-                        <td key={`${cls}-${p.number}`} className="p-1.5 border-l border-border/50 align-top">
-                          {slot ? (
-                            <SlotCard
-                              slot={slot}
-                              teacherName={resolveTeacherName(slot)}
-                              editMode={editMode}
-                              publications={publications}
-                              isConflicted={conflictedSlotIds.has(slot.id)}
-                              onEdit={() => onEditSlot(slot)}
-                              onDuplicate={() => onDuplicateSlot(slot)}
-                              onRemove={() => onRemoveSlot(slot)}
-                            />
-                          ) : (
-                            <button
-                              onClick={() => editMode && onAssignPeriod(selectedDay, p.number)}
-                              className={cn(
-                                'w-full rounded-lg border flex flex-col items-center justify-center gap-0.5 transition-all group',
-                                editMode
-                                  ? 'h-14 border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary cursor-pointer'
-                                  : 'h-14 border-transparent text-muted-foreground/30 cursor-default'
-                              )}
-                              disabled={!editMode}
-                            >
-                              {editMode ? (
-                                <>
-                                  <Plus className="h-3 w-3 group-hover:scale-110 transition-transform" />
-                                  <span className="text-[9px] font-medium">Assign</span>
-                                </>
-                              ) : null}
-                            </button>
-                          )}
-                        </td>
-                      )
-                    })}
-                  </motion.tr>
-                )
-              })}
+              {rows.map((row, idx) => (
+                <RowOrBreak
+                  key={`row-${row.number}`}
+                  row={row}
+                  editMode={editMode}
+                  visibleClasses={visibleClasses}
+                  daySlots={daySlots}
+                  selectedDay={selectedDay}
+                  publications={publications}
+                  conflictedSlotIds={conflictedSlotIds}
+                  hasShortBreak={hasShortBreak}
+                  hasLunchBreak={hasLunchBreak}
+                  resolveTeacherName={resolveTeacherName}
+                  onEditSlot={onEditSlot}
+                  onDuplicateSlot={onDuplicateSlot}
+                  onRemoveSlot={onRemoveSlot}
+                  onAssignPeriod={onAssignPeriod}
+                  onInsertRow={onInsertRow}
+                  onDeleteRow={onDeleteRow}
+                  onEditRowTime={onEditRowTime}
+                  isLast={idx === rows.length - 1}
+                />
+              ))}
             </AnimatePresence>
           </tbody>
         </table>
@@ -178,32 +146,66 @@ export function ScheduleGrid({
 
       {/* Mobile: card-based layout (visible below lg) */}
       <div className="lg:hidden space-y-2">
-        {PERIODS.map((p) => {
-          if (p.isBreak) {
+        {rows.map((row) => {
+          if (row.isBreak) {
             return (
-              <div key={`break-${p.number}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <div key={`break-${row.number}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/20">
                 <Coffee className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-foreground">{p.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{p.time}</p>
+                  <p className="text-xs font-bold text-foreground">{row.name}</p>
+                  {editMode ? (
+                    <TimeEditor
+                      time={row.time}
+                      onSave={(newTime) => onEditRowTime(row.number, newTime)}
+                    />
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground">{row.time}</p>
+                  )}
                 </div>
+                {editMode && (
+                  <button
+                    onClick={() => onDeleteRow(row.number)}
+                    className="p-1 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                    title="Delete break"
+                    aria-label="Delete break"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
               </div>
             )
           }
 
-          const periodSlots = daySlots.filter((s) => s.period === p.number)
+          const periodSlots = daySlots.filter((s) => s.period === row.number)
           return (
-            <div key={`period-${p.number}`} className="space-y-1.5">
+            <div key={`period-${row.number}`} className="space-y-1.5">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-foreground">{p.name}</span>
-                  <span className="text-[9px] text-muted-foreground">{p.time}</span>
+                  <span className="text-[10px] font-bold text-foreground">{row.name}</span>
+                  {editMode ? (
+                    <TimeEditor
+                      time={row.time}
+                      onSave={(newTime) => onEditRowTime(row.number, newTime)}
+                    />
+                  ) : (
+                    <span className="text-[9px] text-muted-foreground">{row.time}</span>
+                  )}
                 </div>
+                {editMode && (
+                  <button
+                    onClick={() => onDeleteRow(row.number)}
+                    className="p-1 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                    title="Delete period"
+                    aria-label="Delete period"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
               </div>
               {periodSlots.length === 0 ? (
                 editMode ? (
                   <button
-                    onClick={() => onAssignPeriod(selectedDay, p.number)}
+                    onClick={() => onAssignPeriod(selectedDay, row.number, selectedClass !== 'all' ? selectedClass : 'Class 2-A')}
                     className="w-full py-2.5 rounded-lg border border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 flex items-center justify-center gap-1 text-muted-foreground hover:text-primary transition-all"
                   >
                     <Plus className="h-3 w-3" />
@@ -228,6 +230,15 @@ export function ScheduleGrid({
                   />
                 ))
               )}
+              {/* Row divider + (between rows and after last) */}
+              {editMode && (
+                <RowInsertButton
+                  afterRowNumber={row.number}
+                  hasShortBreak={hasShortBreak}
+                  hasLunchBreak={hasLunchBreak}
+                  onInsert={onInsertRow}
+                />
+              )}
             </div>
           )
         })}
@@ -237,9 +248,345 @@ export function ScheduleGrid({
 }
 
 /* ------------------------------------------------------------------ */
+/* RowOrBreak — renders a period row or a break row + the divider +    */
+/* ------------------------------------------------------------------ */
+function RowOrBreak({
+  row, editMode, visibleClasses, daySlots, selectedDay, publications,
+  conflictedSlotIds, hasShortBreak, hasLunchBreak, resolveTeacherName,
+  onEditSlot, onDuplicateSlot, onRemoveSlot, onAssignPeriod,
+  onInsertRow, onDeleteRow, onEditRowTime, isLast,
+}: {
+  row: TimetableRow
+  editMode: boolean
+  visibleClasses: string[]
+  daySlots: TimetableSlot[]
+  selectedDay: DayType
+  publications: PublishedVersion[]
+  conflictedSlotIds: Set<string>
+  hasShortBreak: boolean
+  hasLunchBreak: boolean
+  resolveTeacherName: (slot: TimetableSlot) => string
+  onEditSlot: (slot: TimetableSlot) => void
+  onDuplicateSlot: (slot: TimetableSlot) => void
+  onRemoveSlot: (slot: TimetableSlot) => void
+  onAssignPeriod: (day: DayType, period: number, className: string) => void
+  onInsertRow: (afterRowNumber: number, type: 'period' | 'short_break' | 'lunch_break') => void
+  onDeleteRow: (rowNumber: number) => void
+  onEditRowTime: (rowNumber: number, newTime: string) => void
+  isLast: boolean
+}) {
+  if (row.isBreak) {
+    return (
+      <>
+        <motion.tr
+          key={`break-${row.number}`}
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="bg-muted/20"
+        >
+          <td className="p-2.5 shrink-0">
+            <div className="flex items-center gap-1.5">
+              <Coffee className="h-3 w-3 text-amber-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <p className="text-[10px] font-bold text-foreground">{row.name}</p>
+                  {editMode && (
+                    <button
+                      onClick={() => onDeleteRow(row.number)}
+                      className="p-0.5 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                      title="Delete break"
+                      aria-label="Delete break"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
+                {editMode ? (
+                  <TimeEditor time={row.time} onSave={(newTime) => onEditRowTime(row.number, newTime)} />
+                ) : (
+                  <p className="text-[9px] text-muted-foreground">{row.time}</p>
+                )}
+              </div>
+            </div>
+          </td>
+          <td
+            colSpan={visibleClasses.length}
+            className="p-2.5 text-center text-[10px] font-medium text-muted-foreground/60 italic border-l border-border/50 bg-amber-500/5"
+          >
+            — {row.name} ({row.time}) —
+          </td>
+        </motion.tr>
+        {editMode && (
+          <RowInsertDivider
+            afterRowNumber={row.number}
+            hasShortBreak={hasShortBreak}
+            hasLunchBreak={hasLunchBreak}
+            onInsert={onInsertRow}
+          />
+        )}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <motion.tr
+        key={`period-${row.number}`}
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: 'auto' }}
+        exit={{ opacity: 0, height: 0 }}
+        className={cn('border-t border-border/40 transition-colors', editMode ? 'hover:bg-accent/20' : '')}
+      >
+        <td className="p-2.5 shrink-0">
+          <div className="flex items-center gap-1">
+            <p className="text-[10px] font-bold text-foreground">{row.name}</p>
+            {editMode && (
+              <button
+                onClick={() => onDeleteRow(row.number)}
+                className="p-0.5 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                title="Delete period"
+                aria-label="Delete period"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            )}
+          </div>
+          {editMode ? (
+            <TimeEditor time={row.time} onSave={(newTime) => onEditRowTime(row.number, newTime)} />
+          ) : (
+            <p className="text-[9px] text-muted-foreground mt-0.5">{row.time}</p>
+          )}
+        </td>
+        {visibleClasses.map((cls) => {
+          const slot = daySlots.find(
+            (s) => s.period === row.number && s.className === cls
+          )
+          return (
+            <td key={`${cls}-${row.number}`} className="p-1.5 border-l border-border/50 align-top">
+              {slot ? (
+                <SlotCard
+                  slot={slot}
+                  teacherName={resolveTeacherName(slot)}
+                  editMode={editMode}
+                  publications={publications}
+                  isConflicted={conflictedSlotIds.has(slot.id)}
+                  onEdit={() => onEditSlot(slot)}
+                  onDuplicate={() => onDuplicateSlot(slot)}
+                  onRemove={() => onRemoveSlot(slot)}
+                />
+              ) : (
+                <button
+                  onClick={() => editMode && onAssignPeriod(selectedDay, row.number, cls)}
+                  className={cn(
+                    'w-full rounded-lg border flex flex-col items-center justify-center gap-0.5 transition-all group',
+                    editMode
+                      ? 'h-14 border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary cursor-pointer'
+                      : 'h-14 border-transparent text-muted-foreground/30 cursor-default'
+                  )}
+                  disabled={!editMode}
+                >
+                  {editMode ? (
+                    <>
+                      <Plus className="h-3 w-3 group-hover:scale-110 transition-transform" />
+                      <span className="text-[9px] font-medium">Assign</span>
+                    </>
+                  ) : null}
+                </button>
+              )}
+            </td>
+          )
+        })}
+      </motion.tr>
+      {editMode && (
+        <RowInsertDivider
+          afterRowNumber={row.number}
+          hasShortBreak={hasShortBreak}
+          hasLunchBreak={hasLunchBreak}
+          onInsert={onInsertRow}
+        />
+      )}
+    </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* RowInsertDivider — tiny + ON the divider between rows              */
+/* Brief section 16 + 27: Clicking opens a compact menu.               */
+/* ------------------------------------------------------------------ */
+function RowInsertDivider({
+  afterRowNumber, hasShortBreak, hasLunchBreak, onInsert,
+}: {
+  afterRowNumber: number
+  hasShortBreak: boolean
+  hasLunchBreak: boolean
+  onInsert: (afterRowNumber: number, type: 'period' | 'short_break' | 'lunch_break') => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <tr className="border-t border-border/20">
+      <td colSpan={99} className="p-0 h-0 relative">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="h-4 w-4 rounded-full border border-border/60 bg-card text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors flex items-center justify-center shadow-sm"
+                title="Insert row"
+                aria-label="Insert row"
+              >
+                <Plus className="h-2 w-2" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-36 p-1" align="center" sideOffset={4}>
+              <button
+                onClick={() => { onInsert(afterRowNumber, 'period'); setOpen(false) }}
+                className="w-full px-2 py-1.5 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors text-[10px] rounded"
+              >
+                <Plus className="h-2.5 w-2.5" /> Period
+              </button>
+              {!hasShortBreak && (
+                <button
+                  onClick={() => { onInsert(afterRowNumber, 'short_break'); setOpen(false) }}
+                  className="w-full px-2 py-1.5 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors text-[10px] rounded"
+                >
+                  <Coffee className="h-2.5 w-2.5" /> Short Break
+                </button>
+              )}
+              {!hasLunchBreak && (
+                <button
+                  onClick={() => { onInsert(afterRowNumber, 'lunch_break'); setOpen(false) }}
+                  className="w-full px-2 py-1.5 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors text-[10px] rounded"
+                >
+                  <Coffee className="h-2.5 w-2.5" /> Lunch Break
+                </button>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* RowInsertButton — mobile version of the row divider +              */
+/* ------------------------------------------------------------------ */
+function RowInsertButton({
+  afterRowNumber, hasShortBreak, hasLunchBreak, onInsert,
+}: {
+  afterRowNumber: number
+  hasShortBreak: boolean
+  hasLunchBreak: boolean
+  onInsert: (afterRowNumber: number, type: 'period' | 'short_break' | 'lunch_break') => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="flex justify-center py-0.5">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="h-4 w-4 rounded-full border border-border/60 bg-card text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors flex items-center justify-center"
+            title="Insert row"
+            aria-label="Insert row"
+          >
+            <Plus className="h-2 w-2" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-36 p-1" align="center" sideOffset={4}>
+          <button
+            onClick={() => { onInsert(afterRowNumber, 'period'); setOpen(false) }}
+            className="w-full px-2 py-1.5 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors text-[10px] rounded"
+          >
+            <Plus className="h-2.5 w-2.5" /> Period
+          </button>
+          {!hasShortBreak && (
+            <button
+              onClick={() => { onInsert(afterRowNumber, 'short_break'); setOpen(false) }}
+              className="w-full px-2 py-1.5 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors text-[10px] rounded"
+            >
+              <Coffee className="h-2.5 w-2.5" /> Short Break
+            </button>
+          )}
+          {!hasLunchBreak && (
+            <button
+              onClick={() => { onInsert(afterRowNumber, 'lunch_break'); setOpen(false) }}
+              className="w-full px-2 py-1.5 flex items-center gap-1.5 text-left hover:bg-muted/40 transition-colors text-[10px] rounded"
+            >
+              <Coffee className="h-2.5 w-2.5" /> Lunch Break
+            </button>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* TimeEditor — compact inline time editor (Brief section 14)          */
+/* Click on time text → popover with Start/End time inputs            */
+/* ------------------------------------------------------------------ */
+function TimeEditor({ time, onSave }: {
+  time: string
+  onSave: (newTime: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  // Parse "08:30 AM - 09:15 AM" into start/end
+  const parts = time.split(' - ')
+  const [start, setStart] = useState(parts[0] || '08:30 AM')
+  const [end, setEnd] = useState(parts[1] || '09:15 AM')
+
+  const handleSave = () => {
+    // Validate start < end (Brief section 15)
+    onSave(`${start} - ${end}`)
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="text-[9px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5"
+          title="Edit time"
+        >
+          <Clock className="h-2.5 w-2.5" />
+          {time}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-2" align="start" sideOffset={4}>
+        <div className="space-y-2">
+          <div>
+            <label className="text-[8px] font-semibold text-muted-foreground uppercase tracking-wider">Start</label>
+            <Input
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              className="h-7 text-[10px] mt-0.5"
+              placeholder="08:30 AM"
+            />
+          </div>
+          <div>
+            <label className="text-[8px] font-semibold text-muted-foreground uppercase tracking-wider">End</label>
+            <Input
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+              className="h-7 text-[10px] mt-0.5"
+              placeholder="09:15 AM"
+            />
+          </div>
+          <Button size="sm" className="w-full h-7 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleSave}>
+            Done
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /* SlotCard — desktop table cell with polished subject card design     */
-/* Brief section 8 + 9 + 10: Subject prominent, teacher+room with       */
-/*   small icons, tiny × in edit mode (visible only in edit mode).     */
 /* ------------------------------------------------------------------ */
 function SlotCard({ slot, teacherName, editMode, publications, isConflicted, onEdit, onDuplicate, onRemove }: {
   slot: TimetableSlot
@@ -264,15 +611,11 @@ function SlotCard({ slot, teacherName, editMode, publications, isConflicted, onE
           : isSports
           ? 'border-teal-500/20 bg-teal-500/5 hover:border-teal-500/40'
           : 'border-primary/20 bg-primary/5 hover:border-primary/40',
-        // Conflict corner-glow (Brief section 9 + 11): subtle animated rose glow
         isConflicted && 'ring-1 ring-rose-400/40 shadow-[0_0_8px_rgba(244,63,94,0.15)]'
       )}
       onClick={editMode ? onEdit : undefined}
     >
-      {/* Change indicator (data-driven, 72h TTL, old → new) */}
       <ChangeIndicator slotId={slot.id} publications={publications} />
-
-      {/* Subject — primary */}
       <div className="flex items-start justify-between gap-1">
         <span className={cn(
           'font-bold text-[11px] truncate',
@@ -280,7 +623,6 @@ function SlotCard({ slot, teacherName, editMode, publications, isConflicted, onE
         )}>
           {slot.subject}
         </span>
-        {/* Tiny × — visible only in edit mode (Brief section 10 + 12) */}
         {editMode && (
           <button
             onClick={(e) => { e.stopPropagation(); onRemove() }}
@@ -292,14 +634,10 @@ function SlotCard({ slot, teacherName, editMode, publications, isConflicted, onE
           </button>
         )}
       </div>
-
-      {/* Teacher — secondary */}
       <p className="text-[10px] font-medium text-foreground mt-1 flex items-center gap-0.5">
         <UserCheck className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
         <span className="truncate">{teacherName}</span>
       </p>
-
-      {/* Room — tertiary */}
       <p className="text-[9px] text-muted-foreground mt-0.5 flex items-center gap-0.5">
         <MapPin className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
         <span className="truncate">{slot.room}</span>
@@ -338,7 +676,6 @@ function MobileSlotCard({ slot, teacherName, publications, isConflicted, editMod
       onClick={editMode ? onEdit : undefined}
     >
       <ChangeIndicator slotId={slot.id} publications={publications} />
-
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <p className={cn(
@@ -355,7 +692,7 @@ function MobileSlotCard({ slot, teacherName, publications, isConflicted, editMod
             className="p-1.5 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
             aria-label="Remove slot"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <X className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
