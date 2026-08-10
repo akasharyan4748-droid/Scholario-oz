@@ -280,25 +280,39 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
             </div>
           </div>
 
-          {/* Number of Periods (truly editable) */}
+          {/* Number of Periods (strict 1-9, single digit) */}
           <div className="space-y-1">
             <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Number of periods</label>
             <input
               type="number"
               min={1}
-              max={12}
+              max={9}
+              maxLength={1}
               value={numPeriodsInput}
               onChange={(e) => {
                 const raw = e.target.value
-                setNumPeriodsInput(raw)
+                // Only accept single digit 1-9
+                if (raw === '') { setNumPeriodsInput(''); return }
                 const v = parseInt(raw, 10)
-                if (!isNaN(v) && v >= 1 && v <= 12) setNumPeriods(v)
+                if (!isNaN(v) && v >= 1 && v <= 9) {
+                  setNumPeriodsInput(String(v))
+                  setNumPeriods(v)
+                }
               }}
               onBlur={() => {
                 const v = parseInt(numPeriodsInput, 10)
                 if (isNaN(v) || v < 1) { setNumPeriods(1); setNumPeriodsInput('1') }
-                else if (v > 12) { setNumPeriods(12); setNumPeriodsInput('12') }
+                else if (v > 9) { setNumPeriods(9); setNumPeriodsInput('9') }
                 else setNumPeriods(v)
+              }}
+              onPaste={(e) => {
+                e.preventDefault()
+                const pasted = e.clipboardData.getData('text')
+                const v = parseInt(pasted, 10)
+                if (!isNaN(v) && v >= 1 && v <= 9) {
+                  setNumPeriodsInput(String(v))
+                  setNumPeriods(v)
+                }
               }}
               className="h-8 w-full px-2.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground outline-none focus:ring-2 focus:ring-primary/20"
             />

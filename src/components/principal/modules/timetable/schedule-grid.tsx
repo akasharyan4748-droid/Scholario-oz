@@ -58,9 +58,9 @@ export function ScheduleGrid({
         )}
       </div>
 
-      {/* Desktop table — clean scroll container, no nested card */}
-      <div className="hidden lg:block overflow-x-auto">
-        <table className="w-full text-left text-xs border-collapse min-w-[600px]">
+      {/* Desktop table — clean bordered scroll container */}
+      <div className="hidden lg:block rounded-lg border border-border/60 overflow-x-auto overscroll-x-contain">
+        <table className="text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
               <th className="p-2.5 w-32 shrink-0 text-[10px] uppercase tracking-wider">Period</th>
