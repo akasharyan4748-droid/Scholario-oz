@@ -10,13 +10,18 @@ import { cn } from '@/lib/utils'
 import { getTeacherById } from '@/lib/mock/teachers'
 import { CLASSES, type DayType, type TimetableSlot } from './data'
 import { type PublishedVersion } from './timetable-store'
+import { type TimelineRow } from './time-engine'
 import { TimeEditor } from './time-editor'
 import { RowDeleteButton, RowInsertDivider, RowInsertButton } from './structural-row-controls'
 import { SlotCard, MobileSlotCard } from './slot-cards'
 
-export interface TimetableRow {
-  number: number; name: string; time: string; isBreak: boolean; breakType?: 'short' | 'lunch'
-}
+/**
+ * TimetableRow — the visible timeline structure (periods + breaks).
+ *
+ * Brief section 15: `.time` is ALWAYS DERIVED via `recomputeRowTimes` from
+ * `durationMin`. Never mutate `.time` directly outside the time engine.
+ */
+export interface TimetableRow extends TimelineRow {}
 
 interface ScheduleGridProps {
   selectedDay: DayType; selectedClass: string; filteredSlots: TimetableSlot[]

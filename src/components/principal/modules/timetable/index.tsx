@@ -36,8 +36,14 @@ import {
   type TimetableChange,
 } from './timetable-store'
 import { teachers } from '@/lib/mock/teachers'
-import { PERIODS, type TimetableSlot as Slot } from './data'
+import { buildInitialRows, type TimetableSlot as Slot } from './data'
 import type { TimetableRow } from './schedule-grid'
+import {
+  recomputeRowTimes,
+  reanchorTimelineAtRow,
+  renumberVisiblePeriods,
+  defaultDurationForRow,
+} from './time-engine'
 import { toast } from 'sonner'
 import { OverviewCards } from './overview-cards'
 import { FiltersBar } from './filters-bar'
@@ -48,6 +54,7 @@ import { AutoTimetableDialog } from './auto-timetable-dialog'
 import { ConfirmDialog } from '../shared/confirm-dialog'
 import { exportTimetablePDF, exportTeacherTimetablePDF } from './timetable-pdf'
 import { ExportTargetDialog } from './export-target-dialog'
+import { ExportPreview } from './export-preview'
 import { Trash2, AlertTriangle } from 'lucide-react'
 import { CLASSES } from './data'
 
@@ -66,9 +73,7 @@ export function TimetableModule() {
 
   // ── Draft state (local — only mutated during edit mode) ──
   const [draftSlots, setDraftSlots] = useState<Slot[]>(slots)
-  const [draftRows, setDraftRows] = useState<TimetableRow[]>(
-    PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
-  )
+  const [draftRows, setDraftRows] = useState<TimetableRow[]>(buildInitialRows())
   const [editMode, setEditMode] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
@@ -87,14 +92,16 @@ export function TimetableModule() {
   const [autoOpen, setAutoOpen] = useState(false)
   const [exportTargetOpen, setExportTargetOpen] = useState(false)
   const [exportType, setExportType] = useState<'class' | 'teacher'>('class')
+  const [exportPreview, setExportPreview] = useState<
+    | { html: string; title: string; subtitle: string; orientation: 'portrait' | 'landscape' }
+    | null
+  >(null)
 
-  // Sync draft when entering edit mode
+  // Sync draft when entering edit mode (Brief section 27)
   useEffect(() => {
     if (editMode) {
       setDraftSlots(slots)
-      setDraftRows(
-        PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
-      )
+      setDraftRows(buildInitialRows())
       setHasUnsavedChanges(false)
     }
   }, [editMode, slots])
@@ -135,9 +142,7 @@ export function TimetableModule() {
   // ── Handlers ──
   const handleEnterEdit = () => {
     setDraftSlots(slots)
-    setDraftRows(
-      PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
-    )
+    setDraftRows(buildInitialRows())
     setHasUnsavedChanges(false)
     setEditMode(true)
   }
@@ -152,9 +157,7 @@ export function TimetableModule() {
 
   const handleDiscard = () => {
     setDraftSlots(slots)
-    setDraftRows(
-      PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
-    )
+    setDraftRows(buildInitialRows())
     setHasUnsavedChanges(false)
     setEditMode(false)
     setDiscardOpen(false)
@@ -163,47 +166,50 @@ export function TimetableModule() {
   }
 
   // ── Row management handlers (Brief section 4-10 + 19) ──
+  // All structural mutations funnel through recomputeRowTimes so the
+  // timeline is always chronologically valid (Brief 1.7 + 1.8).
   const handleInsertRow = (afterRowNumber: number, type: 'period' | 'short_break' | 'lunch_break') => {
     setDraftRows((prev) => {
       const insertIdx = prev.findIndex((r) => r.number === afterRowNumber) + 1
-      const newRow: TimetableRow = type === 'period'
-        ? { number: Date.now(), name: 'Period', time: '08:30 AM - 09:15 AM', isBreak: false }
-        : type === 'short_break'
-        ? { number: Date.now() + 1, name: 'Short Break', time: '10:45 AM - 11:00 AM', isBreak: true, breakType: 'short' }
-        : { number: Date.now() + 2, name: 'Lunch Break', time: '12:30 PM - 01:15 PM', isBreak: true, breakType: 'lunch' }
+      const isBreak = type !== 'period'
+      const breakType = type === 'short_break' ? 'short' : type === 'lunch_break' ? 'lunch' : undefined
+      const newRow: TimetableRow = {
+        number: Date.now(), // stable internal id (NOT visible period number)
+        name: isBreak ? (type === 'short_break' ? 'Short Break' : 'Lunch Break') : 'Period',
+        time: '', // derived below
+        isBreak,
+        breakType,
+        durationMin: defaultDurationForRow(isBreak, breakType),
+      }
       const next = [...prev]
       next.splice(insertIdx, 0, newRow)
-      // Auto-renumber periods (Brief section 5 + 19)
-      let periodNum = 0
-      for (const row of next) {
-        if (!row.isBreak) {
-          periodNum++
-          row.name = `Period ${periodNum}`
-        }
-      }
-      return next
+      // Brief 2: renumber visible period names
+      const renumbered = renumberVisiblePeriods(next)
+      // Brief 1.7: recompute all times from the anchor (first row's start)
+      return recomputeRowTimes(renumbered)
     })
     setHasUnsavedChanges(true)
   }
 
   const handleDeleteRow = (rowNumber: number) => {
+    // Brief 2 + 1.7: When a structural row is deleted, slots that referenced
+    // its `.number` as their period are orphaned (no row to render in).
+    // Remove them from the draft so the data stays consistent with the UI.
+    setDraftSlots((prevSlots) => prevSlots.filter((s) => s.period !== rowNumber))
     setDraftRows((prev) => {
       const next = prev.filter((r) => r.number !== rowNumber)
-      // Auto-renumber periods
-      let periodNum = 0
-      for (const row of next) {
-        if (!row.isBreak) {
-          periodNum++
-          row.name = `Period ${periodNum}`
-        }
-      }
-      return next
+      const renumbered = renumberVisiblePeriods(next)
+      return recomputeRowTimes(renumbered)
     })
     setHasUnsavedChanges(true)
   }
 
+  // Brief 1.7 + 1.8: When the user edits one row's start/end via TimeEditor,
+  // derive the new durationMin for that row and CASCADE the timeline forward.
+  // Rows before the edited row are untouched (still valid). Rows after re-anchor
+  // from the edited row's new end. No stale times, no overlaps, no backwards time.
   const handleEditRowTime = (rowNumber: number, newTime: string) => {
-    setDraftRows((prev) => prev.map((r) => r.number === rowNumber ? { ...r, time: newTime } : r))
+    setDraftRows((prev) => reanchorTimelineAtRow(prev, rowNumber, newTime))
     setHasUnsavedChanges(true)
   }
 
@@ -305,14 +311,15 @@ export function TimetableModule() {
   }
 
   const handleOpenAssign = (day: DayType, period: number, className: string) => {
-    const periodObj = PERIODS.find((p) => p.number === period)
+    // Brief 15: Look up time from the canonical draftRows, NOT stale PERIODS.
+    const row = draftRows.find((r) => r.number === period)
     // Auto-derive room: use the class's existing room from any slot, or 'Auto'
     const existingClassSlot = draftSlots.find((s) => s.className === className)
     const room = existingClassSlot?.room || 'Auto'
     setEditorContext({
       day, period,
-      periodName: periodObj?.name || `Period ${period}`,
-      time: periodObj?.time || '08:30 AM - 09:15 AM',
+      periodName: row?.name || `Period ${period}`,
+      time: row?.time || '08:30 AM - 09:15 AM',
       className, room,
     })
     setEditingSlot(null)
@@ -321,11 +328,12 @@ export function TimetableModule() {
   }
 
   const handleEditSlot = (slot: Slot) => {
-    const periodObj = PERIODS.find((p) => p.number === slot.period)
+    // Brief 15: Use canonical draftRows time — slot.time may be stale after row mutations.
+    const row = draftRows.find((r) => r.number === slot.period)
     setEditorContext({
       day: slot.day, period: slot.period,
-      periodName: periodObj?.name || `Period ${slot.period}`,
-      time: slot.time, className: slot.className, room: slot.room,
+      periodName: row?.name || `Period ${slot.period}`,
+      time: row?.time || slot.time, className: slot.className, room: slot.room,
     })
     setEditingSlot({ id: slot.id, subject: slot.subject, teacherId: slot.teacherId })
     setMinimalForm({ subject: slot.subject, teacherId: slot.teacherId })
@@ -337,13 +345,14 @@ export function TimetableModule() {
 
     const teacherObj = teachers.find((t) => t.id === minimalForm.teacherId)
     const teacherName = teacherObj?.name || 'Assigned Faculty'
-    const periodObj = PERIODS.find((p) => p.number === editorContext.period)
+    // Brief 15: Canonical time from draftRows (not stale PERIODS).
+    const row = draftRows.find((r) => r.number === editorContext.period)
 
     if (editingSlot) {
       // Update existing slot in draft
       setDraftSlots((prev) => prev.map((s) =>
         s.id === editingSlot.id
-          ? { ...s, subject: minimalForm.subject, teacherId: minimalForm.teacherId, teacherName }
+          ? { ...s, subject: minimalForm.subject, teacherId: minimalForm.teacherId, teacherName, time: row?.time || s.time }
           : s
       ))
     } else {
@@ -352,7 +361,7 @@ export function TimetableModule() {
         id: `tt-${Date.now().toString().slice(-6)}`,
         day: editorContext.day,
         period: editorContext.period,
-        time: periodObj?.time || editorContext.time,
+        time: row?.time || editorContext.time,
         className: editorContext.className,
         subject: minimalForm.subject,
         teacherId: minimalForm.teacherId,
@@ -388,25 +397,39 @@ export function TimetableModule() {
     }
   }
 
+  // Brief section 14 + 15: Exports always use the CURRENT validated state —
+  // draftSlots/draftRows in edit mode, store slots/PERIODS in view mode.
+  // Time + Preview + PDF share ONE timeline source (Brief 15).
+  const activeRows = editMode ? draftRows : buildInitialRows()
+  const activeSlots = editMode ? draftSlots : slots
+
   const handleExport = (type: 'class' | 'teacher' | 'master') => {
     if (type === 'master') {
-      const displaySlots = editMode ? draftSlots : slots
-      const displayRows = editMode ? draftRows : PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
-      exportTimetablePDF(displaySlots, displayRows, selectedDay, 'all', CLASSES)
+      // Brief section 5: Master goes straight to preview (no target selector needed).
+      const { html, title, subtitle, orientation } = exportTimetablePDF(
+        activeSlots, activeRows, selectedDay, 'all', CLASSES
+      )
+      setExportPreview({ html, title, subtitle, orientation })
     } else {
       setExportType(type)
       setExportTargetOpen(true)
     }
   }
 
+  // Brief section 8: Classwise/Teacherwise open the preview after target selection.
+  // The preview is the SAME HTML used for download — so Preview === PDF (Brief 8).
   const handleExportTarget = (target: string) => {
-    const displaySlots = editMode ? draftSlots : slots
-    const displayRows = editMode ? draftRows : PERIODS.map(p => ({ number: p.number, name: p.name, time: p.time, isBreak: p.isBreak || false, breakType: p.name === 'Short Break' ? 'short' as const : p.name === 'Lunch Break' ? 'lunch' as const : undefined }))
     if (exportType === 'class') {
-      exportTimetablePDF(displaySlots, displayRows, selectedDay, target, [target])
+      const { html, title, subtitle, orientation } = exportTimetablePDF(
+        activeSlots, activeRows, selectedDay, target, [target]
+      )
+      setExportPreview({ html, title, subtitle, orientation })
     } else {
       const teacher = teachers.find(t => t.id === target)
-      exportTeacherTimetablePDF(displaySlots, displayRows, target, teacher?.name || 'Teacher')
+      const { html, title, subtitle, orientation } = exportTeacherTimetablePDF(
+        activeSlots, activeRows, target, teacher?.name || 'Teacher'
+      )
+      setExportPreview({ html, title, subtitle, orientation })
     }
   }
 
@@ -622,6 +645,12 @@ export function TimetableModule() {
         onOpenChange={setExportTargetOpen}
         exportType={exportType}
         onExport={handleExportTarget}
+      />
+
+      {/* Export preview — full-screen overlay with Back + Download PDF */}
+      <ExportPreview
+        preview={exportPreview}
+        onClose={() => setExportPreview(null)}
       />
     </PageTransition>
   )

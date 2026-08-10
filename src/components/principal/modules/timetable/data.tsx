@@ -20,16 +20,28 @@ export const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Sa
 export type DayType = (typeof DAYS)[number]
 
 export const PERIODS = [
-  { number: 1, name: 'Period 1', time: '08:30 AM - 09:15 AM' },
-  { number: 2, name: 'Period 2', time: '09:15 AM - 10:00 AM' },
-  { number: 3, name: 'Period 3', time: '10:00 AM - 10:45 AM' },
-  { number: 4, name: 'Short Break', time: '10:45 AM - 11:00 AM', isBreak: true },
-  { number: 5, name: 'Period 4', time: '11:00 AM - 11:45 AM' },
-  { number: 6, name: 'Period 5', time: '11:45 AM - 12:30 PM' },
-  { number: 7, name: 'Lunch Break', time: '12:30 PM - 01:15 PM', isBreak: true },
-  { number: 8, name: 'Period 6', time: '01:15 PM - 02:00 PM' },
-  { number: 9, name: 'Period 7', time: '02:00 PM - 02:45 PM' },
+  { number: 1, name: 'Period 1', time: '08:30 AM - 09:15 AM', durationMin: 45 },
+  { number: 2, name: 'Period 2', time: '09:15 AM - 10:00 AM', durationMin: 45 },
+  { number: 3, name: 'Period 3', time: '10:00 AM - 10:45 AM', durationMin: 45 },
+  { number: 4, name: 'Short Break', time: '10:45 AM - 11:00 AM', isBreak: true, breakType: 'short', durationMin: 15 },
+  { number: 5, name: 'Period 4', time: '11:00 AM - 11:45 AM', durationMin: 45 },
+  { number: 6, name: 'Period 5', time: '11:45 AM - 12:30 PM', durationMin: 45 },
+  { number: 7, name: 'Lunch Break', time: '12:30 PM - 01:15 PM', isBreak: true, breakType: 'lunch', durationMin: 45 },
+  { number: 8, name: 'Period 6', time: '01:15 PM - 02:00 PM', durationMin: 45 },
+  { number: 9, name: 'Period 7', time: '02:00 PM - 02:45 PM', durationMin: 45 },
 ]
+
+/** Build initial TimetableRow[] from PERIODS — used everywhere draftRows is initialized. */
+export function buildInitialRows() {
+  return PERIODS.map((p) => ({
+    number: p.number,
+    name: p.name,
+    time: p.time,
+    isBreak: p.isBreak || false,
+    breakType: p.breakType as 'short' | 'lunch' | undefined,
+    durationMin: p.durationMin,
+  }))
+}
 
 export const CLASSES = ['Class 2-A', 'Class 2-B', 'Class 9-A', 'Class 10-A', 'Class 12-Sci-A']
 

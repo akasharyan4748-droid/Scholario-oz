@@ -18,8 +18,13 @@ import { CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { CLASSES, DAYS, ROOMS, PERIODS } from './data'
+import { CLASSES, DAYS, ROOMS } from './data'
 import { countAllConflicts } from './timetable-store'
+import {
+  recomputeRowTimes,
+  defaultDurationForRow,
+  parseTimeToMinutes,
+} from './time-engine'
 import { teachers } from '@/lib/mock/teachers'
 import { subjects } from '@/lib/mock/school'
 import { useState } from 'react'
@@ -33,28 +38,6 @@ interface AutoTimetableDialogProps {
   onOpenChange: (o: boolean) => void
   onGenerate: (generatedSlots: TimetableSlot[], generatedRows: TimetableRow[]) => void
   existingSlots: TimetableSlot[]
-}
-
-/** Parse "08:30 AM" → minutes from midnight (510) */
-function timeToMinutes(timeStr: string): number {
-  const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
-  if (!match) return 510 // default 8:30 AM
-  let hour = parseInt(match[1], 10)
-  const minute = parseInt(match[2], 10)
-  const period = match[3].toUpperCase()
-  if (period === 'PM' && hour !== 12) hour += 12
-  if (period === 'AM' && hour === 12) hour = 0
-  return hour * 60 + minute
-}
-
-/** Minutes from midnight → "08:30 AM" */
-function minutesToTime(minutes: number): string {
-  let hour = Math.floor(minutes / 60)
-  const minute = minutes % 60
-  const period = hour >= 12 ? 'PM' : 'AM'
-  if (hour === 0) hour = 12
-  if (hour > 12) hour -= 12
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${period}`
 }
 
 /** Subject → teacher mapping (Brief section 14) */
@@ -89,64 +72,82 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
   const handleGenerate = () => {
     setGenerating(true)
 
-    // Brief section 5 + 27: Calculate period timings from school start/end
-    const startMin = timeToMinutes(schoolStart)
-    const endMin = timeToMinutes(schoolEnd)
+    // Brief section 5 + 27: Calculate period duration from school start/end.
+    // Brief 1.5 + 1.6: respect break durations from the canonical time engine.
+    const startMin = parseTimeToMinutes(schoolStart)
+    const endMin = parseTimeToMinutes(schoolEnd)
     const totalMin = endMin - startMin
 
-    // Use editable numPeriods + configurable break structure
     const includeShort = breakMode === 'short' || breakMode === 'both'
     const includeLunch = breakMode === 'lunch' || breakMode === 'both'
-    const breakDuration = 15
-    const lunchDuration = 45
+    const breakDuration = defaultDurationForRow(true, 'short')
+    const lunchDuration = defaultDurationForRow(true, 'lunch')
     const breakTimeTotal = (includeShort ? breakDuration : 0) + (includeLunch ? lunchDuration : 0)
     const instructionalTime = totalMin - breakTimeTotal
-    const periodDuration = Math.floor(instructionalTime / numPeriods)
+    const periodDuration = Math.max(30, Math.floor(instructionalTime / numPeriods))
 
-    // Build row timings AND row structure (TimetableRow[])
-    const rowTimings: { number: number; isBreak: boolean; breakType?: 'short' | 'lunch'; startTime: number; endTime: number }[] = []
+    // Build row structure (TimetableRow[]) with durationMin — times will be
+    // DERIVED via recomputeRowTimes so the timeline is canonical (Brief 15).
     const generatedRows: TimetableRow[] = []
-    let currentTime = startMin
-    let periodCounter = 0
     const shortBreakAfter = Math.max(1, Math.floor(numPeriods / 3))
     const lunchBreakAfter = Math.max(1, Math.floor(numPeriods * 2 / 3))
+    let periodCounter = 0
     for (let i = 0; i < numPeriods; i++) {
       periodCounter++
-      const timeStr = `${minutesToTime(currentTime)} - ${minutesToTime(currentTime + periodDuration)}`
-      rowTimings.push({ number: periodCounter, isBreak: false, startTime: currentTime, endTime: currentTime + periodDuration })
-      generatedRows.push({ number: periodCounter, name: `Period ${periodCounter}`, time: timeStr, isBreak: false })
-      currentTime += periodDuration
+      generatedRows.push({
+        number: periodCounter,
+        name: `Period ${periodCounter}`,
+        time: '', // derived below
+        isBreak: false,
+        durationMin: periodDuration,
+      })
       if (i === shortBreakAfter - 1 && includeShort) {
-        const breakTime = `${minutesToTime(currentTime)} - ${minutesToTime(currentTime + breakDuration)}`
-        rowTimings.push({ number: 100, isBreak: true, breakType: 'short', startTime: currentTime, endTime: currentTime + breakDuration })
-        generatedRows.push({ number: 100, name: 'Short Break', time: breakTime, isBreak: true, breakType: 'short' })
-        currentTime += breakDuration
+        generatedRows.push({
+          number: 100,
+          name: 'Short Break',
+          time: '',
+          isBreak: true,
+          breakType: 'short',
+          durationMin: breakDuration,
+        })
       }
       if (i === lunchBreakAfter - 1 && includeLunch) {
-        const breakTime = `${minutesToTime(currentTime)} - ${minutesToTime(currentTime + lunchDuration)}`
-        rowTimings.push({ number: 101, isBreak: true, breakType: 'lunch', startTime: currentTime, endTime: currentTime + lunchDuration })
-        generatedRows.push({ number: 101, name: 'Lunch Break', time: breakTime, isBreak: true, breakType: 'lunch' })
-        currentTime += lunchDuration
+        generatedRows.push({
+          number: 101,
+          name: 'Lunch Break',
+          time: '',
+          isBreak: true,
+          breakType: 'lunch',
+          durationMin: lunchDuration,
+        })
       }
+    }
+    // Brief 15: derive .time strings via the canonical engine — single source of truth.
+    const computedRows = recomputeRowTimes(generatedRows, schoolStart)
+
+    // Build a quick lookup: period number → time string (for slots)
+    const timeByPeriod = new Map<number, string>()
+    for (const row of computedRows) {
+      if (!row.isBreak) timeByPeriod.set(row.number, row.time)
     }
 
     // Brief section 13-19: Realistic generation
     const generated: TimetableSlot[] = []
     let assignedCount = 0
 
-    // Track teacher load: teacherId → Map<day-period, boolean>
-    const teacherOccupancy = new Map<string, Set<string>>() // teacherId → set of "day-period" keys
+    // Track teacher load: teacherId → Set of "day-period" keys
+    const teacherOccupancy = new Map<string, Set<string>>()
     const getTeacherKey = (teacherId: string, day: string, period: number) => `${teacherId}-${day}-${period}`
 
     // Track class-subject distribution to avoid repetition (Brief section 17)
-    const classSubjectCount = new Map<string, Map<string, number>>() // className → subject → count
+    const classSubjectCount = new Map<string, Map<string, number>>()
 
     for (const className of targetClasses) {
       for (const day of DAYS) {
-        for (const rowTiming of rowTimings) {
-          if (rowTiming.isBreak) continue
+        for (const row of computedRows) {
+          if (row.isBreak) continue
 
-          const period = rowTiming.number
+          const period = row.number
 
           // Get available subjects for this class (rotate to distribute naturally)
           const classSubjects = subjects.slice(0, 6).map((s) => s.name)
@@ -192,8 +193,8 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
             const existingClassSlot = generated.find((s) => s.className === className) || existingSlots.find((s) => s.className === className)
             const room = existingClassSlot?.room || ROOMS[period % ROOMS.length]
 
-            // Time string from calculated timings
-            const timeStr = `${minutesToTime(rowTiming.startTime)} - ${minutesToTime(rowTiming.endTime)}`
+            // Brief 15: time comes from the canonical row time, NOT a separate calc.
+            const timeStr = timeByPeriod.get(period) || row.time
 
             generated.push({
               id: `auto-${Date.now()}-${className}-${day}-${period}`,
@@ -224,7 +225,7 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
 
     setTimeout(() => {
       setGenerating(false)
-      onGenerate(generated, generatedRows)
+      onGenerate(generated, computedRows)
       toast.success('Timetable generated', {
         description: `${assignedCount} periods assigned · ${actualConflicts} conflict${actualConflicts === 1 ? '' : 's'}`,
       })
