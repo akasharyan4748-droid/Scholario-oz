@@ -25,7 +25,7 @@ import { subjects } from '@/lib/mock/school'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import type { TimetableSlot } from './data'
-import { CompactTimeControls, CompactTimeTrigger } from './compact-time-picker'
+import { CompactTimeControls } from './compact-time-picker'
 
 interface AutoTimetableDialogProps {
   open: boolean
