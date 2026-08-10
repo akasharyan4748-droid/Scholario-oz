@@ -3,40 +3,81 @@
 /**
  * AutoTimetableDialog — compact auto-schedule generator.
  *
- * Brief section 29 + 30 + 31: Small icon (CalendarClock), compact dialog,
- *   uses existing school data (classes, subjects, teachers, rooms).
+ * Brief section 4-6: School Day Start/End time config using the same
+ *   12-hour AM/PM CompactTimePicker.
+ *
+ * Brief section 5 + 27: Auto-generate period timings from school start/end
+ *   + break structure.
+ *
+ * Brief section 13-19: Realistic generation — distributes subjects
+ *   naturally, prevents same-teacher conflicts, avoids repetitive patterns.
  *
  * Brief section 33: Generates a DRAFT — never auto-publishes.
- *   The generated timetable enters Edit mode for Principal review.
- *
- * Brief section 34 + 35: Shows generation result summary (periods assigned,
- *   conflicts, empty periods).
  */
-import { CalendarClock, Check, AlertTriangle } from 'lucide-react'
+import { CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { CLASSES, DAYS, ROOMS } from './data'
+import { CLASSES, DAYS, ROOMS, PERIODS } from './data'
 import { countAllConflicts } from './timetable-store'
 import { teachers } from '@/lib/mock/teachers'
 import { subjects } from '@/lib/mock/school'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import type { TimetableSlot } from './data'
+import { CompactTimePicker } from './compact-time-picker'
 
 interface AutoTimetableDialogProps {
   open: boolean
   onOpenChange: (o: boolean) => void
-  /** Called with the generated draft slots. The parent enters edit mode with these. */
   onGenerate: (generatedSlots: TimetableSlot[]) => void
-  /** Current slots (so we can preserve existing assignments where possible). */
   existingSlots: TimetableSlot[]
 }
 
+/** Parse "08:30 AM" → minutes from midnight (510) */
+function timeToMinutes(timeStr: string): number {
+  const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+  if (!match) return 510 // default 8:30 AM
+  let hour = parseInt(match[1], 10)
+  const minute = parseInt(match[2], 10)
+  const period = match[3].toUpperCase()
+  if (period === 'PM' && hour !== 12) hour += 12
+  if (period === 'AM' && hour === 12) hour = 0
+  return hour * 60 + minute
+}
+
+/** Minutes from midnight → "08:30 AM" */
+function minutesToTime(minutes: number): string {
+  let hour = Math.floor(minutes / 60)
+  const minute = minutes % 60
+  const period = hour >= 12 ? 'PM' : 'AM'
+  if (hour === 0) hour = 12
+  if (hour > 12) hour -= 12
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${period}`
+}
+
+/** Subject → teacher mapping (Brief section 14) */
+const SUBJECT_TEACHERS: Record<string, string[]> = {
+  'Mathematics': ['T-014'],
+  'English': ['T-002'],
+  'Science': ['T-011'],
+  'EVS': ['T-011'],
+  'Hindi': ['T-005'],
+  'Computer Science': ['T-041'],
+  'Social Studies': ['T-023'],
+  'Physical Education': ['T-047'],
+  'Physics': ['T-035'],
+  'Chemistry': ['T-026'],
+  'Biology': ['T-017'],
+  'Art & Craft': ['T-053'],
+  'Music': ['T-050'],
+}
+
 export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSlots }: AutoTimetableDialogProps) {
-  const [scope, setScope] = useState<string>('all') // 'all' or specific class
+  const [scope, setScope] = useState<string>('all')
+  const [schoolStart, setSchoolStart] = useState('08:30 AM')
+  const [schoolEnd, setSchoolEnd] = useState('02:45 PM')
   const [generating, setGenerating] = useState(false)
-  const [result, setResult] = useState<{ assigned: number; conflicts: number; empty: number } | null>(null)
 
   const activeTeachers = teachers.filter((t) => !t.archived && t.status === 'Active')
   const targetClasses = scope === 'all' ? CLASSES : [scope]
@@ -44,80 +85,141 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
   const handleGenerate = () => {
     setGenerating(true)
 
-    // Simple auto-generation: for each class × day × period, assign a subject + teacher.
-    // Brief section 6 + 37 + 38: Generator must NOT create fake conflicts.
-    // Only teacher double-booking and class-slot collisions are real conflicts.
-    // Room reuse is NOT a conflict (Brief section 1 + 40).
-    const generated: TimetableSlot[] = [...existingSlots]
-    let assignedCount = 0
-    let conflictCount = 0
+    // Brief section 5 + 27: Calculate period timings from school start/end
+    const startMin = timeToMinutes(schoolStart)
+    const endMin = timeToMinutes(schoolEnd)
+    const totalMin = endMin - startMin
 
-    const periods = [1, 2, 3, 5, 6, 8, 9] // non-break periods
+    // Count periods and breaks from current structure
+    const periodRows = PERIODS.filter((p) => !p.isBreak)
+    const breakRows = PERIODS.filter((p) => p.isBreak)
+    const numPeriods = periodRows.length
+    const numBreaks = breakRows.length
+
+    // Distribute time: breaks get 15 min each, periods share the rest
+    const breakDuration = 15 // minutes per break (Short Break)
+    const lunchDuration = 45 // minutes for Lunch Break
+    const breakTimeTotal = breakRows.reduce((sum, b) => {
+      const isLunch = b.name === 'Lunch Break'
+      return sum + (isLunch ? lunchDuration : breakDuration)
+    }, 0)
+    const instructionalTime = totalMin - breakTimeTotal
+    const periodDuration = Math.floor(instructionalTime / numPeriods)
+
+    // Build the row timing structure
+    const rowTimings: { number: number; isBreak: boolean; breakType?: 'short' | 'lunch'; startTime: number; endTime: number }[] = []
+    let currentTime = startMin
+    for (const p of PERIODS) {
+      if (p.isBreak) {
+        const isLunch = p.name === 'Lunch Break'
+        const duration = isLunch ? lunchDuration : breakDuration
+        rowTimings.push({ number: p.number, isBreak: true, breakType: isLunch ? 'lunch' : 'short', startTime: currentTime, endTime: currentTime + duration })
+        currentTime += duration
+      } else {
+        rowTimings.push({ number: p.number, isBreak: false, startTime: currentTime, endTime: currentTime + periodDuration })
+        currentTime += periodDuration
+      }
+    }
+
+    // Brief section 13-19: Realistic generation
+    const generated: TimetableSlot[] = []
+    let assignedCount = 0
+
+    // Track teacher load: teacherId → Map<day-period, boolean>
+    const teacherOccupancy = new Map<string, Set<string>>() // teacherId → set of "day-period" keys
+    const getTeacherKey = (teacherId: string, day: string, period: number) => `${teacherId}-${day}-${period}`
+
+    // Track class-subject distribution to avoid repetition (Brief section 17)
+    const classSubjectCount = new Map<string, Map<string, number>>() // className → subject → count
 
     for (const className of targetClasses) {
       for (const day of DAYS) {
-        for (const period of periods) {
-          // Skip if already assigned (class-slot already filled)
-          const existing = generated.find(
-            (s) => s.className === className && s.day === day && s.period === period
-          )
-          if (existing) continue
+        for (const rowTiming of rowTimings) {
+          if (rowTiming.isBreak) continue
 
-          // Pick a subject (round-robin from subject list)
+          const period = rowTiming.number
+
+          // Get available subjects for this class (rotate to distribute naturally)
           const classSubjects = subjects.slice(0, 6).map((s) => s.name)
-          const subjectIdx = (period + day.length + className.length) % classSubjects.length
-          const subject = classSubjects[subjectIdx]
+          // Add extra subjects for variety
+          const extraSubjects = ['Hindi', 'Social Studies', 'Computer Science', 'Art & Craft', 'Physical Education']
+          const allClassSubjects = [...classSubjects, ...extraSubjects]
 
-          // Pick a teacher — ONLY from teachers NOT already teaching in this day+period
-          // This prevents teacher double-booking (Brief section 4 + 37)
-          const availableTeachers = activeTeachers.filter(
-            (t) => !generated.some((s) => s.day === day && s.period === period && s.teacherId === t.id)
-          )
-          if (availableTeachers.length === 0) {
-            // No available teacher — skip this slot (leave empty, NOT a conflict)
-            continue
+          // Brief section 17: Avoid same subject in consecutive periods
+          const lastSubject = generated.length > 0 ? generated[generated.length - 1]?.subject : null
+
+          // Try subjects in a rotated order based on class + day + period (Brief section 18)
+          const rotationOffset = (day.length + className.length + period) % allClassSubjects.length
+          const shuffledSubjects = [...allClassSubjects.slice(rotationOffset), ...allClassSubjects.slice(0, rotationOffset)]
+
+          let assigned = false
+          for (const subject of shuffledSubjects) {
+            // Skip if same as last subject (Brief section 17)
+            if (subject === lastSubject) continue
+
+            // Get available teachers for this subject
+            const subjectTeacherIds = SUBJECT_TEACHERS[subject] || []
+            const availableTeachers = subjectTeacherIds
+              .map((id) => teachers.find((t) => t.id === id))
+              .filter((t): t is NonNullable<typeof t> => !!t && !t.archived && t.status === 'Active')
+              .filter((t) => {
+                // Brief section 15: NEVER assign same teacher to two classes at same day+period
+                const key = getTeacherKey(t.id, day, period)
+                if (!teacherOccupancy.has(t.id)) teacherOccupancy.set(t.id, new Set())
+                return !teacherOccupancy.get(t.id)!.has(`${day}-${period}`)
+              })
+
+            if (availableTeachers.length === 0) continue
+
+            // Pick teacher (round-robin among available)
+            const teacher = availableTeachers[0]
+
+            // Mark teacher as occupied
+            const occKey = `${day}-${period}`
+            if (!teacherOccupancy.has(teacher.id)) teacherOccupancy.set(teacher.id, new Set())
+            teacherOccupancy.get(teacher.id)!.add(occKey)
+
+            // Room: use class's existing room
+            const existingClassSlot = generated.find((s) => s.className === className) || existingSlots.find((s) => s.className === className)
+            const room = existingClassSlot?.room || ROOMS[period % ROOMS.length]
+
+            // Time string from calculated timings
+            const timeStr = `${minutesToTime(rowTiming.startTime)} - ${minutesToTime(rowTiming.endTime)}`
+
+            generated.push({
+              id: `auto-${Date.now()}-${className}-${day}-${period}`,
+              day,
+              period,
+              time: timeStr,
+              className,
+              subject,
+              teacherId: teacher.id,
+              teacherName: teacher.name,
+              room,
+              type: 'Lecture',
+            })
+            assignedCount++
+            assigned = true
+            break
           }
-          const teacherIdx = (period + day.length + className.length) % availableTeachers.length
-          const teacher = availableTeachers[teacherIdx]
 
-          // Room: use the class's existing room (room reuse is NOT a conflict)
-          const existingClassSlot = generated.find((s) => s.className === className)
-          const room = existingClassSlot?.room || ROOMS[period % ROOMS.length]
-
-          generated.push({
-            id: `auto-${Date.now()}-${className}-${day}-${period}`,
-            day,
-            period,
-            time: '08:30 AM - 09:15 AM', // placeholder — will use PERIODS time display
-            className,
-            subject,
-            teacherId: teacher.id,
-            teacherName: teacher.name,
-            room,
-            type: 'Lecture',
-          })
-          assignedCount++
+          if (!assigned) {
+            // No subject/teacher available — leave empty (NOT a conflict)
+          }
         }
       }
     }
 
-    // Validate the generated timetable with the SAME conflict engine (Brief section 37)
-    // Re-use countAllConflicts from the store to verify
-    // (imported at the top of this file)
+    // Validate with the same conflict engine (Brief section 22 + 37)
     const actualConflicts = countAllConflicts(generated)
-    conflictCount = actualConflicts
-
-    const emptyCount = targetClasses.length * DAYS.length * periods.length - assignedCount
 
     setTimeout(() => {
       setGenerating(false)
-      setResult({ assigned: assignedCount, conflicts: conflictCount, empty: Math.max(0, emptyCount) })
       onGenerate(generated)
       toast.success('Timetable generated', {
-        description: `${assignedCount} periods assigned · ${conflictCount} conflict${conflictCount === 1 ? '' : 's'}`,
+        description: `${assignedCount} periods assigned · ${actualConflicts} conflict${actualConflicts === 1 ? '' : 's'}`,
       })
       onOpenChange(false)
-      setResult(null)
     }, 800)
   }
 
@@ -135,7 +237,7 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
         </DialogHeader>
 
         <div className="p-4 space-y-3">
-          {/* Scope selector */}
+          {/* Classes selector */}
           <div className="space-y-1">
             <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Classes</label>
             <Select value={scope} onValueChange={setScope}>
@@ -151,7 +253,17 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
             </Select>
           </div>
 
-          {/* Days (read-only context) */}
+          {/* School Day Start/End (Brief section 4 + 26) */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">School day</label>
+            <div className="flex items-center gap-2">
+              <CompactTimePicker value={schoolStart} onChange={setSchoolStart} />
+              <span className="text-[10px] text-muted-foreground">→</span>
+              <CompactTimePicker value={schoolEnd} onChange={setSchoolEnd} />
+            </div>
+          </div>
+
+          {/* Days (read-only) */}
           <div className="space-y-1">
             <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Days</label>
             <div className="h-8 px-2.5 flex items-center rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground">
@@ -159,11 +271,11 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
             </div>
           </div>
 
-          {/* Periods (read-only context) */}
+          {/* Structure (read-only) */}
           <div className="space-y-1">
-            <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Periods</label>
+            <label className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Structure</label>
             <div className="h-8 px-2.5 flex items-center rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground">
-              Current timetable structure
+              {PERIODS.filter((p) => !p.isBreak).length} periods · {PERIODS.filter((p) => p.isBreak).length} breaks
             </div>
           </div>
 
@@ -172,10 +284,6 @@ export function AutoTimetableDialog({ open, onOpenChange, onGenerate, existingSl
             <Stat label="Classes" value={targetClasses.length} />
             <Stat label="Subjects" value={subjects.length} />
             <Stat label="Teachers" value={activeTeachers.length} />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Stat label="Rooms" value={ROOMS.length} />
-            <Stat label="Days" value={DAYS.length} />
           </div>
         </div>
 
