@@ -1,0 +1,1499 @@
+SCHOLARIO-OS — ATTENDANCE MODULE
+PHASE 2: INFORMATION ARCHITECTURE + RESPONSIVE UX + PREMIUM ANALYTICS
+======================================================================
+
+IMPORTANT — WORK LIKE A GENIUS PRODUCT DESIGNER + SENIOR FRONTEND ENGINEER
+======================================================================
+
+We are continuing the Attendance redesign.
+
+The previous Attendance redesign improved the charts, but after reviewing the
+actual result carefully on an iPad/tablet viewport, several deeper UX,
+layout, responsiveness and information-architecture issues are still present.
+
+This phase is NOT just another visual polish.
+
+We now need to make Attendance feel like a genuinely mature enterprise
+attendance system.
+
+Think deeply before coding.
+
+Do not simply patch the visible screenshot.
+
+Understand the whole Attendance experience and redesign the structure so it
+remains excellent across different screen sizes.
+
+============================================================
+ABSOLUTE LOCK — TIMETABLE
+============================================================
+
+TIMETABLE IS FINAL AND LOCKED.
+
+DO NOT modify:
+
+• Timetable UI
+• Timetable scrolling
+• Timetable editor
+• Timetable time calculation
+• Timetable period logic
+• Timetable break logic
+• Timetable publish logic
+• Timetable export logic
+
+Do not refactor Timetable while working on Attendance.
+
+If a shared component is used by both modules, preserve its existing
+Timetable behavior exactly.
+
+Attendance work must not create regressions in Timetable.
+
+============================================================
+CORE DESIGN GOAL
+============================================================
+
+The Attendance module should become a complete system with three clear
+experiences:
+
+1. OVERVIEW
+2. TEACHERS & EMPLOYEES
+3. ATTENDANCE HISTORY
+
+Do not make the user scroll through one gigantic dashboard to find everything.
+
+The user should immediately understand:
+
+• today's student attendance
+• current attendance health
+• trends
+• class performance
+• live class status
+• staff attendance
+• historical attendance
+
+without visual clutter.
+
+============================================================
+1. CREATE A CLEAN ATTENDANCE SUB-NAVIGATION
+============================================================
+
+At the top of Attendance, introduce a compact, premium sub-navigation.
+
+Suggested structure:
+
+Attendance
+
+[ Overview ] [ Teachers & Employees ] [ History ]
+
+Keep it elegant and minimal.
+
+Do NOT make it look like a giant tab bar.
+
+The active section should have a subtle Scholario-style active state.
+
+The three sections have distinct responsibilities:
+
+OVERVIEW
+→ Today's student attendance and analytics
+
+TEACHERS & EMPLOYEES
+→ Staff attendance managed by Principal/Admin
+
+HISTORY
+→ Past attendance, date-wise records, details and downloads
+
+This prevents the main Attendance Overview from becoming infinitely long.
+
+============================================================
+2. RESPONSIVE LAYOUT — CRITICAL
+============================================================
+
+The screenshots show a serious issue:
+
+Today's Breakdown content can overflow/clash horizontally on an iPad-sized
+viewport.
+
+This is NOT acceptable.
+
+If it happens on an iPad, it can happen on many other tablet and laptop
+sizes.
+
+Perform a complete responsive audit.
+
+Test at minimum:
+
+• 768px
+• 820px
+• 834px
+• 1024px
+• 1180px
+• 1280px
+• 1366px
+• 1440px
+• larger desktop widths
+
+The design must never:
+
+❌ clip text
+❌ push content outside cards
+❌ create accidental horizontal page scrolling
+❌ overlap labels
+❌ cut chart axes
+❌ make tooltips go outside viewport
+❌ create giant empty areas
+❌ make cards too narrow
+❌ force microscopic fonts
+
+Use responsive layout logic rather than hardcoded widths.
+
+Prefer:
+
+CSS Grid
+flexible columns
+minmax()
+responsive gaps
+container queries where appropriate
+proper min-width / max-width handling
+
+Avoid fixed pixel widths for content that needs to adapt.
+
+============================================================
+3. TODAY'S BREAKDOWN — COMPLETELY RETHINK IT
+============================================================
+
+The current Today's Breakdown is not working well.
+
+The percentage and status list can become visually cramped and text can
+run into the adjacent chart.
+
+Do NOT merely reduce the font.
+
+Redesign the component.
+
+The objective is:
+
+TODAY'S BREAKDOWN
+93.3% Present
+
+Present   1,719   93.3%
+Late         18    1.0%
+Absent       96    5.2%
+Leave         9    0.5%
+
+But present this in a much more premium way.
+
+Preferred direction:
+
+A compact attendance composition visualization with a central percentage
+and four clean status metrics around/beside it.
+
+Possible structure:
+
+       93.3%
+       PRESENT
+
+Present   1,719
+Late         18
+Absent       96
+Leave         9
+
+OR:
+
+93.3% Present
+────────────────
+● Present   1,719
+● Late         18
+● Absent       96
+● Leave         9
+
+The final implementation is up to you.
+
+But it MUST:
+
+• never overflow
+• never collide with Weekly Trend
+• remain readable on iPad
+• remain compact
+• not require a giant card
+• look premium
+• communicate the data instantly
+
+Do not use a huge donut merely because it looks impressive.
+
+If a ring visualization is used, keep it compact.
+
+If a different visualization communicates the data better, use it.
+
+============================================================
+4. WEEKLY + MONTHLY TREND — REMOVE THE HEAVY CARD FEEL
+============================================================
+
+The current Weekly and Monthly trend charts look too large and boxed-in.
+
+I explicitly DO NOT want:
+
+❌ giant chart cards
+❌ huge backgrounds
+❌ heavy borders around every chart
+❌ excessive empty chart space
+❌ giant graph heights
+❌ oversized bars
+
+Instead create a sophisticated page-level analytics section.
+
+Place:
+
+WEEKLY TREND                  MONTHLY TREND
+
+side-by-side on desktop/tablet where space permits.
+
+They should feel like charts naturally sitting on the page, not two giant
+boxes.
+
+The chart backgrounds should visually blend into the page.
+
+NO unnecessary card background.
+
+NO heavy container.
+
+NO giant border.
+
+Use whitespace intelligently.
+
+============================================================
+5. WEEKLY TREND
+============================================================
+
+Keep the concept:
+
+Attendance rate · last 6 working days
+
+Use a compact smooth line chart.
+
+Not giant.
+
+Not a huge filled graph.
+
+The chart should occupy only the amount of space necessary to communicate
+the trend.
+
+Use:
+
+• smooth line
+• extremely subtle area fill if appropriate
+• restrained grid
+• compact axis labels
+• small tooltip
+• subtle animation
+• percentage values where useful
+
+Example:
+
+Mon   Tue   Wed   Thu   Fri   Sat
+
+The user should immediately see whether attendance is:
+
+Improving
+Stable
+Declining
+
+The trend badge should be generated from actual data.
+
+Do NOT fabricate a "Declining" state.
+
+If the data is stable:
+
+Stable
+
+If improving:
+
+Improving
+
+If declining:
+
+Declining
+
+Use an appropriate threshold so tiny meaningless fluctuations do not
+produce dramatic trend labels.
+
+============================================================
+6. MONTHLY TREND
+============================================================
+
+Place Monthly Trend beside Weekly Trend.
+
+Keep:
+
+6-month attendance rate
+
+Use the same visual language as Weekly Trend.
+
+Do NOT make it another giant card.
+
+Keep it compact.
+
+Show:
+
+Jun
+Jul
+Aug
+Sep
+Oct
+Nov
+
+Include:
+
+6-month average
+Latest
+
+in a small footer-like information row.
+
+Example:
+
+6-month avg 94.0%                         Latest 93.3%
+
+The graph should visually communicate long-term direction.
+
+Again:
+
+Do not fabricate insights.
+
+============================================================
+7. CLASS-WISE ATTENDANCE — REMOVE THE DUPLICATE TOP CHART
+============================================================
+
+IMPORTANT:
+
+There is already a proper:
+
+CLASS-WISE ATTENDANCE REPORT
+
+lower on the page.
+
+Therefore the Class-wise Attendance ranking shown beside Monthly Trend is
+redundant.
+
+REMOVE THE DUPLICATE CLASS-WISE CHART FROM THE TOP OVERVIEW.
+
+Do NOT remove the actual detailed report.
+
+The detailed report remains the authoritative class-wise attendance view.
+
+This makes the page cleaner and prevents duplicate information.
+
+============================================================
+8. TOP OVERVIEW SHOULD BE SHORTER
+============================================================
+
+The Overview should NOT become an endlessly long analytics wall.
+
+Recommended structure:
+
+HEADER
+↓
+compact filters + export
+↓
+KPI summary
+↓
+Today's Breakdown + Weekly Trend
+↓
+Weekly Trend + Monthly Trend / analytics section
+↓
+Attendance Heatmap / selected day
+↓
+Class-wise Attendance Report
+↓
+Live Class Snapshot
+↓
+Footer
+
+But intelligently adjust this based on available data and viewport.
+
+Avoid redundant sections.
+
+============================================================
+9. ALL CLASSES FILTER — MAKE IT SMALLER
+============================================================
+
+Current:
+
+All Classes
+Export
+
+is visually too prominent.
+
+Make these controls compact.
+
+Example:
+
+[ All Classes ▾ ]     [ Export ↓ ]
+
+They should not consume excessive horizontal space.
+
+The filter should remain easy to tap on iPad.
+
+Use the existing universal Scholario dropdown if one exists.
+
+Do not create a new Attendance-specific dropdown style.
+
+============================================================
+10. CLASS FILTER MUST CONTROL THE ENTIRE OVERVIEW
+============================================================
+
+This is extremely important.
+
+When the Principal changes:
+
+All Classes
+→ Class 2-A
+
+the Overview should become the attendance overview specifically for
+Class 2-A.
+
+Update ALL relevant data:
+
+• Today's Rate
+• Present Today
+• Absent + Leave
+• Late Arrivals
+• Today's Breakdown
+• Weekly Trend
+• Monthly Trend, if class-level historical data exists
+• Heatmap
+• Selected Day
+• Class-wise report behavior
+• Live Class Snapshot
+
+Do not leave school-wide numbers visible while the UI says:
+
+Class 2-A.
+
+That creates misleading analytics.
+
+The filter must genuinely filter the data.
+
+When:
+
+All Classes
+
+is selected:
+
+show school-wide data.
+
+When:
+
+Class 2-A
+
+is selected:
+
+show Class 2-A data.
+
+If a specific metric cannot legitimately be calculated at class level,
+handle that gracefully instead of showing misleading data.
+
+============================================================
+11. LIVE CLASS SNAPSHOT — DEFINE THE LOGIC PROPERLY
+============================================================
+
+The current Live Class Snapshot raises an important UX question:
+
+How many classes should it show?
+
+Do NOT arbitrarily show a random number of classes.
+
+Define the behavior clearly.
+
+WHEN "ALL CLASSES" IS SELECTED:
+
+Do NOT display every student's tile from every class.
+
+That would become enormous.
+
+Instead show a compact:
+
+LIVE CLASS OVERVIEW
+
+with a class-level summary.
+
+For example:
+
+Class 2-A     66.7% present
+12 Present · 2 Late · 3 Absent · 1 Leave
+
+Class 2-B     91.4% present
+...
+
+Show a sensible limited number of class summaries initially.
+
+Example:
+
+Top 4–6 active/relevant classes
+
+Then:
+
+View all classes →
+
+Clicking "View all classes" should open a proper class-level live view.
+
+WHEN A SPECIFIC CLASS IS SELECTED:
+
+Example:
+
+Class 2-A
+
+Then Live Class Snapshot becomes:
+
+Live Class Snapshot — Class 2-A
+
+Today's roster · 18 students
+
+Show the student roster for THAT CLASS.
+
+Do not arbitrarily hide students just to fit the card.
+
+If the class is large, use a compact responsive grid with internal scrolling
+or pagination as appropriate.
+
+The user should be able to access the complete roster.
+
+============================================================
+12. LIVE SNAPSHOT SHOULD SHOW REAL-TIME STATUS COUNTS
+============================================================
+
+At the top of the snapshot:
+
+Present 12
+Late 2
+Absent 3
+Leave 1
+
+Then the student grid.
+
+Each student:
+
+#01
+Aarav
+PRESENT
+
+Use compact tiles.
+
+Do not make them giant.
+
+Status colors should remain semantic and accessible.
+
+============================================================
+13. TEACHERS & EMPLOYEES ATTENDANCE
+============================================================
+
+This is a MAJOR new section.
+
+Create:
+
+TEACHERS & EMPLOYEES
+
+This section is intended for Principal/Admin.
+
+Because teacher and employee attendance is managed by the Principal/Admin,
+the workflow should reflect that.
+
+Do NOT copy the student attendance UI and simply replace "student" with
+"teacher".
+
+Design an actual staff attendance experience.
+
+Top summary:
+
+Staff Attendance
+
+Present
+Late
+Absent
+Leave
+
+Example:
+
+Present       18
+Late           1
+Absent         2
+Leave          1
+
+Then a clean attendance management area.
+
+Suggested controls:
+
+Date
+Department / Role
+Search
+
+Then staff list:
+
+Name
+Role
+Today's Status
+Check-in / Time if available
+Action
+
+Statuses:
+
+Present
+Late
+Absent
+Leave
+
+Provide an efficient marking workflow.
+
+============================================================
+14. STAFF ATTENDANCE MARKING
+============================================================
+
+Principal should be able to mark staff attendance quickly.
+
+Avoid forcing the Principal to open individual profiles repeatedly.
+
+Provide efficient actions such as:
+
+Mark Present
+Mark Late
+Mark Absent
+Mark Leave
+
+If the current architecture supports bulk actions:
+
+Select multiple
+→ Mark Present
+
+But do not create complicated interactions if unnecessary.
+
+The UI should feel extremely fast.
+
+============================================================
+15. STAFF ATTENDANCE DATE CONTROL
+============================================================
+
+Principal should be able to select a date.
+
+Example:
+
+← 10 Dec 2025 →
+
+or:
+
+[ 10 Dec 2025 ▾ ]
+
+The selected date controls the staff attendance list.
+
+Do not allow accidental editing of future dates without appropriate
+business rules.
+
+Preserve existing application rules if they exist.
+
+============================================================
+16. ATTENDANCE HISTORY — DO NOT LOSE PAST DATA
+============================================================
+
+A serious school ERP must make historical attendance easy to retrieve.
+
+Create:
+
+ATTENDANCE HISTORY
+
+This is where the user can answer:
+
+"What was attendance on 10 December?"
+
+"What was Class 2-A attendance last Monday?"
+
+"What was a particular student's attendance?"
+
+"What should I download?"
+
+The History section should contain:
+
+Date selector / date range
+Class filter
+Student search where appropriate
+Status filter
+Search
+
+Then show historical records.
+
+============================================================
+17. HISTORY SHOULD NOT BE JUST ANOTHER HEATMAP
+============================================================
+
+The existing heatmap is useful for quick visual discovery.
+
+But History must be the authoritative record.
+
+The user should be able to:
+
+1. Select a date
+2. Select class
+3. View attendance details
+4. View student-level records
+5. Download the selected record
+
+Example:
+
+10 December 2025
+Class 2-A
+
+Total Students: 18
+Present: 12
+Late: 2
+Absent: 3
+Leave: 1
+Attendance: 66.7%
+
+Then the student records.
+
+============================================================
+18. PAST ATTENDANCE DOWNLOAD
+============================================================
+
+Historical attendance must be downloadable.
+
+Provide a compact universal Export action.
+
+Depending on existing export architecture, support:
+
+CSV
+PDF
+
+At minimum preserve the existing CSV capability.
+
+If PDF is already supported elsewhere, use the universal PDF export system.
+
+Do NOT invent a separate Attendance-only export design.
+
+The exported record must respect current filters.
+
+Example:
+
+Date:
+10 Dec 2025
+
+Class:
+2-A
+
+Export PDF
+
+→ only Class 2-A attendance for 10 Dec 2025.
+
+If:
+
+All Classes
+
+is selected:
+
+→ school-wide attendance for that date.
+
+Never export unrelated data.
+
+============================================================
+19. HISTORY QUICK ACCESS FROM HEATMAP
+============================================================
+
+The current heatmap already allows selecting a day.
+
+Keep that interaction.
+
+But improve it.
+
+When the user taps:
+
+10 December
+
+show the selected-day summary.
+
+Then provide:
+
+View full attendance →
+
+This should take the user directly to the relevant History view/filter.
+
+This creates a natural workflow:
+
+Heatmap
+→ select day
+→ quick summary
+→ View full attendance
+→ historical detailed records
+
+============================================================
+20. HISTORY SHOULD SUPPORT DATE RANGE
+============================================================
+
+Where supported by the existing data architecture, allow:
+
+Single day
+Date range
+
+Example:
+
+10 Dec 2025
+to
+17 Dec 2025
+
+This is useful for administration.
+
+Do not make the interface complicated.
+
+A compact date-range picker is enough.
+
+============================================================
+21. EXPORT DESIGN MUST BE UNIVERSAL
+============================================================
+
+Use the same Scholario export pattern used elsewhere.
+
+Do not create a giant custom Export button.
+
+Use a compact:
+
+Export ↓
+
+or icon + Export
+
+If multiple formats are available:
+
+Export
+  PDF
+  CSV
+
+Keep the menu clean.
+
+============================================================
+22. RESPONSIVE TYPOGRAPHY
+============================================================
+
+Do NOT solve responsive problems by simply shrinking fonts.
+
+Instead define a proper type scale.
+
+Page title
+Section title
+Metric
+Body
+Caption
+Chart label
+
+must scale intelligently.
+
+The design should look correct on:
+
+iPad
+laptop
+desktop
+large desktop
+
+without looking:
+
+too tiny
+too oversized
+too compressed.
+
+Use CSS responsive sizing where appropriate.
+
+============================================================
+23. RESPONSIVE CHART RULES
+============================================================
+
+Charts must NEVER force the entire page wider.
+
+For every chart:
+
+• container width must be flexible
+• canvas/SVG must respect container width
+• labels must not overflow
+• tooltip must stay inside viewport
+• legend must wrap if necessary
+• chart height must adapt
+• no fixed giant width
+
+On tablet:
+
+Weekly + Monthly can remain side-by-side if they have sufficient width.
+
+If not:
+
+stack them elegantly.
+
+Do NOT squeeze two charts into unusably narrow columns.
+
+============================================================
+24. REMOVE EXCESSIVE CARD CONTAINERS
+============================================================
+
+The current page uses cards for almost everything.
+
+This creates visual heaviness.
+
+Not every section needs:
+
+white background
+border
+shadow
+rounded rectangle
+
+Use hierarchy through:
+
+spacing
+typography
+alignment
+subtle dividers
+small labels
+
+Weekly/Monthly trend section in particular should feel more open and
+integrated into the page.
+
+The UI should breathe.
+
+============================================================
+25. UNIVERSAL SCHOLARIO DESIGN LANGUAGE
+============================================================
+
+Reuse existing universal components for:
+
+• filters
+• dropdowns
+• buttons
+• Export
+• cards
+• badges
+• date pickers
+• modals
+• tables
+• tooltips
+• tabs
+• empty states
+
+Do not build Attendance-specific duplicates if an equivalent universal
+component already exists.
+
+The ERP must feel like ONE system.
+
+============================================================
+26. UNIVERSAL SIZING SYSTEM
+============================================================
+
+Audit Attendance for arbitrary component sizes.
+
+Avoid:
+
+random card heights
+random button heights
+random border radii
+random typography
+random gaps
+
+Use the existing Scholario spacing/radius/type system.
+
+If the project already has design tokens:
+
+reuse them.
+
+If not:
+
+create a minimal coherent local token system rather than dozens of
+one-off values.
+
+============================================================
+27. DO NOT MAKE EVERYTHING "PREMIUM" BY ADDING EFFECTS
+============================================================
+
+Premium does NOT mean:
+
+❌ glass everywhere
+❌ gradients everywhere
+❌ huge shadows
+❌ glowing charts
+❌ giant rounded boxes
+❌ animations everywhere
+
+Premium means:
+
+precision
+spacing
+hierarchy
+consistency
+clarity
+restraint.
+
+============================================================
+28. MICRO-ANIMATIONS
+============================================================
+
+Keep the animations introduced in the previous phase, but refine them.
+
+Good:
+
+• KPI number transition
+• chart line reveal
+• selected heatmap day transition
+• filter transition
+• status transition
+• tab transition
+
+Avoid:
+
+• bouncing cards
+• excessive scale
+• spinning icons
+• continuous animations
+
+Respect:
+
+prefers-reduced-motion.
+
+============================================================
+29. ATTENDANCE OVERVIEW — FINAL STRUCTURE
+============================================================
+
+Aim for a structure approximately like:
+
+--------------------------------------------------
+
+Attendance
+
+[ Overview ] [ Teachers & Employees ] [ History ]
+
+                    [All Classes ▾] [Export]
+
+Today's Attendance
+
+[ Today's Rate ]
+[ Present Today ]
+[ Absent + Leave ]
+[ Late Arrivals ]
+
+--------------------------------------------------
+
+Today's Breakdown          Weekly Trend
+
+93.3% Present              compact line chart
+Present 1719               Mon Tue Wed Thu Fri Sat
+Late 18
+Absent 96
+Leave 9
+
+--------------------------------------------------
+
+Monthly Trend              [no duplicate class chart]
+
+compact long-term chart
+
+--------------------------------------------------
+
+December 2025 — Attendance Heatmap
+
+compact calendar
+
+--------------------------------------------------
+
+Selected Day
+
+Wednesday, 10 December
+
+Present | Late | Absent | Leave
+
+[ View full attendance → ]
+
+--------------------------------------------------
+
+Class-wise Attendance Report
+
+full detailed report
+
+--------------------------------------------------
+
+Live Class Snapshot
+
+context-aware class-level/student-level view
+
+--------------------------------------------------
+
+This is only a structural direction.
+
+Use your design judgment to improve it further.
+
+============================================================
+30. CLASS-WISE REPORT REMAINS THE SOURCE OF TRUTH
+============================================================
+
+Keep the detailed:
+
+Class-wise Attendance Report
+
+with:
+
+Class
+Total
+Present
+Absent
+Late
+Rate
+Status
+
+Keep its compact progress indicators.
+
+Do not duplicate this data in another large chart above.
+
+============================================================
+31. HISTORY UX
+============================================================
+
+History should feel like a real record-management system.
+
+Suggested:
+
+Attendance History
+
+[ Date / Range ] [ Class ] [ Search ] [ Export ]
+
+Then:
+
+Date
+Class
+Total
+Present
+Absent
+Late
+Leave
+Rate
+Status
+View
+
+Click View:
+
+→ full attendance details.
+
+Do not overload the Overview page with historical records.
+
+============================================================
+32. STUDENT ATTENDANCE DETAIL
+============================================================
+
+If the existing data model supports student-level historical attendance,
+provide a student detail view from History.
+
+Example:
+
+Aarav
+
+Attendance:
+Present 18
+Absent 2
+Late 1
+Leave 0
+
+Attendance rate:
+90%
+
+Then date-wise history.
+
+Do not invent data.
+
+Only implement this if the underlying student attendance data exists.
+
+============================================================
+33. STAFF HISTORY
+============================================================
+
+Teachers & Employees should also have historical attendance.
+
+Provide a History action/filter there.
+
+Example:
+
+Teacher:
+Rohan Mehta
+
+Date:
+10 Dec 2025
+
+Status:
+Present
+
+The Principal should be able to review past staff attendance.
+
+============================================================
+34. DATA INTEGRITY
+============================================================
+
+This phase must NOT alter actual attendance data simply to make charts
+look better.
+
+Do not fabricate:
+
+• percentages
+• students
+• classes
+• staff
+• dates
+• trends
+• attendance states
+
+All displayed values must come from the existing data model.
+
+If current demo data is used, preserve it.
+
+============================================================
+35. DEAD / DUPLICATE CODE CLEANUP
+============================================================
+
+After implementing the new architecture, inspect Attendance for old
+versions created during previous iterations.
+
+Safely identify:
+
+• duplicate chart components
+• old Today's Breakdown component
+• old class-wise chart
+• unused chart wrappers
+• abandoned layouts
+• duplicate CSS
+• unused imports
+• unused mock datasets
+• obsolete screenshots/assets
+• dead helper functions
+• duplicate Attendance components
+
+ONLY delete code after proving it is unused.
+
+Do NOT perform blind deletion.
+
+Do NOT delete shared components used by other modules.
+
+Goal:
+
+smaller
+cleaner
+faster
+less confusing workspace.
+
+============================================================
+36. PERFORMANCE
+============================================================
+
+Do not add unnecessary packages.
+
+Before installing anything:
+
+check existing dependencies.
+
+Reuse the current chart system if possible.
+
+Avoid duplicate chart libraries.
+
+Avoid unnecessarily heavy animations.
+
+Attendance should remain fast on iPad.
+
+============================================================
+37. ACCESSIBILITY
+============================================================
+
+All important information must remain readable without relying solely on
+color.
+
+Examples:
+
+Present → icon/text/status
+Absent → icon/text/status
+Late → icon/text/status
+Leave → icon/text/status
+
+Charts must have accessible labels where possible.
+
+Interactive controls should be keyboard/touch accessible.
+
+Touch targets must remain comfortable on tablets.
+
+============================================================
+38. FINAL RESPONSIVE QUALITY TEST
+============================================================
+
+Test the Attendance module on multiple viewport sizes.
+
+Especially the exact type of iPad/tablet viewport where the current
+Today's Breakdown text was overflowing.
+
+Verify:
+
+✓ no text overflow
+✓ no chart overlap
+✓ no horizontal page stretch
+✓ no clipped percentages
+✓ no clipped labels
+✓ no oversized charts
+✓ no giant empty spaces
+✓ Weekly/Monthly remain elegant
+✓ filters remain usable
+✓ Export remains usable
+✓ Heatmap remains readable
+✓ report remains usable
+✓ Live Snapshot remains usable
+✓ staff section works
+✓ history works
+
+============================================================
+39. FUNCTIONAL TEST MATRIX
+============================================================
+
+Test:
+
+A. All Classes
+→ school-wide overview
+
+B. Class 2-A
+→ ONLY Class 2-A overview
+
+C. Class 2-B
+→ ONLY Class 2-B overview
+
+D. Different dates
+→ historical data changes correctly
+
+E. Heatmap day selection
+→ selected-day summary changes
+
+F. View full attendance
+→ History opens with correct date/class
+
+G. Export
+→ exported data respects current date/class filters
+
+H. Teachers & Employees
+→ staff attendance is independent of student attendance
+
+I. Staff date selection
+→ correct historical staff record appears
+
+============================================================
+40. IMPORTANT — DO NOT OVERWRITE WORKING FEATURES
+============================================================
+
+Before changing anything:
+
+identify what is already working.
+
+Preserve:
+
+• attendance calculations
+• current heatmap interaction
+• existing export behavior
+• class filtering logic if correct
+• selected-day logic if correct
+• existing data structures
+• existing universal components
+
+Only change what genuinely needs improvement.
+
+============================================================
+41. FINAL QUALITY BAR
+============================================================
+
+The result should feel like:
+
+A premium enterprise attendance management system.
+
+Not:
+
+a school dashboard template.
+
+Not:
+
+an AI-generated dashboard.
+
+Not:
+
+a collection of random cards.
+
+The Principal should be able to open Attendance and immediately understand:
+
+TODAY
+→ How is attendance?
+
+TREND
+→ Is it improving?
+
+CLASS
+→ Which classes need attention?
+
+LIVE
+→ What is happening right now?
+
+STAFF
+→ Who is present/absent among teachers and employees?
+
+HISTORY
+→ What happened on a previous date?
+
+EXPORT
+→ Can I get the exact record I need?
+
+Everything should be obvious.
+
+============================================================
+42. FINAL REPORT
+============================================================
+
+After implementation, report clearly:
+
+1. Attendance information architecture changes
+2. Responsive fixes
+3. Today's Breakdown redesign
+4. Weekly/Monthly redesign
+5. Duplicate Class-wise chart removal
+6. Class filter behavior
+7. Live Class Snapshot behavior
+8. Teachers & Employees attendance implementation
+9. Attendance History implementation
+10. Historical attendance access
+11. Export behavior
+12. Universal components reused
+13. Dead/duplicate code safely removed
+14. Performance improvements
+15. TypeScript/build verification
+16. Runtime verification
+17. Responsive viewport verification
+18. Confirmation that Timetable was NOT modified
+
+DO NOT CLAIM TESTS PASSED UNLESS THEY WERE ACTUALLY RUN.
+
+============================================================
+FINAL INSTRUCTION
+============================================================
+
+Do not rush into coding.
+
+First understand the current implementation.
+
+Then make a clean plan.
+
+Then implement.
+
+Then test.
+
+Then inspect the result visually again.
+
+If something technically works but visually feels wrong, iterate.
+
+Work like a genius product designer AND a senior engineer.
+
+The objective is not "make the screenshot look better."
+
+The objective is:
+
+MAKE SCHOLARIO'S ATTENDANCE MODULE FEEL LIKE A PRODUCT THAT COULD
+ACTUALLY BE USED BY A LARGE SCHOOL EVERY DAY.
+
+Premium.
+Elegant.
+Fast.
+Responsive.
+Intelligent.
+Consistent.
+Minimal.
+Powerful.
+============================================================
