@@ -1,0 +1,1477 @@
+SCHOLARIO-OS — FINAL ATTENDANCE ENTRY UX + WORKING-DAY HISTORY + OFFICIAL EXCEL-STYLE REPORT
+================================================================================================
+
+IMPORTANT:
+
+Do NOT keep patching the current date-picker inside the Teachers & Employees
+attendance entry screen.
+
+The current date picker approach is making the page unnecessarily complicated.
+
+We are changing the architecture of this screen.
+
+The Teachers & Employees Attendance page should primarily be an
+ATTENDANCE MARKING / SUBMISSION screen.
+
+Historical attendance is accessed through a small Previous Working Day
+navigation control, not through a large date picker.
+
+Also, the official attendance report must NOT look like a dashboard/card UI.
+It should look like an actual official school attendance sheet exported from
+Excel/office software.
+
+Do not blindly implement only the literal requirements below.
+After implementing them, review the complete UX and make sensible premium,
+logical improvements yourself without changing the intended workflow.
+
+================================================================================================
+1. REMOVE THE DATE PICKER FROM THE MAIN ATTENDANCE ENTRY TOOLBAR
+================================================================================================
+
+Currently the screen has:
+
+[ December 10th... ]
+
+as a large date selector.
+
+REMOVE THIS DATE PICKER FROM THE MAIN Teachers & Employees attendance screen.
+
+Do NOT replace it with another large calendar.
+
+The main screen should automatically be:
+
+TODAY'S ATTENDANCE.
+
+Example:
+
+Today = 11 August 2026
+
+The page opens directly on:
+
+Teachers & Employees
+11 August 2026
+
+The user does not need to manually choose today's date.
+
+This makes the page much more operational and much less cluttered.
+
+================================================================================================
+2. NEW COMPACT PREVIOUS-WORKING-DAY NAVIGATION
+================================================================================================
+
+Add a very small, elegant historical navigation control near the attendance
+heading/topbar.
+
+Example:
+
+‹  10 Aug 2026
+
+or:
+
+←  Previous working day · 10 Aug
+
+The exact visual treatment can be improved by you.
+
+The important requirement:
+
+This control means:
+
+"Go to the previous WORKING DAY's attendance."
+
+It is NOT a general date picker.
+
+================================================================================================
+3. ONLY PREVIOUS WORKING DAYS
+================================================================================================
+
+When clicking the previous arrow:
+
+11 Aug 2026
+↓
+10 Aug 2026
+
+Click again:
+
+10 Aug
+↓
+7 Aug
+
+If:
+
+8 Aug = Saturday
+9 Aug = Sunday
+
+skip them automatically.
+
+If a date is a school holiday according to School Calendar:
+
+skip that date as well.
+
+Therefore navigation should be based on:
+
+School Calendar
++
+working-day rules
+
+NOT simply:
+
+selectedDate - 1 day
+
+Example:
+
+Tuesday 11 Aug
+←
+Monday 10 Aug
+←
+Friday 7 Aug
+←
+Thursday 6 Aug
+
+No weekend/holiday dates should appear in this attendance-history
+navigation.
+
+================================================================================================
+4. NO FUTURE ATTENDANCE
+================================================================================================
+
+This rule is ABSOLUTE.
+
+The attendance entry screen must never allow:
+
+Tomorrow
+Future working day
+Future school day
+
+to appear as an attendance sheet.
+
+There should be no way for:
+
+12 Aug 2026
+
+to display:
+
+Rohan — Present — 08:30 AM
+Priya — Present — 08:30 AM
+
+etc.
+
+Future attendance DOES NOT EXIST.
+
+Do not render fake/demo values.
+
+Do not render locked future values.
+
+Do not render check-in times.
+
+Do not render a future attendance roster.
+
+The main page is always TODAY.
+
+The history arrow only goes BACKWARD.
+
+There is no forward attendance navigation.
+
+================================================================================================
+5. TODAY'S ATTENDANCE — PRIMARY MODE
+================================================================================================
+
+When the page opens:
+
+show TODAY.
+
+Example:
+
+Attendance
+Teachers & Employees
+
+Today · 11 August 2026
+
+If attendance is not submitted:
+
+show editable controls:
+
+Present
+Late
+Absent
+Leave
+
+and:
+
+[ Mark all present ]
+
+[ Submit Attendance ]
+
+The page should feel like an operational attendance-taking screen.
+
+================================================================================================
+6. TODAY AFTER SUBMISSION
+================================================================================================
+
+Once today's attendance is submitted:
+
+the entire attendance becomes READ ONLY.
+
+Show a subtle finalized indicator such as:
+
+✓ Attendance submitted
+
+or:
+
+✓ Submitted
+
+Do NOT allow normal editing.
+
+Do NOT show Mark all present.
+
+Do NOT show Submit again.
+
+Status controls should visually become read-only.
+
+================================================================================================
+7. PREVIOUS WORKING DAY — SUBMITTED
+================================================================================================
+
+When user clicks:
+
+← Previous working day
+
+and reaches a past working day where attendance was already submitted:
+
+show that day's attendance.
+
+Example:
+
+Monday · 10 August 2026
+✓ Submitted
+
+All attendance values:
+
+Present
+Late
+Absent
+Leave
+Check-in
+
+are READ ONLY.
+
+No editing.
+
+No Mark all present.
+
+No Submit button.
+
+This is the historical inspection mode.
+
+================================================================================================
+8. PREVIOUS WORKING DAY — NOT SUBMITTED
+================================================================================================
+
+This is the important exception.
+
+Suppose:
+
+8 Aug attendance was never submitted.
+
+User navigates:
+
+11 Aug
+← 10 Aug
+← 7 Aug
+← 6 Aug
+← 5 Aug
+
+and reaches:
+
+5 Aug 2026
+
+If attendance was never submitted for that working day:
+
+show the attendance sheet.
+
+If there is an existing draft:
+
+restore the exact draft.
+
+If there is no draft:
+
+show an unmarked/empty attendance state.
+
+Allow the Principal to:
+
+• mark Present
+• mark Absent
+• mark Late
+• mark Leave
+• change existing draft statuses
+• Mark all present
+• Submit Attendance
+
+This is the ONLY reason a past date is editable.
+
+================================================================================================
+9. PAST UNSUBMITTED STATUS
+================================================================================================
+
+At the top of the historical view, clearly communicate:
+
+⚠ Attendance not submitted
+
+or:
+
+● Submission pending
+
+Use a tiny but noticeable colored status indicator.
+
+Do NOT use a giant warning card.
+
+Example:
+
+← 5 Aug 2026
+  ● Submission pending
+
+This should immediately tell the Principal:
+
+"This historical attendance is incomplete."
+
+================================================================================================
+10. TINY COLORFUL SUBMISSION STATUS IN THE TOP BAR
+================================================================================================
+
+Add a small, elegant status indicator in the Attendance top/header area.
+
+If there are previous working days with attendance that has not been
+submitted:
+
+show something like:
+
+● 2 pending
+
+or:
+
+● Submission pending
+
+The indicator should be:
+
+small
+colorful
+subtle
+premium
+
+Possible states:
+
+Green:
+✓ Up to date
+
+Amber:
+● 1 pending submission
+
+Red/pink:
+● Multiple pending submissions
+
+Do NOT make it a giant notification banner.
+
+Clicking it may open a tiny popover/list of pending working dates.
+
+Example:
+
+Attendance submissions
+───────────────────────
+5 Aug · Pending
+7 Aug · Pending
+
+[Review]
+
+This is optional if it improves UX, but keep it compact.
+
+================================================================================================
+11. IMPORTANT — DO NOT MAKE THE TOPBAR TOO BUSY
+================================================================================================
+
+The topbar should remain clean.
+
+Do NOT add:
+
+large date picker
+large history panel
+large submission warning
+multiple cards
+
+Instead:
+
+Attendance
+Teachers & Employees
+← Previous working day · 10 Aug
+                    ● 2 pending
+
+This is enough.
+
+================================================================================================
+12. HISTORY NAVIGATION SHOULD BE READ-ONLY BY DEFAULT
+================================================================================================
+
+The previous-working-day mechanism is essentially a lightweight history
+viewer.
+
+Normal historical records:
+
+READ ONLY.
+
+Only:
+
+PAST + UNSUBMITTED
+
+becomes editable.
+
+This distinction must be visible.
+
+Example:
+
+10 Aug 2026
+✓ Submitted
+READ ONLY
+
+7 Aug 2026
+● Submission pending
+EDITABLE
+
+6 Aug 2026
+✓ Submitted
+READ ONLY
+
+================================================================================================
+13. NO LARGE HISTORY TAB REQUIRED FOR STAFF ENTRY
+================================================================================================
+
+The Teachers & Employees screen should NOT become a full historical report
+screen.
+
+The Principal can inspect previous attendance through the previous-working-day
+arrow.
+
+Individual teacher/employee detailed attendance history will live on the
+individual person's profile.
+
+This keeps responsibilities separated.
+
+================================================================================================
+14. INDIVIDUAL TEACHER / EMPLOYEE PROFILE
+================================================================================================
+
+Every teacher and employee should have their attendance stored against their
+own profile.
+
+Example:
+
+Rohan Mehta
+Teacher
+Mathematics
+
+Profile
+→ Attendance
+
+There the person can have:
+
+Monthly attendance
+Attendance percentage
+Present
+Late
+Absent
+Leave
+Working days
+Attendance calendar/history
+
+This is where an individual person's detailed attendance history belongs.
+
+================================================================================================
+15. INDIVIDUAL ATTENDANCE REPORT
+================================================================================================
+
+If someone needs:
+
+"Rohan Mehta's attendance report"
+
+the report should be generated from:
+
+Rohan Mehta → Profile → Attendance → Export
+
+This is separate from the Principal's daily attendance marking screen.
+
+The Attendance entry page should not become overloaded with individual
+reporting functionality.
+
+================================================================================================
+16. SINGLE SOURCE OF TRUTH
+================================================================================================
+
+Do NOT maintain separate fake/demo attendance datasets for:
+
+Principal attendance screen
+Teacher profile attendance
+Employee profile attendance
+Reports
+
+All must read from the same authoritative attendance records.
+
+Example:
+
+Principal marks:
+
+Rohan Mehta
+11 Aug
+Late
+
+After saving/submission:
+
+Rohan's profile automatically shows:
+
+11 Aug — Late
+
+The report also reads:
+
+11 Aug — Late
+
+No duplicate manual entry.
+
+================================================================================================
+17. PERSONAL ATTENDANCE MUST AUTO-SYNC
+================================================================================================
+
+Every teacher/employee's personal attendance must automatically update from
+the authoritative attendance record.
+
+No manual synchronization.
+
+No duplicate attendance form.
+
+If Principal changes a PAST UNSUBMITTED record:
+
+Present → Absent
+
+the person's profile reflects the updated draft/current state.
+
+After submission:
+
+the finalized state is reflected everywhere.
+
+================================================================================================
+18. DATE NAVIGATION MUST NEVER LEAK DATA
+================================================================================================
+
+This is a critical bug-prevention requirement.
+
+Test:
+
+11 Aug → 10 Aug → 7 Aug → 6 Aug → 5 Aug → back to 11 Aug
+
+Each date must load its own independent state.
+
+Never carry:
+
+status
+check-in time
+submission state
+draft
+
+from one date to another.
+
+Example:
+
+10 Aug:
+Rohan Present
+
+7 Aug:
+Rohan Absent
+
+The UI must not accidentally continue showing Present when switching.
+
+================================================================================================
+19. EMPTY PAST WORKING DAY
+================================================================================================
+
+If a past working day has NO attendance record at all:
+
+show:
+
+Attendance not submitted
+
+The roster may be displayed with empty/unmarked statuses.
+
+Allow the Principal to mark attendance and submit.
+
+Do NOT fabricate:
+
+Present
+Check-in
+timestamps
+
+================================================================================================
+20. HOLIDAY / NON-WORKING DAY
+================================================================================================
+
+Use the School Calendar as the source of truth.
+
+The previous-working-day arrow must SKIP:
+
+• Sundays
+• Saturdays if configured as non-working
+• School holidays
+• Other configured non-working days
+
+Example:
+
+11 Aug Tuesday
+10 Aug Monday
+7 Aug Friday
+6 Aug Thursday
+
+If 10 Aug was a holiday:
+
+11 Aug
+←
+7 Aug
+
+Do not create an attendance page for the holiday.
+
+================================================================================================
+21. HOLIDAY DISPLAY IN REPORTS
+================================================================================================
+
+In monthly reports:
+
+holiday should appear as:
+
+HOLIDAY
+
+or:
+
+School Holiday
+
+It must NOT appear as:
+
+Absent
+
+It must NOT count as an absence.
+
+It must NOT artificially lower attendance percentage.
+
+================================================================================================
+22. MARK ALL PRESENT
+================================================================================================
+
+Keep:
+
+[ ✓ Mark all present ]
+
+Make it visually polished.
+
+When clicked:
+
+• all currently editable staff become Present
+• show a subtle success/state animation
+• update the summary counts immediately
+
+Do NOT affect:
+
+locked submitted records.
+
+Do NOT affect:
+
+future dates.
+
+Do NOT affect:
+
+holiday dates.
+
+================================================================================================
+23. SUBMIT ATTENDANCE
+================================================================================================
+
+The Submit button should be the primary action.
+
+Example:
+
+[ ✓ Submit Attendance ]
+
+Before submission:
+
+show a concise confirmation if needed:
+
+20 staff
+18 Present
+1 Late
+1 Absent
+0 Leave
+
+Submit attendance?
+
+After successful submission:
+
+show:
+
+✓ Attendance submitted
+
+Then lock the record.
+
+Do not fake a success state if the save actually failed.
+
+================================================================================================
+24. UNSAVED CHANGES
+================================================================================================
+
+If user changes an attendance value but has not submitted:
+
+show a very small:
+
+● Unsaved changes
+
+indicator.
+
+Do not create a huge alert box.
+
+If navigating away:
+
+if the application supports it, warn before losing changes.
+
+Draft state should preferably persist safely.
+
+================================================================================================
+25. SUMMARY CARDS
+================================================================================================
+
+Keep the four summary cards:
+
+Present
+Late
+Absent
+Leave
+
+but make them compact.
+
+Use semantic icon colors:
+
+Present → green
+Late → amber
+Absent → red/pink
+Leave → blue
+
+Icons should have their own semantic color.
+
+Do not use random decorative colors.
+
+Counts should update immediately when attendance status changes.
+
+================================================================================================
+26. REMOVE UNNECESSARY NESTED BOXES
+================================================================================================
+
+Review the current screen for:
+
+box inside box
+card inside card
+unnecessary toolbar containers
+unnecessary date-picker containers
+
+Remove wherever possible.
+
+Use:
+
+spacing
+alignment
+subtle divider
+background tone
+typography
+
+instead of another rounded rectangle.
+
+The UI should feel premium and calm.
+
+================================================================================================
+27. MAIN ATTENDANCE SCREEN SHOULD LOOK LIKE THIS CONCEPTUALLY
+================================================================================================
+
+Attendance
+
+Teachers & Employees
+
+← Previous working day · 10 Aug 2026
+
+                         ● 2 pending submissions
+
+
+Present          Late          Absent          Leave
+20               0             0               0
+
+
+[ All Roles ] [ Search staff... ] [ Mark all present ]
+
+
+NAME             ROLE          DEPARTMENT       STATUS       CHECK-IN
+
+Rohan Mehta      Teacher       Mathematics      ✓ Present    08:30 AM
+Priya Nair       Teacher       Languages        ✓ Present    08:30 AM
+Pooja Bhatt      Teacher       Science          ✓ Present    08:30 AM
+
+                                            [ Submit Attendance ]
+
+This is only a conceptual hierarchy.
+Use the existing Scholario visual language and improve it further.
+
+================================================================================================
+28. NO FORWARD ATTENDANCE ARROW
+================================================================================================
+
+Do NOT provide:
+
+→ Next day
+
+on the attendance entry page.
+
+Because future attendance must never be accessible.
+
+Only:
+
+← Previous working day
+
+is required.
+
+When the user is already at today's attendance:
+
+the previous arrow is enabled.
+
+There is no next arrow.
+
+================================================================================================
+29. CURRENT DATE MUST BE OBVIOUS
+================================================================================================
+
+Today's screen should clearly say:
+
+Today · 11 August 2026
+
+Do not require the user to infer the date from a tiny picker.
+
+Use a clean date label near the Attendance title.
+
+================================================================================================
+30. REPORTING ARCHITECTURE
+================================================================================================
+
+Now fix the reporting side separately.
+
+The report should NOT look like the current dashboard UI.
+
+The report should NOT contain:
+
+large rounded cards
+dashboard-style widgets
+huge modern KPI cards
+excessive whitespace
+floating UI elements
+
+It should look like an OFFICIAL SCHOOL ATTENDANCE REPORT.
+
+Think:
+
+Microsoft Excel / official office spreadsheet
+printed on A4
+proper table
+professional borders
+merged headings
+aligned columns
+totals
+page numbers
+
+================================================================================================
+31. OFFICIAL EXCEL-STYLE PDF
+================================================================================================
+
+The exported PDF must visually resemble a professionally prepared Excel
+attendance workbook printed/exported to PDF.
+
+It should feel like:
+
+"School office generated this report from Excel."
+
+NOT:
+
+"Dashboard screenshot converted into PDF."
+
+Use:
+
+• structured rows
+• structured columns
+• thin professional borders
+• clear header rows
+• merged title cells where appropriate
+• proper column alignment
+• consistent row heights
+• page breaks
+• repeated table headers on new pages
+• totals
+• attendance percentages
+• working-day calculations
+• school name
+• report title
+• month
+• class/staff scope
+• generated date
+• page number
+
+================================================================================================
+32. REPORT HEADER
+================================================================================================
+
+Example:
+
+------------------------------------------------------------
+                 DEMO SCHOOL OF SCHOLARIO
+              MONTHLY ATTENDANCE REPORT
+                     DECEMBER 2025
+                     CLASS 2-A
+------------------------------------------------------------
+
+Then:
+
+Working Days: 22
+Present: ...
+Absent: ...
+Late: ...
+Leave: ...
+Attendance Rate: ...
+
+Then the detailed sheet.
+
+Use a professional spreadsheet-style hierarchy.
+
+================================================================================================
+33. STUDENT MONTHLY REPORT
+================================================================================================
+
+For each class:
+
+Student Attendance Register
+
+Columns can include:
+
+S.No.
+Roll No.
+Student Name
+Working Days
+Present
+Absent
+Late
+Leave
+Attendance %
+Remarks
+
+Then optionally a day-wise matrix:
+
+S.No. | Roll No. | Student | 1 | 2 | 3 | 4 | ... | 31 | Present | Absent | %
+ 
+Each date cell:
+
+P = Present
+A = Absent
+L = Late
+LV = Leave
+H = Holiday
+— = Non-working / not applicable
+
+Keep it readable.
+
+Do not make the report ridiculously dense.
+
+Use proper landscape A4 if necessary.
+
+================================================================================================
+34. CLASS-WISE PDF
+================================================================================================
+
+If Principal exports:
+
+Class 2-A
+
+generate:
+
+CLASS 2-A
+December 2025
+Attendance Report
+
+ONLY.
+
+Do not include other classes.
+
+================================================================================================
+35. ALL CLASSES PDF
+================================================================================================
+
+If Principal exports:
+
+All Classes
+
+generate a complete monthly report.
+
+Organize clearly:
+
+CLASS 2-A
+report
+
+then
+
+CLASS 2-B
+report
+
+then
+
+CLASS 9-A
+report
+
+etc.
+
+Each class should have a clear section/page break.
+
+================================================================================================
+36. STAFF MONTHLY REPORT
+================================================================================================
+
+Teachers & Employees report should be separate.
+
+Example:
+
+DEMO SCHOOL OF SCHOLARIO
+TEACHERS & EMPLOYEES
+MONTHLY ATTENDANCE REPORT
+DECEMBER 2025
+
+Columns:
+
+S.No.
+Employee ID
+Name
+Role
+Department
+Working Days
+Present
+Late
+Absent
+Leave
+Attendance %
+
+Then optional day-wise attendance matrix.
+
+================================================================================================
+37. EXCEL-LIKE FORMATTING DETAILS
+================================================================================================
+
+Make the PDF genuinely look like a spreadsheet.
+
+Use:
+
+• consistent grid borders
+• bold header row
+• light header fill
+• centered numeric columns
+• left-aligned names
+• right/center aligned totals appropriately
+• consistent decimal formatting
+• repeated header rows
+• page footer
+• report metadata
+• clean print margins
+
+Avoid:
+
+glassmorphism
+huge rounded cards
+dashboard gradients
+large colored blobs
+floating cards
+
+This is an official report.
+
+================================================================================================
+38. REPORT COLORS
+================================================================================================
+
+Use restrained office/report colors.
+
+Semantic values can have subtle emphasis:
+
+Present → green text
+Absent → red
+Late → amber
+Leave → blue
+
+But do not make the entire report colorful.
+
+It should remain professional.
+
+Think:
+
+official school register + modern Excel.
+
+================================================================================================
+39. PDF PRINT QUALITY
+================================================================================================
+
+The PDF must be print-ready.
+
+Ensure:
+
+A4 page size
+appropriate portrait/landscape orientation
+proper margins
+no cropped columns
+no overlapping cells
+no broken rows
+no text clipping
+repeated headers on subsequent pages
+correct page numbering
+
+If the report is wide:
+
+use landscape orientation.
+
+================================================================================================
+40. REPORT SHOULD NOT DEPEND ON VISIBLE UI
+================================================================================================
+
+The PDF must be generated from the actual attendance dataset.
+
+Do NOT:
+
+take a screenshot
+print the dashboard DOM
+export only visible rows
+export only the current page
+export only paginated records
+
+The report query must retrieve the complete selected month.
+
+================================================================================================
+41. REPORT MONTH
+================================================================================================
+
+The report month must be explicitly selected from the History/reporting
+context.
+
+Example:
+
+December 2025
+
+means:
+
+1 Dec 2025 → 31 Dec 2025
+
+with only applicable working days and holidays.
+
+Do not mix August 2026 data into a December 2025 report.
+
+================================================================================================
+42. INDIVIDUAL PROFILE REPORT
+================================================================================================
+
+Keep individual teacher/employee reporting on their profile.
+
+Example:
+
+Teacher Profile
+→ Attendance
+→ Export Monthly Report
+
+This can generate:
+
+Rohan Mehta
+Teachers & Employees Attendance
+December 2025
+
+The main Attendance marking page does NOT need individual export controls.
+
+================================================================================================
+43. HISTORY SHOULD BE LIGHTWEIGHT
+================================================================================================
+
+The previous-working-day navigation is for:
+
+inspection
+verification
+pending submission
+correction before submission
+
+The full monthly reporting interface belongs to:
+
+History / Reports
+
+or appropriate reporting area.
+
+Do not overload the daily attendance page.
+
+================================================================================================
+44. PREMIUM TOPBAR STATUS
+================================================================================================
+
+Use a tiny visual status indicator.
+
+Examples:
+
+✓ Attendance up to date
+
+or:
+
+● 1 pending submission
+
+or:
+
+● 3 pending submissions
+
+Use subtle animation when a submission changes state.
+
+Example:
+
+Before:
+● 1 pending
+
+After submitting:
+✓ Up to date
+
+A small fade/check animation is enough.
+
+No giant toast that blocks the screen.
+
+================================================================================================
+45. SMART UX IMPROVEMENT
+================================================================================================
+
+Use your own judgement to improve the experience.
+
+For example:
+
+If the Principal has pending historical attendance:
+
+show the tiny status.
+
+Clicking it can show:
+
+Pending attendance
+────────────────
+5 Aug · Staff
+7 Aug · Staff
+
+[ Review ]
+
+Clicking Review navigates directly to the corresponding previous-working-day
+record.
+
+This is optional but strongly encouraged if it can be implemented cleanly.
+
+================================================================================================
+46. DO NOT OVER-CARD THE PAGE
+================================================================================================
+
+The current Scholario design is already clean.
+
+Do not ruin it by adding more cards.
+
+The Attendance page should feel like:
+
+a professional operational workspace.
+
+Not:
+
+a dashboard full of cards.
+
+================================================================================================
+47. MICRO-ANIMATIONS
+================================================================================================
+
+Add subtle animations for:
+
+• changing attendance status
+• summary count updates
+• submit success
+• pending → submitted status
+• date/history transition
+• dropdown/popover opening
+
+Do NOT use:
+
+bouncy animations
+large zooms
+excessive motion
+gaming effects
+
+================================================================================================
+48. LOGIC TEST MATRIX
+================================================================================================
+
+Before declaring completion, test ALL of these:
+
+TEST 1
+Today + unsubmitted
+→ editable.
+
+TEST 2
+Today + submitted
+→ read-only.
+
+TEST 3
+Previous working day + submitted
+→ read-only.
+
+TEST 4
+Previous working day + unsubmitted
+→ editable.
+
+TEST 5
+Previous working day + no attendance record
+→ blank editable sheet.
+
+TEST 6
+Weekend
+→ skipped.
+
+TEST 7
+School holiday
+→ skipped/no attendance entry.
+
+TEST 8
+Future working day
+→ impossible to navigate to through attendance entry.
+
+TEST 9
+Change date backwards and return to today
+→ no data leakage.
+
+TEST 10
+Change one person's status
+→ summary updates immediately.
+
+TEST 11
+Submit
+→ record becomes read-only.
+
+TEST 12
+Submit
+→ personal teacher/employee attendance updates automatically.
+
+TEST 13
+Export Class 2-A
+→ only Class 2-A.
+
+TEST 14
+Export All Classes
+→ every class, clearly separated.
+
+TEST 15
+Export December 2025
+→ only December 2025.
+
+TEST 16
+Large dataset / pagination
+→ PDF contains complete monthly data, not visible rows only.
+
+TEST 17
+Multi-page PDF
+→ headers repeat and no rows are clipped.
+
+================================================================================================
+49. FINAL PRODUCT THINKING
+================================================================================================
+
+Before finishing, inspect the entire Attendance module and ask yourself:
+
+"Would a real school Principal find this faster and easier than an Excel
+attendance register?"
+
+If not, improve it.
+
+The final result should have two very clear experiences:
+
+A. DAILY ATTENDANCE ENTRY
+--------------------------------
+Today
+↓
+Mark attendance
+↓
+Submit
+↓
+Locked/finalized
+
+Previous working-day arrow
+↓
+Inspect past attendance
+↓
+Only unsubmitted past attendance can be edited
+--------------------------------
+
+B. REPORTING
+--------------------------------
+Monthly
+↓
+Class-wise student report
+OR
+Teachers & Employees report
+↓
+Official Excel-style PDF
+--------------------------------
+
+Do not mix these two workflows.
+
+================================================================================================
+50. FINAL INSTRUCTION TO THE AGENT
+================================================================================================
+
+First inspect the current Attendance implementation and understand its
+existing data flow.
+
+Do NOT blindly rewrite the entire module.
+
+Remove the current date-picker approach from Teachers & Employees.
+
+Implement the previous-working-day model.
+
+Fix the actual attendance state/data logic.
+
+Then implement the pending-submission indicator.
+
+Then ensure personal attendance is synchronized from the same authoritative
+record.
+
+Then rebuild the monthly reports into proper official Excel-style PDFs.
+
+Finally perform a premium UX review.
+
+Use your own judgement to improve:
+
+spacing
+alignment
+iconography
+semantic colors
+micro-interactions
+empty states
+loading states
+error states
+report formatting
+accessibility
+responsive behavior
+
+BUT:
+
+Do not change the intended attendance workflow.
+
+Do not invent data.
+
+Do not allow future attendance.
+
+Do not fake submission.
+
+Do not create duplicate attendance sources.
+
+Do not turn the daily attendance screen into a reporting dashboard.
+
+The final product should feel like a mature, production-grade school ERP
+that is simpler to operate than the current version.
+
+================================================================================================
+END
+================================================================================================

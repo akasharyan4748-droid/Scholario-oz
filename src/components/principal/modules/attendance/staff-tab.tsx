@@ -28,11 +28,13 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion'
-import { Search, CheckCheck, Upload, AlertCircle, CheckCircle2, Lock, CalendarClock, CalendarOff, Clock, CalendarX, FileEdit } from 'lucide-react'
+import { Search, CheckCheck, Upload, AlertCircle, CheckCircle2, Lock, CalendarClock, CalendarOff, ChevronLeft, FileEdit } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { DatePicker, type DayState } from '@/components/ui/date-picker'
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,7 +51,9 @@ import { type StaffAttendanceRecord, type AttendanceStatus, STAFF_DEFS, getStaff
 import {
   isHoliday as isSchoolHoliday,
   getHoliday as getSchoolHoliday,
-  isFutureDate as isDateFuture,
+  isWorkingDay,
+  getPreviousWorkingDay,
+  findPendingWorkingDays,
   type Holiday,
 } from '@/lib/mock/school-calendar'
 import { AnimatedCounter } from '@/components/shared/animated-counter'
@@ -58,7 +62,6 @@ import { STATUS_META, STATUS_ORDER, StatusBadge } from './attendance-status'
 import {
   useStaffAttendanceStore,
   STAFF_TODAY_DATE,
-  getDateStateMap,
   type DateState,
   type StaffDateState,
 } from '@/lib/store/staff-attendance-store'
@@ -112,31 +115,38 @@ export function StaffAttendanceTab() {
     }
   }, [byDate, selectedDate])
 
-  // Brief §13: build the day-state map for the date picker dots.
-  const dayStateMap = useMemo<Record<string, DayState>>(() => {
-    const map = getDateStateMap()
-    // Normalize the store map to DatePicker's DayState type
-    const normalized: Record<string, DayState> = {}
-    for (const [k, v] of Object.entries(map)) {
-      normalized[k] = v as DayState
-    }
-    return normalized
-  }, [dateState.submitted, dateState.draft]) // refresh when state changes
+  // Brief PART 1-4: No date picker — page defaults to TODAY.
+  // Brief PART 2-3: Previous working day navigation (skips weekends + holidays).
+  // Brief PART 4: No future dates — no forward arrow.
+  const isToday = selectedDate === STAFF_TODAY_DATE
+  const prevWorkingDay = useMemo(() => {
+    if (isToday) return getPreviousWorkingDay(selectedDate)
+    return getPreviousWorkingDay(selectedDate)
+  }, [selectedDate])
+
+  // Brief PART 10: Find pending (unsubmitted) past working days.
+  const pendingDays = useMemo(() => {
+    return findPendingWorkingDays(STAFF_TODAY_DATE, byDate)
+  }, [byDate])
+
+  const handleGoToPrev = () => {
+    setSelectedDate(prevWorkingDay)
+  }
+
+  const handleReturnToToday = () => {
+    setSelectedDate(STAFF_TODAY_DATE)
+  }
 
   // Brief PART 14-22 + PART 46: Authoritative state matrix.
-  //   FUTURE → READ ONLY / DISABLED
-  //   HOLIDAY → HOLIDAY / DISABLED (holiday takes precedence over future per Brief PART 13)
-  //   TODAY draft → EDITABLE
-  //   TODAY submitted → READ ONLY
-  //   PAST draft → EDITABLE + Submit available
-  //   PAST submitted → READ ONLY
-  const isFuture = useMemo(() => isDateFuture(selectedDate, STAFF_TODAY_DATE), [selectedDate])
+  // Since we only navigate to past working days + today, isFuture should
+  // never be true. But we keep the guard as a safety net.
+  const isFuture = false // Brief PART 4: impossible to navigate to future
   const isHoliday = useMemo(() => isSchoolHoliday(selectedDate), [selectedDate])
   const holidayInfo: Holiday | null = useMemo(() => getSchoolHoliday(selectedDate), [selectedDate])
 
   // Brief §11 + PART 46: explicit submission flag + future/holiday states determine editability.
   const isReadOnly = dateState.submitted
-  const isEditable = !isFuture && !isHoliday && !dateState.submitted
+  const isEditable = !isHoliday && !dateState.submitted
 
   const currentState: DateState = dateState.submitted
     ? 'submitted'
@@ -159,13 +169,11 @@ export function StaffAttendanceTab() {
     })
   }, [selectedDate, dateState.draft, isReadOnly])
 
-  // Brief PART 1-4 (Phase 7): THE CORE FIX.
-  // NEVER generate fake attendance data for future/holiday dates.
-  // Only show records that actually exist (submitted or draft).
+  // Brief PART 1-4: records is null for holiday dates (future is impossible
+  // via the previous-working-day navigation model).
+  // Only submitted or draft records produce non-null records.
   // For empty past/today dates — show a clean "start attendance" empty state.
   const records: StaffAttendanceRecord[] | null = useMemo(() => {
-    // Future dates: NO records at all — empty state handles the display
-    if (isFuture) return null
     // Holiday dates: NO records at all — empty state handles the display
     if (isHoliday) return null
     // Submitted: show the frozen submitted snapshot
@@ -174,7 +182,7 @@ export function StaffAttendanceTab() {
     if (dateState.draft) return dateState.draft
     // Empty past/today date: NO records — show "start attendance" state
     return null
-  }, [dateState, isFuture, isHoliday])
+  }, [dateState, isHoliday])
 
   const summary = useMemo(() => {
     if (!records) return { total: 0, present: 0, late: 0, absent: 0, leave: 0 }
@@ -247,24 +255,82 @@ export function StaffAttendanceTab() {
 
   return (
     <PageTransition className="space-y-4">
-      {/* Brief PART 9: Date picker + state indicator — always visible */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <DatePicker
-          value={selectedDate}
-          onChange={(v) => v && setSelectedDate(v)}
-          compact
-          className="w-[170px]"
-          dayStateMap={dayStateMap}
-          maxDate={STAFF_TODAY_DATE}
-        />
-        {/* Brief PART 9: Smart state indicator next to date picker */}
-        <span className="text-[10px] text-muted-foreground font-medium">
-          {isHoliday ? `Holiday · ${holidayInfo?.name ?? ''}`
-            : isFuture ? 'Upcoming'
-            : dateState.submitted ? 'Submitted · Read only'
-            : dateState.draft ? (hasUnsaved ? 'Unsaved changes' : 'Draft')
-            : 'Not started'}
-        </span>
+      {/* Brief PART 1-5: Clean header — TODAY as primary, previous-working-day
+          navigation as small control. No date picker.
+          Brief PART 10: Pending submissions indicator. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          {/* Brief PART 2-3: Previous working day navigation */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+            onClick={handleGoToPrev}
+            title={`Previous working day · ${formatDisplayDate(prevWorkingDay)}`}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Previous working day</span>
+            <span className="sm:hidden">‹</span>
+          </Button>
+
+          {/* Brief PART 5 + 29: Current date label — prominent */}
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-foreground">
+              {isToday ? 'Today' : formatDisplayDate(selectedDate)}
+            </span>
+            {!isToday && (
+              <button
+                onClick={handleReturnToToday}
+                className="text-[10px] text-primary hover:underline underline-offset-2 text-left"
+              >
+                ← Back to today
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Brief PART 10-11: Pending submissions indicator */}
+        <div className="flex items-center gap-2">
+          {pendingDays.length > 0 ? (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-1.5 text-[10px] font-medium text-amber-600 dark:text-amber-400 hover:underline underline-offset-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  {pendingDays.length} pending
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-56 p-2" sideOffset={4}>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 px-1">
+                  Pending attendance submissions
+                </p>
+                <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                  {pendingDays.map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => { setSelectedDate(d) }}
+                      className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs hover:bg-muted/40 transition-colors"
+                    >
+                      <span className="text-muted-foreground">{formatDisplayDate(d)}</span>
+                      <span className="text-amber-600 dark:text-amber-400 font-medium text-[10px]">Pending</span>
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-3 w-3" />
+              Up to date
+            </span>
+          )}
+
+          {/* Brief PART 9: State indicator */}
+          <span className="text-[10px] text-muted-foreground font-medium">
+            {dateState.submitted ? 'Submitted · Read only'
+              : dateState.draft ? (hasUnsaved ? 'Unsaved changes' : 'Draft')
+              : 'Not started'}
+          </span>
+        </div>
       </div>
 
       {/* Brief §2: Staff KPI cards — only shown when records exist */}
@@ -303,7 +369,7 @@ export function StaffAttendanceTab() {
 
       {/* Brief §24: Submitted / Read-only banner (only for submitted dates) */}
       <AnimatePresence mode="wait">
-        {/* Brief PART 10 + PART 13: Holiday banner (highest precedence) */}
+        {/* Brief PART 10 + PART 13: Holiday banner */}
         {isHoliday && (
           <motion.div
             key="holiday-banner"
@@ -321,24 +387,8 @@ export function StaffAttendanceTab() {
             </span>
           </motion.div>
         )}
-        {/* Brief PART 12 + PART 46: Future date banner */}
-        {!isHoliday && isFuture && (
-          <motion.div
-            key="future-banner"
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.25 }}
-            className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 border border-border rounded-lg px-3 py-2"
-          >
-            <Clock className="h-3.5 w-3.5 shrink-0" />
-            <span className="font-semibold">Upcoming</span>
-            <span className="text-muted-foreground/60">·</span>
-            <span>{formatDisplayDate(selectedDate)} · Attendance not yet available</span>
-          </motion.div>
-        )}
-        {/* Brief PART 4 + 5: Submitted / Read-only banner (only for submitted, NOT for future/holiday) */}
-        {!isHoliday && !isFuture && dateState.submitted && (
+        {/* Brief PART 4 + 5: Submitted / Read-only banner */}
+        {!isHoliday && dateState.submitted && (
           <motion.div
             key="readonly-banner"
             initial={{ opacity: 0, y: -6 }}
@@ -355,31 +405,31 @@ export function StaffAttendanceTab() {
             </span>
           </motion.div>
         )}
+        {/* Brief PART 8-9: Pending submission banner */}
+        {!isHoliday && !dateState.submitted && dateState.draft && hasUnsaved && !isToday && (
+          <motion.div
+            key="pending-banner"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25 }}
+            className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2"
+          >
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-semibold">Submission pending</span>
+            <span className="text-amber-600/70 dark:text-amber-400/70">·</span>
+            <span className="text-amber-700/80 dark:text-amber-300/80">
+              {formatDisplayDate(selectedDate)} · Attendance not submitted
+            </span>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Brief PART 10 + PART 31: Premium empty states for non-editable dates.
           When records is null, NO attendance table is rendered.
           Each state has its own icon + message + visual treatment. */}
       <AnimatePresence mode="wait">
-        {isFuture ? (
-          <motion.div
-            key="future-empty"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.3 }}
-            className="flex flex-col items-center justify-center py-16 px-4 text-center"
-          >
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60 mb-4">
-              <Clock className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <h3 className="text-sm font-semibold text-foreground mb-1">Upcoming Attendance</h3>
-            <p className="text-xs text-muted-foreground">{formatDisplayDate(selectedDate)}</p>
-            <p className="text-[11px] text-muted-foreground/70 mt-2 max-w-xs">
-              Attendance entry will become available on the scheduled school day.
-            </p>
-          </motion.div>
-        ) : isHoliday ? (
+        {isHoliday ? (
           <motion.div
             key="holiday-empty"
             initial={{ opacity: 0, y: 8 }}

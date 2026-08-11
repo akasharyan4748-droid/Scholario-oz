@@ -117,6 +117,55 @@ export function isWorkingDay(dateStr: string): boolean {
 }
 
 /**
+ * Brief PART 3: Returns the PREVIOUS working day before the given date.
+ * Skips weekends + school holidays automatically.
+ *
+ * Example: if today = Wednesday 11 Aug, previous working day = Tuesday 10 Aug.
+ * If 10 Aug was a holiday, skips to Friday 7 Aug.
+ */
+export function getPreviousWorkingDay(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  let date = new Date(y, m - 1, d)
+  // Go back one day at a time, skipping weekends + holidays
+  do {
+    date.setDate(date.getDate() - 1)
+    const prevStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    if (isWorkingDay(prevStr)) {
+      return prevStr
+    }
+  } while (true) // will always find a working day eventually
+}
+
+/**
+ * Brief PART 10: Find all past working days (from today backward) that have
+ * unsubmitted attendance. Returns array of date strings.
+ */
+export function findPendingWorkingDays(
+  todayStr: string,
+  byDate: Record<string, { submitted: boolean; draft: any[] | null }>,
+  maxDays: number = 30
+): string[] {
+  const pending: string[] = []
+  const [ty, tm, td] = todayStr.split('-').map(Number)
+  let date = new Date(ty, tm - 1, td)
+  for (let i = 0; i < maxDays; i++) {
+    date.setDate(date.getDate() - 1)
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    if (!isWorkingDay(dateStr)) continue
+    const state = byDate[dateStr]
+    if (!state || (!state.submitted && !state.draft)) {
+      // No attendance record at all = pending
+      pending.push(dateStr)
+    } else if (!state.submitted && state.draft) {
+      // Has draft but not submitted = pending
+      pending.push(dateStr)
+    }
+    if (pending.length >= 10) break
+  }
+  return pending
+}
+
+/**
  * Returns true if the date is in the future (after `todayStr`).
  * Brief PART 12 + PART 46: future dates are not markable.
  */

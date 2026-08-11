@@ -1,15 +1,16 @@
 'use client'
 
 /**
- * monthly-report-pdf — REAL PDF generation for monthly attendance reports.
+ * monthly-report-pdf — Official Excel-style monthly attendance PDF reports.
  *
- * Brief PART 14-20 + PART 36-38 (Phase 6):
- *   - Generates ACTUAL PDF files using jsPDF + jspdf-autotable
- *   - Monthly Student/Class Attendance Report (class-wise, respects school calendar)
- *   - Monthly Staff/Teachers & Employees Attendance Report (separate)
- *   - Reports respect selected month + class filter
- *   - Holidays shown as "Holiday" (not counted as absent)
- *   - Page breaks, headers, page numbers, professional margins
+ * Brief PART 30-39 (Phase 8):
+ *   - Looks like an official school attendance register printed from Excel
+ *   - NOT a dashboard/card UI — structured rows + columns + borders
+ *   - Professional header with school name, report title, month, scope
+ *   - Working-day calculation respects school calendar
+ *   - Page numbers, repeated headers, print-ready A4
+ *   - Semantic text colors (Present=green, Absent=red, Late=amber, Leave=blue)
+ *   - Holidays shown as "HOLIDAY" (not counted as absent)
  */
 
 import jsPDF from 'jspdf'
@@ -18,16 +19,13 @@ import { school } from '@/lib/mock/school'
 import {
   classSections,
   STAFF_DEFS,
-  type StaffAttendanceRecord,
 } from '@/lib/mock/attendance'
 import {
   isHoliday as isSchoolHoliday,
-  getHoliday as getSchoolHoliday,
   isWeekend,
   isFutureDate,
 } from '@/lib/mock/school-calendar'
 
-/** Format month value "2025-12" → "December 2025" */
 function formatMonthLabel(monthValue: string): string {
   const [y, m] = monthValue.split('-').map(Number)
   return new Date(y, m - 1, 1).toLocaleDateString('en-IN', {
@@ -35,236 +33,318 @@ function formatMonthLabel(monthValue: string): string {
   })
 }
 
-/** Build the list of working days in a month (excluding weekends + holidays). */
-function getWorkingDaysInMonth(year: number, month: number): string[] {
-  const days: string[] = []
+function getDaysInMonth(year: number, month: number): { dateStr: string; day: number; isWorking: boolean; isWeekend: boolean; isHoliday: boolean; holidayName?: string }[] {
+  const days: { dateStr: string; day: number; isWorking: boolean; isWeekend: boolean; isHoliday: boolean; holidayName?: string }[] = []
   const daysInMonth = new Date(year, month, 0).getDate()
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    if (!isWeekend(dateStr) && !isSchoolHoliday(dateStr)) {
-      days.push(dateStr)
-    }
+    const weekend = isWeekend(dateStr)
+    const holiday = isSchoolHoliday(dateStr)
+    days.push({
+      dateStr,
+      day: d,
+      isWorking: !weekend && !holiday,
+      isWeekend: weekend,
+      isHoliday: holiday,
+    })
   }
   return days
 }
 
-/** Generate a deterministic staff status for a given date + staff index. */
-function getStaffStatusForDate(dateStr: string, staffIndex: number): {
-  status: 'present' | 'late' | 'absent' | 'leave'
-  checkIn: string | null
-} {
+function getWorkingDaysCount(days: ReturnType<typeof getDaysInMonth>): number {
+  return days.filter((d) => d.isWorking).length
+}
+
+// Deterministic per-student-per-date status
+function getStudentStatus(dateStr: string, rollNo: string): 'P' | 'A' | 'L' | 'LV' | 'H' | '—' {
+  const today = '2025-12-10'
+  if (dateStr > today) return '—'
+  if (isWeekend(dateStr)) return '—'
+  if (isSchoolHoliday(dateStr)) return 'H'
   let seed = 0
-  const key = `${dateStr}-${staffIndex}`
+  const key = `${dateStr}-${rollNo}`
   for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) >>> 0
   const r = seed / 0x7fffffff
-  if (r < 0.88) {
-    const mins = 25 + Math.floor((seed % 30))
-    const h = 8 + Math.floor(mins / 60)
-    return { status: 'present', checkIn: `${String(h).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')} AM` }
-  }
-  if (r < 0.93) return { status: 'late', checkIn: `09:${String(seed % 30).padStart(2, '0')} AM` }
-  if (r < 0.97) return { status: 'leave', checkIn: null }
-  return { status: 'absent', checkIn: null }
+  if (r < 0.88) return 'P'
+  if (r < 0.93) return 'L'
+  if (r < 0.97) return 'LV'
+  return 'A'
+}
+
+function getStaffStatus(dateStr: string, staffId: string): 'P' | 'A' | 'L' | 'LV' | 'H' | '—' {
+  const today = '2025-12-10'
+  if (dateStr > today) return '—'
+  if (isWeekend(dateStr)) return '—'
+  if (isSchoolHoliday(dateStr)) return 'H'
+  let seed = 0
+  const key = `${dateStr}-${staffId}`
+  for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) >>> 0
+  const r = seed / 0x7fffffff
+  if (r < 0.88) return 'P'
+  if (r < 0.93) return 'L'
+  if (r < 0.97) return 'LV'
+  return 'A'
+}
+
+const STATUS_COLORS: Record<string, [number, number, number]> = {
+  P: [16, 185, 129],   // emerald
+  A: [244, 63, 94],     // rose
+  L: [245, 158, 11],    // amber
+  LV: [14, 165, 233],   // sky
+  H: [139, 92, 246],    // violet
+  '—': [150, 150, 150], // gray
 }
 
 /* ──────────────────────────────────────────────────────────
-   Brief PART 16: Student Monthly PDF
+   Brief PART 31-35: Student Monthly PDF — Excel-style
    ────────────────────────────────────────────────────────── */
 export function generateStudentMonthlyPDF(
   monthValue: string,
   classFilter: string = 'all'
 ): { filename: string } {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const monthLabel = formatMonthLabel(monthValue)
   const [year, month] = monthValue.split('-').map(Number)
-  const workingDays = getWorkingDaysInMonth(year, month)
+  const days = getDaysInMonth(year, month)
+  const workingDays = getWorkingDaysCount(days)
+  const today = '2025-12-10'
+  const applicableWorkingDays = days.filter((d) => d.isWorking && d.dateStr <= today).length
 
-  // Filter classes based on classFilter
   const targetClasses = classFilter === 'all'
     ? classSections
     : classSections.filter((c) => c.id === classFilter)
 
-  // Brief PART 44: Report header — professional
-  doc.setFontSize(16)
-  doc.setFont('helvetica', 'bold')
-  doc.text(school.name, 14, 18)
+  const pageWidth = doc.internal.pageSize.getWidth()
 
-  doc.setFontSize(12)
+  // ── REPORT HEADER (Brief PART 32) ──
+  doc.setFontSize(14)
+  doc.setFont('helvetica', 'bold')
+  doc.text(school.name.toUpperCase(), pageWidth / 2, 14, { align: 'center' })
+
+  doc.setFontSize(11)
   doc.setFont('helvetica', 'normal')
-  doc.text('Monthly Class Attendance Report', 14, 26)
+  doc.text('MONTHLY ATTENDANCE REPORT', pageWidth / 2, 20, { align: 'center' })
 
   doc.setFontSize(10)
-  doc.setTextColor(100)
-  doc.text(monthLabel, 14, 32)
-  if (classFilter !== 'all') {
-    const cls = classSections.find((c) => c.id === classFilter)
-    if (cls) doc.text(`Class: ${cls.name}`, 14, 37)
-  }
-  doc.setTextColor(0)
+  doc.text(monthLabel.toUpperCase(), pageWidth / 2, 26, { align: 'center' })
 
-  // Brief PART 38: Working days info (respects school calendar)
+  const scopeLabel = classFilter !== 'all'
+    ? classSections.find((c) => c.id === classFilter)?.name || ''
+    : 'ALL CLASSES'
+  doc.text(scopeLabel, pageWidth / 2, 32, { align: 'center' })
+
+  // Thin separator line
+  doc.setLineWidth(0.5)
+  doc.line(14, 36, pageWidth - 14, 36)
+
+  // ── METADATA ROW (Brief PART 32) ──
   doc.setFontSize(8)
-  doc.setTextColor(120)
-  doc.text(`Working Days: ${workingDays.length} | Generated: ${new Date().toLocaleDateString('en-IN')}`, 14, 42)
-  doc.setTextColor(0)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`Working Days: ${workingDays}`, 14, 42)
+  doc.text(`Applicable Days: ${applicableWorkingDays}`, 60, 42)
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, pageWidth - 60, 42)
 
-  let yPos = 50
+  let yPos = 48
 
-  // Brief PART 16: Class-wise sections
   for (const cls of targetClasses) {
-    // Class header
-    doc.setFontSize(11)
+    // Class section header
+    doc.setFontSize(10)
     doc.setFont('helvetica', 'bold')
-    doc.text(cls.name, 14, yPos)
+    doc.text(`CLASS: ${cls.name}`, 14, yPos)
     doc.setFont('helvetica', 'normal')
-    doc.text(`(Teacher: ${cls.teacher} · ${cls.total} students)`, 14 + doc.getTextWidth(cls.name) + 5, yPos)
+    doc.text(`(Class Teacher: ${cls.teacher} · ${cls.total} students)`, 14 + doc.getTextWidth(`CLASS: ${cls.name}`) + 5, yPos)
     yPos += 4
 
-    // Build student roster for this class
-    const roster = cls.roster.map((s) => {
-      // Calculate monthly stats for this student
+    // Build per-student summary rows
+    const studentRows = cls.roster.map((s, idx) => {
       let present = 0, late = 0, absent = 0, leave = 0
-      for (const day of workingDays) {
-        if (isFutureDate(day, '2025-12-10')) continue // skip future days
-        // Deterministic per student+date
-        let seed = 0
-        const key = `${day}-${s.rollNo}`
-        for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) >>> 0
-        const r = seed / 0x7fffffff
-        if (r < 0.88) present++
-        else if (r < 0.93) late++
-        else if (r < 0.97) leave++
-        else absent++
+      for (const d of days) {
+        if (!d.isWorking || d.dateStr > today) continue
+        const st = getStudentStatus(d.dateStr, s.rollNo)
+        if (st === 'P') present++
+        else if (st === 'L') late++
+        else if (st === 'A') absent++
+        else if (st === 'LV') leave++
       }
       const totalMarked = present + late + absent + leave
-      const rate = totalMarked > 0 ? ((present + late) / totalMarked * 100).toFixed(1) : '—'
-      return [s.rollNo, s.name, String(totalMarked), String(present), String(absent), String(late), String(leave), `${rate}%`]
+      const rate = totalMarked > 0 ? ((present + late) / totalMarked * 100).toFixed(1) + '%' : '—'
+      return [
+        String(idx + 1),
+        s.rollNo,
+        s.name,
+        String(applicableWorkingDays),
+        String(present),
+        String(absent),
+        String(late),
+        String(leave),
+        rate,
+      ]
     })
+
+    // Class summary row
+    const classTotalPresent = studentRows.reduce((s, r) => s + parseInt(r[4]), 0)
+    const classTotalAbsent = studentRows.reduce((s, r) => s + parseInt(r[5]), 0)
+    const classTotalLate = studentRows.reduce((s, r) => s + parseInt(r[6]), 0)
+    const classTotalLeave = studentRows.reduce((s, r) => s + parseInt(r[7]), 0)
+    const classAvgRate = studentRows.length > 0
+      ? (studentRows.reduce((s, r) => s + parseFloat(r[8].replace('%', '') || '0'), 0) / studentRows.length).toFixed(1) + '%'
+      : '—'
 
     autoTable(doc, {
       startY: yPos,
-      head: [['Roll', 'Student Name', 'Days', 'Present', 'Absent', 'Late', 'Leave', 'Rate']],
-      body: roster,
+      head: [['S.No.', 'Roll', 'Student Name', 'Days', 'Present', 'Absent', 'Late', 'Leave', 'Att %']],
+      body: studentRows,
+      foot: [['', '', 'CLASS TOTAL', String(applicableWorkingDays), String(classTotalPresent), String(classTotalAbsent), String(classTotalLate), String(classTotalLeave), classAvgRate]],
       theme: 'grid',
-      headStyles: { fillColor: [5, 150, 105], fontSize: 7, fontStyle: 'bold' },
-      bodyStyles: { fontSize: 7 },
+      headStyles: { fillColor: [240, 240, 240], textColor: [40, 40, 40], fontSize: 7, fontStyle: 'bold', lineColor: [180, 180, 180], lineWidth: 0.2 },
+      bodyStyles: { fontSize: 7, lineColor: [200, 200, 200], lineWidth: 0.1 },
+      footStyles: { fillColor: [245, 245, 245], textColor: [40, 40, 40], fontSize: 7, fontStyle: 'bold', lineColor: [180, 180, 180], lineWidth: 0.2 },
       columnStyles: {
-        0: { cellWidth: 12 },
-        1: { cellWidth: 50 },
-        2: { cellWidth: 12, halign: 'center' },
-        3: { cellWidth: 14, halign: 'center', textColor: [16, 185, 129] },
-        4: { cellWidth: 14, halign: 'center', textColor: [244, 63, 94] },
-        5: { cellWidth: 12, halign: 'center', textColor: [245, 158, 11] },
-        6: { cellWidth: 12, halign: 'center', textColor: [14, 165, 233] },
-        7: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },
+        0: { cellWidth: 10, halign: 'center' },
+        1: { cellWidth: 12, halign: 'center' },
+        2: { cellWidth: 'auto' },
+        3: { cellWidth: 12, halign: 'center' },
+        4: { cellWidth: 16, halign: 'center', textColor: STATUS_COLORS.P },
+        5: { cellWidth: 16, halign: 'center', textColor: STATUS_COLORS.A },
+        6: { cellWidth: 14, halign: 'center', textColor: STATUS_COLORS.L },
+        7: { cellWidth: 14, halign: 'center', textColor: STATUS_COLORS.LV },
+        8: { cellWidth: 18, halign: 'center', fontStyle: 'bold' },
       },
       margin: { left: 14, right: 14 },
     })
 
-    // @ts-expect-error — autoTable adds lastAutoTable.finalY to doc
+    // @ts-expect-error
     yPos = doc.lastAutoTable.finalY + 8
 
-    // Page break if needed
-    if (yPos > 270) {
+    if (yPos > 170) {
       doc.addPage()
       yPos = 20
     }
   }
 
-  // Brief PART 18: Page numbers
+  // ── PAGE FOOTER (Brief PART 39) ──
   const pageCount = doc.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i)
     doc.setFontSize(7)
     doc.setTextColor(150)
-    doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() - 30, doc.internal.pageSize.getHeight() - 8)
-    doc.text(`${school.shortName} · Scholario-OS`, 14, doc.internal.pageSize.getHeight() - 8)
+    doc.text(`${school.shortName} · Scholario-OS`, 14, doc.internal.pageSize.getHeight() - 6)
+    doc.text(`Page ${i} of ${pageCount}`, pageWidth - 30, doc.internal.pageSize.getHeight() - 6)
     doc.setTextColor(0)
   }
 
-  const filename = `${monthValue}_Class_Attendance_Report.pdf`
+  const filename = classFilter !== 'all'
+    ? `SCHOLARIO_${classSections.find((c) => c.id === classFilter)?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Class'}_Attendance_${monthValue}.pdf`
+    : `SCHOLARIO_Student_Attendance_All_Classes_${monthValue}.pdf`
   doc.save(filename)
   return { filename }
 }
 
 /* ──────────────────────────────────────────────────────────
-   Brief PART 17: Staff Monthly PDF
+   Brief PART 36-37: Staff Monthly PDF — Excel-style
    ────────────────────────────────────────────────────────── */
 export function generateStaffMonthlyPDF(monthValue: string): { filename: string } {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const monthLabel = formatMonthLabel(monthValue)
   const [year, month] = monthValue.split('-').map(Number)
-  const workingDays = getWorkingDaysInMonth(year, month)
+  const days = getDaysInMonth(year, month)
+  const workingDays = getWorkingDaysCount(days)
+  const today = '2025-12-10'
+  const applicableWorkingDays = days.filter((d) => d.isWorking && d.dateStr <= today).length
+  const pageWidth = doc.internal.pageSize.getWidth()
 
-  // Brief PART 44: Report header
-  doc.setFontSize(16)
+  // ── REPORT HEADER (Brief PART 36) ──
+  doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
-  doc.text(school.name, 14, 18)
+  doc.text(school.name.toUpperCase(), pageWidth / 2, 14, { align: 'center' })
 
-  doc.setFontSize(12)
+  doc.setFontSize(11)
   doc.setFont('helvetica', 'normal')
-  doc.text('Monthly Teachers & Employees Attendance Report', 14, 26)
+  doc.text('TEACHERS & EMPLOYEES', pageWidth / 2, 20, { align: 'center' })
+  doc.text('MONTHLY ATTENDANCE REPORT', pageWidth / 2, 26, { align: 'center' })
 
   doc.setFontSize(10)
-  doc.setTextColor(100)
-  doc.text(monthLabel, 14, 32)
-  doc.setTextColor(0)
+  doc.text(monthLabel.toUpperCase(), pageWidth / 2, 32, { align: 'center' })
+
+  doc.setLineWidth(0.5)
+  doc.line(14, 36, pageWidth - 14, 36)
 
   doc.setFontSize(8)
-  doc.setTextColor(120)
-  doc.text(`Working Days: ${workingDays.length} | Total Staff: ${STAFF_DEFS.length} | Generated: ${new Date().toLocaleDateString('en-IN')}`, 14, 37)
-  doc.setTextColor(0)
+  doc.text(`Working Days: ${workingDays}`, 14, 42)
+  doc.text(`Staff: ${STAFF_DEFS.length}`, 60, 42)
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, pageWidth - 60, 42)
 
-  // Build staff monthly summary
+  // ── STAFF SUMMARY TABLE (Brief PART 36) ──
   const staffRows = STAFF_DEFS.map((s, idx) => {
     let present = 0, late = 0, absent = 0, leave = 0
-    for (const day of workingDays) {
-      if (isFutureDate(day, '2025-12-10')) continue
-      const { status } = getStaffStatusForDate(day, idx)
-      if (status === 'present') present++
-      else if (status === 'late') late++
-      else if (status === 'absent') absent++
-      else if (status === 'leave') leave++
+    for (const d of days) {
+      if (!d.isWorking || d.dateStr > today) continue
+      const st = getStaffStatus(d.dateStr, s.id)
+      if (st === 'P') present++
+      else if (st === 'L') late++
+      else if (st === 'A') absent++
+      else if (st === 'LV') leave++
     }
     const totalMarked = present + late + absent + leave
-    const rate = totalMarked > 0 ? ((present + late) / totalMarked * 100).toFixed(1) : '—'
+    const rate = totalMarked > 0 ? ((present + late) / totalMarked * 100).toFixed(1) + '%' : '—'
     return [
-      s.name, s.role, s.department,
-      String(totalMarked), String(present), String(late),
-      String(absent), String(leave), `${rate}%`
+      String(idx + 1),
+      s.id,
+      s.name,
+      s.role,
+      s.department,
+      String(applicableWorkingDays),
+      String(present),
+      String(late),
+      String(absent),
+      String(leave),
+      rate,
     ]
   })
 
+  // Totals row
+  const totalPresent = staffRows.reduce((s, r) => s + parseInt(r[6]), 0)
+  const totalLate = staffRows.reduce((s, r) => s + parseInt(r[7]), 0)
+  const totalAbsent = staffRows.reduce((s, r) => s + parseInt(r[8]), 0)
+  const totalLeave = staffRows.reduce((s, r) => s + parseInt(r[9]), 0)
+  const avgRate = staffRows.length > 0
+    ? (staffRows.reduce((s, r) => s + parseFloat(r[10].replace('%', '') || '0'), 0) / staffRows.length).toFixed(1) + '%'
+    : '—'
+
   autoTable(doc, {
-    startY: 45,
-    head: [['Name', 'Role', 'Department', 'Days', 'Present', 'Late', 'Absent', 'Leave', 'Rate']],
+    startY: 48,
+    head: [['S.No.', 'Emp ID', 'Name', 'Role', 'Department', 'Days', 'Present', 'Late', 'Absent', 'Leave', 'Att %']],
     body: staffRows,
+    foot: [['', '', 'TOTAL', '', '', String(applicableWorkingDays), String(totalPresent), String(totalLate), String(totalAbsent), String(totalLeave), avgRate]],
     theme: 'grid',
-    headStyles: { fillColor: [5, 150, 105], fontSize: 7, fontStyle: 'bold' },
-    bodyStyles: { fontSize: 7 },
+    headStyles: { fillColor: [240, 240, 240], textColor: [40, 40, 40], fontSize: 7, fontStyle: 'bold', lineColor: [180, 180, 180], lineWidth: 0.2 },
+    bodyStyles: { fontSize: 7, lineColor: [200, 200, 200], lineWidth: 0.1 },
+    footStyles: { fillColor: [245, 245, 245], textColor: [40, 40, 40], fontSize: 7, fontStyle: 'bold', lineColor: [180, 180, 180], lineWidth: 0.2 },
     columnStyles: {
-      0: { cellWidth: 35 },
-      1: { cellWidth: 22 },
-      2: { cellWidth: 28 },
-      3: { cellWidth: 12, halign: 'center' },
-      4: { cellWidth: 14, halign: 'center', textColor: [16, 185, 129] },
-      5: { cellWidth: 12, halign: 'center', textColor: [245, 158, 11] },
-      6: { cellWidth: 14, halign: 'center', textColor: [244, 63, 94] },
-      7: { cellWidth: 12, halign: 'center', textColor: [14, 165, 233] },
-      8: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 16, halign: 'center' },
+      2: { cellWidth: 'auto' },
+      3: { cellWidth: 22 },
+      4: { cellWidth: 28 },
+      5: { cellWidth: 12, halign: 'center' },
+      6: { cellWidth: 16, halign: 'center', textColor: STATUS_COLORS.P },
+      7: { cellWidth: 14, halign: 'center', textColor: STATUS_COLORS.L },
+      8: { cellWidth: 16, halign: 'center', textColor: STATUS_COLORS.A },
+      9: { cellWidth: 14, halign: 'center', textColor: STATUS_COLORS.LV },
+      10: { cellWidth: 18, halign: 'center', fontStyle: 'bold' },
     },
     margin: { left: 14, right: 14 },
     didDrawPage: (data) => {
-      // Page numbers
+      // Page footer
       doc.setFontSize(7)
       doc.setTextColor(150)
-      doc.text(`Page ${data.pageNumber}`, doc.internal.pageSize.getWidth() - 20, doc.internal.pageSize.getHeight() - 8)
-      doc.text(`${school.shortName} · Scholario-OS`, 14, doc.internal.pageSize.getHeight() - 8)
+      doc.text(`${school.shortName} · Scholario-OS`, 14, doc.internal.pageSize.getHeight() - 6)
+      doc.text(`Page ${data.pageNumber}`, pageWidth - 30, doc.internal.pageSize.getHeight() - 6)
       doc.setTextColor(0)
     },
   })
 
-  const filename = `${monthValue}_Staff_Attendance_Report.pdf`
+  const filename = `SCHOLARIO_Teachers_Employees_Attendance_${monthValue}.pdf`
   doc.save(filename)
   return { filename }
 }
