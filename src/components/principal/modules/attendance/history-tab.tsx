@@ -36,6 +36,7 @@ import { formatNumber } from '@/lib/format'
 import { toast } from 'sonner'
 import { ATTENDANCE_PALETTE } from './attendance-charts'
 import { school } from '@/lib/mock/school'
+import { generateStudentMonthlyPDF, generateStaffMonthlyPDF } from './monthly-report-pdf'
 
 const STATUS_VARIANT: Record<AttendanceHistoryRecord['status'], {
   cls: string; dot: string
@@ -122,34 +123,48 @@ export function AttendanceHistoryTab({ initialDate, initialClassId }: Attendance
     return opt ? opt.label : selectedMonth
   }, [selectedMonth])
 
-  // Brief PART 43-44: Export Student Attendance (monthly report).
+  // Brief PART 43-44: Export Student Attendance → REAL PDF (Brief PART 14-20).
+  // Brief PART 36: respects selected month + class filter.
   const handleExportStudent = () => {
     if (exporting) return
     setExporting('student')
     setExported(null)
-    setTimeout(() => {
+    try {
+      const { filename } = generateStudentMonthlyPDF(selectedMonth, classFilter)
       setExporting(null)
       const label = `${selectedMonthLabel} — Class Attendance Report`
       setExported({ kind: 'student', label })
       toast.success('Class Attendance Report generated', {
-        description: `${label} · ${classSections.length} classes`,
+        description: `${filename} · ${label}`,
       })
-    }, 1000)
+    } catch (err) {
+      setExporting(null)
+      toast.error('Unable to generate report', {
+        description: 'Please try again.',
+      })
+    }
   }
 
-  // Brief PART 43-44: Export Staff Attendance (separate monthly report).
+  // Brief PART 43-44: Export Staff Attendance → REAL PDF (Brief PART 14-20).
+  // Brief PART 29: completely separate from student report.
   const handleExportStaff = () => {
     if (exporting) return
     setExporting('staff')
     setExported(null)
-    setTimeout(() => {
+    try {
+      const { filename } = generateStaffMonthlyPDF(selectedMonth)
       setExporting(null)
       const label = `${selectedMonthLabel} — Teachers & Employees Attendance Report`
       setExported({ kind: 'staff', label })
       toast.success('Staff Attendance Report generated', {
-        description: `${label} · 20 staff members`,
+        description: `${filename} · ${label}`,
       })
-    }, 1000)
+    } catch (err) {
+      setExporting(null)
+      toast.error('Unable to generate report', {
+        description: 'Please try again.',
+      })
+    }
   }
 
   // Brief PART 30: Find selected month option object

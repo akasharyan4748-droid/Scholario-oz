@@ -160,15 +160,18 @@ export function StaffAttendanceTab() {
     })
   }, [selectedDate, dateState.draft, isReadOnly])
 
-  // Records to display: submitted → submitted snapshot, else draft (or
-  // a fresh empty default when there's no draft yet).
+  // Brief PART 1-2: Records to display must react to the selected date.
+  //   - Submitted date → submitted snapshot (frozen at submit time)
+  //   - Future/Holiday date → default staff list (controls disabled)
+  //   - Draft date → draft records (editable)
+  //   - Empty date → default staff list (editable, starts as all-present)
   const records: StaffAttendanceRecord[] = useMemo(() => {
-    if (isReadOnly) return dateState.submittedRecords
+    // Only use submittedRecords when the date is ACTUALLY submitted (not just read-only due to future/holiday)
+    if (dateState.submitted) return dateState.submittedRecords
     if (dateState.draft) return dateState.draft
-    // Empty state — show all staff with no status, but only display rows
-    // once the user starts marking (we keep a blank default for clarity).
-    return STAFF_DEFS.map((s) => ({ ...s, status: 'present' as AttendanceStatus, checkIn: '08:30 AM' }))
-  }, [dateState, isReadOnly])
+    // For future, holiday, or empty dates — show the default staff list
+    return getStaffAttendanceForDate(selectedDate)
+  }, [dateState, selectedDate])
 
   const summary = useMemo(() => {
     return records.reduce(
