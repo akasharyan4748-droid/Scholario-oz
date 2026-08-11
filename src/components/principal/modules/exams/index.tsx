@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
-import { ChartCard, Donut, RadialGauge, ProgressBar } from '@/components/shared/charts'
+import { Donut, RadialGauge } from '@/components/shared/charts'
 import {
   EXAMS,
   filterExams,
@@ -265,76 +265,93 @@ export function ExamsModule() {
         </Table>
       </div>
 
-      {/* ── 5. PERFORMANCE ANALYTICS ── */}
+      {/* ── 5. PERFORMANCE ANALYTICS — COMPACT, NO DEAD SPACE ── */}
       {analytics ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Pass Percentage */}
-          <ChartCard title="Pass Percentage" subtitle={`${analyticsExam?.name || ''} · ${analytics.totalStudents} students`}>
-            <div className="flex items-center justify-center h-full py-2">
-              <RadialGauge
-                value={analytics.passRate}
-                label="pass rate"
-                size={150}
-                color="oklch(0.55 0.14 162)"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              <div className="text-center rounded-lg bg-emerald-500/10 py-2">
-                <p className="font-display text-lg font-bold text-emerald-600 dark:text-emerald-400">{analytics.passed}</p>
-                <p className="text-[10px] text-muted-foreground">Passed</p>
+          {/* Pass Percentage — compact: gauge + pass/fail inline */}
+          <div className="rounded-xl border border-border/60 bg-card p-4">
+            <h3 className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Pass Percentage</h3>
+            <p className="text-[10px] text-muted-foreground mb-3">{analyticsExam?.name} · {analytics.totalStudents} students</p>
+            <div className="flex items-center gap-4">
+              <div className="shrink-0" style={{ width: 100, height: 100 }}>
+                <RadialGauge
+                  value={analytics.passRate}
+                  label="pass"
+                  size={100}
+                  color="oklch(0.55 0.14 162)"
+                />
               </div>
-              <div className="text-center rounded-lg bg-rose-500/10 py-2">
-                <p className="font-display text-lg font-bold text-rose-600 dark:text-rose-400">{analytics.totalStudents - analytics.passed}</p>
-                <p className="text-[10px] text-muted-foreground">Failed</p>
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-500/10 px-2.5 py-1.5">
+                  <span className="text-[10px] text-muted-foreground">Passed</span>
+                  <span className="font-display text-lg font-bold text-emerald-600 dark:text-emerald-400">{analytics.passed}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2 rounded-lg bg-rose-500/10 px-2.5 py-1.5">
+                  <span className="text-[10px] text-muted-foreground">Not Passed</span>
+                  <span className="font-display text-lg font-bold text-rose-600 dark:text-rose-400">{analytics.totalStudents - analytics.passed}</span>
+                </div>
               </div>
             </div>
-          </ChartCard>
+          </div>
 
-          {/* Grade Distribution */}
-          <ChartCard title="Grade Distribution" subtitle="Across all subjects">
-            <div className="flex items-center justify-center h-full">
-              <Donut
-                data={GRADE_BOUNDARIES.map((g) => ({
-                  name: g.grade,
-                  value: analytics.gradeDistribution[g.grade] || 0,
-                  color: g.color.includes('emerald') ? 'oklch(0.65 0.16 162)' :
-                         g.color.includes('sky') ? 'oklch(0.7 0.15 200)' :
-                         g.color.includes('amber') ? 'oklch(0.75 0.15 75)' :
-                         g.color.includes('orange') ? 'oklch(0.7 0.18 50)' :
-                         g.color.includes('rose') ? 'oklch(0.62 0.2 25)' :
-                         'oklch(0.6 0.15 300)',
-                })).filter((d) => d.value > 0)}
-                height={200}
-                centerValue={`${analytics.totalStudents}`}
-                centerLabel="students"
-              />
+          {/* Grade Distribution — compact donut + legend */}
+          <div className="rounded-xl border border-border/60 bg-card p-4">
+            <h3 className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Grade Distribution</h3>
+            <p className="text-[10px] text-muted-foreground mb-3">Across all students</p>
+            <div className="flex items-center gap-3">
+              <div className="shrink-0" style={{ width: 110, height: 110 }}>
+                <Donut
+                  data={GRADE_BOUNDARIES.map((g) => ({
+                    name: g.grade,
+                    value: analytics.gradeDistribution[g.grade] || 0,
+                    color: g.color.includes('emerald') ? 'oklch(0.65 0.16 162)' :
+                           g.color.includes('sky') ? 'oklch(0.7 0.15 200)' :
+                           g.color.includes('amber') ? 'oklch(0.75 0.15 75)' :
+                           g.color.includes('orange') ? 'oklch(0.7 0.18 50)' :
+                           g.color.includes('rose') ? 'oklch(0.62 0.2 25)' :
+                           'oklch(0.6 0.15 300)',
+                  })).filter((d) => d.value > 0)}
+                  height={110}
+                  innerRadius={32}
+                  outerRadius={48}
+                  centerValue={`${analytics.totalStudents}`}
+                  centerLabel=""
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                {GRADE_BOUNDARIES.map((g) => {
+                  const count = analytics.gradeDistribution[g.grade] || 0
+                  if (count === 0) return null
+                  const dotColor = g.color.includes('emerald') ? 'bg-emerald-500' :
+                                   g.color.includes('sky') ? 'bg-sky-500' :
+                                   g.color.includes('amber') ? 'bg-amber-500' :
+                                   g.color.includes('orange') ? 'bg-orange-500' :
+                                   g.color.includes('rose') ? 'bg-rose-500' : 'bg-violet-500'
+                  return (
+                    <div key={g.grade} className="flex items-center gap-2 text-xs">
+                      <span className={cn('h-2 w-2 rounded-full shrink-0', dotColor)} />
+                      <span className="text-muted-foreground flex-1">{g.grade}</span>
+                      <span className="font-semibold tabular-nums">{count}</span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-1.5 mt-2">
-              {GRADE_BOUNDARIES.map((g) => {
-                const count = analytics.gradeDistribution[g.grade] || 0
-                if (count === 0) return null
-                return (
-                  <div key={g.grade} className="flex items-center gap-1.5 text-[10px]">
-                    <span className={cn('h-2 w-2 rounded-full', g.color.replace('text-', 'bg-'))} />
-                    <span className="text-muted-foreground">{g.grade}</span>
-                    <span className="font-semibold ml-auto">{count}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </ChartCard>
+          </div>
 
-          {/* Subject Performance */}
-          <ChartCard title="Subject Performance" subtitle="Average marks by subject">
-            <div className="space-y-2 pt-2">
+          {/* Subject Performance — compact horizontal bars */}
+          <div className="rounded-xl border border-border/60 bg-card p-4">
+            <h3 className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Subject Performance</h3>
+            <p className="text-[10px] text-muted-foreground mb-3">Average marks by subject</p>
+            <div className="space-y-1.5">
               {analytics.subjectPerformance.map((subj, i) => (
                 <div key={subj.subject} className="flex items-center gap-2">
-                  <span className="text-[10px] font-medium text-foreground w-24 shrink-0 truncate">{subj.subject}</span>
-                  <div className="flex-1 h-2 rounded-full bg-muted/60 overflow-hidden">
+                  <span className="text-[10px] font-medium text-foreground w-20 shrink-0 truncate">{subj.subject}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-muted/60 overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${subj.avg}%` }}
-                      transition={{ duration: 0.6, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                      transition={{ duration: 0.5, delay: i * 0.04, ease: [0.22, 1, 0.36, 1] }}
                       className="h-full rounded-full"
                       style={{
                         background: subj.avg >= 80 ? 'oklch(0.65 0.16 162)' :
@@ -347,11 +364,11 @@ export function ExamsModule() {
                 </div>
               ))}
             </div>
-            <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground">
+            <div className="mt-2 pt-1.5 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground">
               <span>Average: {analytics.averagePercentage}%</span>
               <span>{analytics.totalStudents} students</span>
             </div>
-          </ChartCard>
+          </div>
         </div>
       ) : (
         <GlassCard className="p-6 text-center">
