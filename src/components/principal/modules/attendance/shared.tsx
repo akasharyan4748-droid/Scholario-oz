@@ -4,16 +4,15 @@
  * Attendance shared presentational pieces.
  *
  * CalendarLegend — compact color legend strip.
- * SelectedDayPanel — Brief §10: connected to heatmap (renders inside).
- *   Brief §19: includes "View full attendance →" CTA.
- *
- * Brief §29 + §34: derived counts use day's `rate` × school total.
+ * SelectedDayPanel — Brief §10 (connected to heatmap) + §19 (View full CTA)
+ *   + Brief PART 8 (accepts dateStr + holiday for cross-month selection)
+ *   + Brief PART 35 (distinguishes holiday from working day)
  */
 
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, CalendarOff } from 'lucide-react'
 import { attendanceOverview } from '@/lib/mock/attendance'
-import { decemberCalendar } from './data'
+import type { Holiday } from '@/lib/mock/school-calendar'
 import { formatNumber } from '@/lib/format'
 import { ATTENDANCE_PALETTE } from './attendance-charts'
 
@@ -34,7 +33,10 @@ export function CalendarLegend() {
         <span className="h-2.5 w-2.5 rounded-sm bg-rose-400/70 border border-rose-500" /> &lt;85%
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="h-2.5 w-2.5 rounded-sm bg-muted/40 border border-border" /> Weekend/Holiday
+        <span className="h-2.5 w-2.5 rounded-sm bg-violet-500/15 border border-violet-500/40" /> Holiday
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="h-2.5 w-2.5 rounded-sm bg-muted/40 border border-border" /> Weekend
       </span>
     </div>
   )
@@ -42,22 +44,71 @@ export function CalendarLegend() {
 
 /**
  * SelectedDayPanel — Brief §10 (connected to heatmap) + §19 (View full CTA).
+ *
+ * Brief PART 8: accepts `dateStr` (ISO date) + `holiday` (from school calendar)
+ *   so it can correctly display the selected day across any month.
+ *
+ * Brief PART 35: when the selected day is a holiday, shows the holiday name
+ *   instead of attendance counts.
  */
 export function SelectedDayPanel({
   selectedDay,
+  dateStr,
+  holiday,
   onViewFullAttendance,
 }: {
   selectedDay: number
+  dateStr: string
+  holiday: Holiday | null
   onViewFullAttendance?: () => void
 }) {
   const reduce = useReducedMotion()
-  const cell = decemberCalendar.find((c) => c.day === selectedDay)
-  const rate = cell?.rate ?? 0
-  const dateLabel = new Date(2025, 11, selectedDay).toLocaleDateString('en-IN', {
+
+  // Parse dateStr (YYYY-MM-DD) → Date for label
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dateLabel = new Date(y, m - 1, d).toLocaleDateString('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long',
   })
 
-  // Derived counts — same proportional computation as the original.
+  // Brief PART 35: holiday display — no attendance counts
+  if (holiday) {
+    return (
+      <motion.div
+        initial={reduce ? false : { opacity: 0, y: 6, height: 0 }}
+        animate={{ opacity: 1, y: 0, height: 'auto' }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        className="mt-3 rounded-lg border border-violet-500/30 bg-violet-500/5 overflow-hidden"
+      >
+        <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-violet-500/20 bg-violet-500/5">
+          <div className="min-w-0">
+            <p className="text-[9px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-400">
+              Selected Day · School Holiday
+            </p>
+            <p className="text-xs font-semibold text-foreground truncate">{dateLabel}</p>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <CalendarOff className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+            <span className="text-xs font-semibold text-violet-700 dark:text-violet-300">
+              {holiday.name}
+            </span>
+          </div>
+        </div>
+        <div className="px-3 py-2">
+          <p className="text-[10px] text-muted-foreground italic">
+            No attendance marked on school holidays.
+          </p>
+        </div>
+      </motion.div>
+    )
+  }
+
+  // Compute the rate from the dateStr — derive deterministically per date.
+  // This matches the buildMonthCalendar() rate formula.
+  const seed = y * 10000 + m * 100 + d
+  let rate = 88 + Math.round(Math.sin(seed * 0.6) * 4 + Math.cos(seed * 0.3) * 3 + 4)
+  rate = Math.max(82, Math.min(98, rate))
+
+  // Derived counts — same proportional computation as before (Brief §29).
   const total = attendanceOverview.today.total
   const presentCount = Math.round(total * rate / 100)
   const lateCount = Math.round(total * 0.012)

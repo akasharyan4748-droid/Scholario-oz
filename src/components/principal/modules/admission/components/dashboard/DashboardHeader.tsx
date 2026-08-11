@@ -20,12 +20,11 @@ export function DashboardHeader({
 }: DashboardHeaderProps) {
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-foreground">Admissions</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {total} applications · {inReview} pending review · {approved} ready for issuance
-        </p>
-      </div>
+      {/* Brief PART 1: NO duplicate page title — topbar already shows "Admissions".
+          Content begins directly with the contextual summary + controls. */}
+      <p className="text-xs text-muted-foreground">
+        {total} applications · {inReview} pending review · {approved} ready for issuance
+      </p>
       <div className="flex items-center gap-2">
         {/* Settings */}
         <Button variant="outline" size="sm" onClick={onOpenSettingsModal} className="text-xs gap-1.5">

@@ -21,12 +21,6 @@ import { Download, Pencil, Upload, AlertCircle, Check, CalendarClock } from 'luc
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
   useTimetableStore,
   detectConflicts,
   countAllConflicts,
@@ -52,8 +46,7 @@ import { SlotEditorDialog, type MinimalSlotForm } from './slot-editor-dialog'
 import { PublishDialog } from './publish-dialog'
 import { AutoTimetableDialog } from './auto-timetable-dialog'
 import { ConfirmDialog } from '../shared/confirm-dialog'
-import { exportTimetablePDF, exportTeacherTimetablePDF } from './timetable-pdf'
-import { ExportTargetDialog } from './export-target-dialog'
+import { exportTimetablePDF } from './timetable-pdf'
 import { ExportPreview } from './export-preview'
 import { Trash2, AlertTriangle } from 'lucide-react'
 import { CLASSES } from './data'
@@ -90,8 +83,6 @@ export function TimetableModule() {
   const [discardOpen, setDiscardOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [autoOpen, setAutoOpen] = useState(false)
-  const [exportTargetOpen, setExportTargetOpen] = useState(false)
-  const [exportType, setExportType] = useState<'class' | 'teacher'>('class')
   const [exportPreview, setExportPreview] = useState<
     | { html: string; title: string; subtitle: string; orientation: 'portrait' | 'landscape' }
     | null
@@ -403,59 +394,27 @@ export function TimetableModule() {
   const activeRows = editMode ? draftRows : buildInitialRows()
   const activeSlots = editMode ? draftSlots : slots
 
-  const handleExport = (type: 'class' | 'teacher' | 'master') => {
-    if (type === 'master') {
-      // Brief section 5: Master goes straight to preview (no target selector needed).
-      const { html, title, subtitle, orientation } = exportTimetablePDF(
-        activeSlots, activeRows, selectedDay, 'all', CLASSES
-      )
-      setExportPreview({ html, title, subtitle, orientation })
-    } else {
-      setExportType(type)
-      setExportTargetOpen(true)
-    }
-  }
-
-  // Brief section 8: Classwise/Teacherwise open the preview after target selection.
-  // The preview is the SAME HTML used for download — so Preview === PDF (Brief 8).
-  const handleExportTarget = (target: string) => {
-    if (exportType === 'class') {
-      const { html, title, subtitle, orientation } = exportTimetablePDF(
-        activeSlots, activeRows, selectedDay, target, [target]
-      )
-      setExportPreview({ html, title, subtitle, orientation })
-    } else {
-      const teacher = teachers.find(t => t.id === target)
-      const { html, title, subtitle, orientation } = exportTeacherTimetablePDF(
-        activeSlots, activeRows, target, teacher?.name || 'Teacher'
-      )
-      setExportPreview({ html, title, subtitle, orientation })
-    }
+  // Brief PART 2: Simplify export — master timetable only (no class/teacher
+  // dropdown). Removes unnecessary scope-selection UI.
+  const handleExport = () => {
+    const { html, title, subtitle, orientation } = exportTimetablePDF(
+      activeSlots, activeRows, selectedDay, 'all', CLASSES
+    )
+    setExportPreview({ html, title, subtitle, orientation })
   }
 
   return (
     <PageTransition className="space-y-5">
-      {/* Compact header — title + contextual actions */}
+      {/* Brief PART 1: NO duplicate page title — topbar already shows "Timetable".
+          Content begins directly with the subtitle + controls. */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Timetable</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">School-wide master schedule</p>
-        </div>
+        <p className="text-xs text-muted-foreground">School-wide master schedule</p>
 
         <div className="flex items-center gap-2">
-          {/* Export — always available */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                <Download className="h-3.5 w-3.5" /> Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => handleExport('class')} className="text-xs">Class timetable</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('teacher')} className="text-xs">Teacher timetable</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('master')} className="text-xs">Master timetable</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Brief PART 2: Single Export action — master timetable only */}
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport}>
+            <Download className="h-3.5 w-3.5" /> Export
+          </Button>
 
           {editMode ? (
             <>
@@ -637,14 +596,6 @@ export function TimetableModule() {
           setDraftRows(generatedRows)
           setHasUnsavedChanges(true)
         }}
-      />
-
-      {/* Export target selector */}
-      <ExportTargetDialog
-        open={exportTargetOpen}
-        onOpenChange={setExportTargetOpen}
-        exportType={exportType}
-        onExport={handleExportTarget}
       />
 
       {/* Export preview — full-screen overlay with Back + Download PDF */}

@@ -45,9 +45,9 @@ export function AttendanceModule() {
     })
   }, [classFilter])
 
-  // Brief §19: View full attendance from heatmap → switch to History tab
-  const handleViewFullAttendance = useCallback((day: number) => {
-    const dateStr = `2025-12-${String(day).padStart(2, '0')}`
+  // Brief PART 8 + §19: View full attendance from heatmap → switch to
+  // History tab with the date pre-filled. Accepts ISO date string (YYYY-MM-DD).
+  const handleViewFullAttendance = useCallback((dateStr: string) => {
     setHistoryInitialDate(dateStr)
     setHistoryInitialClassId(classFilter === 'all' ? undefined : classFilter)
     setActiveTab('history')

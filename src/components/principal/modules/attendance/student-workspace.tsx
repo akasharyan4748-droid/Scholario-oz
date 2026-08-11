@@ -1,32 +1,31 @@
 'use client'
 
 /**
- * StudentWorkspace (Overview tab) — Brief §3-§12 (Phase 2).
+ * StudentWorkspace (Overview tab) — Brief §3-§12 (Phase 2) + PART 3-4-26 (Phase 5).
  *
  * Brief §10: ALL metrics respect the classFilter — no school-wide numbers
  * shown when a specific class is selected.
+ *
+ * Brief PART 3: All Classes filter is compact (size="sm" to match h-8 rhythm).
+ * Brief PART 4 + PART 26: Export button REMOVED from Overview — export lives
+ *   in Attendance → History only.
  *
  * Brief §11: Live Class Snapshot behavior is context-aware — handled in
  * AttendanceInsights.
  */
 
 import { useState, useMemo } from 'react'
-import { Download, Filter, CalendarCheck, UserCheck, UserX, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { Filter, CalendarCheck, UserCheck, UserX, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
 import {
-  attendanceOverview,
   classSections,
   getClassSection,
   getAllSectionsToday,
   getClassWeeklyTrend,
   getClassMonthlyTrend,
-  buildAttendanceExportFilename,
 } from '@/lib/mock/attendance'
-import { classList } from '@/lib/mock/school'
 import { formatNumber } from '@/lib/format'
-import { toast } from 'sonner'
 import { ModuleHeader } from '../shared/module-header'
 import { OverviewCharts } from './overview-charts'
 import { AttendanceHeatmap } from './heatmap'
@@ -36,12 +35,12 @@ import { AttendanceInsights } from './insights'
 interface StudentWorkspaceProps {
   classFilter: string
   setClassFilter: (v: string) => void
-  onExport: () => void
-  onViewFullAttendance: (day: number) => void
+  onExport: () => void  // kept for API compatibility but not rendered
+  onViewFullAttendance: (dateStr: string) => void
 }
 
 export function StudentWorkspace({
-  classFilter, setClassFilter, onExport, onViewFullAttendance,
+  classFilter, setClassFilter, onViewFullAttendance,
 }: StudentWorkspaceProps) {
   const [selectedDay, setSelectedDay] = useState<number | null>(10)
 
@@ -83,27 +82,22 @@ export function StudentWorkspace({
 
   return (
     <PageTransition className="space-y-4">
-      {/* Brief §9: compact filters + export */}
+      {/* Brief PART 3: compact All Classes filter; PART 4: no Export button */}
       <ModuleHeader
         meta={[`December 2025`, isAllClasses ? 'All Classes' : (section?.name ?? '')]}
         actions={
-          <>
-            <Select value={classFilter} onValueChange={setClassFilter}>
-              <SelectTrigger className="w-[150px] h-8 text-xs hidden sm:flex">
-                <Filter className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Classes</SelectItem>
-                {classSections.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={onExport} variant="outline" size="sm" className="h-8 text-xs">
-              <Download className="h-3.5 w-3.5" /> Export
-            </Button>
-          </>
+          <Select value={classFilter} onValueChange={setClassFilter}>
+            <SelectTrigger size="sm" className="w-[150px] text-xs hidden sm:flex rounded-lg">
+              <Filter className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Classes</SelectItem>
+              {classSections.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         }
       />
 
@@ -158,7 +152,7 @@ export function StudentWorkspace({
         onViewFullAttendance={onViewFullAttendance}
       />
 
-      <ClassReport onExport={onExport} classFilter={classFilter} />
+      <ClassReport classFilter={classFilter} />
 
       <AttendanceInsights
         classFilter={classFilter}

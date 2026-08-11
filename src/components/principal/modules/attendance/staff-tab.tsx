@@ -28,7 +28,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion'
-import { Search, CheckCheck, Upload, AlertCircle, CheckCircle2, Lock, CalendarClock } from 'lucide-react'
+import { Search, CheckCheck, Upload, AlertCircle, CheckCircle2, Lock, CalendarClock, CalendarOff, Clock } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +46,12 @@ import {
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { type StaffAttendanceRecord, type AttendanceStatus, STAFF_DEFS, getStaffAttendanceForDate } from '@/lib/mock/attendance'
+import {
+  isHoliday as isSchoolHoliday,
+  getHoliday as getSchoolHoliday,
+  isFutureDate as isDateFuture,
+  type Holiday,
+} from '@/lib/mock/school-calendar'
 import { AnimatedCounter } from '@/components/shared/animated-counter'
 import { toast } from 'sonner'
 import { STATUS_META, STATUS_ORDER, StatusBadge } from './attendance-status'
@@ -117,8 +123,21 @@ export function StaffAttendanceTab() {
     return normalized
   }, [dateState.submitted, dateState.draft]) // refresh when state changes
 
-  // Brief §11: explicit submission flag determines editability.
-  const isReadOnly = dateState.submitted
+  // Brief PART 14-22 + PART 46: Authoritative state matrix.
+  //   FUTURE → READ ONLY / DISABLED
+  //   HOLIDAY → HOLIDAY / DISABLED (holiday takes precedence over future per Brief PART 13)
+  //   TODAY draft → EDITABLE
+  //   TODAY submitted → READ ONLY
+  //   PAST draft → EDITABLE + Submit available
+  //   PAST submitted → READ ONLY
+  const isFuture = useMemo(() => isDateFuture(selectedDate, STAFF_TODAY_DATE), [selectedDate])
+  const isHoliday = useMemo(() => isSchoolHoliday(selectedDate), [selectedDate])
+  const holidayInfo: Holiday | null = useMemo(() => getSchoolHoliday(selectedDate), [selectedDate])
+
+  // Brief §11 + PART 46: explicit submission flag + future/holiday states determine editability.
+  const isReadOnly = dateState.submitted || isFuture || isHoliday
+  const isDisabledNonSubmitted = isFuture || isHoliday  // controls for non-submitted-disabled states
+
   const currentState: DateState = dateState.submitted
     ? 'submitted'
     : dateState.draft
@@ -254,7 +273,42 @@ export function StaffAttendanceTab() {
 
       {/* Brief §24: Submitted / Read-only banner (only for submitted dates) */}
       <AnimatePresence mode="wait">
-        {isReadOnly && (
+        {/* Brief PART 10 + PART 13: Holiday banner (highest precedence) */}
+        {isHoliday && (
+          <motion.div
+            key="holiday-banner"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25 }}
+            className="flex items-center gap-2 text-xs text-violet-700 dark:text-violet-300 bg-violet-500/10 border border-violet-500/20 rounded-lg px-3 py-2"
+          >
+            <CalendarOff className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-semibold">School Holiday{holidayInfo ? ` · ${holidayInfo.name}` : ''}</span>
+            <span className="text-violet-600/70 dark:text-violet-400/70">·</span>
+            <span className="text-violet-700/80 dark:text-violet-300/80">
+              {formatDisplayDate(selectedDate)} · No attendance marked
+            </span>
+          </motion.div>
+        )}
+        {/* Brief PART 12 + PART 46: Future date banner */}
+        {!isHoliday && isFuture && (
+          <motion.div
+            key="future-banner"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25 }}
+            className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 border border-border rounded-lg px-3 py-2"
+          >
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-semibold">Upcoming</span>
+            <span className="text-muted-foreground/60">·</span>
+            <span>{formatDisplayDate(selectedDate)} · Attendance not yet available</span>
+          </motion.div>
+        )}
+        {/* Brief PART 4 + 5: Submitted / Read-only banner (only for submitted, NOT for future/holiday) */}
+        {!isHoliday && !isFuture && dateState.submitted && (
           <motion.div
             key="readonly-banner"
             initial={{ opacity: 0, y: -6 }}
@@ -276,14 +330,15 @@ export function StaffAttendanceTab() {
       {/* Brief §21: Filter row — one control family, same height/rhythm */}
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Brief §13: Date picker with day-state dots */}
+          {/* Brief §13 + PART 22: Date picker with day-state dots.
+              Brief PART 12: future dates ARE selectable so user can see
+              the "Upcoming" state — but all marking controls are disabled. */}
           <DatePicker
             value={selectedDate}
             onChange={(v) => v && setSelectedDate(v)}
             compact
             className="w-[160px]"
             dayStateMap={dayStateMap}
-            maxDate={STAFF_TODAY_DATE}
           />
 
           {/* Brief §20: All Roles — uses size="sm" so it matches the
@@ -372,7 +427,29 @@ export function StaffAttendanceTab() {
       <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
         <div className="flex items-center gap-2 text-xs">
           <AnimatePresence mode="wait">
-            {isReadOnly ? (
+            {isHoliday ? (
+              <motion.span
+                key="holiday"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="flex items-center gap-1.5 text-violet-600 dark:text-violet-400 font-medium"
+              >
+                <CalendarOff className="h-3.5 w-3.5" />
+                School Holiday {holidayInfo ? `· ${holidayInfo.name}` : ''}
+              </motion.span>
+            ) : isFuture ? (
+              <motion.span
+                key="future"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="flex items-center gap-1.5 text-muted-foreground font-medium"
+              >
+                <Clock className="h-3.5 w-3.5" />
+                Upcoming · attendance not yet available
+              </motion.span>
+            ) : dateState.submitted ? (
               <motion.span
                 key="readonly"
                 initial={{ opacity: 0, y: 4 }}
