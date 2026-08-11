@@ -17,11 +17,12 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion'
-import { Search, ArrowLeft, Download, Eye, FileText, Users, CheckCircle2, Loader2 } from 'lucide-react'
+import { Search, ArrowLeft, Download, Eye, FileText, Users, CheckCircle2, Loader2, ChevronDown } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -123,15 +124,18 @@ export function AttendanceHistoryTab({ initialDate, initialClassId }: Attendance
   }, [selectedMonth])
 
   // Brief PART 43-44: Export Student Attendance → REAL PDF (Brief PART 14-20).
-  // Brief PART 36: respects selected month + class filter.
-  const handleExportStudent = () => {
+  // Brief PART 11 + 36: accepts a classId ('all' or specific) for class-wise export.
+  const handleExportStudent = (classId: string = 'all') => {
     if (exporting) return
     setExporting('student')
     setExported(null)
     try {
-      const { filename } = generateStudentMonthlyPDF(selectedMonth, classFilter)
+      const { filename } = generateStudentMonthlyPDF(selectedMonth, classId)
       setExporting(null)
-      const label = `${selectedMonthLabel} — Class Attendance Report`
+      const cls = classSections.find((c) => c.id === classId)
+      const label = cls
+        ? `${selectedMonthLabel} — ${cls.name} Attendance Report`
+        : `${selectedMonthLabel} — Class Attendance Report`
       setExported({ kind: 'student', label })
       toast.success('Class Attendance Report generated', {
         description: `${filename} · ${label}`,
@@ -171,88 +175,105 @@ export function AttendanceHistoryTab({ initialDate, initialClassId }: Attendance
 
   return (
     <PageTransition className="space-y-4">
-      {/* Brief PART 30 + PART 31: Month selection + export actions */}
-      <div className="flex flex-wrap items-center gap-2 justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Brief PART 31: Month selector (replaces from-date + to-date) */}
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger size="sm" className="w-[170px] text-xs rounded-lg">
-              <SelectValue placeholder="Select month" />
-            </SelectTrigger>
-            <SelectContent>
-              {MONTH_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {/* Brief PART 14: Filters row — separated from actions */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+          <SelectTrigger size="sm" className="w-[170px] text-xs rounded-lg">
+            <SelectValue placeholder="Select month" />
+          </SelectTrigger>
+          <SelectContent>
+            {MONTH_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-          {/* Brief PART 32: View filters (separate from export) */}
-          <Select value={classFilter} onValueChange={setClassFilter}>
-            <SelectTrigger size="sm" className="w-[150px] text-xs rounded-lg">
-              <SelectValue placeholder="All Classes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Classes</SelectItem>
-              {classSections.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <Select value={classFilter} onValueChange={setClassFilter}>
+          <SelectTrigger size="sm" className="w-[150px] text-xs rounded-lg">
+            <SelectValue placeholder="All Classes" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Classes</SelectItem>
+            {classSections.map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger size="sm" className="w-[140px] text-xs rounded-lg">
-              <SelectValue placeholder="All Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="Excellent">Excellent</SelectItem>
-              <SelectItem value="Good">Good</SelectItem>
-              <SelectItem value="Needs Attention">Needs Attention</SelectItem>
-            </SelectContent>
-          </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger size="sm" className="w-[140px] text-xs rounded-lg">
+            <SelectValue placeholder="All Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="Excellent">Excellent</SelectItem>
+            <SelectItem value="Good">Good</SelectItem>
+            <SelectItem value="Needs Attention">Needs Attention</SelectItem>
+          </SelectContent>
+        </Select>
 
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="h-8 pl-8 pr-3 text-xs w-[160px] rounded-lg"
-            />
-          </div>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search…"
+            className="h-8 pl-8 pr-3 text-xs w-[160px] rounded-lg"
+          />
         </div>
+      </div>
 
-        {/* Brief PART 30: Two export actions — student vs staff */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5 rounded-lg"
-            onClick={handleExportStudent}
-            disabled={exporting !== null}
-          >
-            {exporting === 'student' ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <FileText className="h-3.5 w-3.5" />
-            )}
-            {exporting === 'student' ? 'Generating...' : 'Export Student'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5 rounded-lg"
-            onClick={handleExportStaff}
-            disabled={exporting !== null}
-          >
-            {exporting === 'staff' ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Users className="h-3.5 w-3.5" />
-            )}
-            {exporting === 'staff' ? 'Generating...' : 'Export Staff'}
-          </Button>
-        </div>
+      {/* Brief PART 14 + 15: Actions row — right-aligned, premium export dropdown */}
+      <div className="flex items-center justify-end gap-2">
+        {/* Brief PART 11 + 15: Export Student dropdown — All Classes + individual classes */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 rounded-lg"
+              disabled={exporting !== null}
+            >
+              {exporting === 'student' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileText className="h-3.5 w-3.5" />
+              )}
+              {exporting === 'student' ? 'Generating...' : 'Export Student'}
+              <ChevronDown className="h-3 w-3 ml-0.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Monthly PDF · {selectedMonthLabel}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleExportStudent('all')} className="text-xs gap-2">
+              <FileText className="h-3.5 w-3.5" /> All Classes
+            </DropdownMenuItem>
+            {classSections.map((c) => (
+              <DropdownMenuItem key={c.id} onClick={() => handleExportStudent(c.id)} className="text-xs gap-2">
+                <FileText className="h-3.5 w-3.5" /> {c.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Brief PART 16: Export Staff — separate, no class selection */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5 rounded-lg"
+          onClick={handleExportStaff}
+          disabled={exporting !== null}
+        >
+          {exporting === 'staff' ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Users className="h-3.5 w-3.5" />
+          )}
+          {exporting === 'staff' ? 'Generating...' : 'Export Staff'}
+        </Button>
       </div>
 
       {/* Brief PART 43: Export success feedback */}

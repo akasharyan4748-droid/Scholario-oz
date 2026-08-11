@@ -28,7 +28,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion'
-import { Search, CheckCheck, Upload, AlertCircle, CheckCircle2, Lock, CalendarClock, CalendarOff, Clock } from 'lucide-react'
+import { Search, CheckCheck, Upload, AlertCircle, CheckCircle2, Lock, CalendarClock, CalendarOff, Clock, CalendarX, FileEdit } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -135,8 +135,8 @@ export function StaffAttendanceTab() {
   const holidayInfo: Holiday | null = useMemo(() => getSchoolHoliday(selectedDate), [selectedDate])
 
   // Brief §11 + PART 46: explicit submission flag + future/holiday states determine editability.
-  const isReadOnly = dateState.submitted || isFuture || isHoliday
-  const isDisabledNonSubmitted = isFuture || isHoliday  // controls for non-submitted-disabled states
+  const isReadOnly = dateState.submitted
+  const isEditable = !isFuture && !isHoliday && !dateState.submitted
 
   const currentState: DateState = dateState.submitted
     ? 'submitted'
@@ -151,7 +151,6 @@ export function StaffAttendanceTab() {
     if (!dateState.draft) return false
     // Compare against the default draft (what would have been generated if
     // the user hadn't touched anything) — detects "no changes from default".
-    // Brief: use the canonical staffAttendance for today, or generate per-date.
     const defaultDraft = getStaffAttendanceForDate(selectedDate)
     if (defaultDraft.length !== dateState.draft.length) return true
     return dateState.draft.some((r, i) => {
@@ -160,20 +159,25 @@ export function StaffAttendanceTab() {
     })
   }, [selectedDate, dateState.draft, isReadOnly])
 
-  // Brief PART 1-2: Records to display must react to the selected date.
-  //   - Submitted date → submitted snapshot (frozen at submit time)
-  //   - Future/Holiday date → default staff list (controls disabled)
-  //   - Draft date → draft records (editable)
-  //   - Empty date → default staff list (editable, starts as all-present)
-  const records: StaffAttendanceRecord[] = useMemo(() => {
-    // Only use submittedRecords when the date is ACTUALLY submitted (not just read-only due to future/holiday)
+  // Brief PART 1-4 (Phase 7): THE CORE FIX.
+  // NEVER generate fake attendance data for future/holiday dates.
+  // Only show records that actually exist (submitted or draft).
+  // For empty past/today dates — show a clean "start attendance" empty state.
+  const records: StaffAttendanceRecord[] | null = useMemo(() => {
+    // Future dates: NO records at all — empty state handles the display
+    if (isFuture) return null
+    // Holiday dates: NO records at all — empty state handles the display
+    if (isHoliday) return null
+    // Submitted: show the frozen submitted snapshot
     if (dateState.submitted) return dateState.submittedRecords
+    // Draft exists: show the draft (user may have modified it)
     if (dateState.draft) return dateState.draft
-    // For future, holiday, or empty dates — show the default staff list
-    return getStaffAttendanceForDate(selectedDate)
-  }, [dateState, selectedDate])
+    // Empty past/today date: NO records — show "start attendance" state
+    return null
+  }, [dateState, isFuture, isHoliday])
 
   const summary = useMemo(() => {
+    if (!records) return { total: 0, present: 0, late: 0, absent: 0, leave: 0 }
     return records.reduce(
       (acc, r) => {
         acc.total++
@@ -185,6 +189,7 @@ export function StaffAttendanceTab() {
   }, [records])
 
   const filtered = useMemo(() => {
+    if (!records) return []
     return records.filter((r) => {
       if (roleFilter !== 'all' && r.role !== roleFilter) return false
       if (search) {
@@ -206,14 +211,14 @@ export function StaffAttendanceTab() {
 
   // Brief §6: mark a staff member — store enforces read-only guard.
   const handleMark = (id: string, status: AttendanceStatus) => {
-    if (isReadOnly) return
+    if (!isEditable) return
     mark(selectedDate, id, status)
   }
 
   // Brief §3 + §19 + §28: Mark All Present (with confirmation).
   const handleMarkAllPresent = () => {
     setMarkAllConfirmOpen(false)
-    if (isReadOnly) return
+    if (!isEditable) return
     markAllPresentStore(selectedDate)
     toast.success('All staff marked present', {
       description: 'Review and submit attendance to confirm.',
@@ -222,7 +227,7 @@ export function StaffAttendanceTab() {
 
   // Brief §7 + §15 + §17: Submit Attendance.
   const handleSubmit = () => {
-    if (isReadOnly || submitting) return
+    if (!isEditable || submitting) return
     setSubmitting(true)
     setTimeout(() => {
       const ok = submit(selectedDate)
@@ -242,7 +247,28 @@ export function StaffAttendanceTab() {
 
   return (
     <PageTransition className="space-y-4">
-      {/* Brief §2: Staff KPI cards */}
+      {/* Brief PART 9: Date picker + state indicator — always visible */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <DatePicker
+          value={selectedDate}
+          onChange={(v) => v && setSelectedDate(v)}
+          compact
+          className="w-[170px]"
+          dayStateMap={dayStateMap}
+          maxDate={STAFF_TODAY_DATE}
+        />
+        {/* Brief PART 9: Smart state indicator next to date picker */}
+        <span className="text-[10px] text-muted-foreground font-medium">
+          {isHoliday ? `Holiday · ${holidayInfo?.name ?? ''}`
+            : isFuture ? 'Upcoming'
+            : dateState.submitted ? 'Submitted · Read only'
+            : dateState.draft ? (hasUnsaved ? 'Unsaved changes' : 'Draft')
+            : 'Not started'}
+        </span>
+      </div>
+
+      {/* Brief §2: Staff KPI cards — only shown when records exist */}
+      {records && (
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {STATUS_ORDER.map((status, i) => {
           const meta = STATUS_META[status]
@@ -273,6 +299,7 @@ export function StaffAttendanceTab() {
           )
         })}
       </div>
+      )}
 
       {/* Brief §24: Submitted / Read-only banner (only for submitted dates) */}
       <AnimatePresence mode="wait">
@@ -330,202 +357,234 @@ export function StaffAttendanceTab() {
         )}
       </AnimatePresence>
 
-      {/* Brief §21: Filter row — one control family, same height/rhythm */}
-      <div className="flex flex-wrap items-center gap-2 justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Brief §13 + PART 22: Date picker with day-state dots.
-              Brief PART 12: future dates ARE selectable so user can see
-              the "Upcoming" state — but all marking controls are disabled. */}
-          <DatePicker
-            value={selectedDate}
-            onChange={(v) => v && setSelectedDate(v)}
-            compact
-            className="w-[160px]"
-            dayStateMap={dayStateMap}
-          />
-
-          {/* Brief §20: All Roles — uses size="sm" so it matches the
-              h-8 rhythm of Date Picker + Search + Mark All Present. */}
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger size="sm" className="w-[150px] text-xs rounded-lg">
-              <SelectValue placeholder="All Roles" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Roles</SelectItem>
-              {ROLES.map((r) => (
-                <SelectItem key={r} value={r}>{r}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search staff…"
-              className="h-8 pl-8 pr-3 text-xs w-[200px] rounded-lg"
-            />
-          </div>
-
-          {/* Brief §19: Mark All Present — only for editable dates */}
-          {!isReadOnly && (
+      {/* Brief PART 10 + PART 31: Premium empty states for non-editable dates.
+          When records is null, NO attendance table is rendered.
+          Each state has its own icon + message + visual treatment. */}
+      <AnimatePresence mode="wait">
+        {isFuture ? (
+          <motion.div
+            key="future-empty"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3 }}
+            className="flex flex-col items-center justify-center py-16 px-4 text-center"
+          >
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60 mb-4">
+              <Clock className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <h3 className="text-sm font-semibold text-foreground mb-1">Upcoming Attendance</h3>
+            <p className="text-xs text-muted-foreground">{formatDisplayDate(selectedDate)}</p>
+            <p className="text-[11px] text-muted-foreground/70 mt-2 max-w-xs">
+              Attendance entry will become available on the scheduled school day.
+            </p>
+          </motion.div>
+        ) : isHoliday ? (
+          <motion.div
+            key="holiday-empty"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3 }}
+            className="flex flex-col items-center justify-center py-16 px-4 text-center"
+          >
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-500/10 mb-4">
+              <CalendarOff className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+            </div>
+            <h3 className="text-sm font-semibold text-foreground mb-1">School Holiday</h3>
+            {holidayInfo && (
+              <p className="text-xs font-medium text-violet-600 dark:text-violet-400">{holidayInfo.name}</p>
+            )}
+            <p className="text-[11px] text-muted-foreground/70 mt-2 max-w-xs">
+              {formatDisplayDate(selectedDate)} · Attendance is not required on school holidays.
+            </p>
+          </motion.div>
+        ) : !records ? (
+          <motion.div
+            key="empty-start"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3 }}
+            className="flex flex-col items-center justify-center py-16 px-4 text-center"
+          >
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 mb-4">
+              <FileEdit className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <h3 className="text-sm font-semibold text-foreground mb-1">No attendance recorded</h3>
+            <p className="text-xs text-muted-foreground">{formatDisplayDate(selectedDate)}</p>
+            <p className="text-[11px] text-muted-foreground/70 mt-2 max-w-xs mb-4">
+              Start marking attendance for {STAFF_DEFS.length} staff members on this date.
+            </p>
             <Button
-              variant="outline"
               size="sm"
-              className="h-8 text-xs gap-1.5 rounded-lg"
-              onClick={() => setMarkAllConfirmOpen(true)}
+              className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => markAllPresentStore(selectedDate)}
             >
               <CheckCheck className="h-3.5 w-3.5" />
-              Mark all present
+              Start attendance
             </Button>
-          )}
-        </div>
-
-        <span className="text-[10px] text-muted-foreground">
-          {filtered.length} staff
-        </span>
-      </div>
-
-      {/* Brief §22 + §23: Staff table — clean, no nested boxes */}
-      <div className="rounded-xl border border-border overflow-hidden bg-card">
-        <Table>
-          <TableHeader className="sticky top-0 bg-muted/40 backdrop-blur-sm z-10">
-            <TableRow className="border-b border-border hover:bg-transparent">
-              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5">Name</TableHead>
-              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 hidden sm:table-cell">Role</TableHead>
-              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 hidden md:table-cell">Department</TableHead>
-              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5">Status</TableHead>
-              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 hidden sm:table-cell">Check-in</TableHead>
-              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 text-right">
-                {isReadOnly ? '' : 'Mark'}
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <AnimatePresence mode="popLayout">
-              {filtered.map((r, i) => (
-                <StaffRow
-                  key={`${r.id}-${selectedDate}`}
-                  record={r}
-                  index={i}
-                  reduce={reduce}
-                  isReadOnly={isReadOnly}
-                  onMark={handleMark}
-                />
-              ))}
-            </AnimatePresence>
-            {filtered.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-8">
-                  No staff found matching filters.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Brief §4 + §5 + §17 + §18: Submit / status bar */}
-      <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
-        <div className="flex items-center gap-2 text-xs">
-          <AnimatePresence mode="wait">
-            {isHoliday ? (
-              <motion.span
-                key="holiday"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                className="flex items-center gap-1.5 text-violet-600 dark:text-violet-400 font-medium"
-              >
-                <CalendarOff className="h-3.5 w-3.5" />
-                School Holiday {holidayInfo ? `· ${holidayInfo.name}` : ''}
-              </motion.span>
-            ) : isFuture ? (
-              <motion.span
-                key="future"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                className="flex items-center gap-1.5 text-muted-foreground font-medium"
-              >
-                <Clock className="h-3.5 w-3.5" />
-                Upcoming · attendance not yet available
-              </motion.span>
-            ) : dateState.submitted ? (
-              <motion.span
-                key="readonly"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium"
-              >
-                <Lock className="h-3.5 w-3.5" />
-                Read only — submitted {dateState.submittedAt ? new Date(dateState.submittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
-              </motion.span>
-            ) : hasUnsaved ? (
-              <motion.span
-                key="unsaved"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium"
-              >
-                <AlertCircle className="h-3.5 w-3.5" />
-                Unsaved changes · not submitted
-              </motion.span>
-            ) : currentState === 'draft' ? (
-              <motion.span
-                key="draft"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                className="flex items-center gap-1.5 text-muted-foreground"
-              >
-                <CalendarClock className="h-3.5 w-3.5" />
-                Attendance draft · not submitted
-              </motion.span>
-            ) : (
-              <motion.span
-                key="editable"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                className="text-muted-foreground"
-              >
-                Editable — mark attendance
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Brief §4 + §7: Submit button (hidden for read-only) */}
-        {!isReadOnly && (
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={handleSubmit}
-            disabled={!hasUnsaved || submitting}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="table"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
           >
-            {submitting ? (
-              <>
-                <motion.span
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            {/* Filter row — only shown when records exist */}
+            <div className="flex flex-wrap items-center gap-2 justify-between mb-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger size="sm" className="w-[150px] text-xs rounded-lg">
+                    <SelectValue placeholder="All Roles" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    {ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search staff…"
+                    className="h-8 pl-8 pr-3 text-xs w-[200px] rounded-lg"
+                  />
+                </div>
+
+                {isEditable && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs gap-1.5 rounded-lg"
+                    onClick={() => setMarkAllConfirmOpen(true)}
+                  >
+                    <CheckCheck className="h-3.5 w-3.5" />
+                    Mark all present
+                  </Button>
+                )}
+              </div>
+
+              <span className="text-[10px] text-muted-foreground">
+                {filtered.length} staff
+              </span>
+            </div>
+
+            {/* Staff table */}
+            <div className="rounded-xl border border-border overflow-hidden bg-card">
+              <Table>
+                <TableHeader className="sticky top-0 bg-muted/40 backdrop-blur-sm z-10">
+                  <TableRow className="border-b border-border hover:bg-transparent">
+                    <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5">Name</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 hidden sm:table-cell">Role</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 hidden md:table-cell">Department</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5">Status</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 hidden sm:table-cell">Check-in</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 text-right">
+                      {isReadOnly ? '' : 'Mark'}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <AnimatePresence mode="popLayout">
+                    {filtered.map((r, i) => (
+                      <StaffRow
+                        key={`${r.id}-${selectedDate}`}
+                        record={r}
+                        index={i}
+                        reduce={reduce}
+                        isReadOnly={isReadOnly}
+                        onMark={handleMark}
+                      />
+                    ))}
+                  </AnimatePresence>
+                  {filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-8">
+                        No staff found matching filters.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Submit / status bar */}
+            <div className="flex items-center justify-between gap-3 flex-wrap pt-1 mt-3">
+              <div className="flex items-center gap-2 text-xs">
+                <AnimatePresence mode="wait">
+                  {dateState.submitted ? (
+                    <motion.span
+                      key="readonly"
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium"
+                    >
+                      <Lock className="h-3.5 w-3.5" />
+                      Read only — submitted {dateState.submittedAt ? new Date(dateState.submittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                    </motion.span>
+                  ) : hasUnsaved ? (
+                    <motion.span
+                      key="unsaved"
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium"
+                    >
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      Unsaved changes · not submitted
+                    </motion.span>
+                  ) : (
+                    <motion.span
+                      key="draft"
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="flex items-center gap-1.5 text-muted-foreground"
+                    >
+                      <CalendarClock className="h-3.5 w-3.5" />
+                      Attendance draft · not submitted
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {isEditable && (
+                <Button
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleSubmit}
+                  disabled={!hasUnsaved || submitting}
                 >
-                  <Upload className="h-3.5 w-3.5" />
-                </motion.span>
-                Submitting…
-              </>
-            ) : (
-              <>
-                <Upload className="h-3.5 w-3.5" />
-                Submit Attendance
-              </>
-            )}
-          </Button>
+                  {submitting ? (
+                    <>
+                      <motion.span
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                      </motion.span>
+                      Submitting…
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-3.5 w-3.5" />
+                      Submit Attendance
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </motion.div>
         )}
-      </div>
+      </AnimatePresence>
 
       {/* Brief §28: Mark All Present confirmation */}
       <AlertDialog open={markAllConfirmOpen} onOpenChange={setMarkAllConfirmOpen}>
