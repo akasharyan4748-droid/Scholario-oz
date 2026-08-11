@@ -3,6 +3,7 @@
 import { TeacherDashboard } from '../modules/dashboard'
 import { TimetableModule } from '../modules/timetable'
 import { AttendanceModule } from '../modules/attendance'
+import { PersonalAttendance } from '../modules/personal-attendance'
 import { HomeworkModule } from '../modules/homework'
 import { AssignmentsModule } from '../modules/assignments'
 import { MarksEntryModule } from '../modules/marks'
@@ -30,6 +31,7 @@ export function ModuleRouter({ active, onNavigate }: ModuleRouterProps) {
       {active === 'dashboard' && <TeacherDashboard onNavigate={onNavigate} />}
       {active === 'timetable' && <TimetableModule />}
       {active === 'classroom' && <ClassroomResourcesModule />}
+      {active === 'my-attendance' && <PersonalAttendance />}
       {active === 'attendance' && <AttendanceModule />}
       {active === 'lesson-planner' && <LessonPlannerModule />}
       {active === 'homework' && <HomeworkModule />}

@@ -31,6 +31,7 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions }: NavRegi
       label: 'Overview',
       items: [
         { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4.5 w-4.5" /> },
+        { key: 'my-attendance', label: 'My Attendance', icon: <CalendarCheck className="h-4.5 w-4.5" /> },
         { key: 'timetable', label: 'My Timetable', icon: <CalendarDays className="h-4.5 w-4.5" /> },
         { key: 'classroom', label: 'Classroom Resources', icon: <Monitor className="h-4.5 w-4.5" /> },
       ],

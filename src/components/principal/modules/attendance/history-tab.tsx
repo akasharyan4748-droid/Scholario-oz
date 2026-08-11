@@ -35,7 +35,6 @@ import {
 import { formatNumber } from '@/lib/format'
 import { toast } from 'sonner'
 import { ATTENDANCE_PALETTE } from './attendance-charts'
-import { school } from '@/lib/mock/school'
 import { generateStudentMonthlyPDF, generateStaffMonthlyPDF } from './monthly-report-pdf'
 
 const STATUS_VARIANT: Record<AttendanceHistoryRecord['status'], {
