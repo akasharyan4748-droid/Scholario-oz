@@ -303,7 +303,7 @@ export interface StaffAttendanceRecord {
   checkIn: string | null // "09:02 AM" or null when absent/leave
 }
 
-const STAFF_DEFS: Omit<StaffAttendanceRecord, 'status' | 'checkIn'>[] = [
+export const STAFF_DEFS: Omit<StaffAttendanceRecord, 'status' | 'checkIn'>[] = [
   { id: 'T-014', name: 'Rohan Mehta',       role: 'Teacher',        department: 'Mathematics' },
   { id: 'T-003', name: 'Priya Nair',         role: 'Teacher',        department: 'Languages' },
   { id: 'T-002', name: 'Pooja Bhatt',        role: 'Teacher',        department: 'Science' },

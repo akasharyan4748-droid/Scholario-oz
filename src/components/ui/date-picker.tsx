@@ -13,6 +13,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
+/**
+ * Optional map of YYYY-MM-DD → state label, used to render subtle day
+ * indicators inside the calendar popover (Brief §13 — show the selected
+ * date's state without overloading the calendar).
+ *
+ * Example:
+ *   { '2025-12-08': 'submitted', '2025-12-10': 'draft' }
+ */
+export type DayState = 'submitted' | 'draft' | 'empty'
+
 export interface DatePickerProps {
   value?: string // YYYY-MM-DD
   onChange?: (dateString: string) => void
@@ -21,6 +31,18 @@ export interface DatePickerProps {
   disabled?: boolean
   id?: string
   compact?: boolean
+  /** Map of YYYY-MM-DD → DayState — renders a subtle dot under each known day. */
+  dayStateMap?: Record<string, DayState>
+  /** Max selectable date (YYYY-MM-DD). Future dates beyond this are disabled. */
+  maxDate?: string
+  /** Min selectable date (YYYY-MM-DD). */
+  minDate?: string
+}
+
+const STATE_DOT_COLOR: Record<DayState, string> = {
+  submitted: 'bg-emerald-500',
+  draft: 'bg-amber-500',
+  empty: 'bg-muted-foreground/40',
 }
 
 export function DatePicker({
@@ -31,6 +53,9 @@ export function DatePicker({
   disabled = false,
   id,
   compact = false,
+  dayStateMap,
+  maxDate,
+  minDate,
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false)
 
@@ -43,6 +68,41 @@ export function DatePicker({
       return undefined
     }
   }, [value])
+
+  // Build disabled date matcher for max/min
+  const disabledMatcher = React.useMemo(() => {
+    const max = maxDate ? parseISO(maxDate) : null
+    const min = minDate ? parseISO(minDate) : null
+    if (!max && !min) return undefined
+    return (date: Date) => {
+      if (max && date > max) return true
+      if (min && date < min) return true
+      return false
+    }
+  }, [maxDate, minDate])
+
+  // Custom DayButton renders the day number + a subtle state dot if known.
+  const CustomDayButton = React.useCallback(
+    ({ day, ...props }: any) => {
+      const dateStr = format(day.date, 'yyyy-MM-dd')
+      const state = dayStateMap?.[dateStr]
+      return (
+        <button {...props} className={cn(props.className, 'relative')}>
+          {day.date.getDate()}
+          {state && (
+            <span
+              className={cn(
+                'absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full',
+                STATE_DOT_COLOR[state]
+              )}
+              aria-hidden
+            />
+          )}
+        </button>
+      )
+    },
+    [dayStateMap]
+  )
 
   const handleSelect = (date?: Date) => {
     if (date) {
@@ -105,6 +165,8 @@ export function DatePicker({
           onSelect={handleSelect}
           initialFocus
           captionLayout="dropdown"
+          disabled={disabledMatcher}
+          components={dayStateMap ? { DayButton: CustomDayButton } : undefined}
         />
       </PopoverContent>
     </Popover>

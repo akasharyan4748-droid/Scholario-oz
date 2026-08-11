@@ -1,33 +1,38 @@
 'use client'
 
 /**
- * StaffAttendanceTab — Phase 3 redesign.
+ * StaffAttendanceTab — Phase 4 redesign.
  *
- * Brief §1-§7 (Phase 3): semantic colors, count-up, Mark All Present,
- * Submit Attendance with unsaved-changes detection, improved action states.
+ * Brief §2-§15 (Phase 4): Date-based attendance state machine.
+ *   - Submitted dates are READ-ONLY (Brief §4, §7, §8, §14, §16).
+ *   - Draft dates are editable + persisted (Brief §9, §10, §27, §29).
+ *   - Empty dates are editable blank slates (Brief §12).
  *
- * Universal status system (Brief §7): STATUS_META from ./attendance-status
- * is shared with student attendance + history.
+ * Brief §1: this screen IS the staff attendance history. The Date Picker
+ *   controls which date's record is shown. No separate "Staff History"
+ *   module is created.
  *
- * Workflow:
- *   KPI summary (count-up + colored icons)
- *   ↓
- *   filters (date picker FIXED via universal DatePicker, role, search)
- *   ↓
- *   Mark All Present action (with lightweight confirmation)
- *   ↓
- *   Staff table (rows with filled selected state)
- *   ↓
- *   Unsaved changes indicator + Submit Attendance button
+ * Brief §16: read-only is enforced at the store layer (not just UI).
+ *   The store's `mark()` / `markAllPresent()` / `submit()` actions refuse
+ *   to mutate a submitted date — this is the frontend bypass guard.
+ *
+ * Brief §5 + §24: read-only UI is intentional — status banner above
+ *   the table + Mark All Present hidden + Submit replaced by
+ *   "Submitted ✓" indicator.
+ *
+ * Brief §13: date picker shows subtle dots for known-day states.
+ *
+ * Brief §20 + §21: All controls in the filter row use the same
+ *   height / radius / border rhythm — no orphaned tall/wide dropdown.
  */
 
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion'
-import { Search, Check, Clock, X, Coffee, CheckCheck, Upload, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Search, CheckCheck, Upload, AlertCircle, CheckCircle2, Lock, CalendarClock } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { DatePicker } from '@/components/ui/date-picker'
+import { DatePicker, type DayState } from '@/components/ui/date-picker'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,16 +45,17 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
-import {
-  getStaffAttendanceForDate,
-  getStaffAttendanceSummary,
-  staffAttendance,
-  type StaffAttendanceRecord,
-  type AttendanceStatus,
-} from '@/lib/mock/attendance'
+import { type StaffAttendanceRecord, type AttendanceStatus, STAFF_DEFS, getStaffAttendanceForDate } from '@/lib/mock/attendance'
 import { AnimatedCounter } from '@/components/shared/animated-counter'
 import { toast } from 'sonner'
 import { STATUS_META, STATUS_ORDER, StatusBadge } from './attendance-status'
+import {
+  useStaffAttendanceStore,
+  STAFF_TODAY_DATE,
+  getDateStateMap,
+  type DateState,
+  type StaffDateState,
+} from '@/lib/store/staff-attendance-store'
 
 const ROLES: StaffAttendanceRecord['role'][] = [
   'Teacher', 'Coordinator', 'Admin Staff', 'Librarian', 'Lab Assistant',
@@ -62,36 +68,99 @@ const TONE_CLASSES = {
   leave:   { text: 'text-sky-600 dark:text-sky-400',         bg: 'bg-sky-500/5',      border: 'border-border hover:border-sky-500/40' },
 } as const
 
+/** Format date string (YYYY-MM-DD) for display. */
+function formatDisplayDate(dateStr: string): string {
+  if (!dateStr) return ''
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-IN', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  })
+}
+
 export function StaffAttendanceTab() {
   const reduce = useReducedMotion()
-  const [selectedDate, setSelectedDate] = useState('2025-12-10')
+  const [selectedDate, setSelectedDate] = useState(STAFF_TODAY_DATE)
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
-  /** Local draft state — principal can mark attendance inline (Brief §3, §5). */
-  const [draft, setDraft] = useState<StaffAttendanceRecord[] | null>(null)
-  /** Track the "submitted" state so we can show success + lock the submit button. */
-  const [submitted, setSubmitted] = useState(false)
-  /** Mark All Present confirmation dialog (Brief §28). */
   const [markAllConfirmOpen, setMarkAllConfirmOpen] = useState(false)
-  /** Submitting state for the Submit button (Brief §4). */
   const [submitting, setSubmitting] = useState(false)
-  /** Ref to scroll to the submit button on click (Brief §27). */
-  const submitRef = useRef<HTMLDivElement>(null)
 
-  // Load records for the selected date (deterministic per date).
-  const baseRecords = useMemo(() => {
-    if (selectedDate === '2025-12-10') return staffAttendance
-    return getStaffAttendanceForDate(selectedDate)
-  }, [selectedDate])
+  // Brief §2: Subscribe to the date-keyed store.
+  // Note: we subscribe to the byDate map directly (NOT to a function that
+  // returns a new object each call) — Zustand requires the selector result
+  // to be referentially stable to avoid infinite re-render loops.
+  const byDate = useStaffAttendanceStore((s) => s.byDate)
+  const mark = useStaffAttendanceStore((s) => s.mark)
+  const markAllPresentStore = useStaffAttendanceStore((s) => s.markAllPresent)
+  const submit = useStaffAttendanceStore((s) => s.submit)
 
-  // Reset draft + submitted state when date changes (Brief §15).
-  useEffect(() => {
-    setDraft(null)
-    setSubmitted(false)
-  }, [selectedDate])
+  // Compute the date state outside the selector — this is referentially
+  // stable when byDate hasn't changed.
+  const dateState = useMemo<StaffDateState>(() => {
+    return byDate[selectedDate] ?? {
+      date: selectedDate,
+      submitted: false,
+      submittedAt: null,
+      submittedRecords: [],
+      draft: null,
+    }
+  }, [byDate, selectedDate])
 
-  const records = draft ?? baseRecords
-  const summary = useMemo(() => getStaffAttendanceSummary(records), [records])
+  // Brief §13: build the day-state map for the date picker dots.
+  const dayStateMap = useMemo<Record<string, DayState>>(() => {
+    const map = getDateStateMap()
+    // Normalize the store map to DatePicker's DayState type
+    const normalized: Record<string, DayState> = {}
+    for (const [k, v] of Object.entries(map)) {
+      normalized[k] = v as DayState
+    }
+    return normalized
+  }, [dateState.submitted, dateState.draft]) // refresh when state changes
+
+  // Brief §11: explicit submission flag determines editability.
+  const isReadOnly = dateState.submitted
+  const currentState: DateState = dateState.submitted
+    ? 'submitted'
+    : dateState.draft
+    ? 'draft'
+    : 'empty'
+
+  // Brief §27 + §5: detect unsaved changes for the selected date.
+  // Computed reactively from the store subscription (re-renders when draft changes).
+  const hasUnsaved = useMemo(() => {
+    if (isReadOnly) return false
+    if (!dateState.draft) return false
+    // Compare against the default draft (what would have been generated if
+    // the user hadn't touched anything) — detects "no changes from default".
+    // Brief: use the canonical staffAttendance for today, or generate per-date.
+    const defaultDraft = getStaffAttendanceForDate(selectedDate)
+    if (defaultDraft.length !== dateState.draft.length) return true
+    return dateState.draft.some((r, i) => {
+      const base = defaultDraft[i]
+      return base.status !== r.status || base.checkIn !== r.checkIn
+    })
+  }, [selectedDate, dateState.draft, isReadOnly])
+
+  // Records to display: submitted → submitted snapshot, else draft (or
+  // a fresh empty default when there's no draft yet).
+  const records: StaffAttendanceRecord[] = useMemo(() => {
+    if (isReadOnly) return dateState.submittedRecords
+    if (dateState.draft) return dateState.draft
+    // Empty state — show all staff with no status, but only display rows
+    // once the user starts marking (we keep a blank default for clarity).
+    return STAFF_DEFS.map((s) => ({ ...s, status: 'present' as AttendanceStatus, checkIn: '08:30 AM' }))
+  }, [dateState, isReadOnly])
+
+  const summary = useMemo(() => {
+    return records.reduce(
+      (acc, r) => {
+        acc.total++
+        acc[r.status]++
+        return acc
+      },
+      { total: 0, present: 0, late: 0, absent: 0, leave: 0 }
+    )
+  }, [records])
 
   const filtered = useMemo(() => {
     return records.filter((r) => {
@@ -106,63 +175,52 @@ export function StaffAttendanceTab() {
     })
   }, [records, roleFilter, search])
 
-  // Brief §5: detect unsaved changes by comparing draft vs base records.
-  const hasUnsavedChanges = useMemo(() => {
-    if (!draft) return false
-    if (draft.length !== baseRecords.length) return true
-    return draft.some((r, i) => {
-      const base = baseRecords[i]
-      return base.status !== r.status || base.checkIn !== r.checkIn
-    })
-  }, [draft, baseRecords])
+  // Brief §25: subtle transition when date changes — clears search/role
+  // filters so the new date's full roster is visible.
+  useEffect(() => {
+    setRoleFilter('all')
+    setSearch('')
+  }, [selectedDate])
 
-  // Brief §14: per-row marking. When marked absent/leave, clear check-in.
+  // Brief §6: mark a staff member — store enforces read-only guard.
   const handleMark = (id: string, status: AttendanceStatus) => {
-    setSubmitted(false) // any change invalidates prior submission
-    setDraft((prev) => {
-      const base = prev ?? baseRecords
-      return base.map((r) => {
-        if (r.id !== id) return r
-        const checkIn = status === 'present'
-          ? '08:30 AM'
-          : status === 'late'
-          ? '09:00 AM'
-          : null
-        return { ...r, status, checkIn }
-      })
-    })
+    if (isReadOnly) return
+    mark(selectedDate, id, status)
   }
 
-  // Brief §3 + §28: Mark All Present with lightweight confirmation.
+  // Brief §3 + §19 + §28: Mark All Present (with confirmation).
   const handleMarkAllPresent = () => {
     setMarkAllConfirmOpen(false)
-    setSubmitted(false)
-    setDraft((prev) => {
-      const base = prev ?? baseRecords
-      return base.map((r) => ({ ...r, status: 'present' as AttendanceStatus, checkIn: '08:30 AM' }))
-    })
+    if (isReadOnly) return
+    markAllPresentStore(selectedDate)
     toast.success('All staff marked present', {
       description: 'Review and submit attendance to confirm.',
     })
   }
 
-  // Brief §4: Submit Attendance — simulates submission (demo only).
+  // Brief §7 + §15 + §17: Submit Attendance.
   const handleSubmit = () => {
-    if (!hasUnsavedChanges || submitting) return
+    if (isReadOnly || submitting) return
     setSubmitting(true)
-    // Simulate a network round-trip.
     setTimeout(() => {
+      const ok = submit(selectedDate)
       setSubmitting(false)
-      setSubmitted(true)
-      toast.success('Attendance submitted', {
-        description: `${summary.present} present · ${summary.late} late · ${summary.absent} absent · ${summary.leave} leave`,
-      })
+      if (ok) {
+        toast.success('Attendance submitted', {
+          description: `${summary.present} present · ${summary.late} late · ${summary.absent} absent · ${summary.leave} leave`,
+        })
+      } else {
+        // Brief §15: rejected (already submitted)
+        toast.error('Attendance already submitted', {
+          description: 'This date is locked and read-only.',
+        })
+      }
     }, 800)
   }
 
   return (
     <PageTransition className="space-y-4">
-      {/* Brief §2: Staff KPI cards with count-up + colored icon + tint */}
+      {/* Brief §2: Staff KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {STATUS_ORDER.map((status, i) => {
           const meta = STATUS_META[status]
@@ -194,19 +252,44 @@ export function StaffAttendanceTab() {
         })}
       </div>
 
-      {/* Brief §15: Filters — date picker FIXED (universal DatePicker) */}
+      {/* Brief §24: Submitted / Read-only banner (only for submitted dates) */}
+      <AnimatePresence mode="wait">
+        {isReadOnly && (
+          <motion.div
+            key="readonly-banner"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25 }}
+            className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-semibold">Attendance submitted</span>
+            <span className="text-emerald-600/70 dark:text-emerald-400/70">·</span>
+            <span className="text-emerald-700/80 dark:text-emerald-300/80">
+              {formatDisplayDate(selectedDate)} · Read only
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Brief §21: Filter row — one control family, same height/rhythm */}
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Universal DatePicker — replaces the broken Input[type=date] + absolute icon */}
+          {/* Brief §13: Date picker with day-state dots */}
           <DatePicker
             value={selectedDate}
             onChange={(v) => v && setSelectedDate(v)}
             compact
-            className="w-[150px]"
+            className="w-[160px]"
+            dayStateMap={dayStateMap}
+            maxDate={STAFF_TODAY_DATE}
           />
 
+          {/* Brief §20: All Roles — uses size="sm" so it matches the
+              h-8 rhythm of Date Picker + Search + Mark All Present. */}
           <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="h-8 w-[160px] text-xs">
+            <SelectTrigger size="sm" className="w-[150px] text-xs rounded-lg">
               <SelectValue placeholder="All Roles" />
             </SelectTrigger>
             <SelectContent>
@@ -223,20 +306,22 @@ export function StaffAttendanceTab() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search staff…"
-              className="h-8 pl-8 pr-3 text-xs w-[200px]"
+              className="h-8 pl-8 pr-3 text-xs w-[200px] rounded-lg"
             />
           </div>
 
-          {/* Brief §3: Mark All Present — soft action, not destructive */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            onClick={() => setMarkAllConfirmOpen(true)}
-          >
-            <CheckCheck className="h-3.5 w-3.5" />
-            Mark all present
-          </Button>
+          {/* Brief §19: Mark All Present — only for editable dates */}
+          {!isReadOnly && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 rounded-lg"
+              onClick={() => setMarkAllConfirmOpen(true)}
+            >
+              <CheckCheck className="h-3.5 w-3.5" />
+              Mark all present
+            </Button>
+          )}
         </div>
 
         <span className="text-[10px] text-muted-foreground">
@@ -244,7 +329,7 @@ export function StaffAttendanceTab() {
         </span>
       </div>
 
-      {/* Brief §13 + §14: Staff table */}
+      {/* Brief §22 + §23: Staff table — clean, no nested boxes */}
       <div className="rounded-xl border border-border overflow-hidden bg-card">
         <Table>
           <TableHeader className="sticky top-0 bg-muted/40 backdrop-blur-sm z-10">
@@ -254,7 +339,9 @@ export function StaffAttendanceTab() {
               <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 hidden md:table-cell">Department</TableHead>
               <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5">Status</TableHead>
               <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 hidden sm:table-cell">Check-in</TableHead>
-              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 text-right">Mark</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5 text-right">
+                {isReadOnly ? '' : 'Mark'}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -265,6 +352,7 @@ export function StaffAttendanceTab() {
                   record={r}
                   index={i}
                   reduce={reduce}
+                  isReadOnly={isReadOnly}
                   onMark={handleMark}
                 />
               ))}
@@ -280,23 +368,22 @@ export function StaffAttendanceTab() {
         </Table>
       </div>
 
-      {/* Brief §4 + §5 + §27: Submit bar */}
-      <div ref={submitRef} className="flex items-center justify-between gap-3 flex-wrap pt-1">
-        {/* Brief §5: Unsaved changes indicator */}
+      {/* Brief §4 + §5 + §17 + §18: Submit / status bar */}
+      <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
         <div className="flex items-center gap-2 text-xs">
           <AnimatePresence mode="wait">
-            {submitted ? (
+            {isReadOnly ? (
               <motion.span
-                key="submitted"
+                key="readonly"
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium"
               >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Attendance submitted
+                <Lock className="h-3.5 w-3.5" />
+                Read only — submitted {dateState.submittedAt ? new Date(dateState.submittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
               </motion.span>
-            ) : hasUnsavedChanges ? (
+            ) : hasUnsaved ? (
               <motion.span
                 key="unsaved"
                 initial={{ opacity: 0, y: 4 }}
@@ -305,51 +392,59 @@ export function StaffAttendanceTab() {
                 className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium"
               >
                 <AlertCircle className="h-3.5 w-3.5" />
-                Unsaved changes
+                Unsaved changes · not submitted
+              </motion.span>
+            ) : currentState === 'draft' ? (
+              <motion.span
+                key="draft"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="flex items-center gap-1.5 text-muted-foreground"
+              >
+                <CalendarClock className="h-3.5 w-3.5" />
+                Attendance draft · not submitted
               </motion.span>
             ) : (
               <motion.span
-                key="saved"
+                key="editable"
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 className="text-muted-foreground"
               >
-                No pending changes
+                Editable — mark attendance
               </motion.span>
             )}
           </AnimatePresence>
         </div>
 
-        {/* Brief §4: Submit Attendance */}
-        <Button
-          size="sm"
-          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={handleSubmit}
-          disabled={!hasUnsavedChanges || submitting || submitted}
-        >
-          {submitting ? (
-            <>
-              <motion.span
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-              >
+        {/* Brief §4 + §7: Submit button (hidden for read-only) */}
+        {!isReadOnly && (
+          <Button
+            size="sm"
+            className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleSubmit}
+            disabled={!hasUnsaved || submitting}
+          >
+            {submitting ? (
+              <>
+                <motion.span
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                </motion.span>
+                Submitting…
+              </>
+            ) : (
+              <>
                 <Upload className="h-3.5 w-3.5" />
-              </motion.span>
-              Submitting…
-            </>
-          ) : submitted ? (
-            <>
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Submitted
-            </>
-          ) : (
-            <>
-              <Upload className="h-3.5 w-3.5" />
-              Submit Attendance
-            </>
-          )}
-        </Button>
+                Submit Attendance
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Brief §28: Mark All Present confirmation */}
@@ -361,7 +456,7 @@ export function StaffAttendanceTab() {
               Mark all staff as Present?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-[10px]">
-              This will overwrite the current attendance selections for all {baseRecords.length} staff members on this date.
+              This will overwrite the current attendance selections for all {STAFF_DEFS.length} staff members on {formatDisplayDate(selectedDate)}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="px-4 py-3">
@@ -380,11 +475,12 @@ export function StaffAttendanceTab() {
 }
 
 function StaffRow({
-  record, index, reduce, onMark,
+  record, index, reduce, isReadOnly, onMark,
 }: {
   record: StaffAttendanceRecord
   index: number
   reduce: boolean | null
+  isReadOnly: boolean
   onMark: (id: string, status: AttendanceStatus) => void
 }) {
   return (
@@ -411,17 +507,25 @@ function StaffRow({
         {record.checkIn ?? '—'}
       </TableCell>
       <TableCell className="py-2.5">
-        <div className="flex items-center justify-end gap-1">
-          {STATUS_ORDER.map((status) => (
-            <MarkButton
-              key={status}
-              id={record.id}
-              status={status}
-              current={record.status}
-              onMark={onMark}
-            />
-          ))}
-        </div>
+        {isReadOnly ? (
+          // Brief §23: read-only column is empty — table stays crisp,
+          // only the interaction layer is removed.
+          <div className="flex justify-end">
+            <Lock className="h-3 w-3 text-muted-foreground/40" />
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-1">
+            {STATUS_ORDER.map((status) => (
+              <MarkButton
+                key={status}
+                id={record.id}
+                status={status}
+                current={record.status}
+                onMark={onMark}
+              />
+            ))}
+          </div>
+        )}
       </TableCell>
     </motion.tr>
   )
@@ -429,7 +533,6 @@ function StaffRow({
 
 /**
  * Brief §6: MarkButton with proper hover/press/selected states.
- * Selected state = filled semantic color (not just tiny icon change).
  */
 function MarkButton({
   id, status, current, onMark,
