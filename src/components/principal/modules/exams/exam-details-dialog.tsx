@@ -28,6 +28,7 @@ import {
   EXAM_STATUS_STYLES,
   RESULT_STATUS_STYLES,
 } from '@/lib/mock/exams-data'
+import { useExamsStore, getExamAnalyticsFromStore, getGradeSheetData } from '@/lib/store/exams-store'
 import { class2AAttendance } from '@/lib/mock/attendance'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -39,8 +40,11 @@ interface ExamDetailsDialogProps {
   onOpenChange: (o: boolean) => void
 }
 
-export function ExamDetailsDialog({ exam, onOpenChange }: ExamDetailsDialogProps) {
+export function ExamDetailsDialog({ exam: initialExam, onOpenChange }: ExamDetailsDialogProps) {
   const [tab, setTab] = useState<DetailTab>('overview')
+
+  // P0: Always read the latest exam from the store
+  const exam = useExamsStore((s) => s.exams.find((e) => e.id === initialExam.id)) || initialExam
 
   const classConfig = exam.classConfigs[0]
   const progress = getExamMarksProgress(exam)
@@ -236,37 +240,41 @@ function ScheduleTab({ exam }: { exam: Exam }) {
 function MarksTab({ exam }: { exam: Exam }) {
   const classConfig = exam.classConfigs[0]
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(classConfig?.subjects[0]?.id || '')
-  const [draftMarks, setDraftMarks] = useState<Record<string, { marks: number | null; absent: boolean }>>({})
+  // P0-3: Use store for marks persistence — not just local state
+  const setStudentMark = useExamsStore((s) => s.setStudentMark)
+  const submitMarks = useExamsStore((s) => s.submitMarks)
+  // Read the latest exam from the store so marks changes reflect immediately
+  const storeExam = useExamsStore((s) => s.exams.find((e) => e.id === exam.id)) || exam
+  const storeClassConfig = storeExam.classConfigs[0]
 
-  const subject = classConfig?.subjects.find((s) => s.id === selectedSubjectId)
-  const subjectMarks = classConfig?.marks.find((m) => m.subjectId === selectedSubjectId)
+  const subject = storeClassConfig?.subjects.find((s) => s.id === selectedSubjectId)
+  const subjectMarks = storeClassConfig?.marks.find((m) => m.subjectId === selectedSubjectId)
 
   if (!subject || !subjectMarks) {
     return <p className="text-xs text-muted-foreground text-center py-8">No subjects configured.</p>
   }
 
+  // P0-3: Save marks directly to the store (persisted to localStorage)
   const handleMarkChange = (studentId: string, value: string) => {
     if (value === '') {
-      setDraftMarks((prev) => ({ ...prev, [studentId]: { marks: null, absent: false } }))
+      setStudentMark(exam.id, storeClassConfig.classId, selectedSubjectId, studentId, null, false)
       return
     }
     if (value.toUpperCase() === 'AB') {
-      setDraftMarks((prev) => ({ ...prev, [studentId]: { marks: null, absent: true } }))
+      setStudentMark(exam.id, storeClassConfig.classId, selectedSubjectId, studentId, null, true)
       return
     }
     const num = parseInt(value, 10)
     if (isNaN(num) || num < 0 || num > subject.maxMarks) return
-    setDraftMarks((prev) => ({ ...prev, [studentId]: { marks: num, absent: false } }))
+    setStudentMark(exam.id, storeClassConfig.classId, selectedSubjectId, studentId, num, false)
   }
 
   const getCurrentMark = (studentId: string): { marks: number | null; absent: boolean } => {
-    const draft = draftMarks[studentId]
-    if (draft) return draft
     const original = subjectMarks.marks.find((m) => m.studentId === studentId)
     return { marks: original?.marksObtained ?? null, absent: original?.isAbsent ?? false }
   }
 
-  const enteredCount = Object.values(draftMarks).filter((d) => d.marks !== null || d.absent).length
+  const enteredCount = subjectMarks.marks.filter((m) => m.marksObtained !== null || m.isAbsent).length
   const totalCount = subjectMarks.marks.length
 
   return (
@@ -351,35 +359,44 @@ function MarksTab({ exam }: { exam: Exam }) {
    Results Tab — Brief §19-22: Grade sheet + toppers + declaration
    ────────────────────────────────────────────────────────── */
 function ResultsTab({ exam }: { exam: Exam }) {
-  const [declared, setDeclared] = useState(exam.resultStatus === 'Result Declared')
+  // P0-7: Use store for declaration
+  const declareResults = useExamsStore((s) => s.declareResults)
+  const lockMarks = useExamsStore((s) => s.lockMarks)
+  // Get the latest exam state from the store
+  const storeExam = useExamsStore((s) => s.exams.find((e) => e.id === exam.id)) || exam
+  const isDeclared = storeExam.resultStatus === 'Result Declared'
   const [submitting, setSubmitting] = useState(false)
 
-  const classConfig = exam.classConfigs[0]
+  const classConfig = storeExam.classConfigs[0]
   const subjectNames = classConfig?.subjects.map((s) => s.name) || []
   const students = class2AAttendance
 
-  // Calculate results for all students
+  // Calculate results for all students — from store exam (real marks)
   const results = useMemo(() => {
     return students.map((student) => {
-      const result = calculateResult(exam, classConfig.classId, student.rollNo)
+      const result = calculateResult(storeExam, classConfig.classId, student.rollNo)
       return { student, result }
     })
-  }, [exam, classConfig, students])
+  }, [storeExam, classConfig, students])
 
   const sortedResults = [...results].sort((a, b) => (b.result?.percentage || 0) - (a.result?.percentage || 0))
 
   const handleDeclare = () => {
     setSubmitting(true)
     setTimeout(() => {
+      // P0-7: Lock then declare via store
+      if (storeExam.resultStatus === 'Under Verification') {
+        lockMarks(storeExam.id)
+      }
+      declareResults(storeExam.id)
       setSubmitting(false)
-      setDeclared(true)
       toast.success('Results declared', {
-        description: `${exam.name} results are now published.`,
+        description: `${storeExam.name} results are now published and locked.`,
       })
     }, 1200)
   }
 
-  if (!declared && exam.resultStatus !== 'Result Declared') {
+  if (!isDeclared && storeExam.resultStatus !== 'Result Declared') {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60 mb-4">

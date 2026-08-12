@@ -191,7 +191,7 @@ export function getExamMarksProgress(exam: Exam): { entered: number; total: numb
 // SEED DATA — internally consistent
 // ──────────────────────────────────────────────────────────────────────
 
-const DEFAULT_SUBJECTS_2A: ExamSubject[] = [
+export const DEFAULT_SUBJECTS_2A: ExamSubject[] = [
   { id: 'sub-eng', name: 'English', maxMarks: 50, passingMarks: 17, theoryMarks: 50, practicalMarks: 0 },
   { id: 'sub-mat', name: 'Mathematics', maxMarks: 50, passingMarks: 17, theoryMarks: 50, practicalMarks: 0 },
   { id: 'sub-sci', name: 'Science', maxMarks: 50, passingMarks: 17, theoryMarks: 40, practicalMarks: 10 },

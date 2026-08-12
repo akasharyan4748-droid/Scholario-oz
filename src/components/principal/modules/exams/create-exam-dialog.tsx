@@ -20,7 +20,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { classSections } from '@/lib/mock/attendance'
-import { EXAM_TYPES, type ExamType } from '@/lib/mock/exams-data'
+import { EXAM_TYPES, type ExamType, type ExamSubject, type ScheduleEntry } from '@/lib/mock/exams-data'
+import { useExamsStore } from '@/lib/store/exams-store'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -95,6 +96,44 @@ export function CreateExamDialog({ open, onOpenChange, onCreate }: CreateExamDia
   }
 
   const handleCreate = () => {
+    // P0-1: Actually persist to the store
+    const createExam = useExamsStore.getState().createExam
+
+    const examSubjects: ExamSubject[] = subjects.map((s) => ({
+      id: s.id,
+      name: s.name,
+      maxMarks: s.maxMarks,
+      passingMarks: s.passingMarks,
+      theoryMarks: s.theoryMarks,
+      practicalMarks: s.practicalMarks,
+    }))
+
+    const schedule: ScheduleEntry[] = subjects.map((s, idx) => ({
+      subjectId: s.id,
+      subjectName: s.name,
+      className: classSections.find((c) => c.id === selectedClasses[0])?.name || selectedClasses[0],
+      date: s.date || startDate,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      room: s.room,
+      invigilator: '',
+    }))
+
+    const examId = createExam({
+      name: name.trim(),
+      type,
+      session: '2025–2026',
+      startDate,
+      endDate: endDate || startDate,
+      classIds: selectedClasses,
+      subjects: examSubjects,
+      schedule,
+    })
+
+    toast.success('Examination created', {
+      description: `${name} has been created as a draft. You can now configure subjects, schedule, and enter marks.`,
+    })
+
     onCreate()
     onOpenChange(false)
   }

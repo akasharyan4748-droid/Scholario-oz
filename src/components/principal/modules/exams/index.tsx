@@ -20,13 +20,12 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { Donut, RadialGauge } from '@/components/shared/charts'
 import {
-  EXAMS,
+  EXAMS as SEED_EXAMS,
   filterExams,
   EXAM_STATUS_STYLES,
   RESULT_STATUS_STYLES,
   EXAM_TYPE_STYLES,
   getExamMarksProgress,
-  getExamAnalytics,
   calculateResult,
   GRADE_BOUNDARIES,
   EXAM_TYPES,
@@ -37,10 +36,16 @@ import {
   type ResultStatus,
   type ExamType,
 } from '@/lib/mock/exams-data'
+import {
+  useExamsStore,
+  getExamAnalyticsFromStore,
+  getGradeSheetData,
+} from '@/lib/store/exams-store'
 import { class2AAttendance } from '@/lib/mock/attendance'
 import { SegmentedTabs } from '../shared/segmented-tabs'
 import { CreateExamDialog } from './create-exam-dialog'
 import { ExamDetailsDialog } from './exam-details-dialog'
+import { generateGradeSheetPDF, generateStudentReportCardPDF } from './exams-pdf'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -81,8 +86,11 @@ export function ExamsModule() {
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null)
 
+  // P0: Get exams from the store (not static import)
+  const storeExams = useExamsStore((s) => s.exams)
+
   const filteredExams = useMemo(() => {
-    let result = filterExams(EXAMS, filter)
+    let result = filterExams(storeExams, filter)
     if (typeFilter !== 'all') result = result.filter((e) => e.type === typeFilter)
     if (search) {
       const q = search.toLowerCase()
@@ -91,42 +99,31 @@ export function ExamsModule() {
       )
     }
     return result
-  }, [filter, typeFilter, search])
+  }, [storeExams, filter, typeFilter, search])
 
   const counts = useMemo(() => ({
-    total: EXAMS.length,
-    scheduled: EXAMS.filter((e) => e.status === 'Scheduled').length,
-    ongoing: EXAMS.filter((e) => e.status === 'Ongoing').length,
-    resultsDeclared: EXAMS.filter((e) => e.resultStatus === 'Result Declared').length,
-  }), [])
+    total: storeExams.length,
+    scheduled: storeExams.filter((e) => e.status === 'Scheduled').length,
+    ongoing: storeExams.filter((e) => e.status === 'Ongoing').length,
+    resultsDeclared: storeExams.filter((e) => e.resultStatus === 'Result Declared').length,
+  }), [storeExams])
 
-  const analyticsExam = useMemo(() => EXAMS.find((e) => e.resultStatus === 'Result Declared') || null, [])
-  const analytics = useMemo(() => analyticsExam ? getExamAnalytics(analyticsExam.id) : null, [analyticsExam])
+  const analyticsExam = useMemo(() => storeExams.find((e) => e.resultStatus === 'Result Declared') || null, [storeExams])
+  const analytics = useMemo(() => analyticsExam ? getExamAnalyticsFromStore(analyticsExam) : null, [analyticsExam])
 
   const gradeSheetData = useMemo(() => {
     if (!analyticsExam) return null
-    const classConfig = analyticsExam.classConfigs[0]
-    if (!classConfig) return null
-    const subjectNames = classConfig.subjects.map((s) => s.name)
-    const rows = class2AAttendance.map((student) => {
-      const result = calculateResult(analyticsExam, classConfig.classId, student.rollNo)
-      const marks = classConfig.marks.map((sm) => {
-        const mark = sm.marks.find((m) => m.studentId === student.rollNo)
-        return mark?.isAbsent ? 'AB' : mark?.marksObtained ?? '—'
-      })
-      return { student, result, marks }
-    }).sort((a, b) => (b.result?.percentage || 0) - (a.result?.percentage || 0))
-    return { subjectNames, rows }
+    return getGradeSheetData(analyticsExam)
   }, [analyticsExam])
 
   // Performance trend — from declared exams
   const trendData = useMemo(() => {
-    const declaredExams = EXAMS.filter((e) => e.resultStatus === 'Result Declared')
+    const declaredExams = storeExams.filter((e) => e.resultStatus === 'Result Declared')
     return declaredExams.map((exam) => {
-      const a = getExamAnalytics(exam.id)
+      const a = getExamAnalyticsFromStore(exam)
       return { name: exam.name, avg: a?.averagePercentage || 0, passRate: a?.passRate || 0 }
     })
-  }, [])
+  }, [storeExams])
 
   const handleCreateExam = () => {
     setCreateOpen(false)
@@ -461,7 +458,12 @@ export function ExamsModule() {
                         </h3>
                         <p className="text-[10px] text-muted-foreground mt-0.5">{analyticsExam?.name} · Class 2-A · {gradeSheetData.rows.length} students</p>
                       </div>
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => toast.success('Grade sheet exported', { description: `${analyticsExam?.name}_class-2A_gradesheet.pdf` })}>
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
+                        if (analyticsExam) {
+                          const { filename } = generateGradeSheetPDF(analyticsExam)
+                          toast.success('Grade sheet exported', { description: filename })
+                        }
+                      }}>
                         <Download className="h-3 w-3" /> Export
                       </Button>
                     </div>
