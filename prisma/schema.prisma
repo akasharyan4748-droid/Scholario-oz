@@ -117,6 +117,7 @@ model Student {
   fees       Fee[]
   attendance Attendance[]
   bookIssues BookIssue[]
+  examMarks  ExamMark[]
 }
 
 model Class {
@@ -131,13 +132,17 @@ model Class {
   classTeacherId String?
   createdAt      DateTime  @default(now())
 
-  students      Student[]
-  subjects      Subject[]
-  exams         Exam[]
-  attendance    Attendance[]
-  timetables    Timetable[]
-  assignments   Assignment[]
-  questionBanks QuestionBank[]
+  students         Student[]
+  subjects         Subject[]
+  exams            Exam[]
+  attendance       Attendance[]
+  timetables       Timetable[]
+  assignments      Assignment[]
+  questionBanks    QuestionBank[]
+  examClasses      ExamClass[]
+  examSubjects     ExamSubjectConfig[]
+  examSchedule     ExamScheduleItem[]
+  examMarks       ExamMark[]
 }
 
 model Subject {
@@ -152,27 +157,132 @@ model Subject {
   passMarks Int?     @default(33)
   createdAt DateTime @default(now())
 
-  results       Result[]
-  timetables    Timetable[]
-  assignments   Assignment[]
-  questionBanks QuestionBank[]
+  results          Result[]
+  timetables       Timetable[]
+  assignments      Assignment[]
+  questionBanks    QuestionBank[]
+  examSubjects     ExamSubjectConfig[]
+  examSchedule     ExamScheduleItem[]
+  examMarks       ExamMark[]
 }
 
 model Exam {
-  id        String    @id @default(cuid())
-  schoolId  String
-  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  name      String
-  term      String?
-  classId   String?
-  class     Class?    @relation(fields: [classId], references: [id])
-  startDate DateTime?
-  endDate   DateTime?
-  status    String    @default("SCHEDULED")
-  createdAt DateTime  @default(now())
+  id              String    @id @default(cuid())
+  schoolId        String
+  school          School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name            String
+  term            String?
+  type            String    @default("Unit Test")
+  session         String?   @default("2025-2026")
+  classId         String?
+  class           Class?    @relation(fields: [classId], references: [id])
+  startDate       DateTime?
+  endDate         DateTime?
+  status          String    @default("Draft")
+  resultStatus    String    @default("Not Started")
+  passPercentage  Float     @default(33)
+  declaredAt      DateTime?
+  declaredBy      String?
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
 
-  results    Result[]
-  examPapers ExamPaper[]
+  results        Result[]
+  examPapers     ExamPaper[]
+  examClasses    ExamClass[]
+  examSubjects   ExamSubjectConfig[]
+  scheduleItems  ExamScheduleItem[]
+  marks          ExamMark[]
+  auditLogs      ExamAuditLog[]
+}
+
+model ExamClass {
+  id        String   @id @default(cuid())
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([examId, classId])
+}
+
+model ExamSubjectConfig {
+  id             String   @id @default(cuid())
+  examId         String
+  exam           Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId        String
+  class          Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  maxMarks       Int      @default(100)
+  passMarks      Float    @default(33)
+  theoryMarks    Int      @default(100)
+  practicalMarks Int      @default(0)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@unique([examId, classId, subjectId])
+}
+
+model ExamScheduleItem {
+  id               String   @id @default(cuid())
+  examId           String
+  exam             Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId          String
+  class            Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId        String?
+  subject          Subject? @relation(fields: [subjectId], references: [id])
+  date             DateTime
+  startTime        String
+  endTime          String
+  room             String?
+  invigilatorId    String?
+  invigilatorName  String?
+  createdAt        DateTime @default(now())
+}
+
+model ExamMark {
+  id             String   @id @default(cuid())
+  examId         String
+  exam           Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId        String
+  class          Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  marksObtained  Float?
+  status         String   @default("PRESENT")
+  workflowStatus String   @default("DRAFT")
+  originalMarks  Float?
+  graceMarks     Float    @default(0)
+  graceReason    String?
+  graceBy        String?
+  remarks        String?
+  enteredBy      String?
+  verifiedBy     String?
+  lockedBy       String?
+  enteredAt      DateTime?
+  verifiedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([examId, classId, subjectId, studentId])
+}
+
+model ExamAuditLog {
+  id        String   @id @default(cuid())
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  userId    String?
+  userName  String?
+  action    String
+  entity    String?
+  entityId  String?
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
 }
 
 model Result {

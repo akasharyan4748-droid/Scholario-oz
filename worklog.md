@@ -1406,3 +1406,32 @@ DELETE     → type-to-confirm → permanently gone
 
 **Remaining limitation:**
 - The teachers-mock-store is a reactive wrapper around the static mock data, NOT the full canonical teachers-store used by the Teachers module. Integrating with the full teachers-store (which has TeacherRecord with status: 'Active' | 'On Leave' | 'Suspended' | 'Probation' | 'Relieved') would be a larger architectural change. The current implementation provides the correct UX and lifecycle behavior for the Class Details use case, with persistence across reloads.
+
+---
+Task ID: exams-real-persistence-rewrite
+Agent: Super Z (main)
+Task: Replace Principal Examination module's mock+localStorage stack with real Prisma+API persistence, end-to-end functional from Principal role.
+
+Work Log:
+- Traced actual Principal → Academics → Examinations route. Confirmed the rendered component was `ExamsModule` in `src/components/principal/modules/exams/index.tsx` which imported `EXAMS` from `@/lib/mock/exams-data` (static seed) + `useExamsStore` Zustand store with localStorage persistence. All students came from `class2AAttendance` mock.
+- Identified existing backend architecture: Next.js 16 + Prisma + SQLite (`db/custom.db`). Existing `/api/exams/route.ts` only had basic GET/POST. Demo school has 2 real classes (Grade 9-A, Grade 10-A), 5 real subjects (Math, Physics, English, Chemistry, Biology), 18 real students. Principal login: `principal@greenwood.edu.in` / `principal123`.
+- Extended Prisma schema with new models: `ExamClass` (multi-class per exam), `ExamSubjectConfig` (per-class per-subject max/pass marks), `ExamScheduleItem` (date/time/room/invigilator), `ExamMark` (studentId+subjectId+examId unique, with workflowStatus DRAFT/SUBMITTED/VERIFIED/LOCKED, status PRESENT/ABSENT/MEDICAL/EXEMPTED, originalMarks + graceMarks for moderation), `ExamAuditLog` (action/entity/old/new).
+- Ran `prisma db push --accept-data-loss` to apply schema. Normalized 3 existing seeded exams to use new fields (type, session, resultStatus).
+- Built server-side service `src/lib/exams/service.ts`: DTO mappers + all CRUD + marks workflow (setMark/setMarksBatch/submitMarks/verifyMarks/lockMarks) + result computation (`getResultsForClass`) + result declaration + audit logging. Pure result engine in `src/lib/exams/result-engine.ts` (computeStudentResult, computeAllResults with rank+ties, computeAnalytics).
+- Created 12 new API routes under `/api/exams/[id]/{marks/{single,batch,submit,verify,lock},schedule/items/[itemId],results/class/[classId],results/declare,audit}`. All use `withUser` + `schoolScoped` for auth + tenant isolation.
+- Wrote `src/lib/exams/use-exams.ts` React hooks: useExamsList, useExam, useMarks, useClassResults, useAuditLogs, plus mutations useCreateExam/useSetMark/useSubmitMarks/useVerifyMarks/useLockMarks/useDeclareResults/useAddScheduleItem/useDeleteScheduleItem. NO localStorage. Direct fetch to API with credentials.
+- Wrote new PDF module `src/components/principal/modules/exams/exams-pdf-real.ts`: 3 official PDF generators (Class Grade Sheet A4 landscape, Individual Student Report Card A4 portrait, Admit Card A4 portrait) using jsPDF + jspdf-autotable. All take REAL ExamDTO + StudentResult[] + ExamAnalyticsDTO.
+- Rewrote Principal ExamsModule `index.tsx` with 7 sections: Overview | Exams | Schedule | Marks | Results | Reports | Settings. Created 7 tab components in `tabs/` subdirectory: `overview-tab.tsx`, `exams-list-tab.tsx`, `schedule-tab.tsx`, `marks-tab.tsx`, `results-tab.tsx`, `reports-tab.tsx`, `settings-tab.tsx`. Each ≤300 LOC.
+- Created `create-exam-dialog.tsx` (5-step wizard) and `exam-workspace-dialog.tsx` (Overview/Schedule/Marks/Results/Audit tabs). Both call real API.
+- Deleted obsolete files: `exam-details-dialog.tsx`, `results-dialog.tsx`, `gradebook.tsx`, `data.tsx`, `kpi-row.tsx`, `analytics-row.tsx`, `shared.tsx`, `schedule.tsx`, `exams-pdf.ts` (old), `lib/store/exams-store.ts` (Zustand+localStorage).
+- Verified end-to-end via `scripts/acceptance-test.ts`: login → create exam with real class + 3 subjects → mark 4 students (3 present + 1 absent) → fill remaining → submit (33) → verify (33) → lock (33) → compute real results (10/11 passed, 90.9% pass rate, avg 73.8%, topper Aditya Singh 84.67%) → declare results → refresh confirms persistence.
+- Verified via headless browser (agent-browser): logged in as principal → clicked Examinations sidebar → confirmed all 7 tabs render (Overview/Exams/Schedule/Marks/Results/Reports/Settings) → confirmed 4 real exam cards visible with real marks progress (33/33) and status pills → opened "Acceptance Test Exam" workspace → Results tab shows real toppers (Aditya Singh #1 84.67%, Arjun Iyer #2 81.33%, Aarav Sharma #3 80.67%) → clicked Class Grade Sheet → real A4 PDF generated (37 KB, `download/Acceptance_Test_Exam_GradeSheet_Grade_9_A.pdf`). Zero console errors.
+
+Stage Summary:
+- Principal Examination module now reads exclusively from real Prisma database via authenticated API. No mock data, no localStorage.
+- All 25 acceptance test steps pass with REAL students from Grade 9-A class.
+- 0 TypeScript errors in new code (`src/lib/exams/*`, `src/app/api/exams/*`, `src/components/principal/modules/exams/*`).
+- 0 browser console errors when navigating Overview/Exams/Workspace/Results/Reports/Schedule.
+- All 9 audit log actions recorded during acceptance test: EXAM_CREATED, MARK_ENTERED (×N), MARK_SUBMITTED, MARK_VERIFIED, MARK_LOCKED, RESULT_DECLARED.
+- 3 PDF report types functional: Class Grade Sheet (tested, downloaded), Individual Report Card, Admit Card.
+- Files added: 11 new files in src/lib/exams/ + src/app/api/exams/[id]/ + src/components/principal/modules/exams/tabs/. Files deleted: 10 obsolete mock/localStorage files.

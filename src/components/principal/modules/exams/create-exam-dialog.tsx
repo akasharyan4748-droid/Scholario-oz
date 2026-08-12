@@ -1,10 +1,10 @@
 'use client'
 
 /**
- * CreateExamDialog — step-based examination creation flow.
+ * CreateExamDialog — 5-step examination creation flow.
  *
- * Brief §9: Steps: Basic Details → Classes → Subjects & Marks → Schedule → Review
- * Brief §10: Marks are configurable per subject.
+ * Calls POST /api/exams with real class IDs + subject IDs from the API.
+ * The exam persists to the Prisma DB and survives page refresh.
  */
 
 import { useState, useEffect } from 'react'
@@ -19,22 +19,32 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
-import { classSections } from '@/lib/mock/attendance'
-import { EXAM_TYPES, type ExamType, type ExamSubject, type ScheduleEntry } from '@/lib/mock/exams-data'
-import { useExamsStore } from '@/lib/store/exams-store'
+import { useCreateExam } from '@/lib/exams/use-exams'
+import { EXAM_TYPES, type ExamDTO, type ExamType } from '@/lib/exams/types'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+
+interface ClassDTO {
+  id: string
+  name: string
+  gradeLevel: string | null
+  section: string | null
+  studentCount: number
+  room?: string | null
+  subjects: Array<{ id: string; name: string; code: string | null; fullMarks: number; passMarks: number }>
+}
 
 interface CreateExamDialogProps {
   open: boolean
   onOpenChange: (o: boolean) => void
-  onCreate: () => void
+  classes: ClassDTO[]
+  onCreated: (exam: ExamDTO) => void
 }
 
 const STEPS = ['Details', 'Classes', 'Subjects', 'Schedule', 'Review']
 
 interface SubjectConfig {
-  id: string
+  subjectId: string
   name: string
   maxMarks: number
   passingMarks: number
@@ -46,23 +56,16 @@ interface SubjectConfig {
   room: string
 }
 
-const DEFAULT_SUBJECTS: SubjectConfig[] = [
-  { id: 's1', name: 'English', maxMarks: 50, passingMarks: 17, theoryMarks: 50, practicalMarks: 0, date: '', startTime: '09:00', endTime: '10:00', room: 'Room 102' },
-  { id: 's2', name: 'Mathematics', maxMarks: 50, passingMarks: 17, theoryMarks: 50, practicalMarks: 0, date: '', startTime: '09:00', endTime: '10:00', room: 'Room 102' },
-  { id: 's3', name: 'Science', maxMarks: 50, passingMarks: 17, theoryMarks: 40, practicalMarks: 10, date: '', startTime: '09:00', endTime: '10:00', room: 'Room 102' },
-  { id: 's4', name: 'Social Studies', maxMarks: 50, passingMarks: 17, theoryMarks: 50, practicalMarks: 0, date: '', startTime: '09:00', endTime: '10:00', room: 'Room 102' },
-  { id: 's5', name: 'Hindi', maxMarks: 50, passingMarks: 17, theoryMarks: 50, practicalMarks: 0, date: '', startTime: '09:00', endTime: '10:00', room: 'Room 102' },
-  { id: 's6', name: 'Computer Science', maxMarks: 50, passingMarks: 17, theoryMarks: 30, practicalMarks: 20, date: '', startTime: '09:00', endTime: '10:00', room: 'Computer Lab' },
-]
-
-export function CreateExamDialog({ open, onOpenChange, onCreate }: CreateExamDialogProps) {
+export function CreateExamDialog({ open, onOpenChange, classes, onCreated }: CreateExamDialogProps) {
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
   const [type, setType] = useState<ExamType>('Unit Test')
+  const [session, setSession] = useState('2025-2026')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [selectedClasses, setSelectedClasses] = useState<string[]>(['class-2-a'])
-  const [subjects, setSubjects] = useState<SubjectConfig[]>(DEFAULT_SUBJECTS)
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([])
+  const [subjectsByClass, setSubjectsByClass] = useState<Record<string, SubjectConfig[]>>({})
+  const { create, loading } = useCreateExam()
 
   useEffect(() => {
     if (!open) {
@@ -70,19 +73,54 @@ export function CreateExamDialog({ open, onOpenChange, onCreate }: CreateExamDia
         setStep(0)
         setName('')
         setType('Unit Test')
+        setSession('2025-2026')
         setStartDate('')
         setEndDate('')
-        setSelectedClasses(['class-2-a'])
-        setSubjects(DEFAULT_SUBJECTS)
+        setSelectedClassIds([])
+        setSubjectsByClass({})
       }, 200)
       return () => clearTimeout(t)
     }
   }, [open])
 
+  // Auto-select all subjects of a class when it's added
+  useEffect(() => {
+    for (const classId of selectedClassIds) {
+      if (!subjectsByClass[classId]) {
+        const cls = classes.find((c) => c.id === classId)
+        if (cls) {
+          setSubjectsByClass((prev) => ({
+            ...prev,
+            [classId]: cls.subjects.map((s) => ({
+              subjectId: s.id,
+              name: s.name,
+              maxMarks: s.fullMarks,
+              passingMarks: s.passMarks,
+              theoryMarks: s.fullMarks,
+              practicalMarks: 0,
+              date: '',
+              startTime: '09:00',
+              endTime: '10:00',
+              room: cls.room ?? '',
+            })),
+          }))
+        }
+      }
+    }
+    // Remove subjects for classes no longer selected
+    setSubjectsByClass((prev) => {
+      const next: Record<string, SubjectConfig[]> = {}
+      for (const classId of selectedClassIds) {
+        if (prev[classId]) next[classId] = prev[classId]
+      }
+      return next
+    })
+  }, [selectedClassIds, classes])
+
   const canProceed = () => {
     if (step === 0) return name.trim() && startDate
-    if (step === 1) return selectedClasses.length > 0
-    if (step === 2) return subjects.length > 0
+    if (step === 1) return selectedClassIds.length > 0
+    if (step === 2) return Object.values(subjectsByClass).every((subs) => subs.length > 0)
     return true
   }
 
@@ -95,65 +133,63 @@ export function CreateExamDialog({ open, onOpenChange, onCreate }: CreateExamDia
     if (step > 0) setStep(step - 1)
   }
 
-  const handleCreate = () => {
-    // P0-1: Actually persist to the store
-    const createExam = useExamsStore.getState().createExam
-
-    const examSubjects: ExamSubject[] = subjects.map((s) => ({
-      id: s.id,
-      name: s.name,
-      maxMarks: s.maxMarks,
-      passingMarks: s.passingMarks,
-      theoryMarks: s.theoryMarks,
-      practicalMarks: s.practicalMarks,
-    }))
-
-    const schedule: ScheduleEntry[] = subjects.map((s, idx) => ({
-      subjectId: s.id,
-      subjectName: s.name,
-      className: classSections.find((c) => c.id === selectedClasses[0])?.name || selectedClasses[0],
-      date: s.date || startDate,
-      startTime: s.startTime,
-      endTime: s.endTime,
-      room: s.room,
-      invigilator: '',
-    }))
-
-    const examId = createExam({
-      name: name.trim(),
-      type,
-      session: '2025–2026',
-      startDate,
-      endDate: endDate || startDate,
-      classIds: selectedClasses,
-      subjects: examSubjects,
-      schedule,
-    })
-
-    toast.success('Examination created', {
-      description: `${name} has been created as a draft. You can now configure subjects, schedule, and enter marks.`,
-    })
-
-    onCreate()
-    onOpenChange(false)
-  }
-
   const toggleClass = (classId: string) => {
-    setSelectedClasses((prev) =>
+    setSelectedClassIds((prev) =>
       prev.includes(classId) ? prev.filter((c) => c !== classId) : [...prev, classId]
     )
   }
 
-  const updateSubject = (id: string, field: keyof SubjectConfig, value: string | number) => {
-    setSubjects((prev) => prev.map((s) => s.id === id ? { ...s, [field]: value } : s))
+  const updateSubject = (classId: string, subjectId: string, field: keyof SubjectConfig, value: string | number) => {
+    setSubjectsByClass((prev) => ({
+      ...prev,
+      [classId]: (prev[classId] || []).map((s) => s.subjectId === subjectId ? { ...s, [field]: value } : s),
+    }))
   }
 
-  const addSubject = () => {
-    setSubjects((prev) => [...prev, { id: `s${prev.length + 1}`, name: '', maxMarks: 50, passingMarks: 17, theoryMarks: 50, practicalMarks: 0, date: '', startTime: '09:00', endTime: '10:00', room: 'Room 102' }])
-  }
-
-  const removeSubject = (id: string) => {
-    setSubjects((prev) => prev.filter((s) => s.id !== id))
+  const handleCreate = async () => {
+    try {
+      const exam = await create({
+        name: name.trim(),
+        type,
+        session,
+        startDate,
+        endDate: endDate || startDate,
+        passPercentage: 33,
+        classIds: selectedClassIds,
+        subjectsByClass: Object.fromEntries(
+          Object.entries(subjectsByClass).map(([classId, subs]) => [
+            classId,
+            subs.map((s) => ({
+              subjectId: s.subjectId,
+              maxMarks: s.maxMarks,
+              passMarks: s.passingMarks,
+              theoryMarks: s.theoryMarks,
+              practicalMarks: s.practicalMarks,
+            })),
+          ])
+        ),
+        schedule: Object.entries(subjectsByClass).flatMap(([classId, subs]) =>
+          subs
+            .filter((s) => s.date)
+            .map((s) => ({
+              classId,
+              subjectId: s.subjectId,
+              date: s.date,
+              startTime: s.startTime,
+              endTime: s.endTime,
+              room: s.room || undefined,
+              invigilatorName: undefined,
+            }))
+        ),
+      })
+      toast.success('Examination created', {
+        description: `"${exam.name}" has been saved. Students from selected classes are now ready for marks entry.`,
+      })
+      onCreated(exam)
+      onOpenChange(false)
+    } catch (e: any) {
+      toast.error('Failed to create examination', { description: e.message })
+    }
   }
 
   return (
@@ -202,6 +238,10 @@ export function CreateExamDialog({ open, onOpenChange, onCreate }: CreateExamDia
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1.5">
+                <Label>Academic Session</Label>
+                <Input value={session} onChange={(e) => setSession(e.target.value)} placeholder="2025-2026" className="text-sm" />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Start Date <span className="text-destructive">*</span></Label>
@@ -218,16 +258,19 @@ export function CreateExamDialog({ open, onOpenChange, onCreate }: CreateExamDia
           {step === 1 && (
             <div className="space-y-2">
               <Label>Select Classes</Label>
-              <p className="text-[10px] text-muted-foreground">Choose which classes will participate in this examination.</p>
-              {classSections.map((cls) => (
+              <p className="text-[10px] text-muted-foreground">Choose which classes will participate in this examination. The real students of each class will be available for marks entry.</p>
+              {classes.length === 0 && (
+                <p className="text-[10px] text-rose-600">No classes found. Add classes in the Classes module first.</p>
+              )}
+              {classes.map((cls) => (
                 <label key={cls.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-border hover:bg-muted/30 cursor-pointer transition-colors">
                   <Checkbox
-                    checked={selectedClasses.includes(cls.id)}
+                    checked={selectedClassIds.includes(cls.id)}
                     onCheckedChange={() => toggleClass(cls.id)}
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">{cls.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{cls.teacher} · {cls.total} students</p>
+                    <p className="text-[10px] text-muted-foreground">{cls.studentCount} students · {cls.subjects.length} subjects available</p>
                   </div>
                 </label>
               ))}
@@ -235,90 +278,98 @@ export function CreateExamDialog({ open, onOpenChange, onCreate }: CreateExamDia
           )}
 
           {step === 2 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Subjects & Marks Configuration</Label>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={addSubject}>
-                  <Plus className="h-3 w-3" /> Add Subject
-                </Button>
-              </div>
-              <div className="rounded-lg border border-border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-b border-border">
-                      <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2">Subject</TableHead>
-                      <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2 text-center">Max</TableHead>
-                      <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2 text-center">Pass</TableHead>
-                      <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2 text-center">Theory</TableHead>
-                      <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2 text-center">Practical</TableHead>
-                      <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {subjects.map((s) => (
-                      <TableRow key={s.id} className="border-b border-border/40 last:border-0">
-                        <TableCell className="py-1.5">
-                          <Input value={s.name} onChange={(e) => updateSubject(s.id, 'name', e.target.value)} placeholder="Subject name" className="h-7 text-xs" />
-                        </TableCell>
-                        <TableCell className="py-1.5 text-center">
-                          <Input type="number" value={s.maxMarks} onChange={(e) => updateSubject(s.id, 'maxMarks', Number(e.target.value))} className="h-7 text-xs w-14 text-center" />
-                        </TableCell>
-                        <TableCell className="py-1.5 text-center">
-                          <Input type="number" value={s.passingMarks} onChange={(e) => updateSubject(s.id, 'passingMarks', Number(e.target.value))} className="h-7 text-xs w-14 text-center" />
-                        </TableCell>
-                        <TableCell className="py-1.5 text-center">
-                          <Input type="number" value={s.theoryMarks} onChange={(e) => updateSubject(s.id, 'theoryMarks', Number(e.target.value))} className="h-7 text-xs w-14 text-center" />
-                        </TableCell>
-                        <TableCell className="py-1.5 text-center">
-                          <Input type="number" value={s.practicalMarks} onChange={(e) => updateSubject(s.id, 'practicalMarks', Number(e.target.value))} className="h-7 text-xs w-14 text-center" />
-                        </TableCell>
-                        <TableCell className="py-1.5">
-                          <button onClick={() => removeSubject(s.id)} className="text-muted-foreground hover:text-rose-500 transition-colors text-xs">✕</button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <p className="text-[10px] text-muted-foreground">Total marks = Theory + Practical. Calculated automatically.</p>
+            <div className="space-y-3">
+              <Label>Subjects & Marks Configuration</Label>
+              <p className="text-[10px] text-muted-foreground">Subjects are auto-populated from the class configuration. Adjust marks per subject as needed.</p>
+              {selectedClassIds.map((classId) => {
+                const cls = classes.find((c) => c.id === classId)
+                const subs = subjectsByClass[classId] || []
+                return (
+                  <div key={classId} className="space-y-2">
+                    <p className="text-[10px] uppercase font-semibold text-muted-foreground">{cls?.name}</p>
+                    <div className="rounded-lg border border-border overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-b border-border">
+                            <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2">Subject</TableHead>
+                            <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2 text-center">Max</TableHead>
+                            <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2 text-center">Pass</TableHead>
+                            <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2 text-center">Theory</TableHead>
+                            <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2 text-center">Practical</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {subs.map((s) => (
+                            <TableRow key={s.subjectId} className="border-b border-border/40 last:border-0">
+                              <TableCell className="py-1.5 text-xs font-medium">{s.name}</TableCell>
+                              <TableCell className="py-1.5 text-center">
+                                <Input type="number" value={s.maxMarks} onChange={(e) => updateSubject(classId, s.subjectId, 'maxMarks', Number(e.target.value))} className="h-7 text-xs w-14 text-center" />
+                              </TableCell>
+                              <TableCell className="py-1.5 text-center">
+                                <Input type="number" value={s.passingMarks} onChange={(e) => updateSubject(classId, s.subjectId, 'passingMarks', Number(e.target.value))} className="h-7 text-xs w-14 text-center" />
+                              </TableCell>
+                              <TableCell className="py-1.5 text-center">
+                                <Input type="number" value={s.theoryMarks} onChange={(e) => updateSubject(classId, s.subjectId, 'theoryMarks', Number(e.target.value))} className="h-7 text-xs w-14 text-center" />
+                              </TableCell>
+                              <TableCell className="py-1.5 text-center">
+                                <Input type="number" value={s.practicalMarks} onChange={(e) => updateSubject(classId, s.subjectId, 'practicalMarks', Number(e.target.value))} className="h-7 text-xs w-14 text-center" />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 
           {step === 3 && (
-            <div className="space-y-2">
-              <Label>Schedule</Label>
-              <div className="rounded-lg border border-border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-b border-border">
-                      <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2">Subject</TableHead>
-                      <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2">Date</TableHead>
-                      <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2">Time</TableHead>
-                      <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2">Room</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {subjects.map((s) => (
-                      <TableRow key={s.id} className="border-b border-border/40 last:border-0">
-                        <TableCell className="py-1.5 text-xs font-medium">{s.name || '—'}</TableCell>
-                        <TableCell className="py-1.5">
-                          <DatePicker value={s.date} onChange={(v) => updateSubject(s.id, 'date', v)} compact placeholder="Date" className="w-[120px]" />
-                        </TableCell>
-                        <TableCell className="py-1.5">
-                          <div className="flex items-center gap-1">
-                            <Input type="time" value={s.startTime} onChange={(e) => updateSubject(s.id, 'startTime', e.target.value)} className="h-7 text-xs w-16" />
-                            <span className="text-[10px] text-muted-foreground">–</span>
-                            <Input type="time" value={s.endTime} onChange={(e) => updateSubject(s.id, 'endTime', e.target.value)} className="h-7 text-xs w-16" />
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-1.5">
-                          <Input value={s.room} onChange={(e) => updateSubject(s.id, 'room', e.target.value)} className="h-7 text-xs w-24" />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+            <div className="space-y-3">
+              <Label>Schedule (Optional)</Label>
+              <p className="text-[10px] text-muted-foreground">Set the date, time, and room for each subject exam. Schedule items can also be added later from the exam workspace.</p>
+              {selectedClassIds.map((classId) => {
+                const cls = classes.find((c) => c.id === classId)
+                const subs = subjectsByClass[classId] || []
+                return (
+                  <div key={classId} className="space-y-2">
+                    <p className="text-[10px] uppercase font-semibold text-muted-foreground">{cls?.name}</p>
+                    <div className="rounded-lg border border-border overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-b border-border">
+                            <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2">Subject</TableHead>
+                            <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2">Date</TableHead>
+                            <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2">Time</TableHead>
+                            <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground py-2">Room</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {subs.map((s) => (
+                            <TableRow key={s.subjectId} className="border-b border-border/40 last:border-0">
+                              <TableCell className="py-1.5 text-xs font-medium">{s.name}</TableCell>
+                              <TableCell className="py-1.5">
+                                <DatePicker value={s.date} onChange={(v) => updateSubject(classId, s.subjectId, 'date', v)} compact placeholder="Date" className="w-[120px]" />
+                              </TableCell>
+                              <TableCell className="py-1.5">
+                                <div className="flex items-center gap-1">
+                                  <Input type="time" value={s.startTime} onChange={(e) => updateSubject(classId, s.subjectId, 'startTime', e.target.value)} className="h-7 text-xs w-16" />
+                                  <span className="text-[10px] text-muted-foreground">–</span>
+                                  <Input type="time" value={s.endTime} onChange={(e) => updateSubject(classId, s.subjectId, 'endTime', e.target.value)} className="h-7 text-xs w-16" />
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-1.5">
+                                <Input value={s.room} onChange={(e) => updateSubject(classId, s.subjectId, 'room', e.target.value)} className="h-7 text-xs w-24" />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 
@@ -328,11 +379,16 @@ export function CreateExamDialog({ open, onOpenChange, onCreate }: CreateExamDia
               <div className="rounded-lg border border-border divide-y divide-border/40">
                 <ReviewRow label="Name" value={name || '—'} />
                 <ReviewRow label="Type" value={type} />
+                <ReviewRow label="Session" value={session} />
                 <ReviewRow label="Start Date" value={startDate || '—'} />
                 <ReviewRow label="End Date" value={endDate || '—'} />
-                <ReviewRow label="Classes" value={selectedClasses.map((id) => classSections.find((c) => c.id === id)?.name).filter(Boolean).join(', ')} />
-                <ReviewRow label="Subjects" value={`${subjects.length} subjects configured`} />
+                <ReviewRow label="Classes" value={selectedClassIds.map((id) => classes.find((c) => c.id === id)?.name).filter(Boolean).join(', ')} />
+                <ReviewRow label="Subjects" value={`${Object.values(subjectsByClass).reduce((s, subs) => s + subs.length, 0)} subjects across ${selectedClassIds.length} classes`} />
+                <ReviewRow label="Schedule items" value={`${Object.values(subjectsByClass).flat().filter((s) => s.date).length} scheduled`} />
               </div>
+              <p className="text-[10px] text-muted-foreground">
+                Upon creation, empty ExamMark rows will be auto-created for every student × subject combination in the selected classes. You can then enter marks immediately.
+              </p>
             </div>
           )}
         </div>
@@ -362,8 +418,9 @@ export function CreateExamDialog({ open, onOpenChange, onCreate }: CreateExamDia
                 size="sm"
                 className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={handleCreate}
+                disabled={loading}
               >
-                <Check className="h-3.5 w-3.5" /> Create Examination
+                {loading ? 'Creating…' : (<><Check className="h-3.5 w-3.5" /> Create Examination</>)}
               </Button>
             )}
           </div>
@@ -377,7 +434,7 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2">
       <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">{label}</span>
-      <span className="text-xs font-medium text-foreground truncate">{value}</span>
+      <span className="text-xs font-medium text-foreground truncate max-w-[300px] text-right">{value}</span>
     </div>
   )
 }
