@@ -48,6 +48,7 @@ import {
   useAssignInvigilator,
   usePublishResults,
 } from '@/lib/exams/use-exams-extended'
+import { useRoleGate } from '@/lib/exams/use-role-gate'
 
 interface Props {
   examId: string
@@ -198,6 +199,7 @@ function ResultStatusPill({ status }: { status: string }) {
 
 function OverviewSection({ exam, onReload }: { exam: any; onReload: () => void }) {
   const { update } = useUpdateExam()
+  const gate = useRoleGate()
   const [name, setName] = useState(exam.name)
   const [status, setStatus] = useState(exam.status)
   const [startDate, setStartDate] = useState(exam.startDate ?? '')
@@ -250,39 +252,63 @@ function OverviewSection({ exam, onReload }: { exam: any; onReload: () => void }
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-3">
-        <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Edit Examination</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div>
-            <Label className="text-[10px]">Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-xs" />
+      {gate.canEdit ? (
+        <div className="rounded-xl border border-border bg-card p-3">
+          <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Edit Examination</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <Label className="text-[10px]">Name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[10px]">Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger size="sm" className="text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Draft">Draft</SelectItem>
+                  <SelectItem value="Scheduled">Scheduled</SelectItem>
+                  <SelectItem value="Ongoing">Ongoing</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
+                  <SelectItem value="Cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-[10px]">Start Date</Label>
+              <DatePicker value={startDate} onChange={setStartDate} />
+            </div>
+            <div>
+              <Label className="text-[10px]">End Date</Label>
+              <DatePicker value={endDate} onChange={setEndDate} />
+            </div>
           </div>
-          <div>
-            <Label className="text-[10px]">Status</Label>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger size="sm" className="text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Draft">Draft</SelectItem>
-                <SelectItem value="Scheduled">Scheduled</SelectItem>
-                <SelectItem value="Ongoing">Ongoing</SelectItem>
-                <SelectItem value="Completed">Completed</SelectItem>
-                <SelectItem value="Cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-[10px]">Start Date</Label>
-            <DatePicker value={startDate} onChange={setStartDate} />
-          </div>
-          <div>
-            <Label className="text-[10px]">End Date</Label>
-            <DatePicker value={endDate} onChange={setEndDate} />
+          <Button size="sm" className="mt-3 h-7 text-xs" onClick={handleSave}>
+            <Save className="h-3 w-3" /> Save Changes
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-card p-3">
+          <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Examination Details</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <p className="text-[9px] text-muted-foreground">Name</p>
+              <p className="text-xs font-medium">{exam.name}</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-muted-foreground">Status</p>
+              <p className="text-xs font-medium">{exam.status}</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-muted-foreground">Start</p>
+              <p className="text-xs font-medium">{exam.startDate ?? '—'}</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-muted-foreground">End</p>
+              <p className="text-xs font-medium">{exam.endDate ?? '—'}</p>
+            </div>
           </div>
         </div>
-        <Button size="sm" className="mt-3 h-7 text-xs" onClick={handleSave}>
-          <Save className="h-3 w-3" /> Save Changes
-        </Button>
-      </div>
+      )}
     </div>
   )
 }
@@ -295,6 +321,7 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
   const { update: updateItem } = useUpdateScheduleItemV2()
   const { teachers } = useTeachers(exam.id)
   const { assign: assignInvigilator } = useAssignInvigilator()
+  const gate = useRoleGate()
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
   const [subjectId, setSubjectId] = useState('')
   const [date, setDate] = useState('')
@@ -365,31 +392,33 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-border bg-card p-3">
-        <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Add Schedule Item</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <Select value={classId} onValueChange={(v) => { setClassId(v); setSubjectId('') }}>
-            <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Class" /></SelectTrigger>
-            <SelectContent>
-              {exam.classes.map((c: any) => <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={subjectId} onValueChange={setSubjectId}>
-            <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Subject" /></SelectTrigger>
-            <SelectContent>
-              {subjectsForClass.map((s: any) => <SelectItem key={s.subjectId} value={s.subjectId}>{s.subjectName}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <DatePicker value={date} onChange={setDate} placeholder="Date" />
-          <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-7 text-xs" />
-          <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="h-7 text-xs" />
-          <Input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Room" className="h-7 text-xs" />
-          <Input value={invigilator} onChange={(e) => setInvigilator(e.target.value)} placeholder="Invigilator name (or assign below)" className="h-7 text-xs" />
+      {gate.canManageSchedule && (
+        <div className="rounded-xl border border-border bg-card p-3">
+          <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Add Schedule Item</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <Select value={classId} onValueChange={(v) => { setClassId(v); setSubjectId('') }}>
+              <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Class" /></SelectTrigger>
+              <SelectContent>
+                {exam.classes.map((c: any) => <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={subjectId} onValueChange={setSubjectId}>
+              <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Subject" /></SelectTrigger>
+              <SelectContent>
+                {subjectsForClass.map((s: any) => <SelectItem key={s.subjectId} value={s.subjectId}>{s.subjectName}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <DatePicker value={date} onChange={setDate} placeholder="Date" />
+            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-7 text-xs" />
+            <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="h-7 text-xs" />
+            <Input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Room" className="h-7 text-xs" />
+            <Input value={invigilator} onChange={(e) => setInvigilator(e.target.value)} placeholder="Invigilator name (or assign below)" className="h-7 text-xs" />
+          </div>
+          <Button size="sm" className="mt-2 h-7 text-xs gap-1" onClick={handleAdd}>
+            <Plus className="h-3 w-3" /> Add to Schedule
+          </Button>
         </div>
-        <Button size="sm" className="mt-2 h-7 text-xs gap-1" onClick={handleAdd}>
-          <Plus className="h-3 w-3" /> Add to Schedule
-        </Button>
-      </div>
+      )}
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="px-3 py-2 border-b border-border flex items-center gap-2">
@@ -462,32 +491,36 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    {editingId === s.id ? (
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => handleSaveEdit(s)} className="text-emerald-600 hover:text-emerald-700">
-                          <Save className="h-3.5 w-3.5" />
-                        </button>
-                        <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground text-[10px]">✕</button>
-                      </div>
+                    {gate.canManageSchedule ? (
+                      editingId === s.id ? (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => handleSaveEdit(s)} className="text-emerald-600 hover:text-emerald-700">
+                            <Save className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground text-[10px]">✕</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingId(s.id)
+                              setEditDate(s.date ? new Date(s.date).toISOString().split('T')[0] : '')
+                              setEditStart(s.startTime)
+                              setEditEnd(s.endTime)
+                              setEditRoom(s.room ?? '')
+                            }}
+                            className="text-muted-foreground hover:text-primary transition-colors"
+                            title="Edit"
+                          >
+                            <Save className="h-3.5 w-3.5 opacity-50" />
+                          </button>
+                          <button onClick={() => handleDelete(s.id)} className="text-muted-foreground hover:text-rose-600 transition-colors" title="Delete">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )
                     ) : (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setEditingId(s.id)
-                            setEditDate(s.date ? new Date(s.date).toISOString().split('T')[0] : '')
-                            setEditStart(s.startTime)
-                            setEditEnd(s.endTime)
-                            setEditRoom(s.room ?? '')
-                          }}
-                          className="text-muted-foreground hover:text-primary transition-colors"
-                          title="Edit"
-                        >
-                          <Save className="h-3.5 w-3.5 opacity-50" />
-                        </button>
-                        <button onClick={() => handleDelete(s.id)} className="text-muted-foreground hover:text-rose-600 transition-colors" title="Delete">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      <span className="text-[9px] text-muted-foreground/40">—</span>
                     )}
                   </td>
                 </tr>
@@ -508,6 +541,7 @@ function MarksSection({ exam, onReload }: { exam: any; onReload: () => void }) {
   const { lock } = useLockMarks()
   const { declare } = useDeclareResults()
   const { publish } = usePublishResults()
+  const gate = useRoleGate()
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
   const [subjectId, setSubjectId] = useState('')
 
@@ -542,9 +576,6 @@ function MarksSection({ exam, onReload }: { exam: any; onReload: () => void }) {
     <div className="space-y-3">
       <div className="rounded-xl border border-border bg-card p-3">
         <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Workflow Controls</p>
-        <p className="text-[10px] text-muted-foreground mb-3">
-          Use the Marks tab for spreadsheet-style entry. Use these controls to advance the workflow state for a class (or class+subject).
-        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Select value={classId} onValueChange={(v) => { setClassId(v); setSubjectId('') }}>
             <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Class" /></SelectTrigger>
@@ -561,21 +592,31 @@ function MarksSection({ exam, onReload }: { exam: any; onReload: () => void }) {
           </Select>
         </div>
         <div className="flex flex-wrap gap-2 mt-3">
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('submit')} disabled={exam.resultStatus === 'Result Declared'}>
-            <Send className="h-3 w-3" /> Submit Marks
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('verify')} disabled={exam.resultStatus === 'Result Declared'}>
-            <ShieldCheck className="h-3 w-3" /> Verify Marks
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('lock')} disabled={exam.resultStatus === 'Result Declared'}>
-            <Lock className="h-3 w-3" /> Lock Marks
-          </Button>
-          <Button size="sm" variant="default" className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleAction('declare')} disabled={exam.resultStatus !== 'Result Ready'}>
-            <Check className="h-3 w-3" /> Declare Results
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('publish')} disabled={exam.resultStatus !== 'Result Declared'}>
-            <Send className="h-3 w-3" /> Publish & Notify
-          </Button>
+          {gate.canSubmitMarks && (
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('submit')} disabled={exam.resultStatus === 'Result Declared'}>
+              <Send className="h-3 w-3" /> Submit
+            </Button>
+          )}
+          {gate.canVerifyMarks && (
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('verify')} disabled={exam.resultStatus === 'Result Declared'}>
+              <ShieldCheck className="h-3 w-3" /> Verify
+            </Button>
+          )}
+          {gate.canLockMarks && (
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('lock')} disabled={exam.resultStatus === 'Result Declared'}>
+              <Lock className="h-3 w-3" /> Lock
+            </Button>
+          )}
+          {gate.canDeclareResults && (
+            <Button size="sm" variant="default" className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleAction('declare')} disabled={exam.resultStatus !== 'Result Ready'}>
+              <Check className="h-3 w-3" /> Declare
+            </Button>
+          )}
+          {gate.canPublishResults && (
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('publish')} disabled={exam.resultStatus !== 'Result Declared'}>
+              <Send className="h-3 w-3" /> Publish & Notify
+            </Button>
+          )}
         </div>
       </div>
 

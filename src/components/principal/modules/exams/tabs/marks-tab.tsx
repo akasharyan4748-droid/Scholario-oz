@@ -25,6 +25,7 @@ import {
   useVerifyMarks,
   useLockMarks,
 } from '@/lib/exams/use-exams'
+import { useRoleGate } from '@/lib/exams/use-role-gate'
 import { type ExamMarkDTO, type StudentDTO, MARK_STATUSES } from '@/lib/exams/types'
 
 interface Props {
@@ -143,6 +144,7 @@ function MarksGrid({
   const { submit: submitMarksHook } = useSubmitMarks()
   const { verify } = useVerifyMarks()
   const { lock } = useLockMarks()
+  const gate = useRoleGate()
 
   // Local mark edits (debounced save)
   const [localMarks, setLocalMarks] = useState<Record<string, { marks: string; status: string }>>({})
@@ -259,31 +261,31 @@ function MarksGrid({
           </p>
         </div>
         <WorkflowBadge state={workflowState} />
-        {dirty.size > 0 && (
+        {dirty.size > 0 && gate.canSubmitMarks && (
           <Button size="sm" variant="default" className="h-7 text-xs gap-1.5" onClick={handleSaveAll}>
             <Save className="h-3 w-3" /> Save {dirty.size} unsaved
           </Button>
         )}
         {!isLocked && !isDeclared && (
           <>
-            {workflowState === 'DRAFT' && (
+            {workflowState === 'DRAFT' && gate.canSubmitMarks && (
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleWorkflowAction('submit')}>
                 <Send className="h-3 w-3" /> Submit
               </Button>
             )}
-            {workflowState === 'SUBMITTED' && (
+            {workflowState === 'SUBMITTED' && gate.canVerifyMarks && (
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleWorkflowAction('verify')}>
                 <ShieldCheck className="h-3 w-3" /> Verify
               </Button>
             )}
-            {workflowState === 'VERIFIED' && (
+            {workflowState === 'VERIFIED' && gate.canLockMarks && (
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleWorkflowAction('lock')}>
                 <Lock className="h-3 w-3" /> Lock
               </Button>
             )}
           </>
         )}
-        {exam?.resultStatus === 'Result Ready' && (
+        {exam?.resultStatus === 'Result Ready' && gate.canDeclareResults && (
           <Button size="sm" className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleDeclareResults}>
             <Check className="h-3 w-3" /> Declare Results
           </Button>
@@ -311,7 +313,7 @@ function MarksGrid({
               const isDirty = dirty.has(s.id)
               const isSaving = saving[s.id]
               const cellState = m?.workflowStatus ?? 'DRAFT'
-              const cellLocked = isLocked || cellState === 'LOCKED'
+              const cellLocked = isLocked || cellState === 'LOCKED' || !gate.canSubmitMarks
               return (
                 <tr key={s.id} className="border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors">
                   <td className="px-3 py-2 font-mono text-[10px]">{s.rollNo ?? '—'}</td>

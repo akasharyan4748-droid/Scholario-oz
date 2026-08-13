@@ -258,7 +258,7 @@ export function CreateExamDialog({ open, onOpenChange, classes, onCreated }: Cre
           {step === 1 && (
             <div className="space-y-2">
               <Label>Select Classes</Label>
-              <p className="text-[10px] text-muted-foreground">Choose which classes will participate in this examination. The real students of each class will be available for marks entry.</p>
+              <p className="text-[10px] text-muted-foreground">Students from selected classes are auto-loaded for marks entry.</p>
               {classes.length === 0 && (
                 <p className="text-[10px] text-rose-600">No classes found. Add classes in the Classes module first.</p>
               )}
@@ -280,7 +280,7 @@ export function CreateExamDialog({ open, onOpenChange, classes, onCreated }: Cre
           {step === 2 && (
             <div className="space-y-3">
               <Label>Subjects & Marks Configuration</Label>
-              <p className="text-[10px] text-muted-foreground">Subjects are auto-populated from the class configuration. Adjust marks per subject as needed.</p>
+              <p className="text-[10px] text-muted-foreground">Subjects load from class configuration. Adjust per subject as needed.</p>
               {selectedClassIds.map((classId) => {
                 const cls = classes.find((c) => c.id === classId)
                 const subs = subjectsByClass[classId] || []
@@ -328,7 +328,7 @@ export function CreateExamDialog({ open, onOpenChange, classes, onCreated }: Cre
           {step === 3 && (
             <div className="space-y-3">
               <Label>Schedule (Optional)</Label>
-              <p className="text-[10px] text-muted-foreground">Set the date, time, and room for each subject exam. Schedule items can also be added later from the exam workspace.</p>
+              <p className="text-[10px] text-muted-foreground">Optional. Schedule items can also be added later from the workspace.</p>
               {selectedClassIds.map((classId) => {
                 const cls = classes.find((c) => c.id === classId)
                 const subs = subjectsByClass[classId] || []
@@ -387,7 +387,7 @@ export function CreateExamDialog({ open, onOpenChange, classes, onCreated }: Cre
                 <ReviewRow label="Schedule items" value={`${Object.values(subjectsByClass).flat().filter((s) => s.date).length} scheduled`} />
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Upon creation, empty ExamMark rows will be auto-created for every student × subject combination in the selected classes. You can then enter marks immediately.
+                Mark rows auto-create for every student × subject. You can enter marks immediately after.
               </p>
             </div>
           )}

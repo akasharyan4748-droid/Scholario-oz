@@ -34,6 +34,7 @@ import {
   type CsvImportRow,
 } from '@/lib/exams/use-exams-extended'
 import { useMarks } from '@/lib/exams/use-exams'
+import { useRoleGate } from '@/lib/exams/use-role-gate'
 import { generateSeatingPlanPDF, generateBatchAdmitCardPDF } from './exams-pdf-extended'
 import { fetchAdmitCardsBatch } from '@/lib/exams/use-exams-extended'
 
@@ -49,6 +50,7 @@ export function SeatingSection({ examId, exam, onReload }: SectionProps) {
   const [classId, setClassId] = useState(exam?.classes[0]?.classId ?? '')
   const { seats, loading, reload } = useSeatingPlan(examId, classId)
   const { generate, loading: generating } = useGenerateSeating()
+  const gate = useRoleGate()
   const [rooms, setRooms] = useState<Array<{ name: string; capacity: number }>>([{ name: 'Room A', capacity: 30 }])
 
   const handleGenerate = async () => {
@@ -99,48 +101,50 @@ export function SeatingSection({ examId, exam, onReload }: SectionProps) {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-border bg-card p-3">
-        <div className="flex items-center gap-2 mb-2">
-          <MapPin className="h-3.5 w-3.5 text-primary" />
-          <p className="text-[10px] uppercase font-semibold text-muted-foreground">Generate Seating Plan</p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-          <Select value={classId} onValueChange={setClassId}>
-            <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select class" /></SelectTrigger>
-            <SelectContent>
-              {exam?.classes.map((c: any) => <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5 mb-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-[10px] uppercase font-semibold text-muted-foreground">Rooms</Label>
-            <Button size="sm" variant="ghost" className="h-6 text-xs gap-1" onClick={addRoom}><Plus className="h-3 w-3" /> Add Room</Button>
+      {gate.canGenerateSeating && (
+        <div className="rounded-xl border border-border bg-card p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <MapPin className="h-3.5 w-3.5 text-primary" />
+            <p className="text-[10px] uppercase font-semibold text-muted-foreground">Generate Seating Plan</p>
           </div>
-          {rooms.map((r, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <Input value={r.name} onChange={(e) => updateRoom(i, 'name', e.target.value)} placeholder="Room name" className="h-7 text-xs flex-1" />
-              <Input type="number" value={r.capacity} onChange={(e) => updateRoom(i, 'capacity', Number(e.target.value))} className="h-7 text-xs w-20" />
-              <button onClick={() => removeRoom(i)} className="text-muted-foreground hover:text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+            <Select value={classId} onValueChange={setClassId}>
+              <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select class" /></SelectTrigger>
+              <SelectContent>
+                {exam?.classes.map((c: any) => <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5 mb-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-[10px] uppercase font-semibold text-muted-foreground">Rooms</Label>
+              <Button size="sm" variant="ghost" className="h-6 text-xs gap-1" onClick={addRoom}><Plus className="h-3 w-3" /> Add Room</Button>
             </div>
-          ))}
+            {rooms.map((r, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Input value={r.name} onChange={(e) => updateRoom(i, 'name', e.target.value)} placeholder="Room name" className="h-7 text-xs flex-1" />
+                <Input type="number" value={r.capacity} onChange={(e) => updateRoom(i, 'capacity', Number(e.target.value))} className="h-7 text-xs w-20" />
+                <button onClick={() => removeRoom(i)} className="text-muted-foreground hover:text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="default" className="h-7 text-xs gap-1.5" onClick={handleGenerate} disabled={generating}>
+              <Sparkles className="h-3 w-3" /> {generating ? 'Generating…' : 'Generate Seating'}
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleExport} disabled={seats.length === 0}>
+              Export Seating PDF
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleBatchAdmitCards}>
+              Generate All Admit Cards (PDF)
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="default" className="h-7 text-xs gap-1.5" onClick={handleGenerate} disabled={generating}>
-            <Sparkles className="h-3 w-3" /> {generating ? 'Generating…' : 'Generate Seating'}
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleExport} disabled={seats.length === 0}>
-            Export Seating PDF
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleBatchAdmitCards}>
-            Generate All Admit Cards (PDF)
-          </Button>
-        </div>
-      </div>
+      )}
 
       {loading ? <InlineLoading label="Loading seating plan…" /> : seats.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">
-          No seating assignments yet. Generate one above.
+          No seating assignments yet.
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -280,6 +284,7 @@ export function GraceSection({ examId, exam }: SectionProps) {
   const [graceMarks, setGraceMarks] = useState(0)
   const [reason, setReason] = useState('')
   const { apply, loading } = useApplyGrace()
+  const gate = useRoleGate()
 
   const subjectsForClass = exam?.subjects.filter((s: any) => !classId || s.classId === classId) ?? []
   const markRows = students.map((s) => {
@@ -349,7 +354,9 @@ export function GraceSection({ examId, exam }: SectionProps) {
               {markRows.map(({ student, mark }) => (
                 <TableRow key={student.id} className={cn(selectedMarkId === mark?.id && 'bg-amber-500/5')}>
                   <TableCell>
-                    <input type="radio" checked={selectedMarkId === mark?.id} onChange={() => { setSelectedMarkId(mark?.id ?? null); setGraceMarks(0); setReason('') }} />
+                    {gate.canApplyGrace && (
+                      <input type="radio" checked={selectedMarkId === mark?.id} onChange={() => { setSelectedMarkId(mark?.id ?? null); setGraceMarks(0); setReason('') }} />
+                    )}
                   </TableCell>
                   <TableCell className="text-xs font-mono">{student.rollNo ?? '—'}</TableCell>
                   <TableCell className="text-xs">{student.name}</TableCell>
@@ -361,7 +368,7 @@ export function GraceSection({ examId, exam }: SectionProps) {
           </Table>
         )}
 
-        {selectedMarkId && (
+        {selectedMarkId && gate.canApplyGrace && (
           <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
             <p className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-300">Apply Grace Marks</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -391,6 +398,8 @@ export function OutcomesSection({ examId, exam }: SectionProps) {
   const { outcomes, loading, reload } = useOutcomes(examId, classId)
   const { compute, loading: computing } = useComputeOutcomes()
   const { override, loading: overriding } = useOverrideOutcome()
+  const gate = useRoleGate()
+  void overriding
 
   const handleCompute = async () => {
     if (!classId) return
@@ -430,9 +439,11 @@ export function OutcomesSection({ examId, exam }: SectionProps) {
             {exam?.classes.map((c: any) => <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Button size="sm" variant="default" className="h-7 text-xs gap-1.5" onClick={handleCompute} disabled={computing || !classId}>
-          <Sparkles className="h-3 w-3" /> {computing ? 'Computing…' : 'Compute Auto Outcomes'}
-        </Button>
+        {gate.canOverrideOutcome && (
+          <Button size="sm" variant="default" className="h-7 text-xs gap-1.5" onClick={handleCompute} disabled={computing || !classId}>
+            <Sparkles className="h-3 w-3" /> {computing ? 'Computing…' : 'Compute Auto Outcomes'}
+          </Button>
+        )}
         {outcomes.length > 0 && (
           <div className="ml-auto flex items-center gap-2 text-[10px]">
             <OutcomeBadge outcome="PROMOTED" count={summary.promoted} />
@@ -471,15 +482,19 @@ export function OutcomesSection({ examId, exam }: SectionProps) {
                   <TableCell className="text-xs text-center tabular-nums">{o.subjectsFailed}</TableCell>
                   <TableCell><OutcomePill outcome={o.outcome} /></TableCell>
                   <TableCell>
-                    <Select value={o.outcome} onValueChange={(v) => handleOverride(o.studentId, v as any)}>
-                      <SelectTrigger size="sm" className="h-6 text-[10px] w-[140px]"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="PROMOTED">Promoted</SelectItem>
-                        <SelectItem value="COMPARTMENT">Compartment</SelectItem>
-                        <SelectItem value="RETEST">Retest</SelectItem>
-                        <SelectItem value="NOT_PROMOTED">Not Promoted</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    {gate.canOverrideOutcome ? (
+                      <Select value={o.outcome} onValueChange={(v) => handleOverride(o.studentId, v as any)}>
+                        <SelectTrigger size="sm" className="h-6 text-[10px] w-[140px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PROMOTED">Promoted</SelectItem>
+                          <SelectItem value="COMPARTMENT">Compartment</SelectItem>
+                          <SelectItem value="RETEST">Retest</SelectItem>
+                          <SelectItem value="NOT_PROMOTED">Not Promoted</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="text-[9px] text-muted-foreground/40">—</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -519,6 +534,7 @@ export function CsvImportSection({ examId, exam }: SectionProps) {
   const [preview, setPreview] = useState<CsvImportRow[] | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const { importCsv, loading } = useImportMarksCsv()
+  const gate = useRoleGate()
 
   const subjectsForClass = exam?.subjects.filter((s: any) => !classId || s.classId === classId) ?? []
 
@@ -600,13 +616,16 @@ export function CsvImportSection({ examId, exam }: SectionProps) {
           className="text-xs font-mono h-32"
         />
         <div className="flex flex-wrap gap-2 mt-2">
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleParse} disabled={!pasteText.trim()}>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleParse} disabled={!pasteText.trim() || !gate.canImportCsv}>
             Parse & Preview
           </Button>
-          {preview && (
+          {preview && gate.canImportCsv && (
             <Button size="sm" variant="default" className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleImport} disabled={loading || preview.length === 0}>
               {loading ? 'Importing…' : `Import ${preview.length} rows`}
             </Button>
+          )}
+          {!gate.canImportCsv && (
+            <p className="text-[10px] text-muted-foreground self-center">Read-only — you don't have permission to import marks.</p>
           )}
         </div>
         {errors.length > 0 && (

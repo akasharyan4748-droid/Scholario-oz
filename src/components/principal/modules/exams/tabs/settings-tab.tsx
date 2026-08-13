@@ -1,11 +1,7 @@
 'use client'
 
 /**
- * SettingsTab — display grading configuration, exam types, and academic session.
- *
- * These settings are server-side constants today (configured via schema +
- * types.ts). A future iteration could expose editable configuration via a
- * dedicated settings API, but for now we show what's authoritative.
+ * SettingsTab — grading configuration, exam types, and academic session.
  */
 
 import { Settings as SettingsIcon, GraduationCap, Calendar } from 'lucide-react'
@@ -21,9 +17,6 @@ export function SettingsTab() {
           <SettingsIcon className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-semibold">Examination Settings</h3>
         </div>
-        <p className="text-[10px] text-muted-foreground mb-4">
-          Configuration for the academic session. All examinations created in this session inherit these defaults.
-        </p>
 
         {/* Grading configuration */}
         <div className="space-y-2 mb-4">
@@ -96,9 +89,6 @@ export function SettingsTab() {
       {/* Workflow states reference */}
       <div className="rounded-xl border border-border bg-card p-4">
         <h3 className="text-sm font-semibold mb-3">Marks Workflow</h3>
-        <p className="text-[10px] text-muted-foreground mb-3">
-          All examination marks pass through a four-state workflow to ensure data integrity.
-        </p>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
           {[
             { state: 'DRAFT', color: 'bg-muted text-muted-foreground border-border', desc: 'Teacher editing marks' },
