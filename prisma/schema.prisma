@@ -118,6 +118,9 @@ model Student {
   attendance Attendance[]
   bookIssues BookIssue[]
   examMarks  ExamMark[]
+  examAttendance ExamAttendance[]
+  seatAssignments ExamSeatAssignment[]
+  resultOutcomes ExamResultOutcome[]
 }
 
 model Class {
@@ -194,6 +197,9 @@ model Exam {
   scheduleItems  ExamScheduleItem[]
   marks          ExamMark[]
   auditLogs      ExamAuditLog[]
+  examAttendance ExamAttendance[]
+  seatAssignments ExamSeatAssignment[]
+  resultOutcomes ExamResultOutcome[]
 }
 
 model ExamClass {
@@ -240,6 +246,8 @@ model ExamScheduleItem {
   invigilatorId    String?
   invigilatorName  String?
   createdAt        DateTime @default(now())
+
+  examAttendance ExamAttendance[]
 }
 
 model ExamMark {
@@ -269,6 +277,60 @@ model ExamMark {
   updatedAt      DateTime @updatedAt
 
   @@unique([examId, classId, subjectId, studentId])
+}
+
+model ExamAttendance {
+  id            String   @id @default(cuid())
+  examId        String
+  exam          Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  scheduleItemId String?
+  scheduleItem  ExamScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: SetNull)
+  classId       String
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId     String?
+  date          DateTime
+  status        String   @default("PRESENT") // PRESENT, ABSENT, MEDICAL, EXEMPTED
+  remarks       String?
+  markedBy      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([examId, studentId, subjectId, date])
+}
+
+model ExamSeatAssignment {
+  id        String   @id @default(cuid())
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId   String
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  room      String
+  seatNumber Int
+  row       Int?
+  column    Int?
+  createdAt DateTime @default(now())
+
+  @@unique([examId, classId, studentId])
+  @@unique([examId, room, seatNumber])
+}
+
+model ExamResultOutcome {
+  id           String   @id @default(cuid())
+  examId       String
+  exam         Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId      String
+  outcome      String   @default("PROMOTED") // PROMOTED, COMPARTMENT, RETEST, NOT_PROMOTED
+  reason       String?
+  overrideBy   String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([examId, studentId])
 }
 
 model ExamAuditLog {

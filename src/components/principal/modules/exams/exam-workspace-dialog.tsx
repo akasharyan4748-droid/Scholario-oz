@@ -35,6 +35,19 @@ import {
   useAuditLogs,
   useClassResults,
 } from '@/lib/exams/use-exams'
+import {
+  SeatingSection,
+  AttendanceSection,
+  GraceSection,
+  OutcomesSection,
+  CsvImportSection,
+} from './workspace-sections-extended'
+import {
+  useUpdateScheduleItemV2,
+  useTeachers,
+  useAssignInvigilator,
+  usePublishResults,
+} from '@/lib/exams/use-exams-extended'
 
 interface Props {
   examId: string
@@ -42,13 +55,18 @@ interface Props {
   onMutated: () => void
 }
 
-type Tab = 'overview' | 'schedule' | 'marks' | 'results' | 'audit'
+type Tab = 'overview' | 'schedule' | 'marks' | 'csv-import' | 'results' | 'outcomes' | 'seating' | 'attendance' | 'grace' | 'audit'
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'schedule', label: 'Schedule' },
   { value: 'marks', label: 'Marks' },
+  { value: 'csv-import', label: 'Import' },
   { value: 'results', label: 'Results' },
+  { value: 'outcomes', label: 'Outcomes' },
+  { value: 'seating', label: 'Seating' },
+  { value: 'attendance', label: 'Attendance' },
+  { value: 'grace', label: 'Grace' },
   { value: 'audit', label: 'Audit' },
 ]
 
@@ -119,6 +137,31 @@ export function ExamWorkspaceDialog({ examId, onOpenChange, onMutated }: Props) 
               {tab === 'audit' && (
                 <motion.div key="au" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
                   <AuditSection examId={exam.id} />
+                </motion.div>
+              )}
+              {tab === 'csv-import' && (
+                <motion.div key="ci" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
+                  <CsvImportSection examId={exam.id} exam={exam} onReload={handleReload} />
+                </motion.div>
+              )}
+              {tab === 'outcomes' && (
+                <motion.div key="oc" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
+                  <OutcomesSection examId={exam.id} exam={exam} onReload={handleReload} />
+                </motion.div>
+              )}
+              {tab === 'seating' && (
+                <motion.div key="se" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
+                  <SeatingSection examId={exam.id} exam={exam} onReload={handleReload} />
+                </motion.div>
+              )}
+              {tab === 'attendance' && (
+                <motion.div key="at" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
+                  <AttendanceSection examId={exam.id} exam={exam} onReload={handleReload} />
+                </motion.div>
+              )}
+              {tab === 'grace' && (
+                <motion.div key="gr" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
+                  <GraceSection examId={exam.id} exam={exam} onReload={handleReload} />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -249,6 +292,9 @@ function OverviewSection({ exam, onReload }: { exam: any; onReload: () => void }
 function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }) {
   const { add } = useAddScheduleItem()
   const { remove } = useDeleteScheduleItem()
+  const { update: updateItem } = useUpdateScheduleItemV2()
+  const { teachers } = useTeachers(exam.id)
+  const { assign: assignInvigilator } = useAssignInvigilator()
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
   const [subjectId, setSubjectId] = useState('')
   const [date, setDate] = useState('')
@@ -256,6 +302,11 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
   const [endTime, setEndTime] = useState('10:00')
   const [room, setRoom] = useState('')
   const [invigilator, setInvigilator] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editRoom, setEditRoom] = useState('')
+  const [editDate, setEditDate] = useState('')
+  const [editStart, setEditStart] = useState('')
+  const [editEnd, setEditEnd] = useState('')
 
   const handleAdd = async () => {
     if (!classId || !subjectId || !date) {
@@ -279,6 +330,33 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
       onReload()
     } catch (e: any) {
       toast.error('Failed to remove schedule item', { description: e.message })
+    }
+  }
+
+  const handleSaveEdit = async (item: any) => {
+    try {
+      await updateItem(exam.id, item.id, {
+        date: editDate || undefined,
+        startTime: editStart || undefined,
+        endTime: editEnd || undefined,
+        room: editRoom,
+      })
+      toast.success('Schedule item updated')
+      setEditingId(null)
+      onReload()
+    } catch (e: any) {
+      toast.error('Failed to update', { description: e.message })
+    }
+  }
+
+  const handleAssignInvigilator = async (itemId: string, teacherId: string) => {
+    if (!teacherId) return
+    try {
+      await assignInvigilator(exam.id, itemId, teacherId)
+      toast.success('Invigilator assigned')
+      onReload()
+    } catch (e: any) {
+      toast.error('Failed to assign invigilator', { description: e.message })
     }
   }
 
@@ -306,7 +384,7 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
           <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-7 text-xs" />
           <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="h-7 text-xs" />
           <Input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Room" className="h-7 text-xs" />
-          <Input value={invigilator} onChange={(e) => setInvigilator(e.target.value)} placeholder="Invigilator name" className="h-7 text-xs" />
+          <Input value={invigilator} onChange={(e) => setInvigilator(e.target.value)} placeholder="Invigilator name (or assign below)" className="h-7 text-xs" />
         </div>
         <Button size="sm" className="mt-2 h-7 text-xs gap-1" onClick={handleAdd}>
           <Plus className="h-3 w-3" /> Add to Schedule
@@ -314,10 +392,13 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
       </div>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="px-3 py-2 border-b border-border">
+        <div className="px-3 py-2 border-b border-border flex items-center gap-2">
           <p className="text-[10px] uppercase font-semibold text-muted-foreground">
             Schedule for {exam.classes.find((c: any) => c.classId === classId)?.className ?? '—'} ({scheduleForClass.length} items)
           </p>
+          {teachers.length > 0 && (
+            <span className="text-[10px] text-muted-foreground ml-auto">{teachers.length} teachers available</span>
+          )}
         </div>
         {scheduleForClass.length === 0 ? (
           <div className="p-6 text-center text-xs text-muted-foreground">No schedule items yet. Add one above.</div>
@@ -330,21 +411,84 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
                 <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Time</th>
                 <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Room</th>
                 <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Invigilator</th>
-                <th className="w-12"></th>
+                <th className="w-16"></th>
               </tr>
             </thead>
             <tbody>
               {scheduleForClass.map((s: any) => (
                 <tr key={s.id} className="border-b border-border/40 last:border-0 hover:bg-muted/20">
                   <td className="px-3 py-2 font-medium">{s.subjectName ?? '—'}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{s.date ? new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{s.startTime} — {s.endTime}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{s.room ?? '—'}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{s.invigilatorName ?? '—'}</td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {editingId === s.id ? (
+                      <DatePicker value={editDate} onChange={setEditDate} compact placeholder="Date" className="w-[110px]" />
+                    ) : (
+                      s.date ? new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {editingId === s.id ? (
+                      <div className="flex items-center gap-1">
+                        <Input type="time" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="h-6 text-[10px] w-14" />
+                        <span className="text-[9px]">–</span>
+                        <Input type="time" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="h-6 text-[10px] w-14" />
+                      </div>
+                    ) : (
+                      <span>{s.startTime} — {s.endTime}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {editingId === s.id ? (
+                      <Input value={editRoom} onChange={(e) => setEditRoom(e.target.value)} placeholder="Room" className="h-6 text-[10px] w-20" />
+                    ) : (
+                      s.room ?? '—'
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {teachers.length > 0 ? (
+                      <Select
+                        value={s.invigilatorName ?? ''}
+                        onValueChange={(v) => {
+                          const teacher = teachers.find((t) => t.name === v)
+                          if (teacher) handleAssignInvigilator(s.id, teacher.id)
+                        }}
+                      >
+                        <SelectTrigger size="sm" className="h-6 text-[10px]"><SelectValue placeholder="Assign teacher" /></SelectTrigger>
+                        <SelectContent>
+                          {teachers.map((t) => <SelectItem key={t.id} value={t.name}>{t.name} {t.department ? `· ${t.department}` : ''}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="text-muted-foreground">{s.invigilatorName ?? '—'}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right">
-                    <button onClick={() => handleDelete(s.id)} className="text-muted-foreground hover:text-rose-600 transition-colors">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {editingId === s.id ? (
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => handleSaveEdit(s)} className="text-emerald-600 hover:text-emerald-700">
+                          <Save className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground text-[10px]">✕</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingId(s.id)
+                            setEditDate(s.date ? new Date(s.date).toISOString().split('T')[0] : '')
+                            setEditStart(s.startTime)
+                            setEditEnd(s.endTime)
+                            setEditRoom(s.room ?? '')
+                          }}
+                          className="text-muted-foreground hover:text-primary transition-colors"
+                          title="Edit"
+                        >
+                          <Save className="h-3.5 w-3.5 opacity-50" />
+                        </button>
+                        <button onClick={() => handleDelete(s.id)} className="text-muted-foreground hover:text-rose-600 transition-colors" title="Delete">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -363,12 +507,13 @@ function MarksSection({ exam, onReload }: { exam: any; onReload: () => void }) {
   const { verify } = useVerifyMarks()
   const { lock } = useLockMarks()
   const { declare } = useDeclareResults()
+  const { publish } = usePublishResults()
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
   const [subjectId, setSubjectId] = useState('')
 
   const subjectsForClass = exam.subjects.filter((s: any) => s.classId === classId)
 
-  const handleAction = async (action: 'submit' | 'verify' | 'lock' | 'declare') => {
+  const handleAction = async (action: 'submit' | 'verify' | 'lock' | 'declare' | 'publish') => {
     try {
       const filter = { classId, ...(subjectId ? { subjectId } : {}) }
       if (action === 'submit') {
@@ -383,6 +528,9 @@ function MarksSection({ exam, onReload }: { exam: any; onReload: () => void }) {
       } else if (action === 'declare') {
         await declare(exam.id)
         toast.success('Results declared')
+      } else if (action === 'publish') {
+        const r = await publish(exam.id, { notifyStudents: true, notifyParents: true })
+        toast.success(`Results published`, { description: `${r.notificationsSent} student notifications sent.` })
       }
       onReload()
     } catch (e: any) {
@@ -424,6 +572,9 @@ function MarksSection({ exam, onReload }: { exam: any; onReload: () => void }) {
           </Button>
           <Button size="sm" variant="default" className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleAction('declare')} disabled={exam.resultStatus !== 'Result Ready'}>
             <Check className="h-3 w-3" /> Declare Results
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('publish')} disabled={exam.resultStatus !== 'Result Declared'}>
+            <Send className="h-3 w-3" /> Publish & Notify
           </Button>
         </div>
       </div>

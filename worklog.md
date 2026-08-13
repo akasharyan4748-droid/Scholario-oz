@@ -1435,3 +1435,49 @@ Stage Summary:
 - All 9 audit log actions recorded during acceptance test: EXAM_CREATED, MARK_ENTERED (×N), MARK_SUBMITTED, MARK_VERIFIED, MARK_LOCKED, RESULT_DECLARED.
 - 3 PDF report types functional: Class Grade Sheet (tested, downloaded), Individual Report Card, Admit Card.
 - Files added: 11 new files in src/lib/exams/ + src/app/api/exams/[id]/ + src/components/principal/modules/exams/tabs/. Files deleted: 10 obsolete mock/localStorage files.
+
+---
+Task ID: exams-p1-p2-gap-audit-and-implementation
+Agent: Super Z (main)
+Task: Strict gap audit of the Principal Examination module against the 25-area spec, then implement P1+P2 features that were missing — without breaking the working P0 core.
+
+Work Log:
+- Performed strict UI audit via headless browser (agent-browser): logged in as principal@greenwood.edu.in, opened Examinations, navigated Overview/Exams/Schedule/Marks/Results/Reports/Settings + workspace Overview/Schedule/Marks/Results/Audit. Classified 25 areas as ✓/⚠/✗.
+- Audit results: 11 ✓ fully functional, 4 ⚠ partial, 10 ✗ missing. Missing critical features: Schedule edit-in-place, Seating plan, Exam attendance, Invigilator roster with overlap detection, Grace/Moderation UI, Promotion/Compartment/Retest outcomes, CSV import, Result publication+notification, class-wise batch admit card PDF.
+- Extended Prisma schema with 3 new models: ExamAttendance (examId+studentId+subjectId+date unique, links to scheduleItem), ExamSeatAssignment (room+seatNumber unique, row/column for grid layout), ExamResultOutcome (examId+studentId unique, outcome PROMOTED/COMPARTMENT/RETEST/NOT_PROMOTED with override tracking).
+- Created src/lib/exams/service-extended.ts (~600 LOC) with pure server-side functions: updateScheduleItem (with conflict detection), listTeachers (real Teacher table), assignInvigilator (with overlap detection), generateSeatingPlan (multi-room distribution by roll number), getSeatingPlan, markExamAttendance, autoMarkAttendanceFromExamMarks (syncs ABSENT/MEDICAL/EXEMPTED from marks), applyGraceMarks (preserves originalMarks, audits reason+authorizedBy), computeAutoOutcomes (PROMOTED if passed, COMPARTMENT if 1 fail, RETEST if 2 fails, NOT_PROMOTED otherwise), overrideOutcome, getOutcomes (joins with computed analytics), importMarksCsv (validates student roll numbers, max marks, locked status), publishResults (sends notifications to all students of all classes in exam).
+- Created 12 new API routes: /api/exams/[id]/{schedule/items/[itemId] (PATCH), invigilator (GET+POST), seating (GET), seating/generate (POST), attendance (GET+POST), attendance/auto (POST), grace (POST), outcomes (GET), outcomes/compute (POST), outcomes/[studentId] (PATCH), marks/import (POST), marks/template (GET, returns CSV with real students), publish (POST), admit-cards (POST, returns batch data)}.
+- Created src/lib/exams/use-exams-extended.ts (~280 LOC) with React hooks: useUpdateScheduleItemV2, useTeachers, useAssignInvigilator, useSeatingPlan, useGenerateSeating, useExamAttendance, useMarkExamAttendance, useAutoMarkAttendance, useApplyGrace, useOutcomes, useComputeOutcomes, useOverrideOutcome, useImportMarksCsv, downloadCsvTemplate (Blob download), usePublishResults, fetchAdmitCardsBatch.
+- Created src/components/principal/modules/exams/exams-pdf-extended.ts with 2 new PDF generators: generateBatchAdmitCardPDF (one A4 page per student with schedule + seat info), generateSeatingPlanPDF (landscape A4 with room-by-room tables). Both verified working.
+- Created src/components/principal/modules/exams/workspace-sections-extended.tsx (~580 LOC) with 5 new workspace sections: SeatingSection (room input + generate + export PDF + batch admit cards), AttendanceSection (auto-mark from marks button + grouped by date/subject), GraceSection (mark selection + grace input + reason + apply, with originalMarks preservation), OutcomesSection (compute auto + override dropdown per student + summary badges), CsvImportSection (template download + paste textarea + parse + preview + import with error list).
+- Extended exam-workspace-dialog.tsx ScheduleSection: added edit-in-place (date/time/room editable inline via pencil icon), added invigilator dropdown that loads real teachers from /api/exams/[id]/invigilator and assigns with overlap detection, added "Publish & Notify" button to MarksSection for sending notifications.
+- Workspace dialog now has 10 tabs (was 5): Overview | Schedule | Marks | Import | Results | Outcomes | Seating | Attendance | Grace | Audit.
+- Built scripts/test-p1-p2-features.ts that exercises all new APIs end-to-end. All 20 steps pass:
+  • Schedule item PATCH (room updated to "Updated Room 999" ✓)
+  • Invigilator roster: 4 real teachers loaded, Mr. Arjun Nair assigned ✓
+  • Seating: 11 students seated in Hall A, Aarav Sharma at seat #1 ✓
+  • Exam attendance: 1 ABSENT auto-synced from marks ✓
+  • Outcomes: 10 PROMOTED + 1 COMPARTMENT computed ✓
+  • Outcome override: Aarav Sharma manually overridden to RETEST ✓
+  • CSV template: API returns CSV with all 11 students ✓
+  • CSV import: 10 accepted, 2 rejected (invalid roll numbers caught) ✓
+  • Grace marks: +5 applied, original=47 preserved, new total=52 ✓
+  • Publish: 11 student notifications sent ✓
+  • Audit: 49 entries with all 12 new action types ✓
+- Browser-tested all new tabs via agent-browser as principal:
+  • Seating tab: shows 11 seat assignments in Hall A with seat numbers
+  • Outcomes tab: shows summary badges (PROMOTED/COMPARTMENT/RETEST/NOT_PROMOTED) + table with per-student override dropdowns
+  • Attendance tab: shows Ananya Gupta ABSENT with Auto-mark from Marks button
+  • Grace tab: shows "Grace / Moderation" warning + student list with selection
+  • Import tab: shows Download CSV Template + Parse & Preview + Import buttons
+  • Schedule tab: shows 4 teachers available dropdown + edit-in-place controls
+- Verified 0 browser console errors and 0 TypeScript errors across all new files.
+- Verified P0 features still work (no regression): PDFs still generate (Class Grade Sheet, Report Card for Aditya Singh, Admit Card for Aarav Sharma). All 4 exam cards still visible. Overview tab still shows real KPIs.
+
+Stage Summary:
+- 13 of 25 areas now ✓ fully functional from Principal UI (was 11 before this round).
+- 8 new areas implemented: schedule edit, invigilator roster, seating plan, exam attendance, CSV import, grace/moderation, promotion/compartment/retest, result publication with notifications.
+- Remaining ⚠ partial / ✗ missing (out of scope this round): Question Paper/Stationery tracking, No-dues restriction, Student-facing result visibility, advanced analytics refinement.
+- All new features wired to real Prisma database via authenticated API. No localStorage, no mock data, no fake students.
+- Schema additions applied via `prisma db push` (no data loss). Database size grew from 442 KB to ~470 KB with new seating/outcome/attendance tables populated.
+- 0 TypeScript errors, 0 runtime errors, 0 console errors during full audit + implementation.

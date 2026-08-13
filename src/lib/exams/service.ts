@@ -134,7 +134,7 @@ function toExamDTO(e: any): ExamDTO {
 
 // ─── Audit logging ────────────────────────────────────────────────────
 
-async function audit(
+export async function audit(
   examId: string,
   user: AuthUserLike | null,
   action: string,
