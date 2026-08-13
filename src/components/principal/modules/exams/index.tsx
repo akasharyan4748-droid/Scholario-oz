@@ -3,12 +3,12 @@
 /**
  * ExamsModule — Principal-facing Examinations workspace.
  *
- * Reads exclusively from /api/exams/* — no localStorage, no mock data.
- * Tab structure (per user spec):
- *   Overview | Exams | Schedule | Marks | Results | Reports | Settings
+ * Architecture: full-screen workspaces, NOT modals.
+ *   • List view (Overview / Exams / Schedule / Marks / Results / Reports / Settings)
+ *   • Exam Workspace (full-screen, 10 sections)
+ *   • Create Examination (full-screen, 5-step wizard)
  *
- * "All Exams / Scheduled / Ongoing / Completed / Results" are FILTERS
- * inside the Exams tab, NOT top-level navigation.
+ * Reads exclusively from /api/exams/* — no localStorage, no mock data.
  */
 
 import { useState } from 'react'
@@ -25,11 +25,11 @@ import { MarksTab } from './tabs/marks-tab'
 import { ResultsTab } from './tabs/results-tab'
 import { ReportsTab } from './tabs/reports-tab'
 import { SettingsTab } from './tabs/settings-tab'
-import { CreateExamDialog } from './create-exam-dialog'
-import { ExamWorkspaceDialog } from './exam-workspace-dialog'
-import { type ExamDTO } from '@/lib/exams/types'
+import { CreateExamFullScreen } from './create-exam-fullscreen'
+import { ExamWorkspace } from './exam-workspace'
 
 type SectionTab = 'overview' | 'exams' | 'schedule' | 'marks' | 'results' | 'reports' | 'settings'
+type View = { kind: 'list' } | { kind: 'exam'; examId: string } | { kind: 'create' }
 
 const SECTION_TABS = [
   { value: 'overview', label: 'Overview' },
@@ -43,14 +43,36 @@ const SECTION_TABS = [
 
 export function ExamsModule() {
   const [section, setSection] = useState<SectionTab>('overview')
-  const [createOpen, setCreateOpen] = useState(false)
-  const [selectedExamId, setSelectedExamId] = useState<string | null>(null)
+  const [view, setView] = useState<View>({ kind: 'list' })
 
   const { exams, classes, loading, error, reload } = useExamsList()
 
+  // Full-screen views take over the entire content area
+  if (view.kind === 'exam') {
+    return (
+      <ExamWorkspace
+        examId={view.examId}
+        onBack={() => setView({ kind: 'list' })}
+        onMutated={reload}
+      />
+    )
+  }
+  if (view.kind === 'create') {
+    return (
+      <CreateExamFullScreen
+        classes={classes}
+        onBack={() => setView({ kind: 'list' })}
+        onCreated={(exam) => {
+          reload()
+          setView({ kind: 'exam', examId: exam.id })
+        }}
+      />
+    )
+  }
+
+  // List view — the standard Examinations landing
   return (
     <PageTransition className="space-y-4">
-      {/* Top-level section navigation */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <SegmentedTabs
           tabs={SECTION_TABS}
@@ -59,7 +81,7 @@ export function ExamsModule() {
         />
         {section === 'exams' && (
           <Button
-            onClick={() => setCreateOpen(true)}
+            onClick={() => setView({ kind: 'create' })}
             size="sm"
             className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
           >
@@ -70,120 +92,55 @@ export function ExamsModule() {
 
       <AnimatePresence mode="wait">
         {section === 'overview' && (
-          <motion.div
-            key="overview"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
+          <motion.div key="overview" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
             <ExamsOverviewTab
               exams={exams}
               classes={classes}
               loading={loading}
               error={error}
-              onSelectExam={(id) => setSelectedExamId(id)}
+              onSelectExam={(id) => setView({ kind: 'exam', examId: id })}
               onGoToExams={() => setSection('exams')}
             />
           </motion.div>
         )}
-
         {section === 'exams' && (
-          <motion.div
-            key="exams"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
+          <motion.div key="exams" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
             <ExamsListTab
               exams={exams}
               loading={loading}
               error={error}
-              onOpenExam={(id) => setSelectedExamId(id)}
+              onOpenExam={(id) => setView({ kind: 'exam', examId: id })}
               onReload={reload}
+              onCreate={() => setView({ kind: 'create' })}
             />
           </motion.div>
         )}
-
         {section === 'schedule' && (
-          <motion.div
-            key="schedule"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
-            <ScheduleTab exams={exams} onOpenExam={(id) => setSelectedExamId(id)} />
+          <motion.div key="schedule" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
+            <ScheduleTab exams={exams} onOpenExam={(id) => setView({ kind: 'exam', examId: id })} />
           </motion.div>
         )}
-
         {section === 'marks' && (
-          <motion.div
-            key="marks"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
+          <motion.div key="marks" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
             <MarksTab exams={exams} />
           </motion.div>
         )}
-
         {section === 'results' && (
-          <motion.div
-            key="results"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
-            <ResultsTab exams={exams} onOpenExam={(id) => setSelectedExamId(id)} />
+          <motion.div key="results" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
+            <ResultsTab exams={exams} onOpenExam={(id) => setView({ kind: 'exam', examId: id })} />
           </motion.div>
         )}
-
         {section === 'reports' && (
-          <motion.div
-            key="reports"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
+          <motion.div key="reports" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
             <ReportsTab exams={exams} />
           </motion.div>
         )}
-
         {section === 'settings' && (
-          <motion.div
-            key="settings"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
+          <motion.div key="settings" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
             <SettingsTab />
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Dialogs */}
-      <CreateExamDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        classes={classes}
-        onCreated={(exam) => {
-          reload()
-          setSelectedExamId(exam.id)
-        }}
-      />
-      {selectedExamId && (
-        <ExamWorkspaceDialog
-          examId={selectedExamId}
-          onOpenChange={(o) => !o && setSelectedExamId(null)}
-          onMutated={reload}
-        />
-      )}
     </PageTransition>
   )
 }

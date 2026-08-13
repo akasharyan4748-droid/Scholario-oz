@@ -27,6 +27,7 @@ interface Props {
   error: string | null
   onOpenExam: (id: string) => void
   onReload: () => void
+  onCreate?: () => void
 }
 
 type Filter = 'all' | 'scheduled' | 'ongoing' | 'completed' | 'results'
@@ -120,6 +121,7 @@ export function ExamsListTab({ exams, loading, error, onOpenExam }: Props) {
 
 function ExamCard({ exam, delay, onOpen }: { exam: ExamDTO; delay: number; onOpen: () => void }) {
   const markPct = exam.markSummary.pct
+  const totalStudents = exam.classes.reduce((s, c) => s + c.studentCount, 0)
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -132,18 +134,30 @@ function ExamCard({ exam, delay, onOpen }: { exam: ExamDTO; delay: number; onOpe
         <div className="min-w-0">
           <p className="font-semibold text-sm text-foreground truncate">{exam.name}</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            {exam.classes[0]?.className ?? '—'}
-            {exam.classes.length > 1 && ` +${exam.classes.length - 1}`}
-            {' · '}
-            {exam.subjects.length} subjects
+            {exam.session} · {exam.type}
           </p>
         </div>
-        <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 text-primary px-1.5 py-0.5 text-[9px] font-semibold shrink-0">
-          {exam.type}
-        </span>
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
       </div>
 
-      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-3">
+      {/* Meta grid — classes, subjects, students */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="rounded-md bg-muted/30 px-2 py-1">
+          <p className="text-[8px] uppercase text-muted-foreground">Classes</p>
+          <p className="text-xs font-bold tabular-nums">{exam.classes.length}</p>
+        </div>
+        <div className="rounded-md bg-muted/30 px-2 py-1">
+          <p className="text-[8px] uppercase text-muted-foreground">Subjects</p>
+          <p className="text-xs font-bold tabular-nums">{exam.subjects.length}</p>
+        </div>
+        <div className="rounded-md bg-muted/30 px-2 py-1">
+          <p className="text-[8px] uppercase text-muted-foreground">Students</p>
+          <p className="text-xs font-bold tabular-nums">{totalStudents}</p>
+        </div>
+      </div>
+
+      {/* Date range */}
+      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2">
         <Calendar className="h-3 w-3 shrink-0" />
         <span>{exam.startDate || 'TBD'}</span>
         {exam.endDate && exam.endDate !== exam.startDate && (
@@ -154,23 +168,25 @@ function ExamCard({ exam, delay, onOpen }: { exam: ExamDTO; delay: number; onOpe
         )}
       </div>
 
-      {/* Marks progress bar */}
+      {/* Marks progress */}
       <div className="mb-2">
         <div className="flex items-center justify-between text-[9px] text-muted-foreground mb-0.5">
           <span className="flex items-center gap-1">
-            <Clock className="h-2.5 w-2.5" /> Marks Entry
+            <Clock className="h-2.5 w-2.5" /> Evaluation
           </span>
-          <span className="font-semibold tabular-nums">{exam.markSummary.entered}/{exam.markSummary.total}</span>
+          <span className="font-semibold tabular-nums">
+            {exam.markSummary.total > 0 ? `${exam.markSummary.entered}/${exam.markSummary.total} · ${markPct}%` : '—'}
+          </span>
         </div>
         <div className="h-1 rounded-full bg-muted/60 overflow-hidden">
           <div className="h-full rounded-full bg-primary" style={{ width: `${markPct}%` }} />
         </div>
       </div>
 
-      <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+      {/* Status pills */}
+      <div className="flex items-center gap-1.5 pt-2 border-t border-border/40 flex-wrap">
         <StatusPill status={exam.status} />
         <ResultStatusPill status={exam.resultStatus} />
-        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground ml-auto group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
       </div>
     </motion.div>
   )

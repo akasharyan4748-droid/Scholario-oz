@@ -1,19 +1,17 @@
 'use client'
 
 /**
- * ExamWorkspaceDialog — Principal's workspace for a single real exam.
+ * ExamWorkspace — full-screen examination workspace.
  *
- * Sections: Overview | Schedule | Marks | Results | Audit
- * All sections operate on the actual exam entity loaded from the API.
- * Replaces the old hardcoded "Unit Test" details dialog.
+ * Replaces the old modal ExamWorkspaceDialog. The Principal enters
+ * this workspace when they click an exam. It takes over the entire
+ * content area with a top header (back + title + status) and a
+ * 10-section navigation bar.
  */
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Save, Send, ShieldCheck, Lock, Check, History } from 'lucide-react'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog'
+import { ArrowLeft, Pencil, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,33 +34,33 @@ import {
   useClassResults,
 } from '@/lib/exams/use-exams'
 import {
-  SeatingSection,
-  AttendanceSection,
-  GraceSection,
-  OutcomesSection,
-  CsvImportSection,
-} from './workspace-sections-extended'
-import {
   useUpdateScheduleItemV2,
   useTeachers,
   useAssignInvigilator,
   usePublishResults,
 } from '@/lib/exams/use-exams-extended'
 import { useRoleGate } from '@/lib/exams/use-role-gate'
+import {
+  SeatingSection,
+  AttendanceSection,
+  GraceSection,
+  OutcomesSection,
+  CsvImportSection,
+} from './workspace-sections-extended'
 
 interface Props {
   examId: string
-  onOpenChange: (o: boolean) => void
+  onBack: () => void
   onMutated: () => void
 }
 
-type Tab = 'overview' | 'schedule' | 'marks' | 'csv-import' | 'results' | 'outcomes' | 'seating' | 'attendance' | 'grace' | 'audit'
+type Tab = 'overview' | 'schedule' | 'marks' | 'import' | 'results' | 'outcomes' | 'seating' | 'attendance' | 'grace' | 'audit'
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'schedule', label: 'Schedule' },
   { value: 'marks', label: 'Marks' },
-  { value: 'csv-import', label: 'Import' },
+  { value: 'import', label: 'Import' },
   { value: 'results', label: 'Results' },
   { value: 'outcomes', label: 'Outcomes' },
   { value: 'seating', label: 'Seating' },
@@ -71,7 +69,7 @@ const TABS = [
   { value: 'audit', label: 'Audit' },
 ]
 
-export function ExamWorkspaceDialog({ examId, onOpenChange, onMutated }: Props) {
+export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
   const [tab, setTab] = useState<Tab>('overview')
   const { exam, loading, error, reload } = useExam(examId)
 
@@ -81,17 +79,22 @@ export function ExamWorkspaceDialog({ examId, onOpenChange, onMutated }: Props) 
   }
 
   return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[calc(100vw-1.5rem)] sm:max-w-5xl p-0 gap-0 max-h-[88vh] overflow-hidden flex flex-col">
-        <DialogHeader className="px-4 pt-4 pb-3 border-b border-border shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <DialogTitle className="text-sm font-semibold truncate">
-                {exam?.name ?? 'Loading…'}
-              </DialogTitle>
-              <DialogDescription className="text-[10px] mt-0.5">
-                {exam ? `${exam.type} · ${exam.session} · ${exam.classes.length} classes · ${exam.subjects.length} subjects` : ''}
-              </DialogDescription>
+    <div className="flex flex-col h-full -mt-4 -mx-4 sm:-mx-6">
+      {/* Top header — full width */}
+      <div className="border-b border-border bg-card/80 backdrop-blur sticky top-0 z-20">
+        <div className="px-4 sm:px-6 py-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1" onClick={onBack}>
+                <ArrowLeft className="h-3.5 w-3.5" /> Examinations
+              </Button>
+              <div className="h-5 w-px bg-border" />
+              <div className="min-w-0">
+                <h1 className="text-base font-semibold truncate">{exam?.name ?? 'Loading…'}</h1>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {exam ? `${exam.type} · ${exam.session} · ${exam.classes.length} classes · ${exam.subjects.length} subjects` : ''}
+                </p>
+              </div>
             </div>
             {exam && (
               <div className="flex items-center gap-2 shrink-0">
@@ -100,76 +103,45 @@ export function ExamWorkspaceDialog({ examId, onOpenChange, onMutated }: Props) 
               </div>
             )}
           </div>
-        </DialogHeader>
-
-        <div className="px-4 py-2 border-b border-border/60 shrink-0">
+        </div>
+        {/* Section navigation */}
+        <div className="px-4 sm:px-6 pb-3 overflow-x-auto">
           <SegmentedTabs tabs={TABS} value={tab} onValueChange={(v) => setTab(v as Tab)} />
         </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          {loading ? (
-            <InlineLoading label="Loading examination…" />
-          ) : error ? (
-            <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3">
-              <p className="text-xs text-rose-700">{error}</p>
-            </div>
-          ) : !exam ? null : (
-            <AnimatePresence mode="wait">
-              {tab === 'overview' && (
-                <motion.div key="ov" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                  <OverviewSection exam={exam} onReload={handleReload} />
-                </motion.div>
-              )}
-              {tab === 'schedule' && (
-                <motion.div key="sc" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                  <ScheduleSection exam={exam} onReload={handleReload} />
-                </motion.div>
-              )}
-              {tab === 'marks' && (
-                <motion.div key="mk" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                  <MarksSection exam={exam} onReload={handleReload} />
-                </motion.div>
-              )}
-              {tab === 'results' && (
-                <motion.div key="rs" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                  <ResultsSection exam={exam} onReload={handleReload} />
-                </motion.div>
-              )}
-              {tab === 'audit' && (
-                <motion.div key="au" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                  <AuditSection examId={exam.id} />
-                </motion.div>
-              )}
-              {tab === 'csv-import' && (
-                <motion.div key="ci" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                  <CsvImportSection examId={exam.id} exam={exam} onReload={handleReload} />
-                </motion.div>
-              )}
-              {tab === 'outcomes' && (
-                <motion.div key="oc" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                  <OutcomesSection examId={exam.id} exam={exam} onReload={handleReload} />
-                </motion.div>
-              )}
-              {tab === 'seating' && (
-                <motion.div key="se" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                  <SeatingSection examId={exam.id} exam={exam} onReload={handleReload} />
-                </motion.div>
-              )}
-              {tab === 'attendance' && (
-                <motion.div key="at" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                  <AttendanceSection examId={exam.id} exam={exam} onReload={handleReload} />
-                </motion.div>
-              )}
-              {tab === 'grace' && (
-                <motion.div key="gr" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                  <GraceSection examId={exam.id} exam={exam} onReload={handleReload} />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+      {/* Main content — full available width */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        {loading ? (
+          <InlineLoading label="Loading examination…" />
+        ) : error ? (
+          <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3">
+            <p className="text-xs text-rose-700">{error}</p>
+          </div>
+        ) : !exam ? null : (
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15 }}
+            >
+              {tab === 'overview' && <OverviewSection exam={exam} onReload={handleReload} onNavigate={setTab} />}
+              {tab === 'schedule' && <ScheduleSection exam={exam} onReload={handleReload} />}
+              {tab === 'marks' && <MarksSection exam={exam} onReload={handleReload} />}
+              {tab === 'import' && <CsvImportSection examId={exam.id} exam={exam} onReload={handleReload} />}
+              {tab === 'results' && <ResultsSection exam={exam} onReload={handleReload} />}
+              {tab === 'outcomes' && <OutcomesSection examId={exam.id} exam={exam} onReload={handleReload} />}
+              {tab === 'seating' && <SeatingSection examId={exam.id} exam={exam} onReload={handleReload} />}
+              {tab === 'attendance' && <AttendanceSection examId={exam.id} exam={exam} onReload={handleReload} />}
+              {tab === 'grace' && <GraceSection examId={exam.id} exam={exam} onReload={handleReload} />}
+              {tab === 'audit' && <AuditSection examId={exam.id} />}
+            </motion.div>
+          </AnimatePresence>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -195,11 +167,12 @@ function ResultStatusPill({ status }: { status: string }) {
   return <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold', cls[status] ?? 'bg-muted text-muted-foreground border-border')}>{status}</span>
 }
 
-// ─── Overview Section ─────────────────────────────────────────────────
+// ─── Overview Section with Exam Readiness ─────────────────────────────
 
-function OverviewSection({ exam, onReload }: { exam: any; onReload: () => void }) {
+function OverviewSection({ exam, onReload, onNavigate }: { exam: any; onReload: () => void; onNavigate: (t: Tab) => void }) {
   const { update } = useUpdateExam()
   const gate = useRoleGate()
+  const [editing, setEditing] = useState(false)
   const [name, setName] = useState(exam.name)
   const [status, setStatus] = useState(exam.status)
   const [startDate, setStartDate] = useState(exam.startDate ?? '')
@@ -209,11 +182,23 @@ function OverviewSection({ exam, onReload }: { exam: any; onReload: () => void }
     try {
       await update(exam.id, { name, status, startDate, endDate })
       toast.success('Exam updated')
+      setEditing(false)
       onReload()
     } catch (e: any) {
       toast.error('Failed to update exam', { description: e.message })
     }
   }
+
+  // Compute real readiness indicators
+  const readiness = [
+    { label: 'Classes configured', done: exam.classes.length > 0, navigate: 'overview' as Tab },
+    { label: 'Subjects configured', done: exam.subjects.length > 0, navigate: 'overview' as Tab },
+    { label: 'Schedule published', done: exam.schedule.length > 0, navigate: 'schedule' as Tab },
+    { label: 'Marks entry started', done: exam.markSummary.entered > 0, navigate: 'marks' as Tab },
+    { label: 'Marks verified', done: exam.markSummary.verified > 0, navigate: 'marks' as Tab },
+    { label: 'Marks locked', done: exam.markSummary.locked > 0, navigate: 'marks' as Tab },
+    { label: 'Results declared', done: exam.resultStatus === 'Result Declared', navigate: 'results' as Tab },
+  ]
 
   const entered = exam.markSummary.entered
   const total = exam.markSummary.total
@@ -221,99 +206,122 @@ function OverviewSection({ exam, onReload }: { exam: any; onReload: () => void }
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <div className="rounded-xl border border-border bg-card p-3">
-          <p className="text-[10px] uppercase font-semibold text-muted-foreground">Classes</p>
-          <p className="font-display text-2xl font-bold">{exam.classes.length}</p>
-          <div className="mt-1 space-y-0.5">
-            {exam.classes.map((c: any) => (
-              <p key={c.classId} className="text-[10px] text-muted-foreground">{c.className} · {c.studentCount} students</p>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-3">
-          <p className="text-[10px] uppercase font-semibold text-muted-foreground">Subjects</p>
-          <p className="font-display text-2xl font-bold">{exam.subjects.length}</p>
-          <div className="mt-1 space-y-0.5 max-h-32 overflow-y-auto">
-            {exam.subjects.map((s: any) => (
-              <p key={s.subjectId + s.classId} className="text-[10px] text-muted-foreground truncate">
-                {s.subjectName} · max {s.maxMarks} · pass {s.passMarks}
-              </p>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-3">
-          <p className="text-[10px] uppercase font-semibold text-muted-foreground">Marks Entry Progress</p>
-          <p className="font-display text-2xl font-bold">{entered}/{total}</p>
-          <div className="mt-2 h-2 rounded-full bg-muted/60 overflow-hidden">
-            <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-1">{pct}% entered</p>
+      {/* KPI grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Kpi label="Classes" value={exam.classes.length} sub={`${exam.classes.reduce((s: number, c: any) => s + c.studentCount, 0)} students`} />
+        <Kpi label="Subjects" value={exam.subjects.length} sub={`${exam.schedule.length} scheduled`} />
+        <Kpi label="Marks Entry" value={`${entered}/${total}`} sub={`${pct}% entered`} progress={pct} />
+        <Kpi label="Schedule" value={exam.schedule.length} sub={`${exam.schedule.length} sessions`} />
+      </div>
+
+      {/* Exam readiness */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h3 className="text-sm font-semibold mb-3">Exam Readiness</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {readiness.map((r) => (
+            <button
+              key={r.label}
+              onClick={() => onNavigate(r.navigate)}
+              className="flex items-center gap-2 p-2 rounded-lg border border-border hover:bg-muted/40 transition-colors text-left"
+            >
+              <span className={cn(
+                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
+                r.done ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-muted text-muted-foreground'
+              )}>
+                {r.done ? '✓' : '—'}
+              </span>
+              <span className="text-xs flex-1">{r.label}</span>
+              {!r.done && <span className="text-[9px] text-muted-foreground">pending</span>}
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* Edit / details */}
       {gate.canEdit ? (
-        <div className="rounded-xl border border-border bg-card p-3">
-          <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Edit Examination</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <Label className="text-[10px]">Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-xs" />
-            </div>
-            <div>
-              <Label className="text-[10px]">Status</Label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger size="sm" className="text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Draft">Draft</SelectItem>
-                  <SelectItem value="Scheduled">Scheduled</SelectItem>
-                  <SelectItem value="Ongoing">Ongoing</SelectItem>
-                  <SelectItem value="Completed">Completed</SelectItem>
-                  <SelectItem value="Cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-[10px]">Start Date</Label>
-              <DatePicker value={startDate} onChange={setStartDate} />
-            </div>
-            <div>
-              <Label className="text-[10px]">End Date</Label>
-              <DatePicker value={endDate} onChange={setEndDate} />
-            </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">Examination Details</h3>
+            {!editing ? (
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setEditing(true)}>
+                <Pencil className="h-3 w-3" /> Edit
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditing(false)}>Cancel</Button>
+                <Button size="sm" variant="default" className="h-7 text-xs gap-1" onClick={handleSave}>
+                  <Save className="h-3 w-3" /> Save
+                </Button>
+              </div>
+            )}
           </div>
-          <Button size="sm" className="mt-3 h-7 text-xs" onClick={handleSave}>
-            <Save className="h-3 w-3" /> Save Changes
-          </Button>
+          {!editing ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <DetailField label="Name" value={exam.name} />
+              <DetailField label="Status" value={exam.status} />
+              <DetailField label="Start" value={exam.startDate ?? '—'} />
+              <DetailField label="End" value={exam.endDate ?? '—'} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-[10px]">Name</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-xs" />
+              </div>
+              <div>
+                <Label className="text-[10px]">Status</Label>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger size="sm" className="text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Draft">Draft</SelectItem>
+                    <SelectItem value="Scheduled">Scheduled</SelectItem>
+                    <SelectItem value="Ongoing">Ongoing</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-[10px]">Start Date</Label>
+                <DatePicker value={startDate} onChange={setStartDate} />
+              </div>
+              <div>
+                <Label className="text-[10px]">End Date</Label>
+                <DatePicker value={endDate} onChange={setEndDate} />
+              </div>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="rounded-xl border border-border bg-card p-3">
-          <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Examination Details</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <p className="text-[9px] text-muted-foreground">Name</p>
-              <p className="text-xs font-medium">{exam.name}</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-muted-foreground">Status</p>
-              <p className="text-xs font-medium">{exam.status}</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-muted-foreground">Start</p>
-              <p className="text-xs font-medium">{exam.startDate ?? '—'}</p>
-            </div>
-            <div>
-              <p className="text-[9px] text-muted-foreground">End</p>
-              <p className="text-xs font-medium">{exam.endDate ?? '—'}</p>
-            </div>
-          </div>
+      ) : null}
+    </div>
+  )
+}
+
+function Kpi({ label, value, sub, progress }: { label: string; value: any; sub?: string; progress?: number }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-3">
+      <p className="text-[10px] uppercase font-semibold text-muted-foreground">{label}</p>
+      <p className="font-display text-2xl font-bold tabular-nums">{value}</p>
+      {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+      {progress !== undefined && (
+        <div className="mt-2 h-1 rounded-full bg-muted/60 overflow-hidden">
+          <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
         </div>
       )}
     </div>
   )
 }
 
-// ─── Schedule Section ─────────────────────────────────────────────────
+function DetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[9px] uppercase font-semibold text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium truncate">{value}</p>
+    </div>
+  )
+}
+
+// ─── Schedule Section (in-place edit + invigilator assignment) ────────
 
 function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }) {
   const { add } = useAddScheduleItem()
@@ -395,7 +403,7 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
       {gate.canManageSchedule && (
         <div className="rounded-xl border border-border bg-card p-3">
           <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Add Schedule Item</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <Select value={classId} onValueChange={(v) => { setClassId(v); setSubjectId('') }}>
               <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Class" /></SelectTrigger>
               <SelectContent>
@@ -409,13 +417,13 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
               </SelectContent>
             </Select>
             <DatePicker value={date} onChange={setDate} placeholder="Date" />
-            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-7 text-xs" />
-            <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="h-7 text-xs" />
-            <Input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Room" className="h-7 text-xs" />
-            <Input value={invigilator} onChange={(e) => setInvigilator(e.target.value)} placeholder="Invigilator name (or assign below)" className="h-7 text-xs" />
+            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-8 text-xs" />
+            <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="h-8 text-xs" />
+            <Input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Room" className="h-8 text-xs" />
+            <Input value={invigilator} onChange={(e) => setInvigilator(e.target.value)} placeholder="Invigilator" className="h-8 text-xs" />
           </div>
           <Button size="sm" className="mt-2 h-7 text-xs gap-1" onClick={handleAdd}>
-            <Plus className="h-3 w-3" /> Add to Schedule
+            <Plus2 /> Add to Schedule
           </Button>
         </div>
       )}
@@ -430,107 +438,114 @@ function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }
           )}
         </div>
         {scheduleForClass.length === 0 ? (
-          <div className="p-6 text-center text-xs text-muted-foreground">No schedule items yet. Add one above.</div>
+          <div className="p-6 text-center text-xs text-muted-foreground">No schedule items yet.</div>
         ) : (
-          <table className="w-full text-xs">
-            <thead className="bg-muted/40">
-              <tr>
-                <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Subject</th>
-                <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Date</th>
-                <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Time</th>
-                <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Room</th>
-                <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Invigilator</th>
-                <th className="w-16"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {scheduleForClass.map((s: any) => (
-                <tr key={s.id} className="border-b border-border/40 last:border-0 hover:bg-muted/20">
-                  <td className="px-3 py-2 font-medium">{s.subjectName ?? '—'}</td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {editingId === s.id ? (
-                      <DatePicker value={editDate} onChange={setEditDate} compact placeholder="Date" className="w-[110px]" />
-                    ) : (
-                      s.date ? new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {editingId === s.id ? (
-                      <div className="flex items-center gap-1">
-                        <Input type="time" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="h-6 text-[10px] w-14" />
-                        <span className="text-[9px]">–</span>
-                        <Input type="time" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="h-6 text-[10px] w-14" />
-                      </div>
-                    ) : (
-                      <span>{s.startTime} — {s.endTime}</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {editingId === s.id ? (
-                      <Input value={editRoom} onChange={(e) => setEditRoom(e.target.value)} placeholder="Room" className="h-6 text-[10px] w-20" />
-                    ) : (
-                      s.room ?? '—'
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {teachers.length > 0 ? (
-                      <Select
-                        value={s.invigilatorName ?? ''}
-                        onValueChange={(v) => {
-                          const teacher = teachers.find((t) => t.name === v)
-                          if (teacher) handleAssignInvigilator(s.id, teacher.id)
-                        }}
-                      >
-                        <SelectTrigger size="sm" className="h-6 text-[10px]"><SelectValue placeholder="Assign teacher" /></SelectTrigger>
-                        <SelectContent>
-                          {teachers.map((t) => <SelectItem key={t.id} value={t.name}>{t.name} {t.department ? `· ${t.department}` : ''}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <span className="text-muted-foreground">{s.invigilatorName ?? '—'}</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {gate.canManageSchedule ? (
-                      editingId === s.id ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/40">
+                <tr>
+                  <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Subject</th>
+                  <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Date</th>
+                  <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Time</th>
+                  <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Room</th>
+                  <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Invigilator</th>
+                  {gate.canManageSchedule && <th className="w-16"></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {scheduleForClass.map((s: any) => (
+                  <tr key={s.id} className="border-b border-border/40 last:border-0 hover:bg-muted/20">
+                    <td className="px-3 py-2 font-medium">{s.subjectName ?? '—'}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {editingId === s.id ? (
+                        <DatePicker value={editDate} onChange={setEditDate} compact placeholder="Date" className="w-[110px]" />
+                      ) : (
+                        s.date ? new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {editingId === s.id ? (
                         <div className="flex items-center gap-1">
-                          <button onClick={() => handleSaveEdit(s)} className="text-emerald-600 hover:text-emerald-700">
-                            <Save className="h-3.5 w-3.5" />
-                          </button>
-                          <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground text-[10px]">✕</button>
+                          <Input type="time" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="h-6 text-[10px] w-14" />
+                          <span className="text-[9px]">–</span>
+                          <Input type="time" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="h-6 text-[10px] w-14" />
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              setEditingId(s.id)
-                              setEditDate(s.date ? new Date(s.date).toISOString().split('T')[0] : '')
-                              setEditStart(s.startTime)
-                              setEditEnd(s.endTime)
-                              setEditRoom(s.room ?? '')
-                            }}
-                            className="text-muted-foreground hover:text-primary transition-colors"
-                            title="Edit"
-                          >
-                            <Save className="h-3.5 w-3.5 opacity-50" />
-                          </button>
-                          <button onClick={() => handleDelete(s.id)} className="text-muted-foreground hover:text-rose-600 transition-colors" title="Delete">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )
-                    ) : (
-                      <span className="text-[9px] text-muted-foreground/40">—</span>
+                        <span>{s.startTime} — {s.endTime}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {editingId === s.id ? (
+                        <Input value={editRoom} onChange={(e) => setEditRoom(e.target.value)} placeholder="Room" className="h-6 text-[10px] w-20" />
+                      ) : (
+                        s.room ?? '—'
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {teachers.length > 0 ? (
+                        <Select
+                          value={s.invigilatorName ?? ''}
+                          onValueChange={(v) => {
+                            const teacher = teachers.find((t) => t.name === v)
+                            if (teacher) handleAssignInvigilator(s.id, teacher.id)
+                          }}
+                        >
+                          <SelectTrigger size="sm" className="h-6 text-[10px]"><SelectValue placeholder="Assign teacher" /></SelectTrigger>
+                          <SelectContent>
+                            {teachers.map((t) => <SelectItem key={t.id} value={t.name}>{t.name} {t.department ? `· ${t.department}` : ''}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-muted-foreground">{s.invigilatorName ?? '—'}</span>
+                      )}
+                    </td>
+                    {gate.canManageSchedule && (
+                      <td className="px-3 py-2 text-right">
+                        {editingId === s.id ? (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => handleSaveEdit(s)} className="text-emerald-600 hover:text-emerald-700">
+                              <Save className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground text-[10px]">✕</button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingId(s.id)
+                                setEditDate(s.date ? new Date(s.date).toISOString().split('T')[0] : '')
+                                setEditStart(s.startTime)
+                                setEditEnd(s.endTime)
+                                setEditRoom(s.room ?? '')
+                              }}
+                              className="text-muted-foreground hover:text-primary transition-colors"
+                              title="Edit"
+                            >
+                              <Pencil className="h-3.5 w-3.5 opacity-50" />
+                            </button>
+                            <button onClick={() => handleDelete(s.id)} className="text-muted-foreground hover:text-rose-600 transition-colors" title="Delete">
+                              <Trash className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
   )
+}
+
+function Plus2() {
+  return <span className="text-[10px]">+</span>
+}
+function Trash({ className }: { className?: string }) {
+  return <span className={className}>🗑</span>
 }
 
 // ─── Marks Section (workflow controls) ────────────────────────────────
@@ -564,7 +579,7 @@ function MarksSection({ exam, onReload }: { exam: any; onReload: () => void }) {
         toast.success('Results declared')
       } else if (action === 'publish') {
         const r = await publish(exam.id, { notifyStudents: true, notifyParents: true })
-        toast.success(`Results published`, { description: `${r.notificationsSent} student notifications sent.` })
+        toast.success(`Results published`, { description: `${r.notificationsSent} notifications sent.` })
       }
       onReload()
     } catch (e: any) {
@@ -594,27 +609,27 @@ function MarksSection({ exam, onReload }: { exam: any; onReload: () => void }) {
         <div className="flex flex-wrap gap-2 mt-3">
           {gate.canSubmitMarks && (
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('submit')} disabled={exam.resultStatus === 'Result Declared'}>
-              <Send className="h-3 w-3" /> Submit
+              Submit
             </Button>
           )}
           {gate.canVerifyMarks && (
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('verify')} disabled={exam.resultStatus === 'Result Declared'}>
-              <ShieldCheck className="h-3 w-3" /> Verify
+              Verify
             </Button>
           )}
           {gate.canLockMarks && (
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('lock')} disabled={exam.resultStatus === 'Result Declared'}>
-              <Lock className="h-3 w-3" /> Lock
+              Lock
             </Button>
           )}
           {gate.canDeclareResults && (
             <Button size="sm" variant="default" className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleAction('declare')} disabled={exam.resultStatus !== 'Result Ready'}>
-              <Check className="h-3 w-3" /> Declare
+              Declare
             </Button>
           )}
           {gate.canPublishResults && (
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('publish')} disabled={exam.resultStatus !== 'Result Declared'}>
-              <Send className="h-3 w-3" /> Publish & Notify
+              Publish & Notify
             </Button>
           )}
         </div>
@@ -629,6 +644,9 @@ function MarksSection({ exam, onReload }: { exam: any; onReload: () => void }) {
           <Stat label="Verified" value={exam.markSummary.verified} />
         </div>
       </div>
+      <p className="text-[10px] text-muted-foreground px-1">
+        Tip: Use the Marks tab in the main Examinations navigation for spreadsheet entry.
+      </p>
     </div>
   )
 }
@@ -642,9 +660,10 @@ function Stat({ label, value }: { label: string; value: number | string }) {
   )
 }
 
-// ─── Results Section (workspace on the actual exam) ──────────────────
+// ─── Results Section ─────────────────────────────────────────────────
 
 function ResultsSection({ exam, onReload }: { exam: any; onReload: () => void }) {
+  void onReload
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
   return (
     <div className="space-y-3">
@@ -657,12 +676,12 @@ function ResultsSection({ exam, onReload }: { exam: any; onReload: () => void })
           </SelectContent>
         </Select>
       </div>
-      {classId && <ClassResultsInline examId={exam.id} classId={classId} exam={exam} />}
+      {classId && <ClassResultsInline examId={exam.id} classId={classId} />}
     </div>
   )
 }
 
-function ClassResultsInline({ examId, classId, exam }: { examId: string; classId: string; exam: any }) {
+function ClassResultsInline({ examId, classId }: { examId: string; classId: string }) {
   const { data, loading, error } = useClassResults(examId, classId)
   if (loading) return <InlineLoading label="Computing results…" />
   if (error) return <div className="text-xs text-rose-700">{error}</div>
@@ -674,7 +693,7 @@ function ClassResultsInline({ examId, classId, exam }: { examId: string; classId
         <Stat label="Total Students" value={a.totalStudents} />
         <Stat label="Passed" value={a.passed} />
         <Stat label="Failed" value={a.failed} />
-        <Stat label="Pass %" value={a.passRate} />
+        <Stat label="Pass %" value={`${a.passRate}%`} />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <Stat label="Class Average" value={`${a.averagePercentage}%`} />
@@ -706,12 +725,10 @@ function AuditSection({ examId }: { examId: string }) {
   }
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="px-3 py-2 border-b border-border flex items-center gap-2">
-        <History className="h-3.5 w-3.5 text-primary" />
-        <p className="text-xs font-semibold">Audit Trail</p>
-        <span className="text-[10px] text-muted-foreground ml-auto">{logs.length} entries</span>
+      <div className="px-3 py-2 border-b border-border">
+        <p className="text-xs font-semibold">Audit Trail ({logs.length} entries)</p>
       </div>
-      <div className="max-h-[400px] overflow-y-auto">
+      <div className="max-h-[600px] overflow-y-auto">
         <table className="w-full text-xs">
           <thead className="bg-muted/40 sticky top-0">
             <tr>

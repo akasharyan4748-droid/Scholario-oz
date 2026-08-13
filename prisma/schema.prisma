@@ -49,6 +49,11 @@ model School {
   activityLogs  ActivityLog[]
   messages      Message[]
   events        SchoolEvent[]
+  examTypes     ExamTypeConfig[]
+  gradeScales   GradeScale[]
+  examRules     ExamRule[]
+  admitCardConfigs AdmitCardConfig[]
+  reportCardConfigs ReportCardConfig[]
 }
 
 model User {
@@ -618,4 +623,79 @@ model SchoolEvent {
   createdBy   String?
   creator     User?    @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
+}
+
+// ─── Examination Configuration (school-scoped, persisted) ─────────────
+
+model ExamTypeConfig {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String
+  code      String?
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, name])
+}
+
+model GradeScale {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  grade     String
+  minPct    Float
+  maxPct    Float    @default(100)
+  color     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, grade])
+}
+
+model ExamRule {
+  id                  String   @id @default(cuid())
+  schoolId            String
+  school              School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  key                 String
+  value               String
+  updatedAt           DateTime @updatedAt
+
+  @@unique([schoolId, key])
+}
+
+model AdmitCardConfig {
+  id              String   @id @default(cuid())
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  showPhoto       Boolean  @default(true)
+  showRollNumber  Boolean  @default(true)
+  showRoom        Boolean  @default(true)
+  showSeatNumber  Boolean  @default(true)
+  showTimetable   Boolean  @default(true)
+  showInstructions Boolean @default(true)
+  showQrCode      Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([schoolId])
+}
+
+model ReportCardConfig {
+  id                  String   @id @default(cuid())
+  schoolId            String
+  school              School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  showAttendance      Boolean  @default(true)
+  showRank            Boolean  @default(true)
+  showPercentage      Boolean  @default(true)
+  showGrade           Boolean  @default(true)
+  showCoScholastic    Boolean  @default(false)
+  showRemarks         Boolean  @default(true)
+  showClassTeacherSign Boolean @default(true)
+  showPrincipalSign   Boolean  @default(true)
+  updatedAt           DateTime @updatedAt
+
+  @@unique([schoolId])
 }
