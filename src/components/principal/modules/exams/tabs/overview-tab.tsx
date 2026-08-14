@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import type { ExamDTO } from '@/lib/exams/types'
 import { useOverviewAnalytics, type OverviewAnalytics } from '@/lib/exams/use-overview-analytics'
 import { PerformanceSection } from './performance-section'
+import { ExaminationContext } from './examination-context'
 
 interface Props {
   exams: ExamDTO[]
@@ -93,8 +94,8 @@ export function ExamsOverviewTab({ exams, classes, loading, error, onSelectExam,
         />
       </div>
 
-      {/* Current / Next Examination */}
-      <CurrentExamination data={data} onSelectExam={onSelectExam} />
+      {/* Context-aware Examination Status (LIVE / UPCOMING / PERFORMANCE) */}
+      <ExaminationContext exams={exams} onSelectExam={onSelectExam} onNavigate={onNavigate} />
 
       {/* Needs Attention — only if items exist */}
       <NeedsAttention items={data.attentionItems} onSelectExam={onSelectExam} onNavigate={onNavigate} />
@@ -297,127 +298,7 @@ function KpiCard({ label, value, sub, icon, tone, delay }: {
   )
 }
 
-// ─── Current / Next Examination ──────────────────────────────────────
-
-function CurrentExamination({ data, onSelectExam }: { data: OverviewData; onSelectExam: (id: string) => void }) {
-  const exam = data.currentExam ?? data.nextExam
-  if (!exam) {
-    return (
-      <div className="rounded-xl border border-border bg-card p-6 text-center">
-        <p className="text-xs text-muted-foreground">No upcoming examinations.</p>
-      </div>
-    )
-  }
-
-  const isOngoing = data.currentExam !== null
-  const title = isOngoing ? 'Current Examination' : 'Next Examination'
-  const classNames = exam.classes.map((c) => c.className).join(', ') || '—'
-  const subjectCount = exam.subjects.length
-  const dateRange = exam.startDate && exam.endDate
-    ? `${formatDate(exam.startDate)} — ${formatDate(exam.endDate)}`
-    : exam.startDate ? formatDate(exam.startDate) : 'Date not set'
-
-  // Marks progress for this exam
-  const marksTotal = exam.markSummary.total
-  const marksEntered = exam.markSummary.entered
-  const marksPct = marksTotal > 0 ? Math.round((marksEntered / marksTotal) * 100) : 0
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: 0.2 }}
-      className="rounded-xl border border-border bg-card p-5"
-    >
-      {/* Eyebrow + title */}
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="min-w-0">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-1">{title}</p>
-          <h2 className="font-display text-base font-bold tracking-tight truncate">{exam.name}</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            {exam.type} · {classNames}
-          </p>
-          <p className="text-[11px] text-muted-foreground">{dateRange}</p>
-        </div>
-        {isOngoing && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 shrink-0">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            </span>
-            Live
-          </span>
-        )}
-      </div>
-
-      {/* Compact stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <MiniStat label="Classes" value={exam.classes.length} />
-        <MiniStat label="Subjects" value={subjectCount} />
-        <MiniStat label="Schedule" value={exam.schedule.length} />
-        <MiniStat label="Students" value={exam.classes.reduce((s, c) => s + c.studentCount, 0)} />
-      </div>
-
-      {/* Marks + Results row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-        {/* Marks Entry */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] uppercase font-semibold text-muted-foreground">Marks Entry</span>
-            <span className="text-[10px] font-semibold tabular-nums text-foreground">
-              {marksTotal > 0 ? `${marksEntered}/${marksTotal}` : '—'}
-            </span>
-          </div>
-          {marksTotal > 0 ? (
-            <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${marksPct}%` }}
-                transition={{ duration: 0.5, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className={cn('h-full rounded-full', marksPct === 100 ? 'bg-emerald-500' : 'bg-amber-500')}
-              />
-            </div>
-          ) : (
-            <p className="text-[10px] text-muted-foreground">No marks workflow</p>
-          )}
-        </div>
-        {/* Results */}
-        <div>
-          <span className="text-[10px] uppercase font-semibold text-muted-foreground">Results</span>
-          <p className="text-xs font-medium mt-0.5">
-            {exam.resultStatus.toLowerCase() === 'result declared' ? (
-              <span className="text-emerald-600 dark:text-emerald-400">Declared</span>
-            ) : exam.resultStatus.toLowerCase() === 'result ready' ? (
-              <span className="text-cyan-600 dark:text-cyan-400">Ready to declare</span>
-            ) : exam.resultStatus.toLowerCase() === 'under verification' ? (
-              <span className="text-violet-600 dark:text-violet-400">Under verification</span>
-            ) : exam.resultStatus.toLowerCase() === 'marks entry' ? (
-              <span className="text-amber-600 dark:text-amber-400">In progress</span>
-            ) : (
-              <span className="text-muted-foreground">Not started</span>
-            )}
-          </p>
-        </div>
-      </div>
-
-      {/* Action */}
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => onSelectExam(exam.id)}>
-          Open Examination <ArrowRight className="h-3 w-3" />
-        </Button>
-      </div>
-    </motion.div>
-  )
-}
-
-function MiniStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg bg-muted/30 px-2.5 py-1.5">
-      <p className="text-[9px] uppercase font-semibold text-muted-foreground">{label}</p>
-      <p className="font-display text-sm font-bold tabular-nums">{value}</p>
-    </div>
-  )
-}
+// ─── (old CurrentExamination removed — replaced by ExaminationContext) ──
 
 // ─── Needs Attention ────────────────────────────────────────────────
 
