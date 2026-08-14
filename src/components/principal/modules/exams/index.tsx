@@ -100,6 +100,7 @@ export function ExamsModule() {
               error={error}
               onSelectExam={(id) => setView({ kind: 'exam', examId: id })}
               onGoToExams={() => setSection('exams')}
+              onNavigate={(s) => setSection(s as SectionTab)}
             />
           </motion.div>
         )}
