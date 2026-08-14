@@ -57,6 +57,10 @@ model School {
   homeworks     Homework[]
   homeworkSubmissions HomeworkSubmission[]
   homeworkAuditLogs HomeworkAuditLog[]
+  homeworkPolicies HomeworkPolicy[]
+  noHomeworkDates NoHomeworkDate[]
+  parentGrievances ParentGrievance[]
+  homeworkSurveys HomeworkSurvey[]
 }
 
 model User {
@@ -535,6 +539,7 @@ model Homework {
 
   submissions     HomeworkSubmission[]
   auditLogs       HomeworkAuditLog[]
+  grievances      ParentGrievance[]
 }
 
 model HomeworkSubmission {
@@ -795,4 +800,62 @@ model ReportCardConfig {
   updatedAt           DateTime @updatedAt
 
   @@unique([schoolId])
+}
+
+// ─── Homework Policy & Oversight (Principal) ──────────────────────────
+
+model HomeworkPolicy {
+  id              String   @id @default(cuid())
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  gradeLevel      String   // "1", "2", ..., "9", "10", "11", "12", "all"
+  maxMinutesPerDay Int     @default(30) // max daily homework minutes
+  enabled         Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([schoolId, gradeLevel])
+}
+
+model NoHomeworkDate {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  date        DateTime
+  reason      String?  // "Sports Day", "Festival", "Exam Week"
+  createdAt   DateTime @default(now())
+
+  @@unique([schoolId, date])
+}
+
+model ParentGrievance {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  homeworkId  String?
+  homework    Homework? @relation(fields: [homeworkId], references: [id], onDelete: SetNull)
+  parentId    String?
+  parentName  String?
+  studentName String?
+  subject     String
+  description String
+  category    String   @default("workload") // workload, ambiguous, missing_link, other
+  status      String   @default("open") // open, acknowledged, resolved, dismissed
+  response    String?
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model HomeworkSurvey {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  term          String   // "term1", "term2", "annual"
+  respondentType String  @default("parent") // parent, student
+  manageable    Boolean  @default(true)
+  stressful     Boolean  @default(false)
+  rating        Int      @default(3) // 1-5
+  feedback      String?
+  createdAt     DateTime @default(now())
 }
