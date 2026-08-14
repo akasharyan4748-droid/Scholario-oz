@@ -24,7 +24,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { useCreateExam } from '@/lib/exams/use-exams'
-import { EXAM_TYPES, type ExamDTO, type ExamType } from '@/lib/exams/types'
+import { EXAM_TYPES, type ExamDTO } from '@/lib/exams/types'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -40,6 +40,7 @@ interface ClassDTO {
 
 interface Props {
   classes: ClassDTO[]
+  academicYear: string
   onBack: () => void
   onCreated: (exam: ExamDTO) => void
 }
@@ -62,11 +63,10 @@ interface SubjectConfig {
   invigilator: string
 }
 
-export function CreateExamFullScreen({ classes, onBack, onCreated }: Props) {
+export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated }: Props) {
   const [step, setStep] = useState<Step>('Details')
   const [name, setName] = useState('')
-  const [type, setType] = useState<ExamType>('Unit Test')
-  const [session, setSession] = useState('2025-2026')
+  const [type, setType] = useState<string>('Unit Test')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [description, setDescription] = useState('')
@@ -160,7 +160,7 @@ export function CreateExamFullScreen({ classes, onBack, onCreated }: Props) {
       const exam = await create({
         name: name.trim(),
         type,
-        session,
+        session: academicYear,
         startDate,
         endDate: endDate || startDate,
         passPercentage,
@@ -217,10 +217,14 @@ export function CreateExamFullScreen({ classes, onBack, onCreated }: Props) {
         <div className="px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
-              <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1" onClick={onBack}>
-                <ArrowLeft className="h-3.5 w-3.5" /> Examinations
-              </Button>
-              <div className="h-5 w-px bg-border" />
+              <button
+                onClick={onBack}
+                aria-label="Back to Examinations"
+                title="Back to Examinations"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
               <div>
                 <h1 className="text-base font-semibold">Create Examination</h1>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Step {stepIndex + 1} of {STEPS.length} · {step}</p>
@@ -288,16 +292,12 @@ export function CreateExamFullScreen({ classes, onBack, onCreated }: Props) {
                       </div>
                       <div className="space-y-1.5">
                         <Label>Examination Type</Label>
-                        <Select value={type} onValueChange={(v) => setType(v as ExamType)}>
+                        <Select value={type} onValueChange={(v) => setType(v)}>
                           <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {EXAM_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                           </SelectContent>
                         </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Academic Session</Label>
-                        <Input value={session} onChange={(e) => setSession(e.target.value)} className="text-sm" />
                       </div>
                       <div className="space-y-1.5">
                         <Label>Pass Percentage</Label>
@@ -509,7 +509,7 @@ export function CreateExamFullScreen({ classes, onBack, onCreated }: Props) {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                       <ReviewField label="Name" value={name || '—'} />
                       <ReviewField label="Type" value={type} />
-                      <ReviewField label="Session" value={session} />
+                      <ReviewField label="Session" value={academicYear} />
                       <ReviewField label="Pass %" value={`${passPercentage}%`} />
                       <ReviewField label="Start" value={startDate || '—'} />
                       <ReviewField label="End" value={endDate || '—'} />

@@ -13,9 +13,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
-import { Button } from '@/components/ui/button'
 import { SegmentedTabs } from '../shared/segmented-tabs'
 import { useExamsList } from '@/lib/exams/use-exams'
 import { ExamsOverviewTab } from './tabs/overview-tab'
@@ -45,7 +43,7 @@ export function ExamsModule() {
   const [section, setSection] = useState<SectionTab>('overview')
   const [view, setView] = useState<View>({ kind: 'list' })
 
-  const { exams, classes, loading, error, reload } = useExamsList()
+  const { exams, classes, academicYear, loading, error, reload } = useExamsList()
 
   // Full-screen views take over the entire content area
   if (view.kind === 'exam') {
@@ -61,6 +59,7 @@ export function ExamsModule() {
     return (
       <CreateExamFullScreen
         classes={classes}
+        academicYear={academicYear}
         onBack={() => setView({ kind: 'list' })}
         onCreated={(exam) => {
           reload()
@@ -79,15 +78,6 @@ export function ExamsModule() {
           value={section}
           onValueChange={(v) => setSection(v as SectionTab)}
         />
-        {section === 'exams' && (
-          <Button
-            onClick={() => setView({ kind: 'create' })}
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-          >
-            <Plus className="h-3.5 w-3.5" /> Create Examination
-          </Button>
-        )}
       </div>
 
       <AnimatePresence mode="wait">

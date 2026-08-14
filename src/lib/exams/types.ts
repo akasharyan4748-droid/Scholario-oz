@@ -12,14 +12,39 @@ export interface AuthUserLike {
 
 export const EXAM_TYPES = [
   'Unit Test',
+  'Periodic Assessment',
   'Term Examination',
   'Half-Yearly',
-  'Annual',
+  'Annual Examination',
   'Pre-Board',
   'Practical',
-  'Periodic Assessment',
+  'Viva / Oral',
+  'Internal Assessment',
+  'Custom',
 ] as const
-export type ExamType = (typeof EXAM_TYPES)[number]
+export type ExamType = string
+
+// ─── Exam type categories ────────────────────────────────────────────
+
+export interface ExamTypeMeta {
+  name: string
+  category: 'academic' | 'board' | 'other'
+  description: string
+  boardOnly?: boolean
+}
+
+export const EXAM_TYPE_META: ExamTypeMeta[] = [
+  { name: 'Unit Test', category: 'academic', description: 'Short periodic assessment' },
+  { name: 'Periodic Assessment', category: 'academic', description: 'Regular evaluation check' },
+  { name: 'Term Examination', category: 'academic', description: 'End-of-term examination' },
+  { name: 'Half-Yearly', category: 'academic', description: 'Mid-session comprehensive examination' },
+  { name: 'Annual Examination', category: 'academic', description: 'End-of-session examination' },
+  { name: 'Pre-Board', category: 'board', description: 'Board preparation examination', boardOnly: true },
+  { name: 'Practical', category: 'board', description: 'Practical / laboratory evaluation', boardOnly: true },
+  { name: 'Viva / Oral', category: 'other', description: 'Oral evaluation' },
+  { name: 'Internal Assessment', category: 'other', description: 'Continuous evaluation' },
+  { name: 'Custom', category: 'other', description: 'Custom examination type' },
+]
 
 export const EXAM_STATUSES = ['Draft', 'Scheduled', 'Ongoing', 'Completed', 'Cancelled'] as const
 export type ExamStatus = (typeof EXAM_STATUSES)[number]

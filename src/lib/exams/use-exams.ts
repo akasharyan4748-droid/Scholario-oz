@@ -51,6 +51,7 @@ interface ClassesDTO {
 export function useExamsList() {
   const [exams, setExams] = useState<ExamDTO[]>([])
   const [classes, setClasses] = useState<ClassesDTO[]>([])
+  const [academicYear, setAcademicYear] = useState('2025-2026')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -60,11 +61,12 @@ export function useExamsList() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    api<{ exams: ExamDTO[]; classes: ClassesDTO[] }>('/api/exams')
+    api<{ exams: ExamDTO[]; classes: ClassesDTO[]; academicYear: string }>('/api/exams')
       .then((data) => {
         if (cancelled) return
         setExams(data.exams)
         setClasses(data.classes)
+        setAcademicYear(data.academicYear ?? '2025-2026')
         setError(null)
       })
       .catch((e) => !cancelled && setError(e.message))
@@ -72,7 +74,7 @@ export function useExamsList() {
     return () => { cancelled = true }
   }, [reloadKey])
 
-  return { exams, classes, loading, error, reload }
+  return { exams, classes, academicYear, loading, error, reload }
 }
 
 // ─── Single exam hook ──────────────────────────────────────────────────
