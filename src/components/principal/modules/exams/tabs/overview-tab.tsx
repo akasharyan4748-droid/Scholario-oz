@@ -97,9 +97,6 @@ export function ExamsOverviewTab({ exams, classes, loading, error, onSelectExam,
       {/* Context-aware Examination Status (LIVE / UPCOMING / PERFORMANCE) */}
       <ExaminationContext exams={exams} onSelectExam={onSelectExam} onNavigate={onNavigate} />
 
-      {/* Needs Attention — only if items exist */}
-      <NeedsAttention items={data.attentionItems} onSelectExam={onSelectExam} onNavigate={onNavigate} />
-
       {/* Last Examination Performance */}
       <PerformanceSection classes={classes} onSelectExam={onSelectExam} onNavigate={onNavigate} />
     </div>
@@ -123,15 +120,6 @@ interface OverviewData {
   statusTone: 'emerald' | 'amber' | 'sky' | 'rose'
   currentExam: ExamDTO | null
   nextExam: ExamDTO | null
-  attentionItems: AttentionItem[]
-}
-
-interface AttentionItem {
-  type: 'marks_pending' | 'verification_pending' | 'results_ready' | 'schedule_missing'
-  label: string
-  detail: string
-  examId: string
-  action: string
 }
 
 function computeOverview(exams: ExamDTO[]): OverviewData {
@@ -200,56 +188,11 @@ function computeOverview(exams: ExamDTO[]): OverviewData {
     statusTone = 'emerald'
   }
 
-  // Attention items
-  const attentionItems: AttentionItem[] = []
-  for (const e of exams) {
-    if (e.resultStatus.toLowerCase() === 'result ready') {
-      attentionItems.push({
-        type: 'results_ready',
-        label: `${e.name} — Results ready to declare`,
-        detail: 'Awaiting Principal declaration',
-        examId: e.id,
-        action: 'Open',
-      })
-    }
-    if (e.resultStatus.toLowerCase() === 'under verification') {
-      attentionItems.push({
-        type: 'verification_pending',
-        label: `${e.name} — Verification pending`,
-        detail: 'Marks submitted, awaiting verification',
-        examId: e.id,
-        action: 'Open',
-      })
-    }
-    if (e.resultStatus.toLowerCase() === 'marks entry' && e.markSummary.total > 0) {
-      const pending = e.markSummary.total - e.markSummary.entered
-      if (pending > 0) {
-        attentionItems.push({
-          type: 'marks_pending',
-          label: `${e.name} — ${pending} marks pending`,
-          detail: `${e.markSummary.entered}/${e.markSummary.total} entered`,
-          examId: e.id,
-          action: 'Open',
-        })
-      }
-    }
-    // Exams with classes but no schedule
-    if (e.classes.length > 0 && e.schedule.length === 0 && e.status.toLowerCase() !== 'completed') {
-      attentionItems.push({
-        type: 'schedule_missing',
-        label: `${e.name} — No schedule created`,
-        detail: `${e.classes.length} classes assigned, 0 schedule items`,
-        examId: e.id,
-        action: 'Open',
-      })
-    }
-  }
-
   return {
     total, completed, ongoing, upcoming, declared,
     marksTotal, marksEntered, marksSub, resultsSub,
     statusLabel, statusSub, statusTone,
-    currentExam, nextExam, attentionItems,
+    currentExam, nextExam,
   }
 }
 
@@ -298,53 +241,7 @@ function KpiCard({ label, value, sub, icon, tone, delay }: {
   )
 }
 
-// ─── (old CurrentExamination removed — replaced by ExaminationContext) ──
-
-// ─── Needs Attention ────────────────────────────────────────────────
-
-function NeedsAttention({ items, onSelectExam, onNavigate }: {
-  items: AttentionItem[]
-  onSelectExam: (id: string) => void
-  onNavigate?: (s: string) => void
-}) {
-  if (items.length === 0) {
-    return (
-      <div className="flex items-center gap-2 px-1 py-2">
-        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-        <span className="text-xs text-muted-foreground">Everything is up to date.</span>
-      </div>
-    )
-  }
-
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <AlertTriangle className="h-4 w-4 text-amber-500" />
-        <h3 className="text-sm font-semibold">Needs Attention</h3>
-        <span className="ml-auto text-[10px] text-muted-foreground">{items.length} items</span>
-      </div>
-      <div className="space-y-1.5">
-        {items.map((item, i) => (
-          <button
-            key={i}
-            onClick={() => onSelectExam(item.examId)}
-            className="w-full flex items-center gap-3 p-2 rounded-lg border border-border/60 hover:bg-muted/40 transition-colors text-left group"
-          >
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="h-3 w-3" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium truncate">{item.label}</p>
-              <p className="text-[10px] text-muted-foreground truncate">{item.detail}</p>
-            </div>
-            <span className="text-[10px] text-primary shrink-0 group-hover:underline">{item.action}</span>
-            <ChevronRight className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
+// ─── (old CurrentExamination + NeedsAttention removed) ──
 
 // ─── Skeleton ────────────────────────────────────────────────────────
 
