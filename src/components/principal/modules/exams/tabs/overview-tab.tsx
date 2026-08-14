@@ -17,11 +17,14 @@ import { motion } from 'framer-motion'
 import {
   FileText, ClipboardList, CheckCircle2, Activity,
   ArrowRight, AlertTriangle, ChevronRight,
+  Trophy, Medal, TrendingUp, GraduationCap, Crown, Award,
 } from 'lucide-react'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { ExamDTO } from '@/lib/exams/types'
+import { useOverviewAnalytics, type OverviewAnalytics } from '@/lib/exams/use-overview-analytics'
+import { PerformanceSection } from './performance-section'
 
 interface Props {
   exams: ExamDTO[]
@@ -33,7 +36,7 @@ interface Props {
   onNavigate?: (section: string) => void
 }
 
-export function ExamsOverviewTab({ exams, loading, error, onSelectExam, onNavigate }: Props) {
+export function ExamsOverviewTab({ exams, classes, loading, error, onSelectExam, onNavigate }: Props) {
   const data = useMemo(() => computeOverview(exams), [exams])
 
   if (loading) return <OverviewSkeleton />
@@ -95,6 +98,9 @@ export function ExamsOverviewTab({ exams, loading, error, onSelectExam, onNaviga
 
       {/* Needs Attention — only if items exist */}
       <NeedsAttention items={data.attentionItems} onSelectExam={onSelectExam} onNavigate={onNavigate} />
+
+      {/* Last Examination Performance */}
+      <PerformanceSection classes={classes} onSelectExam={onSelectExam} onNavigate={onNavigate} />
     </div>
   )
 }
