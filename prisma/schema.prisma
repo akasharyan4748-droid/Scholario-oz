@@ -54,6 +54,9 @@ model School {
   examRules     ExamRule[]
   admitCardConfigs AdmitCardConfig[]
   reportCardConfigs ReportCardConfig[]
+  homeworks     Homework[]
+  homeworkSubmissions HomeworkSubmission[]
+  homeworkAuditLogs HomeworkAuditLog[]
 }
 
 model User {
@@ -82,6 +85,7 @@ model User {
   sentMessages       Message[] @relation("MessageSender")
   receivedMessages  Message[] @relation("MessageRecipient")
   createdEvents     SchoolEvent[]
+  createdHomeworks  Homework[]
 }
 
 model Teacher {
@@ -126,6 +130,7 @@ model Student {
   examAttendance ExamAttendance[]
   seatAssignments ExamSeatAssignment[]
   resultOutcomes ExamResultOutcome[]
+  homeworkSubmissions HomeworkSubmission[]
 }
 
 model Class {
@@ -151,6 +156,7 @@ model Class {
   examSubjects     ExamSubjectConfig[]
   examSchedule     ExamScheduleItem[]
   examMarks       ExamMark[]
+  homeworks       Homework[]
 }
 
 model Subject {
@@ -172,6 +178,7 @@ model Subject {
   examSubjects     ExamSubjectConfig[]
   examSchedule     ExamScheduleItem[]
   examMarks       ExamMark[]
+  homeworks       Homework[]
 }
 
 model Exam {
@@ -470,19 +477,109 @@ model Timetable {
 }
 
 model Assignment {
-  id          String    @id @default(cuid())
+  id            String    @id @default(cuid())
+  schoolId      String
+  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId       String?
+  class         Class?    @relation(fields: [classId], references: [id])
+  subjectId     String?
+  subject       Subject? @relation(fields: [subjectId], references: [id])
+  title         String
+  description   String?
+  dueDate       DateTime?
+  createdBy     String?
+  creator       User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+  // Legacy compatibility — kept for old assignment routes
+}
+
+// ─── Homework (richer model with full lifecycle) ──────────────────────
+
+model Homework {
+  id              String    @id @default(cuid())
+  schoolId        String
+  school          School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  classId         String
+  class           Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId       String?
+  subject         Subject? @relation(fields: [subjectId], references: [id])
+  teacherId       String?
+  teacherName     String?
+  topic           String?
+  chapter         String?
+  learningObjective String?
+  content         String?
+  attachments     String?   // JSON array of {name, url, type}
+  maxMarks        Float?
+  gradingType     String    @default("marks") // marks, grade, completion
+  assignedDate    DateTime
+  dueDate         DateTime
+  dueTime         String    @default("23:59")
+  status          String    @default("DRAFT") // DRAFT, PUBLISHED, ACTIVE, CLOSED, ARCHIVED
+  allowLateSubmission Boolean @default(true)
+  lateDeadline    DateTime?
+  latePenalty     Float     @default(0)
+  allowResubmission Boolean @default(true)
+  createdBy       String?
+  creator         User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  publishedAt     DateTime?
+  closedAt        DateTime?
+  originalDueDate DateTime?
+  deadlineChangedBy String?
+  deadlineChangedAt DateTime?
+  deadlineChangeReason String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  submissions     HomeworkSubmission[]
+  auditLogs       HomeworkAuditLog[]
+}
+
+model HomeworkSubmission {
+  id              String    @id @default(cuid())
+  homeworkId      String
+  homework        Homework  @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  schoolId        String
+  school          School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  attemptNumber   Int       @default(1)
+  status          String    @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, SUBMITTED, LATE, RETURNED, RESUBMISSION_REQUIRED, REVIEWED
+  responseText    String?
+  attachments     String?   // JSON array
+  submittedAt     DateTime?
+  submittedLate   Boolean   @default(false)
+  lateByMinutes   Int?
+  marks           Float?
+  grade           String?
+  feedback        String?
+  privateNote     String?
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  returnedAt      DateTime?
+  resubmissionReason String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  @@unique([homeworkId, studentId, attemptNumber])
+}
+
+model HomeworkAuditLog {
+  id          String   @id @default(cuid())
+  homeworkId  String
+  homework    Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
   schoolId    String
-  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  classId     String?
-  class       Class?    @relation(fields: [classId], references: [id])
-  subjectId   String?
-  subject     Subject?  @relation(fields: [subjectId], references: [id])
-  title       String
-  description String?
-  dueDate     DateTime?
-  createdBy   String?
-  creator     User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId      String?
+  userName    String?
+  action      String
+  entity      String?
+  entityId    String?
+  oldValue    String?
+  newValue    String?
+  createdAt   DateTime @default(now())
 }
 
 model Notification {
