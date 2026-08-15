@@ -1,0 +1,1799 @@
+SCHOLARIO-OS — PRINCIPAL EXAMINATION MODULE
+NEXT ITERATION: SMART EXAMINATION TEMPLATES + AUTOMATIC EXAM GENERATOR
+
+IMPORTANT:
+This is NOT just another UI polish iteration.
+
+The current Create Examination screen looks better, but the fundamental workflow is still wrong.
+
+Right now the system shows templates such as:
+
+• Unit Test
+• Periodic Assessment
+• Half-Yearly Examination
+• Annual Examination
+• Practical Examination
+• Pre-Board Examination
+• Oral / Viva Examination
+• Custom Examination
+
+BUT after selecting a template, the Principal still has to manually configure almost everything.
+
+That defeats the purpose of templates.
+
+The objective of this iteration is to turn these into REAL SMART EXAMINATION TEMPLATES.
+
+The correct mental model is:
+
+SELECT TEMPLATE
+→ PROVIDE THE MINIMUM REQUIRED INPUT
+→ SYSTEM AUTOMATICALLY BUILDS THE EXAM
+→ PRINCIPAL REVIEWS
+→ CREATE EXAMINATION
+
+The Principal should NOT have to manually construct the entire examination every time.
+
+============================================================
+1. CORE PRINCIPLE
+============================================================
+
+A template is not merely:
+
+"Unit Test" + prefilled text.
+
+A template is a predefined examination policy.
+
+It should already know:
+
+• what kind of examination it is
+• which classes it normally applies to
+• which subjects should be included
+• default maximum marks
+• theory/practical/oral structure
+• passing rules
+• preferred examination duration
+• subject difficulty/priority
+• how many shifts are required
+• how subjects should be distributed across dates
+• scheduling rules
+• whether practical/oral components apply
+• whether the examination is board-oriented
+• default result calculation rules
+
+Therefore:
+
+When the Principal selects a template, the system should AUTOMATICALLY build almost the entire examination.
+
+The Principal should mostly need to choose the examination date/date range.
+
+============================================================
+2. REMOVE THE CURRENT "FORM-FIRST" MENTAL MODEL
+============================================================
+
+Do NOT keep the current flow where the Principal sees:
+
+Choose examination type
++
+Examination Name
++
+Examination Type
++
+Start Date
++
+End Date
++
+Pass Percentage
++
+Description
+
+and then has to continue configuring everything.
+
+Instead, after choosing a template, show a compact "Template Setup" experience.
+
+Example:
+
+CREATE EXAMINATION
+
+Choose an examination type
+
+[ Unit Test ]
+[ Periodic Assessment ]
+[ Half-Yearly ]
+[ Annual ]
+[ Practical ]
+[ Pre-Board ]
+[ Oral / Viva ]
+
+Then after selecting Unit Test:
+
+UNIT TEST
+Short periodic assessment
+
+✓ 50 marks by default
+✓ Double-shift scheduling
+✓ Automatic subject distribution
+✓ Automatic timetable generation
+✓ Automatic passing calculation
+
+Choose examination dates
+
+Start:
+[ 12 September 2026 ]
+
+End:
+[ 13 September 2026 ]
+
+Then:
+
+Classes
+All eligible classes
+
+Subjects
+Automatically selected from class subject structure
+
+Schedule
+Automatically generated
+
+Marks
+Automatically configured
+
+[ Review Examination → ]
+
+This is the experience we want.
+
+============================================================
+3. "ONLY DATES" SHOULD BE THE MAIN INPUT FOR PREBUILT TEMPLATES
+============================================================
+
+For built-in templates, the Principal should NOT manually configure:
+
+• marks
+• subjects
+• theory
+• practical
+• oral
+• schedule
+• invigilator structure
+• passing rules
+
+unless they explicitly choose to customize them.
+
+The template should generate those automatically.
+
+The primary required user input should be:
+
+DATE / DATE RANGE
+
+The system should then generate the examination.
+
+For example:
+
+Principal selects:
+
+Unit Test
+
+Then chooses:
+
+10 September → 12 September
+
+The system automatically determines:
+
+• applicable classes
+• applicable subjects
+• marks
+• number of papers
+• subject order
+• shift allocation
+• time slots
+• examination duration
+• schedule
+• evaluation configuration
+
+Then the Principal sees the generated result for confirmation.
+
+============================================================
+4. CLASSES SHOULD BE AUTOMATICALLY DETERMINED
+============================================================
+
+Do NOT make the Principal select every class again after selecting a standard template.
+
+Use the school's existing:
+
+Students & Classes
++
+Subjects
++
+Academic structure
+
+to determine eligible classes.
+
+For example:
+
+Unit Test template:
+
+Eligible:
+All active academic classes
+
+Half-Yearly:
+
+Eligible:
+All academic classes that are configured for half-yearly assessment
+
+Annual:
+
+Eligible:
+All academic classes
+
+Pre-Board:
+
+Eligible:
+Board classes only, e.g. Grade 10 and Grade 12
+
+Practical:
+
+Eligible:
+Classes/subjects configured with practical components
+
+However:
+
+The Principal should still be able to change the scope.
+
+Do this through a small secondary action:
+
+"Adjust classes"
+
+or
+
+"Edit scope"
+
+rather than forcing class selection as the main workflow.
+
+Default = automatic.
+
+Customization = optional.
+
+============================================================
+5. SMART UNIT TEST TEMPLATE
+============================================================
+
+Create a REAL built-in Unit Test template.
+
+Default configuration:
+
+EXAM TYPE:
+Unit Test
+
+DEFAULT MAXIMUM MARKS:
+50
+
+DEFAULT PASSING:
+33% or school's configured default passing percentage
+
+DEFAULT EXAMINATION MODE:
+Double Shift
+
+The purpose of the double shift is NOT simply to put two random subjects on the same day.
+
+Subjects should be classified based on difficulty/workload.
+
+For example:
+
+Hard / High-load:
+Mathematics
+Physics
+Chemistry
+etc.
+
+Normal / Standard:
+English
+Hindi
+Social Science
+etc.
+
+Do NOT permanently hardcode these exact subjects as "hard".
+
+Instead, subjects should have an optional:
+
+Subject Difficulty / Examination Weight
+
+configuration in the school's subject setup.
+
+Possible values:
+
+• High
+• Normal
+• Light
+
+or an equivalent clean model.
+
+Unit Test scheduling should use this information.
+
+============================================================
+6. UNIT TEST DOUBLE-SHIFT LOGIC
+============================================================
+
+For Unit Tests:
+
+The system should automatically create two examination shifts per day when appropriate.
+
+Example:
+
+DAY 1
+
+Morning Shift
+Mathematics
+9:00 AM – 10:00 AM
+
+Afternoon Shift
+English
+1:00 PM – 2:00 PM
+
+DAY 2
+
+Morning Shift
+Physics
+9:00 AM – 10:00 AM
+
+Afternoon Shift
+Hindi
+1:00 PM – 2:00 PM
+
+The exact times should come from configurable school examination settings.
+
+Do NOT hardcode 9–10 and 1–2 permanently.
+
+Use sensible defaults that the school can change later.
+
+Most importantly:
+
+A hard subject should preferably NOT be paired against another hard subject on the same day.
+
+Example:
+
+BAD:
+
+Morning:
+Mathematics
+
+Afternoon:
+Physics
+
+Better:
+
+Morning:
+Mathematics
+
+Afternoon:
+English
+
+Next day:
+
+Morning:
+Physics
+
+Afternoon:
+Hindi
+
+The scheduling engine should distribute subject load intelligently.
+
+============================================================
+7. UNIT TEST MARKS
+============================================================
+
+Default:
+
+Maximum Marks = 50
+
+This should automatically appear for all applicable subjects.
+
+For example:
+
+Mathematics — 50
+Physics — 50
+English — 50
+
+No need for the Principal to type 50 repeatedly.
+
+However:
+
+The Principal may later customize marks if required.
+
+For example:
+
+Unit Test
+Default = 50
+
+School may change:
+
+50 → 40
+
+or:
+
+50 → 25
+
+if their school policy differs.
+
+This customization should happen through an optional:
+
+"Customize template"
+
+action.
+
+It should NOT be part of the default creation workflow.
+
+============================================================
+8. HALF-YEARLY EXAMINATION TEMPLATE
+============================================================
+
+Create a smart Half-Yearly template.
+
+Default:
+
+Maximum Marks = 100
+
+But DO NOT assume every school uses a simple 100-mark theory paper.
+
+The template should support component-based marks.
+
+For example:
+
+OPTION A
+
+Theory:
+100
+
+Practical:
+0
+
+OR:
+
+OPTION B
+
+Theory:
+70
+
+Practical:
+30
+
+OR:
+
+OPTION C
+
+Theory:
+80
+
+Practical:
+20
+
+OR:
+
+OPTION D
+
+Theory:
+70
+
+Practical:
+20
+
+Oral:
+10
+
+The Principal should not have to configure this every time.
+
+The Half-Yearly template should have a default component policy.
+
+But the school can modify it once in:
+
+Examination Settings / Template Settings
+
+Then future Half-Yearly examinations automatically use that policy.
+
+============================================================
+9. ANNUAL EXAMINATION TEMPLATE
+============================================================
+
+Annual Examination should work similarly.
+
+Default:
+
+Maximum Marks = 100
+
+But support configurable assessment components:
+
+Theory
+Practical
+Oral / Viva
+Internal / other configured component if the system supports it
+
+Example:
+
+Theory = 70
+Practical = 30
+
+or:
+
+Theory = 80
+Practical = 20
+
+The template should automatically apply the school's configured assessment pattern.
+
+The Principal should not manually type this for every annual exam.
+
+============================================================
+10. IMPORTANT: SCHOOL-WIDE TEMPLATE POLICY
+============================================================
+
+This is an important architectural requirement.
+
+Built-in templates should have:
+
+SYSTEM DEFAULTS
+
+but the school should be able to customize those defaults.
+
+For example:
+
+System default:
+
+Half-Yearly
+100 marks
+
+School settings:
+
+Theory 70
+Practical 30
+
+Then every future Half-Yearly examination automatically uses:
+
+70 Theory
+30 Practical
+
+without the Principal having to configure it again.
+
+Similarly:
+
+School can configure Unit Test:
+
+50 marks
+Double shift
+60-minute duration
+
+Then every new Unit Test automatically follows that policy.
+
+This is how a real ERP should behave.
+
+============================================================
+11. TEMPLATE SETTINGS
+============================================================
+
+In:
+
+Examinations → Settings
+
+create a polished:
+
+EXAMINATION TEMPLATES & POLICIES
+
+section.
+
+Show:
+
+UNIT TEST
+50 marks
+Double shift
+Default duration: configurable
+Subject balancing: enabled
+
+HALF-YEARLY
+100 marks
+Theory/Practical: configurable
+
+ANNUAL
+100 marks
+Theory/Practical: configurable
+
+PRACTICAL
+Practical evaluation
+Duration configurable
+
+PRE-BOARD
+Board class assessment
+
+ORAL / VIVA
+Oral evaluation
+
+PERIODIC ASSESSMENT
+Configurable periodic assessment
+
+Each template can have:
+
+[Use Default] / [Customize]
+
+School administrators can customize the policy.
+
+Do not destroy system defaults.
+
+============================================================
+12. SMART SCHEDULING ENGINE
+============================================================
+
+This is one of the most important changes.
+
+When a template is selected and dates are provided:
+
+the system should generate the timetable automatically.
+
+It should consider:
+
+• selected date range
+• school working days
+• selected classes
+• subjects
+• subject difficulty
+• maximum daily examinations
+• morning/afternoon shifts
+• examination duration
+• practical requirements
+• oral requirements
+• holidays if available
+• existing school timetable conflicts
+• existing examination conflicts
+• teacher/invigilator availability where possible
+
+Do not simply generate random dates.
+
+The result should look like a professionally planned school examination timetable.
+
+============================================================
+13. AUTOMATIC SCHEDULE EXAMPLE
+============================================================
+
+Suppose:
+
+Unit Test
+
+Dates:
+
+10 Sep → 12 Sep
+
+Classes:
+
+Grade 9
+Grade 10
+
+Subjects:
+
+English
+Mathematics
+Physics
+Chemistry
+Hindi
+
+System generates:
+
+10 Sep
+
+09:00–10:00
+Mathematics
+
+13:00–14:00
+English
+
+11 Sep
+
+09:00–10:00
+Physics
+
+13:00–14:00
+Hindi
+
+12 Sep
+
+09:00–10:00
+Chemistry
+
+The Principal does NOT manually enter this.
+
+The system creates it.
+
+Then show:
+
+"Schedule generated automatically"
+
+with a small:
+
+[Review / Adjust]
+
+action.
+
+============================================================
+14. AUTOMATIC MARK CONFIGURATION
+============================================================
+
+The same principle applies to marks.
+
+Unit Test:
+
+50 marks automatically.
+
+Half-Yearly:
+
+100 marks automatically.
+
+Annual:
+
+100 marks automatically.
+
+If school policy is:
+
+Theory 70
+Practical 30
+
+the system automatically generates:
+
+Theory = 70
+Practical = 30
+
+The Principal should only intervene if they want something different.
+
+============================================================
+15. AUTOMATIC PASSING RULES
+============================================================
+
+Use the school's configured default passing policy.
+
+For example:
+
+33%
+
+But do NOT repeatedly ask:
+
+Pass Percentage:
+33
+
+in every examination.
+
+Instead:
+
+"Uses school default: 33%"
+
+If the Principal wants to override it:
+
+[Customize]
+
+Then they can change it.
+
+This makes the default workflow much cleaner.
+
+============================================================
+16. AUTOMATIC EXAM DURATION
+============================================================
+
+Templates should also know default duration.
+
+Example:
+
+Unit Test:
+60 minutes
+
+Half-Yearly:
+120–180 minutes depending on subject/configuration
+
+Annual:
+180 minutes or school-defined
+
+Practical:
+subject/configured duration
+
+Oral:
+configured duration
+
+These should be configurable school policies.
+
+The generated timetable should use these durations automatically.
+
+============================================================
+17. CUSTOM EXAMINATION SHOULD BE DIFFERENT
+============================================================
+
+Now the second part is very important.
+
+For an examination that does NOT fit any built-in template:
+
+the Principal should use a separate custom creation action.
+
+Do NOT make Custom Examination another giant card in the same template grid.
+
+Instead, on the Exams page, near the top-right:
+
+[ +  Create Examination ]
+
+Make this button premium, compact and visually distinct.
+
+It can use:
+
++ icon
+Create Examination
+
+or:
+
++  New Exam
+
+Use the one that fits the existing Schollez visual language best.
+
+The button should NOT appear twice.
+
+There must be exactly ONE primary create action.
+
+============================================================
+18. CUSTOM EXAMINATION FLOW
+============================================================
+
+Clicking:
+
++ Create Examination
+
+should open a clean custom examination creator.
+
+This is for completely different examinations.
+
+Examples:
+
+• Diagnostic Test
+• Scholarship Test
+• Admission Test
+• Monthly Assessment
+• Olympiad
+• Special Test
+• Remedial Assessment
+• Any school-specific examination
+
+The custom creator should ask for:
+
+EXAMINATION NAME
+Required
+
+EXAMINATION TYPE
+Custom / school-defined
+
+CLASSES
+Select classes
+
+SUBJECTS
+Select subjects
+
+DATE / DATE RANGE
+Required
+
+TIMING
+Start time / End time
+
+MAXIMUM MARKS
+Configurable
+
+PASSING CRITERIA
+Configurable
+
+FEES
+Optional examination fee
+
+DESCRIPTION / INSTRUCTIONS
+Optional
+
+PRACTICAL / ORAL
+Optional
+
+This is where manual configuration belongs.
+
+============================================================
+19. EXAMINATION FEES
+============================================================
+
+For Custom Examination:
+
+support:
+
+Examination Fee
+
+Examples:
+
+₹50
+₹100
+₹250
+
+The fee should be optional.
+
+If:
+
+Fee = ₹0
+
+show:
+
+No examination fee
+
+Do NOT confuse examination fee with school fee management.
+
+It should integrate with the existing Fee Management system where appropriate.
+
+If the existing finance architecture supports fee heads:
+
+create/use an examination fee head rather than inventing a separate payment system.
+
+============================================================
+20. CUSTOM EXAM SCHEDULE
+============================================================
+
+For custom examinations, the Principal can manually configure:
+
+Date
+Start time
+End time
+Subject
+Room
+Invigilator
+
+But provide smart defaults wherever possible.
+
+For example:
+
+Select 5 subjects
+
+Then the system can offer:
+
+"Generate schedule automatically"
+
+The Principal can choose:
+
+[Generate Automatically]
+
+or:
+
+[Enter Manually]
+
+This gives both flexibility and automation.
+
+============================================================
+21. TEMPLATE CREATION EXPERIENCE
+============================================================
+
+The existing template cards are visually okay but should now communicate something more useful.
+
+Instead of only:
+
+Unit Test
+Short periodic assessment
+
+show subtle metadata:
+
+Unit Test
+
+50 marks
+Double shift
+Auto schedule
+
+Short periodic assessment
+
+Half-Yearly Examination
+
+100 marks
+Multi-day
+Theory + Practical
+
+Annual Examination
+
+100 marks
+Final assessment
+Auto schedule
+
+This immediately tells the Principal:
+
+"What will this template do for me?"
+
+============================================================
+22. DO NOT SHOW UNNECESSARY FORM FIELDS AFTER TEMPLATE SELECTION
+============================================================
+
+This is critical.
+
+After selecting:
+
+Unit Test
+
+DO NOT immediately show:
+
+Examination Name
+Examination Type
+Pass Percentage
+Description
+etc.
+
+Instead show:
+
+UNIT TEST
+
+50 marks · Double shift · Auto schedule
+
+Choose examination dates
+
+[ Start Date ] → [ End Date ]
+
+Classes:
+All eligible classes
+
+Subjects:
+Automatically selected
+
+Schedule:
+Will be generated automatically
+
+Marks:
+50 per subject
+
+Passing:
+School default 33%
+
+Then:
+
+[ Generate Examination ]
+
+This is the experience I want.
+
+============================================================
+23. GENERATED EXAM PREVIEW
+============================================================
+
+After selecting the dates, the system should generate a preview.
+
+Example:
+
+UNIT TEST
+
+10 Sep — 12 Sep 2026
+
+Classes
+Grade 9-A
+Grade 10-A
+
+Subjects
+5 subjects
+
+Marks
+50 per subject
+
+Schedule
+
+10 Sep
+Mathematics — 9:00 AM
+English — 1:00 PM
+
+11 Sep
+Physics — 9:00 AM
+Hindi — 1:00 PM
+
+12 Sep
+Chemistry — 9:00 AM
+
+Status:
+
+✓ Schedule generated
+✓ Marks configured
+✓ Passing configured
+✓ Classes assigned
+✓ Subjects assigned
+
+Then:
+
+[ Create Examination ]
+
+Secondary:
+
+[ Adjust ]
+
+This should replace most of the current five-step manual workflow for built-in templates.
+
+============================================================
+24. KEEP ADVANCED CUSTOMIZATION AVAILABLE
+============================================================
+
+We still need the existing detailed configuration capabilities.
+
+Do NOT remove them.
+
+Instead, hide them behind:
+
+"Customize"
+
+or:
+
+"Advanced settings"
+
+The default experience is simple.
+
+Advanced experience is powerful.
+
+This gives:
+
+Simple for normal Principal usage.
+
+Powerful for special cases.
+
+============================================================
+25. TEMPLATE LOGIC SHOULD BE DATA-DRIVEN
+============================================================
+
+Do NOT implement this with huge frontend if/else blocks such as:
+
+if template === "unit-test"
+if template === "annual"
+if template === "half-yearly"
+
+Instead create a reusable template configuration model.
+
+A template should be able to define things such as:
+
+id
+name
+description
+category
+applicability
+defaultMarks
+assessmentComponents
+passPercentage
+duration
+shiftPolicy
+schedulingPolicy
+subjectDistributionPolicy
+requiresPractical
+requiresOral
+boardOnly
+etc.
+
+Use the existing project's architecture/database where possible.
+
+Do not duplicate existing examination concepts.
+
+============================================================
+26. SUBJECT DIFFICULTY
+============================================================
+
+Introduce subject difficulty as a reusable academic configuration.
+
+Possible:
+
+LIGHT
+NORMAL
+HIGH
+
+or:
+
+LOW
+MEDIUM
+HIGH
+
+Use whichever terminology fits the existing application.
+
+The Principal/Admin should be able to configure it once.
+
+Example:
+
+Mathematics → High
+Physics → High
+Chemistry → High
+English → Normal
+Hindi → Normal
+
+Then Unit Test scheduling can use this information.
+
+Do not hardcode subject names.
+
+============================================================
+27. SMART SCHEDULING SHOULD NOT BE TOO RIGID
+============================================================
+
+The scheduler should produce a sensible default.
+
+But Principal must always be able to adjust it.
+
+Example:
+
+Generated schedule:
+
+Mathematics
+10 Sep — Morning
+
+English
+10 Sep — Afternoon
+
+Principal can click:
+
+Edit Schedule
+
+and change:
+
+Mathematics → 11 Sep
+
+The system should then revalidate conflicts.
+
+So:
+
+AUTO-GENERATION
++
+MANUAL OVERRIDE
+
+This is the correct ERP behavior.
+
+============================================================
+28. HALF-YEARLY / ANNUAL COMPONENT MODEL
+============================================================
+
+Do not model marks as only one number.
+
+Support:
+
+Assessment Components.
+
+Example:
+
+Mathematics
+
+Theory
+70 / 70
+
+Practical
+30 / 30
+
+Total
+100 / 100
+
+Another school:
+
+Theory
+100
+
+Practical
+0
+
+Total
+100
+
+Another:
+
+Theory
+80
+
+Practical
+20
+
+Total
+100
+
+This should be a reusable component system.
+
+It should also work for:
+
+Practical
+Oral
+Internal assessment
+etc.
+
+============================================================
+29. PRACTICAL TEMPLATE
+============================================================
+
+Practical Examination should automatically understand:
+
+• practical subjects
+• practical marks
+• practical duration
+• lab/room
+• examiner
+• schedule
+• applicable classes
+
+The system should automatically select subjects that have practical components where possible.
+
+The Principal can adjust.
+
+============================================================
+30. PRE-BOARD TEMPLATE
+============================================================
+
+Pre-Board should automatically:
+
+• target board classes
+• use board-style marks configuration
+• use longer examination duration
+• generate a multi-day schedule
+• support theory/practical where relevant
+
+Do not require the Principal to manually select every board class again.
+
+============================================================
+31. ORAL / VIVA TEMPLATE
+============================================================
+
+Oral/Viva should automatically:
+
+• select relevant subjects
+• use oral marks
+• use shorter configurable duration
+• generate oral schedule
+• support examiner assignment
+
+============================================================
+32. PERIODIC ASSESSMENT
+============================================================
+
+Periodic Assessment should behave as another smart built-in template.
+
+It should have school-configurable:
+
+• maximum marks
+• duration
+• frequency
+• subject policy
+• scheduling policy
+
+Again:
+
+Select template
+→ choose dates
+→ generate.
+
+============================================================
+33. CUSTOM EXAMINATION BUTTON DESIGN
+============================================================
+
+On the Exams landing page:
+
+There should be ONE primary action:
+
++ Create Examination
+
+Make it premium.
+
+Use:
+
+• emerald/Schollez accent
+• subtle gradient or tonal depth if consistent with the design system
+• clean plus icon
+• slightly elevated hover state
+• compact rounded shape
+
+Do NOT create two duplicate buttons.
+
+Do NOT make it oversized.
+
+============================================================
+34. REMOVE REDUNDANT FIVE-STEP FEEL FOR STANDARD TEMPLATES
+============================================================
+
+For standard templates, do NOT force the Principal through:
+
+Details
+→ Classes
+→ Schedule
+→ Configuration
+→ Review
+
+if the system can automatically generate those.
+
+Instead:
+
+1. Choose Template
+2. Choose Dates
+3. Review Generated Examination
+4. Create
+
+The detailed steps can remain accessible through:
+
+Customize
+
+if the Principal wants manual control.
+
+This is a major UX improvement.
+
+============================================================
+35. FINAL IDEAL USER EXPERIENCE
+============================================================
+
+Principal clicks:
+
+Examinations
+
+Then:
+
++ Create Examination
+
+A beautiful template chooser opens.
+
+Principal sees:
+
+UNIT TEST
+50 marks
+Double shift
+Auto schedule
+
+HALF-YEARLY
+100 marks
+Theory + Practical
+Auto schedule
+
+ANNUAL
+100 marks
+Final assessment
+Auto schedule
+
+PRACTICAL
+Practical evaluation
+Auto schedule
+
+PRE-BOARD
+Board classes
+Board-style assessment
+
+ORAL / VIVA
+Oral evaluation
+
+PERIODIC ASSESSMENT
+Periodic evaluation
+
+Then:
+
+CUSTOM EXAMINATION
+Build your own examination
+
+Principal clicks:
+
+UNIT TEST
+
+System shows:
+
+UNIT TEST
+
+50 marks
+Double shift
+Automatic scheduling
+
+Eligible classes:
+All applicable classes
+
+Subjects:
+Automatically selected
+
+Choose examination dates:
+
+[ 10 Sep 2026 ] → [ 12 Sep 2026 ]
+
+Then:
+
+[ Generate Examination ]
+
+System automatically generates:
+
+Classes
+Subjects
+Marks
+Passing
+Schedule
+Shifts
+Duration
+
+Then preview:
+
+✓ 2 classes
+✓ 5 subjects
+✓ 50 marks per subject
+✓ 5 papers scheduled
+✓ 3 examination days
+✓ Double-shift schedule generated
+
+[ Adjust ]
+[ Create Examination ]
+
+THAT is the experience we are trying to build.
+
+============================================================
+36. VERY IMPORTANT — DO NOT OVERENGINEER THE UI
+============================================================
+
+Do not turn this into a huge configuration dashboard.
+
+The Principal should see only what matters.
+
+Default flow:
+
+Template
+→ Dates
+→ Generated result
+→ Create
+
+Advanced configuration:
+
+Optional.
+
+Keep the UI:
+
+• clean
+• premium
+• colorful but restrained
+• spacious
+• enterprise-grade
+• easy to scan
+
+Avoid:
+
+• box inside box
+• excessive borders
+• unnecessary headings
+• duplicate labels
+• giant empty spaces
+• too many input fields
+• excessive dropdowns
+• text overlap
+• cramped tables
+
+============================================================
+37. EXISTING DATA MUST BE USED
+============================================================
+
+Do NOT use fake frontend data.
+
+Use existing real:
+
+• Classes
+• Students
+• Subjects
+• Teachers
+• Academic session
+• Examination records
+• Fee infrastructure
+• School settings
+
+The active academic session should automatically determine the examination session.
+
+Do not ask the Principal to select the academic session.
+
+============================================================
+38. BACKEND / DATABASE
+============================================================
+
+Before implementation:
+
+inspect the current Prisma/database examination schema.
+
+Do not create duplicate:
+
+ExamType
+ExaminationType
+Template
+etc.
+
+Reuse existing concepts where possible.
+
+If a new template/policy model is genuinely needed:
+
+implement it cleanly.
+
+Built-in templates should be seeded/configured data.
+
+School-customized policies should persist in the database.
+
+Do not store template configuration only in React state.
+
+Do not use localStorage as the source of truth.
+
+============================================================
+39. EXISTING EXAMS MUST NOT BREAK
+============================================================
+
+Existing examinations must continue working.
+
+The new smart template system should create normal examination records compatible with the existing:
+
+• Schedule
+• Marks
+• Results
+• Reports
+• Teacher workflows
+• Student workflows
+
+Do not create a separate incompatible "generated exam" system.
+
+The generated examination must become a normal examination in the existing ERP.
+
+============================================================
+40. IMPLEMENTATION ORDER
+============================================================
+
+Do this carefully in this order:
+
+PHASE 1
+Inspect existing examination architecture and Prisma schema.
+
+PHASE 2
+Define/reuse examination template configuration.
+
+PHASE 3
+Implement smart template defaults.
+
+PHASE 4
+Implement automatic marks generation.
+
+PHASE 5
+Implement automatic class/subject selection.
+
+PHASE 6
+Implement smart scheduling engine.
+
+PHASE 7
+Implement generated examination preview.
+
+PHASE 8
+Implement custom examination creator.
+
+PHASE 9
+Polish UI/UX.
+
+PHASE 10
+Test the complete workflow.
+
+Do not redesign unrelated modules.
+
+============================================================
+41. TEST THESE EXACT SCENARIOS
+============================================================
+
+TEST 1:
+
+Create Unit Test.
+
+Expected:
+
+Select Unit Test
+→ choose dates
+→ automatic 50 marks
+→ automatic classes
+→ automatic subjects
+→ automatic double-shift schedule
+→ review
+→ create
+
+No manual repetitive configuration.
+
+TEST 2:
+
+Create Half-Yearly.
+
+Expected:
+
+Select Half-Yearly
+→ choose dates
+→ automatic 100-mark structure
+→ automatic subjects/classes
+→ multi-day schedule
+→ review
+→ create.
+
+TEST 3:
+
+Configure school Half-Yearly policy:
+
+Theory = 70
+Practical = 30
+
+Create new Half-Yearly.
+
+Expected:
+
+70 + 30 automatically appears.
+
+TEST 4:
+
+Create Annual.
+
+Expected:
+
+100-mark default
++
+automatic schedule
++
+automatic classes
++
+automatic subjects.
+
+TEST 5:
+
+Create Custom Examination.
+
+Expected:
+
+Principal can manually enter:
+
+Name
+Classes
+Subjects
+Date
+Time
+Marks
+Fee
+Other configuration
+
+and create it.
+
+TEST 6:
+
+Edit generated schedule.
+
+Expected:
+
+Principal can manually change a generated date/time.
+
+System revalidates conflicts.
+
+TEST 7:
+
+Create Pre-Board.
+
+Expected:
+
+Only appropriate board classes are suggested automatically.
+
+TEST 8:
+
+Create Practical.
+
+Expected:
+
+Practical subjects/components are automatically recognized.
+
+============================================================
+42. FINAL QUALITY BAR
+============================================================
+
+Do not stop when the screen "looks good."
+
+The workflow must actually behave intelligently.
+
+A real Principal should be able to create a normal Unit Test with approximately:
+
+Template selection
++
+Date selection
++
+Review
++
+Create
+
+instead of manually entering dozens of values.
+
+The entire purpose of this iteration is:
+
+SMART DEFAULTS
++
+AUTOMATIC GENERATION
++
+OPTIONAL CUSTOMIZATION
+
+not:
+
+PRETTY FORM
++
+MORE FORMS.
+
+Also ensure:
+
+• no duplicate Create Examination buttons
+• no Academic Session input
+• no redundant Examination Details heading
+• no unnecessary manual configuration for built-in templates
+• no fake data
+• no localStorage-only persistence
+• no console errors
+• no TypeScript errors
+• no broken existing examination workflows
+• no text overlap
+• no box-inside-box visual clutter
+• respect the project's ~300 line/file constraint
+
+Build this as a real production-grade Principal Examination workflow, not as a static mockup.
