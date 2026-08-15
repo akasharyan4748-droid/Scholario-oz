@@ -1,44 +1,17 @@
 // ──────────────────────────────────────────────────────────────────────
 // Smart template engine — generates complete exam configuration from
-// a template + dates + real school data (classes, subjects, rules).
-// Pure functions — no React, no side effects.
+// a template + dates + real school data.
+// Fixed 33% passing rule — no UI field for passing percentage.
 // ──────────────────────────────────────────────────────────────────────
 
-export type SubjectDifficulty = 'high' | 'normal' | 'light'
+import type { ExamTemplate } from '@/components/principal/modules/exams/tabs/exam-templates'
 
-export interface TemplateScheduleConfig {
-  shiftPolicy: 'single' | 'double'
-  morningStart: string
-  morningEnd: string
-  afternoonStart: string
-  afternoonEnd: string
-  defaultDurationMin: number
-}
-
-export interface TemplateMarksConfig {
-  defaultMaxMarks: number
-  defaultPassMarks: number
-  theoryMarks: number
-  practicalMarks: number
-  oralMarks: number
-  passPercentage: number
-  gradingType: string
-}
-
-export interface TemplateConfig {
-  scheduling: TemplateScheduleConfig
-  marks: TemplateMarksConfig
-  allowLateSubmission: boolean
-  allowResubmission: boolean
-  multiDay: boolean
-  boardOnly: boolean
-}
+export const FIXED_PASS_PERCENTAGE = 33
 
 export interface SubjectInfo {
   id: string
   name: string
   code: string | null
-  difficulty: SubjectDifficulty
 }
 
 export interface ClassInfo {
@@ -57,12 +30,21 @@ export interface GeneratedScheduleItem {
   endTime: string
   room: string
   invigilatorName: string
-  shift: 'morning' | 'afternoon'
+  shift: number // 1 = morning, 2 = afternoon
+}
+
+export interface GeneratedSubjectConfig {
+  subjectId: string
+  maxMarks: number
+  passMarks: number
+  theoryMarks: number
+  practicalMarks: number
 }
 
 export interface GeneratedExamConfig {
   name: string
   type: string
+  templateId: string
   startDate: string
   endDate: string
   passPercentage: number
@@ -70,276 +52,68 @@ export interface GeneratedExamConfig {
   allowLateSubmission: boolean
   allowResubmission: boolean
   selectedClassIds: string[]
-  subjectsByClass: Record<string, Array<{
-    subjectId: string
-    maxMarks: number
-    passMarks: number
-    theoryMarks: number
-    practicalMarks: number
-  }>>
+  subjectsByClass: Record<string, GeneratedSubjectConfig[]>
   schedule: GeneratedScheduleItem[]
-  marksSummary: {
+  hasPractical: boolean
+  summary: {
     totalPapers: number
     totalStudents: number
-    totalMarksPerSubject: number
+    totalClasses: number
+    totalSubjects: number
+    marksPerSubject: number
   }
-}
-
-// ─── Subject difficulty heuristic ────────────────────────────────────
-
-const HIGH_DIFFICULTY_SUBJECTS = ['mathematics', 'physics', 'chemistry', 'biology', 'science']
-const LIGHT_DIFFICULTY_SUBJECTS = ['art', 'music', 'physical education', 'sports', 'drawing']
-
-export function inferSubjectDifficulty(subjectName: string): SubjectDifficulty {
-  const name = subjectName.toLowerCase()
-  if (HIGH_DIFFICULTY_SUBJECTS.some((s) => name.includes(s))) return 'high'
-  if (LIGHT_DIFFICULTY_SUBJECTS.some((s) => name.includes(s))) return 'light'
-  return 'normal'
-}
-
-// ─── Template configs ────────────────────────────────────────────────
-
-export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
-  'unit-test': {
-    scheduling: {
-      shiftPolicy: 'double',
-      morningStart: '09:00',
-      morningEnd: '10:00',
-      afternoonStart: '13:00',
-      afternoonEnd: '14:00',
-      defaultDurationMin: 60,
-    },
-    marks: {
-      defaultMaxMarks: 50,
-      defaultPassMarks: 17,
-      theoryMarks: 50,
-      practicalMarks: 0,
-      oralMarks: 0,
-      passPercentage: 33,
-      gradingType: 'marks',
-    },
-    allowLateSubmission: true,
-    allowResubmission: true,
-    multiDay: true,
-    boardOnly: false,
-  },
-  'periodic-assessment': {
-    scheduling: {
-      shiftPolicy: 'single',
-      morningStart: '09:00',
-      morningEnd: '10:30',
-      afternoonStart: '13:00',
-      afternoonEnd: '14:30',
-      defaultDurationMin: 90,
-    },
-    marks: {
-      defaultMaxMarks: 50,
-      defaultPassMarks: 17,
-      theoryMarks: 50,
-      practicalMarks: 0,
-      oralMarks: 0,
-      passPercentage: 33,
-      gradingType: 'marks',
-    },
-    allowLateSubmission: true,
-    allowResubmission: false,
-    multiDay: false,
-    boardOnly: false,
-  },
-  'half-yearly': {
-    scheduling: {
-      shiftPolicy: 'single',
-      morningStart: '09:00',
-      morningEnd: '12:00',
-      afternoonStart: '13:00',
-      afternoonEnd: '16:00',
-      defaultDurationMin: 180,
-    },
-    marks: {
-      defaultMaxMarks: 100,
-      defaultPassMarks: 33,
-      theoryMarks: 80,
-      practicalMarks: 20,
-      oralMarks: 0,
-      passPercentage: 33,
-      gradingType: 'marks',
-    },
-    allowLateSubmission: false,
-    allowResubmission: false,
-    multiDay: true,
-    boardOnly: false,
-  },
-  'annual': {
-    scheduling: {
-      shiftPolicy: 'single',
-      morningStart: '09:00',
-      morningEnd: '12:00',
-      afternoonStart: '13:00',
-      afternoonEnd: '16:00',
-      defaultDurationMin: 180,
-    },
-    marks: {
-      defaultMaxMarks: 100,
-      defaultPassMarks: 33,
-      theoryMarks: 80,
-      practicalMarks: 20,
-      oralMarks: 0,
-      passPercentage: 33,
-      gradingType: 'marks',
-    },
-    allowLateSubmission: false,
-    allowResubmission: false,
-    multiDay: true,
-    boardOnly: false,
-  },
-  'practical': {
-    scheduling: {
-      shiftPolicy: 'single',
-      morningStart: '09:00',
-      morningEnd: '11:00',
-      afternoonStart: '13:00',
-      afternoonEnd: '15:00',
-      defaultDurationMin: 120,
-    },
-    marks: {
-      defaultMaxMarks: 50,
-      defaultPassMarks: 20,
-      theoryMarks: 0,
-      practicalMarks: 50,
-      oralMarks: 0,
-      passPercentage: 40,
-      gradingType: 'marks',
-    },
-    allowLateSubmission: false,
-    allowResubmission: false,
-    multiDay: false,
-    boardOnly: true,
-  },
-  'pre-board': {
-    scheduling: {
-      shiftPolicy: 'single',
-      morningStart: '09:00',
-      morningEnd: '12:00',
-      afternoonStart: '13:00',
-      afternoonEnd: '16:00',
-      defaultDurationMin: 180,
-    },
-    marks: {
-      defaultMaxMarks: 100,
-      defaultPassMarks: 33,
-      theoryMarks: 100,
-      practicalMarks: 0,
-      oralMarks: 0,
-      passPercentage: 33,
-      gradingType: 'marks',
-    },
-    allowLateSubmission: false,
-    allowResubmission: false,
-    multiDay: true,
-    boardOnly: true,
-  },
-  'oral-viva': {
-    scheduling: {
-      shiftPolicy: 'single',
-      morningStart: '09:00',
-      morningEnd: '10:00',
-      afternoonStart: '13:00',
-      afternoonEnd: '14:00',
-      defaultDurationMin: 60,
-    },
-    marks: {
-      defaultMaxMarks: 20,
-      defaultPassMarks: 8,
-      theoryMarks: 0,
-      practicalMarks: 0,
-      oralMarks: 20,
-      passPercentage: 40,
-      gradingType: 'marks',
-    },
-    allowLateSubmission: false,
-    allowResubmission: false,
-    multiDay: false,
-    boardOnly: false,
-  },
-  'custom': {
-    scheduling: {
-      shiftPolicy: 'single',
-      morningStart: '09:00',
-      morningEnd: '12:00',
-      afternoonStart: '13:00',
-      afternoonEnd: '16:00',
-      defaultDurationMin: 180,
-    },
-    marks: {
-      defaultMaxMarks: 100,
-      defaultPassMarks: 33,
-      theoryMarks: 100,
-      practicalMarks: 0,
-      oralMarks: 0,
-      passPercentage: 33,
-      gradingType: 'marks',
-    },
-    allowLateSubmission: true,
-    allowResubmission: true,
-    multiDay: false,
-    boardOnly: false,
-  },
 }
 
 // ─── Generate exam config from template + dates + real school data ──
 
 export function generateExamConfig(
-  templateId: string,
-  templateName: string,
+  template: ExamTemplate,
   startDate: string,
   endDate: string,
   classes: ClassInfo[],
-  schoolRules: Record<string, string> = {},
 ): GeneratedExamConfig {
-  const config = TEMPLATE_CONFIGS[templateId] ?? TEMPLATE_CONFIGS['custom']
-
-  // Filter classes based on boardOnly
-  let eligibleClasses = classes
-  if (config.boardOnly) {
-    eligibleClasses = classes.filter((c) => ['10', '12'].includes(c.gradeLevel ?? ''))
-  }
-  const selectedClassIds = eligibleClasses.map((c) => c.id)
+  const meta = template.metadata
+  const selectedClassIds = classes.map((c) => c.id)
+  const hasPractical = (meta.practicalMarks ?? 0) > 0
 
   // Generate subjects per class
-  const subjectsByClass: GeneratedExamConfig['subjectsByClass'] = {}
-  for (const cls of eligibleClasses) {
+  const subjectsByClass: Record<string, GeneratedSubjectConfig[]> = {}
+  for (const cls of classes) {
     subjectsByClass[cls.id] = cls.subjects.map((s) => ({
       subjectId: s.id,
-      maxMarks: config.marks.defaultMaxMarks,
-      passMarks: config.marks.defaultPassMarks,
-      theoryMarks: config.marks.theoryMarks,
-      practicalMarks: config.marks.practicalMarks,
+      maxMarks: meta.maxMarks,
+      passMarks: Math.round(meta.maxMarks * FIXED_PASS_PERCENTAGE / 100),
+      theoryMarks: meta.theoryMarks ?? meta.maxMarks,
+      practicalMarks: meta.practicalMarks ?? 0,
     }))
   }
 
   // Generate schedule
-  const schedule = generateSchedule(templateId, startDate, endDate, eligibleClasses, config)
+  const schedule = generateSchedule(template, startDate, endDate, classes)
 
-  // Summary
-  const totalPapers = schedule.length
-  const totalStudents = eligibleClasses.reduce((s, c) => s + c.studentCount, 0)
+  const totalSubjects = Object.values(subjectsByClass).reduce((s, subs) => s + subs.length, 0)
+  const totalStudents = classes.reduce((s, c) => s + c.studentCount, 0)
 
   return {
-    name: templateName,
-    type: getTemplateName(templateId),
+    name: template.label,
+    type: template.name,
+    templateId: template.id,
     startDate,
     endDate: endDate || startDate,
-    passPercentage: config.marks.passPercentage,
-    gradingType: config.marks.gradingType,
-    allowLateSubmission: config.allowLateSubmission,
-    allowResubmission: config.allowResubmission,
+    passPercentage: FIXED_PASS_PERCENTAGE,
+    gradingType: 'marks',
+    allowLateSubmission: template.category === 'unit-test',
+    allowResubmission: template.category === 'unit-test',
     selectedClassIds,
     subjectsByClass,
     schedule,
-    marksSummary: {
-      totalPapers,
+    hasPractical,
+    summary: {
+      totalPapers: schedule.length,
       totalStudents,
-      totalMarksPerSubject: config.marks.defaultMaxMarks,
+      totalClasses: classes.length,
+      totalSubjects,
+      marksPerSubject: meta.maxMarks,
     },
   }
 }
@@ -347,70 +121,58 @@ export function generateExamConfig(
 // ─── Smart scheduling engine ────────────────────────────────────────
 
 function generateSchedule(
-  templateId: string,
+  template: ExamTemplate,
   startDateStr: string,
   endDateStr: string,
   classes: ClassInfo[],
-  config: TemplateConfig,
 ): GeneratedScheduleItem[] {
-  const items: GeneratedScheduleItem[] = []
+  const meta = template.metadata
   const start = new Date(startDateStr)
   const end = new Date(endDateStr || startDateStr)
+
+  // Collect working days (skip Sunday=0)
   const days: Date[] = []
   const current = new Date(start)
   while (current <= end) {
-    const day = current.getDay()
-    if (day !== 0 && day !== 6) { // Skip Sundays (0) and Saturdays (6)
-      days.push(new Date(current))
-    }
+    if (current.getDay() !== 0) days.push(new Date(current))
     current.setDate(current.getDate() + 1)
   }
   if (days.length === 0) days.push(new Date(start))
 
-  let dayIdx = 0
-  let morningSlot = true
+  const items: GeneratedScheduleItem[] = []
+  const startTimeBase = '09:00'
 
   for (const cls of classes) {
-    // Sort subjects by difficulty: high first (morning slots), light last
-    const sortedSubjects = [...cls.subjects].sort((a, b) => {
-      const order = { high: 0, normal: 1, light: 2 }
-      return order[a.difficulty] - order[b.difficulty]
-    })
+    let dayIdx = 0
+    let papersToday = 0
 
-    for (const subject of sortedSubjects) {
+    for (let i = 0; i < cls.subjects.length; i++) {
+      const subject = cls.subjects[i]
       const date = days[dayIdx % days.length]
       const dateStr = date.toISOString().split('T')[0]
 
-      if (config.scheduling.shiftPolicy === 'double') {
-        // Alternate morning/afternoon — avoid pairing two high-difficulty subjects
-        const shift = morningSlot ? 'morning' : 'afternoon'
-        const startTime = shift === 'morning' ? config.scheduling.morningStart : config.scheduling.afternoonStart
-        const endTime = shift === 'morning' ? config.scheduling.morningEnd : config.scheduling.afternoonEnd
+      if (meta.papersPerDay === 2) {
+        // Unit Test: 2 papers/day, 1hr each, 15min gap
+        const shift = papersToday === 0 ? 1 : 2
+        const startTime = shift === 1 ? '09:00' : '10:15'
+        const endTime = shift === 1 ? '10:00' : '11:15'
 
         items.push({
-          classId: cls.id,
-          subjectId: subject.id,
-          date: dateStr,
-          startTime,
-          endTime,
-          room: `Room ${100 + (dayIdx % 5)}`,
-          invigilatorName: '',
-          shift,
+          classId: cls.id, subjectId: subject.id, date: dateStr,
+          startTime, endTime, room: '', invigilatorName: '', shift,
         })
 
-        morningSlot = !morningSlot
-        if (morningSlot) dayIdx++ // Next day after afternoon
+        papersToday++
+        if (papersToday >= meta.papersPerDay) {
+          papersToday = 0
+          dayIdx++
+        }
       } else {
-        // Single shift — one subject per day
+        // Half-Yearly/Annual: 1 paper/day, 3h15m
+        const endTime = addMinutes(startTimeBase, meta.paperDurationMin)
         items.push({
-          classId: cls.id,
-          subjectId: subject.id,
-          date: dateStr,
-          startTime: config.scheduling.morningStart,
-          endTime: config.scheduling.morningEnd,
-          room: `Room ${100 + (dayIdx % 5)}`,
-          invigilatorName: '',
-          shift: 'morning',
+          classId: cls.id, subjectId: subject.id, date: dateStr,
+          startTime: startTimeBase, endTime, room: '', invigilatorName: '', shift: 1,
         })
         dayIdx++
       }
@@ -420,40 +182,78 @@ function generateSchedule(
   return items
 }
 
-function getTemplateName(templateId: string): string {
-  const names: Record<string, string> = {
-    'unit-test': 'Unit Test',
-    'periodic-assessment': 'Periodic Assessment',
-    'half-yearly': 'Half-Yearly',
-    'annual': 'Annual Examination',
-    'practical': 'Practical',
-    'pre-board': 'Pre-Board',
-    'oral-viva': 'Viva / Oral',
-    'custom': 'Custom',
-  }
-  return names[templateId] ?? 'Custom'
+function addMinutes(time: string, minutes: number): string {
+  const [h, m] = time.split(':').map(Number)
+  const total = h * 60 + m + minutes
+  const hrs = Math.floor(total / 60)
+  const mins = total % 60
+  return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
 }
 
-// ─── Get template metadata for display ──────────────────────────────
+// ─── Validate schedule ──────────────────────────────────────────────
 
-export function getTemplateMetadata(templateId: string): Array<{ label: string; value: string }> {
-  const config = TEMPLATE_CONFIGS[templateId]
-  if (!config) return []
+export interface ScheduleWarning {
+  type: 'insufficient_dates' | 'duplicate_subject' | 'overlap'
+  message: string
+  affectedItems?: string[]
+}
 
-  const meta: Array<{ label: string; value: string }> = []
-  meta.push({ label: 'Marks', value: String(config.marks.defaultMaxMarks) })
+export function validateSchedule(
+  config: GeneratedExamConfig,
+  template: ExamTemplate,
+): ScheduleWarning[] {
+  const warnings: ScheduleWarning[] = []
+  const meta = template.metadata
 
-  if (config.scheduling.shiftPolicy === 'double') {
-    meta.push({ label: 'Shift', value: 'Double shift' })
-  } else if (config.multiDay) {
-    meta.push({ label: 'Type', value: 'Multi-day' })
+  // Check if enough dates for one-paper-per-day
+  if (meta.papersPerDay === 1) {
+    for (const cls of config.selectedClassIds) {
+      const classSubjects = config.subjectsByClass[cls] ?? []
+      const classSchedule = config.schedule.filter((s) => s.classId === cls)
+      const uniqueDates = new Set(classSchedule.map((s) => s.date))
+      const requiredDays = classSubjects.length
+
+      if (uniqueDates.size < requiredDays) {
+        warnings.push({
+          type: 'insufficient_dates',
+          message: `Selected date range is insufficient. ${classSubjects.length} subjects require ${requiredDays} examination days (1 paper/day), but only ${uniqueDates.size} days are available.`,
+        })
+        break
+      }
+    }
   }
 
-  if (config.marks.practicalMarks > 0) {
-    meta.push({ label: 'Components', value: `Theory ${config.marks.theoryMarks} + Practical ${config.marks.practicalMarks}` })
+  // Check for duplicate subject on same day (for one-paper-per-day)
+  if (meta.papersPerDay === 1) {
+    const seen = new Map<string, string>()
+    for (const item of config.schedule) {
+      const key = `${item.classId}-${item.date}`
+      if (seen.has(key)) {
+        warnings.push({
+          type: 'duplicate_subject',
+          message: 'Two papers scheduled on the same day for a one-paper-per-day examination.',
+        })
+        break
+      }
+      seen.set(key, item.subjectId)
+    }
   }
 
-  meta.push({ label: 'Schedule', value: 'Auto-generated' })
+  // Check for more than allowed papers per day
+  const dayMap = new Map<string, number>()
+  for (const item of config.schedule) {
+    const key = `${item.classId}-${item.date}`
+    dayMap.set(key, (dayMap.get(key) ?? 0) + 1)
+  }
+  for (const [key, count] of dayMap) {
+    if (count > meta.papersPerDay) {
+      warnings.push({
+        type: 'overlap',
+        message: `${count} papers on the same day. Maximum allowed: ${meta.papersPerDay}.`,
+      })
+      break
+    }
+  }
 
-  return meta
+  return warnings
 }
