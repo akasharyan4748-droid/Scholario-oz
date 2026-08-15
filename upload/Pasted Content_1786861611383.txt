@@ -1,0 +1,1749 @@
+IMPORTANT: STOP AND REBUILD THE EXAMINATION SCHEDULING LOGIC.
+
+I have reviewed the current implementation again. The UI is not the biggest problem anymore. The underlying examination logic is currently wrong.
+
+The current implementation is treating the combined subjects of all selected classes as one global list of papers.
+
+That is incorrect.
+
+For example, if 11 classes/groups are selected and the system says:
+
+18 papers · 18 subjects
+
+that does NOT mean the school needs 18 consecutive examination days.
+
+You must redesign the scheduling model around:
+
+CLASS → SUBJECTS → EXAM SLOTS
+
+not:
+
+SELECTED CLASSES → UNIQUE SUBJECTS → ONE PAPER EACH
+
+This is a critical correction.
+
+============================================================
+1. THE FUNDAMENTAL EXAMINATION MODEL
+============================================================
+
+An examination is conducted for MULTIPLE CLASSES TOGETHER.
+
+The selected classes participate in the same examination window.
+
+The school should NOT conduct:
+
+Class 6 exam separately
+then Class 7 separately
+then Class 8 separately
+then Class 9 separately
+etc.
+
+That defeats the purpose of selecting multiple classes in the same examination.
+
+Instead:
+
+ONE EXAMINATION
+→ ONE COMMON EXAMINATION WINDOW
+→ COMMON EXAM DAYS
+→ COMMON TIME SLOTS
+→ CLASS-SPECIFIC PAPERS WITHIN THOSE SLOTS
+
+Each class follows its own subject list.
+
+The timetable must synchronize those class-specific papers into common slots.
+
+============================================================
+2. VERY IMPORTANT EXAMPLE
+============================================================
+
+Suppose the school has:
+
+Class 9-A:
+Hindi
+English
+Mathematics
+Science
+Social Science
+Additional Subject
+
+Class 10-A:
+Hindi
+English
+Mathematics
+Science
+Social Science
+Additional Subject
+
+Class 11 Science PCM:
+English
+Physics
+Chemistry
+Mathematics
+Physical Education
+
+Class 11 Science PCB:
+English
+Physics
+Chemistry
+Biology
+Physical Education
+
+Class 12 Science PCM:
+English
+Physics
+Chemistry
+Mathematics
+Physical Education
+
+Class 12 Science PCB:
+English
+Physics
+Chemistry
+Biology
+Physical Education
+
+These are NOT:
+
+6 + 6 + 5 + 5 + 5 + 5 = 32 sequential examination papers.
+
+Instead, the scheduler creates COMMON EXAMINATION SLOTS.
+
+For example:
+
+DAY 1
+
+09:00–10:00
+Class 9 → Hindi
+Class 10 → Hindi
+Class 11 PCM → English
+Class 11 PCB → English
+Class 12 PCM → English
+Class 12 PCB → English
+
+10:15–11:15
+Class 9 → English
+Class 10 → English
+Class 11 PCM → Mathematics
+Class 11 PCB → Biology
+Class 12 PCM → Mathematics
+Class 12 PCB → Biology
+
+
+DAY 2
+
+09:00–10:00
+Class 9 → Mathematics
+Class 10 → Mathematics
+Class 11 PCM → Physics
+Class 11 PCB → Physics
+Class 12 PCM → Physics
+Class 12 PCB → Physics
+
+10:15–11:15
+Class 9 → Science
+Class 10 → Science
+Class 11 PCM → Chemistry
+Class 11 PCB → Chemistry
+Class 12 PCM → Chemistry
+Class 12 PCB → Chemistry
+
+
+DAY 3
+
+09:00–10:00
+Class 9 → Social Science
+Class 10 → Social Science
+Class 11 PCM → Physical Education
+Class 11 PCB → Physical Education
+Class 12 PCM → Physical Education
+Class 12 PCB → Physical Education
+
+10:15–11:15
+Class 9 → Additional Subject
+Class 10 → Additional Subject
+
+This is the conceptual model.
+
+The exact ordering can be intelligently generated.
+
+The important point is:
+
+MULTIPLE CLASS-SPECIFIC PAPERS CAN OCCUR IN THE SAME TIME SLOT.
+
+============================================================
+3. SUBJECTS MUST BE DEDUPLICATED CORRECTLY
+============================================================
+
+DO NOT create a separate global paper merely because the same subject appears in multiple classes.
+
+For example:
+
+Hindi in Class 9
+Hindi in Class 10
+
+is NOT:
+
+Hindi Paper 1
+Hindi Paper 2
+
+It is:
+
+Hindi examination for Class 9
+Hindi examination for Class 10
+
+within the same examination slot where possible.
+
+The underlying entities are different because they belong to different classes, but the timetable must group them into the same slot.
+
+Therefore distinguish between:
+
+SUBJECT ID
+CLASS SUBJECT ASSIGNMENT
+EXAM PAPER INSTANCE
+EXAM SLOT
+
+These are NOT the same thing.
+
+============================================================
+4. EXAM PAPER INSTANCE
+============================================================
+
+Internally model a paper approximately as:
+
+ExamPaperInstance:
+
+examId
+classId
+subjectId
+streamId if applicable
+assessmentType
+maximumMarks
+duration
+slotId
+date
+startTime
+endTime
+status
+
+So:
+
+Class 9-A + Hindi
+
+is one paper instance.
+
+Class 10-A + Hindi
+
+is another paper instance.
+
+But they can share:
+
+slotId
+date
+startTime
+endTime
+
+This is the correct architecture.
+
+============================================================
+5. EXAM SLOT
+============================================================
+
+Create a separate concept:
+
+ExamSlot:
+
+id
+examId
+date
+startTime
+endTime
+sequence
+papers[]
+
+A slot can contain MANY paper instances belonging to different classes.
+
+Example:
+
+10 Aug
+09:00–10:00
+
+Papers:
+
+9-A → Hindi
+10-A → Hindi
+11 PCM → English
+11 PCB → English
+12 PCM → English
+12 PCB → English
+
+That is ONE SLOT.
+
+Not six sequential papers.
+
+============================================================
+6. TWO PAPERS PER DAY MEANS PER CLASS
+============================================================
+
+This is another critical correction.
+
+When the examination template says:
+
+2 papers/day
+
+it means:
+
+A CLASS may have at most 2 papers in one day.
+
+It does NOT mean:
+
+the entire school may only have 2 paper instances in one day.
+
+Example:
+
+09:00–10:00
+
+9-A → Hindi
+10-A → Hindi
+11 PCM → English
+11 PCB → English
+
+10:15–11:15
+
+9-A → English
+10-A → English
+11 PCM → Mathematics
+11 PCB → Biology
+
+This is completely valid.
+
+Every participating class has exactly 2 papers that day.
+
+============================================================
+7. UNIT TEST RULE
+============================================================
+
+For Unit Test:
+
+duration = 60 minutes
+
+gap = 15 minutes
+
+default:
+
+Slot 1
+09:00–10:00
+
+Gap
+10:00–10:15
+
+Slot 2
+10:15–11:15
+
+Do NOT generate:
+
+09:00–12:15
+
+for a Unit Test.
+
+The current screenshot showing:
+
+09:00–12:15
+
+for one paper is obviously wrong.
+
+That duration belongs to a completely different examination rule.
+
+The selected examination type must determine:
+
+duration
+maximum papers/day
+gap
+practical rules
+working-day rules
+assessment rules
+
+from Examination Settings.
+
+Do NOT hardcode these independently inside the Create Examination component.
+
+============================================================
+8. NUMBER OF EXAM DAYS
+============================================================
+
+The scheduler must calculate the required number of examination days based on the MAXIMUM subject count among the selected classes.
+
+Formula:
+
+requiredDaysForClass =
+ceil(numberOfExamSubjectsForClass / maxPapersPerDay)
+
+Then:
+
+requiredExamDays =
+MAX(requiredDaysForEachSelectedClass)
+
+Example:
+
+Class 6 = 5 subjects
+→ ceil(5 / 2) = 3 days
+
+Class 7 = 6 subjects
+→ ceil(6 / 2) = 3 days
+
+Class 8 = 6 subjects
+→ 3 days
+
+Class 9 = 6 subjects
+→ 3 days
+
+Class 10 = 6 subjects
+→ 3 days
+
+Class 11 PCM = 5 subjects
+→ 3 days
+
+Class 11 PCB = 5 subjects
+→ 3 days
+
+Therefore:
+
+COMMON EXAMINATION WINDOW = 3 working days.
+
+If another selected class has:
+
+10 subjects
+
+then:
+
+ceil(10 / 2) = 5 days.
+
+Therefore the common examination window becomes:
+
+5 working days.
+
+This is the correct calculation.
+
+============================================================
+9. THE END DATE MUST BE AUTOMATICALLY CALCULATED
+============================================================
+
+The Principal should primarily choose:
+
+START DATE
+
+The system should calculate the minimum valid examination end date automatically from:
+
+selected classes
+↓
+their configured exam subjects
+↓
+exam type rules
+↓
+papers per day
+↓
+school working calendar
+↓
+holidays/weekends
+
+Then show:
+
+Start Date:
+18 Aug 2026
+
+Minimum required:
+3 working days
+
+Calculated Last Date:
+20 Aug 2026
+
+If the Principal wants a longer window, allow changing the last date to a later date.
+
+But NEVER allow a last date earlier than the calculated minimum.
+
+If the selected window is insufficient:
+
+show a clear warning:
+
+"Selected examination window is too short."
+
+Then:
+
+"6 papers per class require 3 working days at 2 papers/day."
+
+Do NOT show nonsense like:
+
+"18 subjects require 18 working days."
+
+============================================================
+10. ABSOLUTE DATE VALIDATION
+============================================================
+
+Current implementation has a serious bug.
+
+It is showing dates such as:
+
+16 Aug
+
+even when the selected examination start date is:
+
+17 Aug.
+
+That is impossible.
+
+The scheduler must NEVER generate a paper before:
+
+exam.startDate
+
+Hard invariant:
+
+paper.date >= exam.startDate
+
+AND
+
+paper.date <= exam.endDate
+
+No exception.
+
+Also:
+
+startDate >= current local school date
+
+for newly created examinations.
+
+Past dates MUST NOT be selectable.
+
+Use the school's configured timezone/local date correctly.
+
+Do not compare UTC dates incorrectly against local dates.
+
+Normalize date-only values as date-only values.
+
+Do not let timezone conversion turn:
+
+2026-08-17
+
+into:
+
+2026-08-16.
+
+This must be tested specifically.
+
+============================================================
+11. DATE RANGE VALIDATION
+============================================================
+
+Validation order:
+
+1. Current local school date
+2. Start date
+3. Examination type
+4. Selected classes
+5. Class subject configuration
+6. Required working days
+7. End date
+8. School calendar
+9. Holidays/weekends
+10. Timetable generation
+
+If start date is tomorrow:
+
+the first examination slot must be tomorrow or later.
+
+Never yesterday.
+
+Never today if today is already past the allowed scheduling cutoff.
+
+============================================================
+12. WORKING DAYS
+============================================================
+
+Do NOT blindly use:
+
+Monday-Friday
+
+unless that is actually how the school's calendar is configured.
+
+Use existing school timetable/calendar settings if available.
+
+At minimum:
+
+Sunday skipped if school configuration says Sunday is non-working.
+
+School holidays should also be respected if the existing system has them.
+
+Build the scheduler around a working-day provider rather than hardcoding weekdays into UI code.
+
+============================================================
+13. SUBJECT SOURCE
+============================================================
+
+Subjects MUST come from:
+
+Students & Classes / school academic configuration.
+
+Do not generate subjects from the selected class name.
+
+Do not create subjects manually in Examination.
+
+Do not hardcode:
+
+Hindi
+English
+Maths
+Science
+
+inside the examination page.
+
+The examination page consumes the configured academic structure.
+
+============================================================
+14. ADDITIONAL SUBJECT
+============================================================
+
+Additional subjects are already configured at class level.
+
+Do not write:
+
+"Additional Subject"
+
+as a literal generic subject unless that is actually the configured subject name.
+
+If the class configuration contains:
+
+Computer
+AI
+Sanskrit
+Drawing
+etc.
+
+then that exact configured subject should be used.
+
+Do not lose the subject identity.
+
+============================================================
+15. STREAM LOGIC
+============================================================
+
+11 and 12 must be stream-aware.
+
+If PCM:
+
+Mathematics applies.
+
+If PCB:
+
+Biology applies.
+
+Do not show Mathematics to PCB unless configured.
+
+Do not show Biology to PCM unless configured.
+
+If a school offers only:
+
+Science PCM
+
+then PCB must not appear.
+
+If a school offers:
+
+Science PCM
+Science PCB
+Commerce
+
+all three may appear.
+
+Everything must be data-driven.
+
+============================================================
+16. CLASS UI REDESIGN
+============================================================
+
+Now fix the current class selection UI.
+
+The current class chips are still visually awkward.
+
+Do NOT use giant cards.
+
+Do NOT show giant empty rectangles.
+
+Use compact selectable rows/chips.
+
+Example:
+
+CLASSES                                             7 selected
+
+MIDDLE · 6–8
+
+[✓ 6-A] [✓ 7-A] [✓ 8-A]
+
+SECONDARY · 9–10
+
+[✓ 9-A] [✓ 10-A]
+
+SENIOR SECONDARY · 11–12
+
+[✓ 11-A · PCM]
+[✓ 11-B · PCB]
+[✓ 12-A · PCM]
+
+Target height:
+
+approximately 38–44px.
+
+The entire class selector should feel like a compact control, not a set of cards.
+
+Selected:
+
+soft green background
+green border
+small check icon
+
+Unselected:
+
+neutral background
+subtle border
+
+No unnecessary student count unless genuinely useful.
+
+============================================================
+17. NO HARD-CODED CLASSES
+============================================================
+
+This is mandatory.
+
+Read classes from actual school configuration.
+
+If the school has:
+
+Nursery
+LKG
+UKG
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11 PCM
+11 PCB
+12 PCM
+12 PCB
+
+then those are the selectable classes.
+
+If it has fewer:
+
+show fewer.
+
+If it has additional sections:
+
+show them.
+
+Do not fabricate.
+
+============================================================
+18. TIMETABLE MUST LOOK LIKE A REAL SCHOOL TIMETABLE
+============================================================
+
+The current timetable is NOT good enough.
+
+This:
+
+16 Aug
+09:00–12:15
+Accountancy
+11 classes
+
+17 Aug
+09:00–12:15
+Arts & Drawing
+11 classes
+
+is not an official school examination timetable.
+
+It looks like a vertical activity list.
+
+I want an ACTUAL SCHOOL EXAMINATION TIMETABLE.
+
+Use a proper table.
+
+Example:
+
+---------------------------------------------------------------
+              DEMO SCHOOL OF SCHOLARIO
+             UNIT TEST 1 — 2026–27
+             EXAMINATION TIME TABLE
+---------------------------------------------------------------
+
+Date        Day       Time             Class / Stream     Subject
+18 Aug      Tuesday   09:00–10:00      9-A                Hindi
+                              10-A     Hindi
+                              11 PCM   English
+                              11 PCB   English
+
+                    10:15–11:15       9-A                English
+                              10-A     English
+                              11 PCM   Mathematics
+                              11 PCB   Biology
+
+19 Aug      Wednesday 09:00–10:00      ...
+
+---------------------------------------------------------------
+
+OR, even better, where practical:
+
+DATE | DAY | SLOT | 6-A | 7-A | 8-A | 9-A | 10-A | 11 PCM | 11 PCB
+     |     |      |     |     |     |     |      |        |
+
+This should feel like an official school document.
+
+Choose whichever representation remains readable with the number of selected classes.
+
+============================================================
+19. TIMETABLE SHOULD GROUP BY SLOT
+============================================================
+
+The fundamental display should be:
+
+DATE
+↓
+SLOT
+↓
+CLASS-SPECIFIC PAPERS
+
+NOT:
+
+DATE
+↓
+ONE GLOBAL SUBJECT
+
+A slot can have many class-specific papers.
+
+============================================================
+20. PARALLEL PAPERS
+============================================================
+
+Support parallel papers.
+
+Example:
+
+09:00–10:00
+
+9-A → Hindi
+10-A → Hindi
+11 PCM → English
+11 PCB → English
+
+This is FOUR paper instances in ONE time slot.
+
+That is correct.
+
+Then:
+
+10:15–11:15
+
+9-A → English
+10-A → English
+11 PCM → Mathematics
+11 PCB → Biology
+
+Again, four paper instances in one slot.
+
+The UI can show them in a structured table.
+
+============================================================
+21. TIMETABLE GENERATION ALGORITHM
+============================================================
+
+Build an actual scheduling engine.
+
+Conceptually:
+
+INPUT:
+
+selectedClasses
+classSubjectMap
+examTemplateRules
+startDate
+endDate
+schoolCalendar
+
+PROCESS:
+
+1. Resolve exam-eligible subjects for every class.
+2. Remove subjects that are not applicable to that class.
+3. Create one ExamPaperInstance for each:
+   class × subject.
+4. Group compatible paper instances.
+5. Create common examination slots.
+6. Assign maximum two slots per working day for Unit Test.
+7. Keep the same class from receiving more than maxPapersPerDay.
+8. Prefer common subject scheduling across classes where appropriate.
+9. Schedule different stream-specific subjects in the same slot where possible.
+10. Respect duration.
+11. Respect gap.
+12. Respect working days.
+13. Respect holidays.
+14. Validate every class receives every required subject exactly once.
+15. Validate no class receives two papers at the same time.
+16. Validate no paper is scheduled outside the exam window.
+17. Validate no paper is scheduled on a non-working day.
+18. Validate no duplicate paper instance.
+19. Validate all generated dates are >= startDate.
+20. Produce timetable.
+
+============================================================
+22. SUBJECT BALANCING
+============================================================
+
+Do not simply use array order.
+
+A good scheduler should avoid obviously poor arrangements.
+
+For example:
+
+Do not unnecessarily put:
+
+Mathematics
+Mathematics
+
+for the same class on consecutive slots if avoidable.
+
+Avoid excessively difficult subjects back-to-back when possible.
+
+But do NOT invent educational rules unless the system has configured them.
+
+Use sensible scheduling heuristics.
+
+============================================================
+23. SAME SUBJECT ACROSS CLASSES
+============================================================
+
+Prefer common scheduling when possible.
+
+For example:
+
+Hindi:
+9-A + 10-A
+
+English:
+9-A + 10-A
+
+Physics:
+11 PCM + 11 PCB + 12 PCM + 12 PCB
+
+Chemistry:
+11 PCM + 11 PCB + 12 PCM + 12 PCB
+
+This makes the timetable operationally much more realistic.
+
+============================================================
+24. DIFFERENT STREAMS
+============================================================
+
+For:
+
+11 PCM
+11 PCB
+
+a common slot can contain:
+
+11 PCM → Mathematics
+11 PCB → Biology
+
+This is exactly the kind of stream-aware parallel scheduling the system must support.
+
+============================================================
+25. MARKS AND DURATION
+============================================================
+
+Principal should NOT manually enter these in the Unit Test creation flow.
+
+For Unit Test:
+
+Maximum Marks:
+50
+
+Assessment:
+Theory
+
+Duration:
+60 minutes
+
+Gap:
+15 minutes
+
+Maximum papers/day:
+2
+
+These must be automatically resolved from Examination Settings/template.
+
+The principal should only see the resolved rules in Review.
+
+Do not make the principal repeatedly type configuration that already exists.
+
+============================================================
+26. PRACTICALS
+============================================================
+
+For examination types that support practical:
+
+resolve practical rules from the template.
+
+If Unit Test is theory-only:
+
+do not show practical controls.
+
+If Half-Yearly supports theory + practical:
+
+show the resolved configuration appropriately.
+
+Again:
+
+template-driven.
+
+============================================================
+27. REVIEW MUST SHOW REAL SCHEDULE
+============================================================
+
+The current Review:
+
+18 papers · 18 subjects
+
+is misleading.
+
+Replace with useful information:
+
+Participating Classes:
+11
+
+Unique Subjects:
+X
+
+Paper Instances:
+Y
+
+Exam Days:
+3
+
+Slots Per Day:
+2
+
+Duration:
+60 min
+
+Gap:
+15 min
+
+Then show:
+
+Exam Schedule
+
+18 Aug
+09:00–10:00
+9-A Hindi
+10-A Hindi
+11 PCM English
+11 PCB English
+
+10:15–11:15
+...
+
+This gives the principal a correct picture.
+
+============================================================
+28. DO NOT CONFUSE UNIQUE SUBJECTS WITH PAPER INSTANCES
+============================================================
+
+These metrics must be separate.
+
+Example:
+
+Unique Subjects:
+8
+
+Paper Instances:
+32
+
+Exam Slots:
+6
+
+Exam Days:
+3
+
+These are completely different values.
+
+Never display:
+
+18 papers · 18 subjects
+
+unless that is actually true.
+
+============================================================
+29. CURRENT DATE BUG MUST BE FIXED BEFORE ANYTHING ELSE
+============================================================
+
+The current screenshot demonstrates:
+
+Start Date:
+17 Aug
+
+but generated timetable begins:
+
+16 Aug.
+
+This is a hard bug.
+
+Fix the date representation at the data layer.
+
+Do not merely hide 16 Aug from the UI.
+
+Trace:
+
+date picker
+→ state
+→ scheduler
+→ date arithmetic
+→ timezone conversion
+→ display formatter
+
+and fix the root cause.
+
+Add a regression test:
+
+Given:
+startDate = 2026-08-17
+
+assert:
+
+MIN(generatedPaperDates) >= 2026-08-17
+
+============================================================
+30. FIX THE REACT HYDRATION ERROR
+============================================================
+
+There is currently a real HTML error:
+
+<button> cannot be a descendant of <button>.
+
+The code currently has approximately:
+
+<button onClick={...}>
+    <Checkbox />
+    <span>...</span>
+</button>
+
+and Checkbox renders its own:
+
+<button>
+
+This is invalid HTML.
+
+DO NOT suppress the error.
+
+Fix the component structure properly.
+
+Options:
+
+Use a non-button wrapper with accessible interaction,
+OR
+make the entire selection control one semantic button and render a visual checkbox indicator instead of a nested button,
+OR
+use the appropriate Radix primitive composition correctly.
+
+Do NOT use:
+
+<button>
+    <Checkbox />
+</button>
+
+ever again.
+
+After fixing:
+
+there must be ZERO:
+
+"button cannot be a descendant of button"
+
+warnings.
+
+Also check the entire Examination module for similar nested interactive elements.
+
+============================================================
+31. ACCESSIBILITY
+============================================================
+
+Class selection must still be keyboard/touch accessible.
+
+Each selectable class needs:
+
+aria-pressed or appropriate checkbox semantics
+clear focus state
+visible selected state
+
+Do not sacrifice semantics merely to fix the nesting warning.
+
+============================================================
+32. TIMETABLE UI SHOULD BE COMPACT BUT OFFICIAL
+============================================================
+
+Do NOT return to giant cards.
+
+The timetable should use:
+
+document header
+table
+date bands
+slot rows
+small badges
+
+not giant cards for every paper.
+
+Use subtle separators.
+
+Use the existing Scholario green/blue visual language.
+
+It should look like something a Principal could:
+
+Preview
+Print
+Download
+share
+
+as an official school document.
+
+============================================================
+33. PRINT VERSION
+============================================================
+
+Print must generate:
+
+School logo
+School name
+Address/contact if configured
+Academic session
+Examination name
+Examination type
+Examination dates
+Official timetable table
+Principal/authorized signature area if configured
+
+No:
+
+sidebar
+ERP header
+wizard progress
+Back button
+Next button
+Edit button
+
+Print must be A4-friendly.
+
+============================================================
+34. DOWNLOAD VERSION
+============================================================
+
+Download must use the same official document structure.
+
+Do not just download the current webpage screenshot/layout.
+
+Generate a proper printable timetable representation.
+
+============================================================
+35. CLASS SELECTION UI SHOULD NOT SHOW SUBJECTS
+============================================================
+
+Correct.
+
+Principal selects classes only.
+
+Subjects are resolved automatically.
+
+Do not bring the old subject-selection screen back.
+
+But the scheduler must internally use those configured subjects.
+
+============================================================
+36. EXAMINATION CREATION FLOW
+============================================================
+
+The final flow should be:
+
+STEP 1 — DETAILS
+
+Exam Type
+↓
+Exam Name
+↓
+Start Date
+↓
+Optional/auto-calculated End Date
+↓
+Start Time
+↓
+Classes
+
+NEXT
+
+STEP 2 — TIMETABLE
+
+Automatically generated official timetable
+↓
+Principal can inspect
+↓
+Principal can edit allowed values
+↓
+Hold + drag to reorder papers within valid constraints
+↓
+System recalculates/validates
+↓
+Print / Download
+
+NEXT
+
+STEP 3 — REVIEW
+
+Complete summary
+↓
+Exam rules
+↓
+Classes
+↓
+Schedule
+↓
+Validation
+↓
+SAVE & SCHEDULE
+
+============================================================
+37. SAVE & SCHEDULE VALIDATION
+============================================================
+
+Do not allow Save & Schedule if:
+
+past date exists
+date range insufficient
+duplicate paper exists
+class missing required subject
+same class has overlapping papers
+non-working day is used
+invalid duration
+invalid gap
+missing examination type
+missing classes
+missing exam name
+
+Show a useful human-readable validation message.
+
+============================================================
+38. DO NOT INVENT DATA TO MAKE THE SCREEN LOOK FULL
+============================================================
+
+If mock data is currently being used:
+
+keep it clearly as mock data.
+
+But do not fabricate 18 subjects simply because 11 classes were selected.
+
+The relationship must remain logically correct even with mock data.
+
+============================================================
+39. KEEP THE CURRENT GOOD VISUAL DIRECTION
+============================================================
+
+The current compact Review page is actually much better than the previous giant-card design.
+
+Keep:
+
+thin separators
+small status badge
+compact stepper
+inline Edit actions
+clean typography
+green accent
+large whitespace where intentional
+
+But improve information grouping.
+
+Do not make it bulky again.
+
+============================================================
+40. CLASS SELECTOR VISUAL TARGET
+============================================================
+
+Aim for something like:
+
+CLASSES                                      6 selected
+
+MIDDLE · 6–8
+[✓ 6-A] [✓ 7-A] [✓ 8-A]
+
+SECONDARY · 9–10
+[✓ 9-A] [✓ 10-A]
+
+SENIOR SECONDARY · 11–12
+[✓ 11-A · PCM] [✓ 11-B · PCB]
+[✓ 12-A · PCM] [✓ 12-B · PCB]
+
+Compact.
+Readable.
+Touch-friendly.
+
+No giant cards.
+
+============================================================
+41. TIMETABLE VISUAL TARGET
+============================================================
+
+Aim for:
+
+DEMO SCHOOL OF SCHOLARIO
+UNIT TEST 1
+Academic Session 2026–27
+
+------------------------------------------------------------
+DATE       SLOT          6-A      7-A      8-A      9-A
+------------------------------------------------------------
+18 Aug     09:00–10:00   Hindi    Hindi    Hindi    Hindi
+           10:15–11:15   English  English  English  English
+
+19 Aug     09:00–10:00   Maths    Maths    Maths    Maths
+           10:15–11:15   Science  Science  Science  SST
+
+20 Aug     09:00–10:00   SST      SST      SST      Additional
+           10:15–11:15   —        —        —        —
+------------------------------------------------------------
+
+For senior secondary, adapt the columns intelligently:
+
+11 PCM
+11 PCB
+12 PCM
+12 PCB
+
+If there are too many classes to fit horizontally, switch to a more readable grouped-slot layout rather than creating an unreadably wide table.
+
+============================================================
+42. DO NOT USE THE CURRENT "18 SUBJECTS = 18 DAYS" LOGIC
+============================================================
+
+This is non-negotiable.
+
+The examination schedule is:
+
+COMMON SCHOOL EXAMINATION
+
+not:
+
+one subject at a time globally.
+
+Each class has its own subject sequence.
+
+The scheduler synchronizes those sequences.
+
+============================================================
+43. TEST THESE EXACT CASES
+============================================================
+
+TEST CASE A
+
+Select:
+
+6-A
+7-A
+8-A
+
+Assume each has 6 exam subjects.
+
+Expected:
+
+3 exam days
+2 slots/day
+6 class-paper assignments per class
+NOT 18 days.
+
+------------------------------------------------------------
+
+TEST CASE B
+
+Select:
+
+9-A
+10-A
+
+Each has 6 subjects.
+
+Expected:
+
+3 exam days
+2 slots/day
+Hindi can be same slot for both
+English can be same slot for both
+etc.
+
+------------------------------------------------------------
+
+TEST CASE C
+
+Select:
+
+11 PCM
+11 PCB
+
+PCM has:
+English
+Physics
+Chemistry
+Mathematics
+PE
+
+PCB has:
+English
+Physics
+Chemistry
+Biology
+PE
+
+Expected:
+
+3 days
+
+and:
+
+PCM Mathematics
++
+PCB Biology
+
+may occupy the same time slot.
+
+------------------------------------------------------------
+
+TEST CASE D
+
+Select:
+
+6-A = 6 subjects
+11 PCM = 5 subjects
+
+Expected:
+
+3 days.
+
+------------------------------------------------------------
+
+TEST CASE E
+
+Select:
+
+Class A = 10 subjects
+
+Expected:
+
+5 working days
+at 2 papers/day.
+
+------------------------------------------------------------
+
+TEST CASE F
+
+Start date:
+
+2026-08-17
+
+Expected:
+
+NO generated paper on:
+2026-08-16
+
+NO generated paper before:
+2026-08-17
+
+------------------------------------------------------------
+
+TEST CASE G
+
+Unit Test:
+
+Start:
+09:00
+
+Duration:
+60 minutes
+
+Gap:
+15 minutes
+
+Expected:
+
+09:00–10:00
+10:15–11:15
+
+NOT:
+
+09:00–12:15.
+
+============================================================
+44. FIX THE "2 ISSUES" PANEL
+============================================================
+
+The screenshot currently shows:
+
+2 Issues
+
+Do not hide it.
+
+After fixing:
+
+the Examination creation flow should have zero runtime console errors related to:
+
+nested buttons
+hydration
+date calculation
+schedule generation
+
+If issues remain, inspect and resolve them.
+
+============================================================
+45. CODE QUALITY
+============================================================
+
+Do not solve this by putting more conditionals into:
+
+create-exam-fullscreen.tsx
+
+Separate scheduling logic from presentation.
+
+Create/use a dedicated domain-level scheduler service/function.
+
+For example conceptually:
+
+generateExamSchedule()
+
+validateExamSchedule()
+
+calculateRequiredExamDays()
+
+resolveClassExamSubjects()
+
+groupCompatiblePaperInstances()
+
+But use the project's existing architecture and naming conventions.
+
+The scheduler must be testable independently from React.
+
+============================================================
+46. IMPORTANT — DO NOT BREAK EXISTING MODULES
+============================================================
+
+Do not modify:
+
+Admissions
+Teachers
+Students & Classes
+Homework
+Attendance
+
+except where the Examination module legitimately consumes their existing configuration/data.
+
+The Examination module should READ existing academic configuration.
+
+Do not duplicate the source of truth.
+
+============================================================
+47. FINAL AUDIT
+============================================================
+
+Before telling me you are finished, verify:
+
+[ ] No past date selectable
+[ ] No generated date before start date
+[ ] No timezone date shift
+[ ] End date calculated correctly
+[ ] Required days calculated from MAX subjects/class
+[ ] 2 papers/day applied PER CLASS
+[ ] Unit Test duration = 60 minutes
+[ ] Unit Test gap = 15 minutes
+[ ] Multiple class papers can share one slot
+[ ] Same subject across classes can share a slot
+[ ] PCM/PCB stream-specific subjects work
+[ ] Subjects come from school configuration
+[ ] Additional subjects come from school configuration
+[ ] No fake global subject list
+[ ] No "18 subjects = 18 days" logic
+[ ] Paper instances are class-specific
+[ ] Exam slots are shared
+[ ] No class gets overlapping papers
+[ ] Every required class subject gets scheduled exactly once
+[ ] Non-working days are skipped
+[ ] Timetable looks like an official school timetable
+[ ] Print works
+[ ] Download works
+[ ] Drag/reorder works if allowed
+[ ] Reordering cannot create invalid schedules
+[ ] Review displays truthful counts
+[ ] Save & Schedule persists correctly
+[ ] Nested button error fixed
+[ ] Hydration warning fixed
+[ ] No horizontal overflow
+[ ] iPad landscape checked
+[ ] Desktop checked
+
+============================================================
+48. FINAL RESPONSE FORMAT
+============================================================
+
+When finished, do NOT say:
+
+"Everything is perfect."
+
+Give me an exact factual report:
+
+1. Scheduling logic before → after
+2. Date bug root cause → fix
+3. Paper/slot model
+4. Class selection UI changes
+5. Timetable UI changes
+6. Unit Test scheduling rules
+7. Stream handling
+8. Subject resolution
+9. Print/Download status
+10. Drag/reorder status
+11. Nested button error status
+12. Test cases passed
+13. Any remaining NOT IMPLEMENTED items
+
+If anything remains incomplete:
+
+write it explicitly.
+
+Do not hide incomplete functionality behind a successful build.
+
+MOST IMPORTANT:
+
+USE LOGIC, NOT JUST UI.
+
+This is a real school examination management workflow.
+
+Think like a school ERP architect and examination scheduler, not like a UI generator.
+
+The Principal selects the participating classes once.
+
+The system knows their subjects.
+
+The system calculates the required duration.
+
+The system creates a COMMON examination timetable.
+
+Each class gets its own papers.
+
+Different classes can have different subjects in the same slot.
+
+Different streams can have different subjects in the same slot.
+
+The final timetable must look like an actual official school examination timetable.
+
+Fix the architecture first, then refine the UI.

@@ -1,0 +1,2079 @@
+You are now responsible for a COMPLETE, PRODUCTION-QUALITY redesign and rebuild of the Examination creation and examination lifecycle system in SCHOLARIO-OS.
+
+READ THIS ENTIRE PROMPT BEFORE WRITING OR MODIFYING CODE.
+
+This is NOT a request for a small UI patch.
+
+The current "Create Examination" implementation has become unnecessarily complicated, visually inconsistent, and structurally wrong.
+
+I want you to REBUILD the Create Examination experience properly from the ground up while preserving the existing Scholario-OS architecture, existing school/class/student/teacher data models, existing navigation, and all unrelated modules.
+
+The result must feel like a real enterprise school ERP product — not an AI-generated form.
+
+The entire experience must be logical, beautiful, compact, highly usable on iPad/tablet/desktop, and deeply connected to the rest of the examination ecosystem.
+
+===========================================================
+PART 0 — ABSOLUTE RULES
+===========================================================
+
+1. DO NOT blindly patch the current Create Examination UI.
+
+2. Remove/rebuild the current Create Examination screen completely.
+
+3. Reuse existing data models, settings, classes, subjects, streams, students, teachers and school configuration wherever they already exist.
+
+4. Do NOT create duplicate class/subject/stream configuration inside Examination.
+
+5. Examination Settings are the source of truth for available Examination Types.
+
+6. School / Academic / Class configuration is the source of truth for:
+   - classes
+   - sections
+   - streams
+   - subjects
+   - additional subjects
+   - student enrollment
+
+7. Examination creation should CONSUME that configuration.
+
+8. Do not ask the Principal to repeatedly enter information that Scholario already knows.
+
+9. Do not show unnecessary technical information such as:
+   - "17 auto-included subjects"
+   - internal IDs
+   - duplicate subjects
+   - passing marks input
+   - repeated stream configuration
+   - repeated class configuration
+   - unnecessary assessment configuration
+
+10. Passing marks must NEVER be an examination creation input.
+    The global passing rule is 33%.
+
+11. Do not hardcode school-specific streams or subjects.
+
+12. Do not assume every school has Science + Commerce + Humanities.
+
+13. Only configured classes, streams and subjects should appear.
+
+14. Do not break Homework, Admissions, Teachers, Students & Classes, Attendance, Finance, Communication or other modules.
+
+15. Match the existing visual quality of the Admissions and Teachers modules.
+    Inspect their actual existing components, spacing, cards, typography, buttons, form controls, page headers, responsive behavior and interaction patterns before designing the new examination UI.
+
+16. The new Examination UI must look like it belongs to the SAME ERP.
+
+17. Do not introduce a completely different design language.
+
+18. Do not create giant empty cards or oversized boxes.
+
+19. Information density should be similar to the best existing ERP forms:
+    compact, readable, spacious but not wasteful.
+
+20. Every major action must have proper validation and meaningful error states.
+
+21. Do not leave placeholder buttons that do nothing.
+
+22. Do not fake functionality where the underlying data/workflow can be implemented properly.
+
+23. Before modifying code, inspect the existing Examination module and its connected data structures.
+
+24. Check for duplicated logic/components created by previous iterations and clean them up where necessary.
+
+25. If the current implementation contains dead code from previous Examination versions, remove it safely.
+
+26. Check code quality and line/file complexity. If any file has become unnecessarily huge because of repeated Examination iterations, refactor it into sensible components/services/hooks without breaking functionality.
+
+===========================================================
+PART 1 — THE NEW EXAMINATION CREATION PHILOSOPHY
+===========================================================
+
+The Principal's job should be extremely simple.
+
+The Principal should basically do:
+
+1. Choose Examination Type
+2. Confirm Examination Name
+3. Choose Start Date
+4. Choose Last Examination Date
+5. Choose Start Time
+6. Choose participating Classes
+7. Click Next
+8. Review automatically generated timetable
+9. Review complete examination configuration
+10. Save & Schedule
+
+That's it.
+
+Everything Scholario already knows should be generated automatically.
+
+For example:
+
+If Principal selects:
+
+UNIT TEST 1
+
+Scholario already knows the Unit Test rules.
+
+It should automatically know:
+
+• applicable assessment structure
+• maximum marks
+• duration
+• papers per day
+• gap between papers
+• eligible subjects
+• class → subject mapping
+• practical/theory behavior
+• scheduling constraints
+
+The Principal should not have to manually configure all of that again.
+
+===========================================================
+PART 2 — CREATE EXAMINATION SHOULD LOOK LIKE ADMISSIONS / TEACHERS
+===========================================================
+
+The current page layout must be completely replaced.
+
+Do NOT use the current giant bordered container approach.
+
+Do NOT create a giant top "Create Examination" box and another giant bottom box.
+
+Instead use the same page composition already established elsewhere in Scholario-OS:
+
+• clean page header
+• compact title
+• subtle breadcrumb/back navigation if appropriate
+• well-spaced form sections
+• compact controls
+• consistent labels
+• consistent input heights
+• subtle separators
+• clean sticky action area
+• same button treatment as Admissions/Teachers
+• same typography hierarchy
+• same border radius
+• same responsive behavior
+
+The page should visually feel like:
+
+"Scholario Enterprise ERP"
+
+not:
+
+"AI-generated wizard".
+
+===========================================================
+PART 3 — STEP 1: BASIC EXAMINATION CREATION
+===========================================================
+
+Create a clean Step 1.
+
+Possible structure:
+
+-------------------------------------------------
+Create Examination
+-------------------------------------------------
+
+EXAMINATION TYPE
+
+[ Unit Test 1 ] [ Unit Test 2 ] [ Unit Test 3 ]
+[ Unit Test 4 ] [ Half-Yearly ] [ Annual ]
+
+These are NOT hardcoded blindly.
+
+They must come from Examination Settings.
+
+If the Principal/admin has configured different examination types in Settings, the available types here must reflect those settings.
+
+The predefined types should have their configuration attached to them.
+
+If a type is selected, automatically load its predefined rules.
+
+-------------------------------------------------
+
+EXAMINATION NAME
+
+[ Unit Test 1 ]
+
+When a predefined type is selected, automatically populate the examination name.
+
+Examples:
+
+Unit Test 1
+Unit Test 2
+Unit Test 3
+Unit Test 4
+Half-Yearly Examination
+Annual Examination
+
+The Principal may edit the name if necessary.
+
+Do not force them to type it again.
+
+-------------------------------------------------
+
+EXAMINATION WINDOW
+
+Start Date
+[ DD/MM/YYYY ]
+
+Last Examination Date
+[ DD/MM/YYYY ]
+
+Examination Start Time
+[ 09:00 AM ]
+
+-------------------------------------------------
+
+CLASSES
+
+This is the ONLY academic selection the Principal should need to make.
+
+Show existing configured classes as compact selectable items.
+
+DO NOT create giant cards.
+
+Use a clean compact selection layout.
+
+For example:
+
+Middle School
+[ ] 6-A
+[ ] 6-B
+[ ] 7-A
+[ ] 8-A
+
+Secondary
+[ ] 9-A
+[ ] 9-B
+[ ] 10-A
+
+Senior Secondary
+[ ] 11-A • Science PCM
+[ ] 11-B • Science PCB
+[ ] 12-A • Science PCM
+[ ] 12-B • Science PCB
+[ ] 11-A • Commerce
+etc.
+
+ONLY show classes that actually exist in the school.
+
+ONLY show streams actually configured for the school.
+
+Do not invent classes.
+
+Do not invent streams.
+
+Do not show "Grade 11 Science PCM" if the school has not configured such a class/stream.
+
+The Principal selects classes by clicking compact selection controls.
+
+Do not show a giant subject selection section.
+
+Do not show maximum marks.
+
+Do not show theory/practical fields here.
+
+Do not show passing marks.
+
+Do not show internal configuration.
+
+The form should remain simple.
+
+-------------------------------------------------
+
+NEXT
+
+[ Next → ]
+
+The Next button becomes active only when:
+
+• examination type is selected
+• valid examination name exists
+• valid start date exists
+• valid last date exists
+• valid start time exists
+• at least one class is selected
+
+===========================================================
+PART 4 — DATE VALIDATION
+===========================================================
+
+Past dates MUST NOT be selectable for a new examination.
+
+Disable past dates in the date picker.
+
+Start Date cannot be in the past.
+
+Last Examination Date cannot be before Start Date.
+
+The UI must immediately explain invalid date combinations.
+
+The system must also understand weekends/non-working days and existing school calendar constraints if such configuration already exists.
+
+Do not blindly schedule an examination on Sunday if the school calendar marks Sunday as a non-working day.
+
+Use the school's configured academic/calendar rules.
+
+If no school calendar exists yet, use a safe default and make the scheduling engine easy to extend later.
+
+===========================================================
+PART 5 — AUTOMATIC ACADEMIC RESOLUTION
+===========================================================
+
+Once classes are selected, the system internally resolves:
+
+Class
+↓
+Section
+↓
+Stream (if applicable)
+↓
+Configured subjects
+↓
+Exam eligibility
+↓
+Exam rules
+↓
+Schedule items
+
+The Principal should not manually select subjects.
+
+For example:
+
+Class 9-A:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+Configured additional subject
+
+Class 10-A:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+Configured additional subject
+
+Grade 11 Science PCM:
+
+Physics
+Chemistry
+Mathematics
+English
+configured common subjects
+
+Grade 11 Science PCB:
+
+Physics
+Chemistry
+Biology
+English
+configured common subjects
+
+A PCM student must never receive Biology simply because Biology exists in the PCB stream.
+
+A PCB student must never receive Mathematics simply because Mathematics exists in PCM.
+
+Use the actual class/stream/subject relationships already configured in the ERP.
+
+===========================================================
+PART 6 — UNIT TEST RULES
+===========================================================
+
+For Unit Test 1/2/3/4:
+
+Maximum Marks = 50
+
+Theory = 50
+
+Practical = not applicable
+
+Passing = global 33%
+
+Duration = 1 hour per paper
+
+Maximum papers per day = 2
+
+Gap between two papers = 15 minutes
+
+Example:
+
+09:00 AM – 10:00 AM
+15 minute gap
+
+10:15 AM – 11:15 AM
+
+The Principal should NOT manually configure these values.
+
+The examination type already knows them.
+
+The system should use these rules internally when generating the schedule.
+
+===========================================================
+PART 7 — HALF-YEARLY / ANNUAL RULES
+===========================================================
+
+For Half-Yearly and Annual:
+
+Maximum Marks = 100
+
+Theory = 70
+
+Practical = 30
+
+Passing = global 33%
+
+Duration = 3 hours 15 minutes per paper
+
+One paper per day.
+
+Again:
+
+Do not make the Principal repeatedly type:
+
+100
+70
+30
+3:15 hours
+1 paper/day
+
+These are properties of the predefined examination type.
+
+The Principal simply chooses the examination type.
+
+The system automatically applies the rules.
+
+===========================================================
+PART 8 — AFTER CLICKING NEXT: STEP 2 = UNIVERSAL EXAMINATION TIMETABLE
+===========================================================
+
+This is extremely important.
+
+After Step 1, do NOT immediately show another ordinary form.
+
+First generate a beautiful, professional examination timetable.
+
+The timetable should be a UNIVERSAL examination timetable for the created examination.
+
+It should look like something a school could actually download, print, share with parents and students.
+
+It should contain proper school branding.
+
+For example:
+
+-------------------------------------------------
+SCHOOL LOGO
+
+SCHOOL NAME
+School Address / configured school details
+
+EXAMINATION TIMETABLE
+
+UNIT TEST 1
+SESSION 2025–26
+
+Classes: 6–10
+-------------------------------------------------
+
+Then the generated schedule:
+
+| Date | Day | Time | Subject | Classes |
+|------|-----|------|---------|---------|
+
+Use the actual generated schedule.
+
+Include proper visual hierarchy.
+
+This is not just a data table.
+
+It should be a polished digital timetable document.
+
+===========================================================
+PART 9 — AUTOMATIC TIMETABLE GENERATION
+===========================================================
+
+The system must automatically distribute all required papers between:
+
+Start Date
+
+and
+
+Last Examination Date
+
+according to the selected examination type rules.
+
+For Unit Test:
+
+• max 2 papers/day
+• 1 hour each
+• 15 minute gap
+
+For Half-Yearly/Annual:
+
+• max 1 paper/day
+• 3h 15m each
+
+Do NOT exceed these constraints.
+
+Do NOT schedule duplicate papers.
+
+Do NOT lose subjects.
+
+Do NOT create four papers on one day.
+
+Do NOT silently omit subjects.
+
+Do NOT schedule outside the selected date window.
+
+Do NOT schedule on blocked/non-working dates if school calendar rules prohibit it.
+
+Do NOT schedule the same student into two simultaneous papers.
+
+The scheduling engine must understand class/subject eligibility.
+
+===========================================================
+PART 10 — IMPORTANT: MULTIPLE CLASSES
+===========================================================
+
+Suppose Principal selects:
+
+6-A
+7-A
+8-A
+9-A
+10-A
+
+The schedule should understand that these classes may have different subject sets.
+
+It should NOT simply count all subjects globally and dump them randomly into dates.
+
+Instead:
+
+Generate exam papers based on:
+
+class + subject eligibility.
+
+If multiple selected classes share the same subject and can take it on the same paper slot, the system may group them intelligently.
+
+If their subjects differ, generate separate schedule items.
+
+Never create an invalid schedule just to make the number of papers fit.
+
+===========================================================
+PART 11 — TIMETABLE MUST BE EDITABLE
+===========================================================
+
+The timetable should initially be generated automatically.
+
+However, Principal must be able to edit it.
+
+The timetable should visually feel READ-ONLY at first, but every editable item must be interactive.
+
+Examples:
+
+• tap date → change date
+• tap time → change time
+• tap subject → change subject if allowed
+• tap class assignment → edit
+• tap row → open edit state
+
+For subject ordering:
+
+SUPPORT DRAG AND DROP.
+
+Principal can press and hold a timetable row and drag it upward/downward to change its position.
+
+The system must visually show where the row will be placed.
+
+After moving:
+
+• dates/times should remain logically valid
+• no collision should occur
+• constraints must be revalidated
+
+If a change creates a conflict, show a clear warning rather than silently accepting invalid data.
+
+===========================================================
+PART 12 — STEP 3 = COMPLETE EXAMINATION REVIEW
+===========================================================
+
+After the timetable, show the complete Examination Review.
+
+This should be a beautiful digital form/document.
+
+It should summarize:
+
+EXAMINATION
+
+Examination Name
+Examination Type
+Academic Session
+Classes
+
+EXAMINATION RULES
+
+Maximum Marks
+Assessment Type
+Duration
+Papers per Day
+Gap
+
+SCHEDULE
+
+Complete generated timetable
+
+EXAMINATION STATUS
+
+Draft / Ready to Schedule
+
+Do not overload the screen with unnecessary internal metadata.
+
+Make it visually polished.
+
+Use sections and cards similar to the best existing Scholario pages.
+
+===========================================================
+PART 13 — REVIEW MUST ALSO BE EDITABLE
+===========================================================
+
+The review should LOOK read-only.
+
+But editable values should be tappable.
+
+Example:
+
+Tap examination name → edit
+
+Tap date → edit
+
+Tap time → edit
+
+Tap class → edit
+
+Tap timetable row → edit
+
+Tap schedule → modify
+
+The Principal should not have to restart the entire creation process because of one small mistake.
+
+After editing:
+
+Revalidate the entire examination.
+
+If necessary regenerate only the affected portion of the schedule rather than destroying everything.
+
+===========================================================
+PART 14 — SAVE & SCHEDULE
+===========================================================
+
+At the bottom of the final Review screen:
+
+[ Save & Schedule ]
+
+NOT:
+
+Create Examination
+
+The wording should clearly indicate that the examination is being saved with its generated schedule.
+
+When clicked:
+
+1. Validate everything.
+2. Save examination.
+3. Save timetable.
+4. Save examination-class relationships.
+5. Save examination-subject relationships.
+6. Save rules/configuration snapshot.
+7. Set status = Draft / Scheduled according to the existing workflow design.
+8. Return to Exams.
+
+Do not publish automatically.
+
+Saving an examination is NOT publishing it.
+
+===========================================================
+PART 15 — EXAMS LIST
+===========================================================
+
+After Save & Schedule:
+
+The examination should appear inside:
+
+Examinations → Exams
+
+Use the existing beautiful Exams page structure, but refine it if necessary.
+
+Each examination should clearly show:
+
+• Examination name
+• Type
+• Session
+• Date range
+• Classes
+• Number of papers
+• Status
+
+Statuses should be meaningful:
+
+Draft
+Scheduled
+Published
+Ongoing
+Completed
+Archived
+
+Do not show meaningless "0 papers / 0 students" if actual data exists.
+
+Use real relationships.
+
+===========================================================
+PART 16 — EXAMINATION PREVIEW
+===========================================================
+
+Opening an examination should show the same polished universal examination preview.
+
+It should contain:
+
+• Exam header
+• School branding
+• Examination information
+• Classes
+• Schedule
+• Assessment rules
+• Current status
+• Readiness information
+• Actions
+
+Do not make the user lose the schedule after creating the exam.
+
+The examination should always have a single source of truth for its schedule.
+
+===========================================================
+PART 17 — PUBLISH WORKFLOW
+===========================================================
+
+An examination that has only been saved is NOT public.
+
+There must be a clear:
+
+[ Publish Examination ]
+
+action.
+
+Before publishing, show a confirmation screen/modal.
+
+Example:
+
+"Publish Unit Test 1?"
+
+"Once published, this examination will become visible to eligible students, teachers and parents according to their roles."
+
+Show a concise readiness summary:
+
+✓ Schedule ready
+✓ Classes assigned
+✓ Subjects resolved
+✓ Examination rules configured
+
+If required information is missing, publishing must be blocked.
+
+===========================================================
+PART 18 — AFTER PUBLISHING
+===========================================================
+
+When Principal publishes the examination:
+
+The system should automatically make the examination available to the appropriate users.
+
+Student portal:
+
+Examination appears.
+
+Teacher portal:
+
+Relevant examination appears.
+
+Principal:
+
+Exam status becomes Published.
+
+Notifications should be generated using the existing notification infrastructure if available.
+
+Do not build a second notification system.
+
+Reuse the existing communication/notification architecture.
+
+===========================================================
+PART 19 — STUDENT EXAMINATION FORM
+===========================================================
+
+When a published examination becomes visible to a student:
+
+The student should be able to open it.
+
+The student sees:
+
+• Examination name
+• Examination dates
+• Subjects
+• Timetable
+• Examination instructions
+• Applicable fee/submission status
+• Form status
+
+There should be:
+
+[ Submit Examination Form ]
+
+The form must have a clear submission state.
+
+===========================================================
+PART 20 — EXAMINATION FEE LOGIC
+===========================================================
+
+Submission eligibility must respect the school's configured fee/payment policy.
+
+If examination fee is already paid:
+
+Student can submit the examination form directly.
+
+If payment is required and not paid:
+
+Student cannot complete submission until payment requirement is satisfied.
+
+If school allows CASH payment:
+
+The system should support an offline/cash payment state.
+
+Principal or authorized class teacher can mark the student's examination fee as paid from their panel.
+
+After authorized cash payment confirmation:
+
+The student becomes eligible to submit.
+
+Do not create fake payment gateway logic.
+
+Use the existing Finance/Fee infrastructure if available.
+
+The Examination module should integrate with it rather than create duplicate financial records.
+
+===========================================================
+PART 21 — FORM SUBMISSION
+===========================================================
+
+Once the student submits:
+
+Status:
+
+Submitted
+
+Store:
+
+• student
+• examination
+• submission timestamp
+• payment state
+• applicable fee
+• late fee if applicable
+• submission source
+• confirmation state
+
+Prevent duplicate submissions.
+
+Show confirmation.
+
+===========================================================
+PART 22 — AUTO-SUBMISSION ON EXAMINATION DAY
+===========================================================
+
+Students who have not submitted their examination form by the school's configured deadline should be automatically handled according to the school's policy.
+
+The requirement is:
+
+On the examination day, eligible non-submitted students should be automatically submitted/marked as submitted by the system.
+
+However:
+
+A submission fee / late fine must be applied.
+
+The fine amount must come from the school's configured Examination settings.
+
+Do NOT hardcode the fine amount.
+
+The system must record:
+
+• original submission status
+• auto-submission timestamp
+• late submission flag
+• late fee amount
+• reason = system auto-submission
+
+The student must still be able to view/download the final examination documents.
+
+===========================================================
+PART 23 — ADMIT CARD / HALL TICKET
+===========================================================
+
+After successful examination form submission OR system auto-submission:
+
+Generate the student's Admit Card / Hall Ticket.
+
+This must be available digitally inside the student's account.
+
+It should contain:
+
+SCHOOL LOGO
+SCHOOL NAME
+ADDRESS
+
+ADMIT CARD / HALL TICKET
+
+Student Name
+Student ID / Admission Number
+Class
+Section
+Stream where applicable
+Roll Number
+Academic Session
+
+EXAMINATION NAME
+Examination Type
+
+COMPLETE EXAMINATION TIMETABLE
+
+For every paper:
+
+Date
+Day
+Time
+Subject
+Room
+Seat / Row
+
+Also include:
+
+Exam instructions
+Reporting time
+Important rules
+School contact information if configured
+
+Make this a polished digital document.
+
+===========================================================
+PART 24 — ROOM / ROW / SEAT
+===========================================================
+
+The admit card must eventually contain:
+
+• Room Number
+• Row
+• Seat Number
+
+This should be connected to the examination seating configuration.
+
+Do NOT simply print fake room/seat values.
+
+If seating management already exists, integrate with it.
+
+If it does not yet exist, create the data structure cleanly so the later seating module can populate:
+
+room
+row
+seat
+
+The Admit Card should update automatically when seating is assigned or changed.
+
+===========================================================
+PART 25 — DOWNLOAD / PRINT
+===========================================================
+
+The following should be downloadable/printable:
+
+1. Universal Examination Timetable
+2. Student Admit Card / Hall Ticket
+
+Use proper school branding.
+
+Documents must be:
+
+• A4 friendly
+• print-ready
+• clean
+• professional
+• no clipping
+• no unnecessary browser UI
+• proper page breaks
+• readable typography
+
+Do not generate an ugly browser screenshot.
+
+Generate a real print-oriented document/PDF using the existing project architecture.
+
+===========================================================
+PART 26 — ARCHIVE
+===========================================================
+
+After an examination is published, it must not simply be deleted like a draft.
+
+Draft:
+
+Can be deleted.
+
+Published:
+
+Cannot be permanently deleted through the normal Delete action.
+
+Instead:
+
+Archive Examination
+
+Move it to the Examination Archive.
+
+Archived examinations remain available for historical records.
+
+The archive should preserve:
+
+• examination
+• timetable
+• students
+• submissions
+• payment status
+• admit cards
+• marks/results
+• publication state
+• timestamps
+
+Do not destroy historical academic data.
+
+===========================================================
+PART 27 — SESSION / ARCHIVE UI
+===========================================================
+
+The session switcher should NOT be unnecessarily repeated across every Examination tab.
+
+Follow the earlier design decision:
+
+The session switcher belongs primarily to the Overview context.
+
+Do not clutter:
+
+Exams
+Reports
+Settings
+Create Examination
+
+with a large repeated session selector.
+
+The Archive can later provide historical session navigation.
+
+For now, preserve the clean existing structure.
+
+===========================================================
+PART 28 — EXAMINATION SETTINGS
+===========================================================
+
+The examination settings must remain the source of truth for predefined examination types.
+
+At minimum the configuration model should support:
+
+Examination Type
+Display Name
+Code
+Order
+Maximum Marks
+Theory Marks
+Practical Marks
+Duration
+Papers Per Day
+Gap Between Papers
+Applicable Classes / Academic Groups
+Publication behavior
+Submission deadline policy
+Late submission fee
+Other school-configurable examination rules
+
+Do not hardcode these values in UI components.
+
+For example:
+
+Unit Test 1
+Unit Test 2
+Unit Test 3
+Unit Test 4
+
+may share the same rules but have different names/codes.
+
+Half-Yearly and Annual have their own predefined rules.
+
+===========================================================
+PART 29 — IMPORTANT SUBJECT / CLASS PRINCIPLE
+===========================================================
+
+The Principal should NOT configure:
+
+Subjects
+Streams
+Additional Subjects
+Maximum Marks
+Theory
+Practical
+
+every time an examination is created.
+
+Those belong upstream.
+
+The Principal creates an examination FROM an existing academic configuration.
+
+Think:
+
+"Select classes → Scholario knows the academic structure."
+
+not:
+
+"Select classes → now manually rebuild the academic structure."
+
+===========================================================
+PART 30 — ADDITIONAL SUBJECTS
+===========================================================
+
+Additional subjects must continue to be configured at the class/school level.
+
+Example:
+
+Class 9-A:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+Computer
+
+The examination system automatically sees Computer.
+
+Do NOT display a literal "Additional Subject" subject.
+
+"Additional" is a classification, not a subject name.
+
+This same mapping must be available to:
+
+• Examination
+• Timetable
+• Marks Entry
+• Report Cards
+• Admit Cards
+• Results
+
+without duplicate configuration.
+
+===========================================================
+PART 31 — EXAMINATION TIMETABLE EDITING RULES
+===========================================================
+
+The auto-generated timetable is the initial proposal.
+
+Principal can edit it.
+
+But every edit must run validation.
+
+Examples:
+
+Cannot create overlapping exams for the same student/class.
+
+Cannot exceed Unit Test's 2 papers/day.
+
+Cannot exceed Annual/Half-Yearly's 1 paper/day.
+
+Cannot schedule a 3h15m exam outside a valid school day if it violates configured timing.
+
+Cannot create duplicate subject entries.
+
+Cannot remove the only paper for a required subject without warning.
+
+Cannot schedule outside the selected Start Date / Last Date.
+
+Cannot use a blocked school holiday/non-working date.
+
+If the user intentionally changes something invalid, show:
+
+"What is wrong"
+
+"Why it is wrong"
+
+"How to fix it"
+
+Do not silently reject.
+
+===========================================================
+PART 32 — UI / UX QUALITY BAR
+===========================================================
+
+The new system must have:
+
+• compact selection controls
+• excellent whitespace
+• no giant empty containers
+• no unnecessarily tall cards
+• consistent form widths
+• proper alignment
+• clear visual hierarchy
+• meaningful section headings
+• polished hover/focus/selected states
+• keyboard support where relevant
+• iPad touch-friendly controls
+• drag-and-drop timetable interaction
+• smooth but restrained animations
+• no excessive animation
+• no AI-looking gradients
+• no unnecessary dark UI
+• no visual clutter
+
+Use the existing Scholario palette.
+
+The Examination module can be more visually expressive than a normal settings form because examinations are important, but it must remain professional.
+
+===========================================================
+PART 33 — RESPONSIVENESS
+===========================================================
+
+The UI must work correctly on:
+
+• iPad
+• desktop
+• laptop
+• smaller tablet widths
+
+Do not allow horizontal overflow.
+
+Do not create huge cards that become unusable on smaller screens.
+
+Timetable should adapt gracefully.
+
+On smaller widths, use:
+
+• horizontal scroll only where genuinely necessary for a dense table
+OR
+• responsive row/card presentation.
+
+Do not make the whole page horizontally scroll.
+
+===========================================================
+PART 34 — ACCESSIBILITY
+===========================================================
+
+Use:
+
+• proper labels
+• keyboard navigation
+• focus states
+• readable contrast
+• semantic buttons
+• proper ARIA where required
+• clear validation messages
+
+Do not use clickable divs where buttons are appropriate.
+
+===========================================================
+PART 35 — DATA INTEGRITY
+===========================================================
+
+This is an enterprise ERP.
+
+Do not treat examination creation as frontend-only state.
+
+The saved examination must have proper persistent relationships.
+
+At minimum conceptually:
+
+Examination
+→ Examination Type
+→ Academic Session
+→ Classes
+→ Class/Stream
+→ Subjects
+→ Schedule Items
+→ Students
+→ Submission
+→ Payment State
+→ Admit Card
+→ Seating
+→ Publication State
+→ Archive State
+→ Results
+
+Use the project's existing database architecture.
+
+Do not introduce an unrelated second data layer.
+
+Do not duplicate existing entities.
+
+===========================================================
+PART 36 — DRAFT SAFETY
+===========================================================
+
+If the Principal leaves the creation process after entering meaningful information:
+
+Preserve draft state where the existing architecture supports it.
+
+A draft examination should be recoverable.
+
+Draft examinations can be deleted.
+
+Before deletion:
+
+Show a confirmation.
+
+Example:
+
+"Delete Draft Examination?"
+
+"This will permanently remove the draft and its generated schedule."
+
+Published examinations must follow Archive rules instead.
+
+===========================================================
+PART 37 — PUBLISH SAFETY
+===========================================================
+
+Before publishing:
+
+Run a complete validation.
+
+Check:
+
+✓ Examination type
+✓ Name
+✓ Dates
+✓ Schedule
+✓ Classes
+✓ Subjects
+✓ No schedule conflicts
+✓ Required students
+✓ Payment configuration if applicable
+✓ Submission policy
+✓ Admit card readiness
+✓ Seating readiness if required before publishing
+
+If something is missing:
+
+Do NOT publish.
+
+Show exactly what needs attention.
+
+===========================================================
+PART 38 — AUDIT TRAIL
+===========================================================
+
+Because this is an enterprise school ERP, record important actions if the existing architecture supports audit logs:
+
+Created by
+Created at
+Updated by
+Updated at
+Published by
+Published at
+Archived by
+Archived at
+
+Schedule changes should be traceable.
+
+Do not create a fake audit system if one already exists.
+
+Reuse the existing one.
+
+===========================================================
+PART 39 — NOTIFICATION ARCHITECTURE
+===========================================================
+
+When an examination is published:
+
+Use the existing notification system.
+
+Notify relevant:
+
+• students
+• teachers
+• parents/guardians if supported by the ERP
+
+Do not send notifications while the exam is still Draft.
+
+Do not notify users repeatedly on every edit.
+
+Only publish-related visibility/notification should trigger the public release.
+
+===========================================================
+PART 40 — EXAMINATION OVERVIEW
+===========================================================
+
+After implementation, the existing Examination Overview should remain beautiful.
+
+It should eventually be able to show:
+
+• total examinations
+• upcoming examination
+• current examination
+• published examinations
+• completed examinations
+• marks workflow
+• result workflow
+• session top performers
+• examination readiness
+
+Do not destroy the existing good parts.
+
+Only connect the new examination lifecycle to them properly.
+
+===========================================================
+PART 41 — DO NOT BREAK SESSION TOP PERFORMERS
+===========================================================
+
+The existing Session Top Performers presentation is visually good.
+
+Do not remove it.
+
+Do not redesign it unnecessarily.
+
+Later, its data should update automatically from published examination results.
+
+For this implementation, preserve its current presentation and existing mock data unless actual result data is already available.
+
+===========================================================
+PART 42 — DO NOT BREAK THE EXISTING EXAMS PAGE
+===========================================================
+
+The Exams page should continue to provide:
+
+Current
+Upcoming
+Completed
+etc.
+
+But newly created examinations must appear there correctly.
+
+The status must reflect actual state.
+
+Example:
+
+Saved:
+Draft / Scheduled
+
+Published:
+Published
+
+Exam underway:
+Ongoing
+
+Past exam:
+Completed
+
+Archived:
+Archived
+
+Do not fake dates or statuses.
+
+===========================================================
+PART 43 — UNIVERSAL EXAMINATION TIMETABLE DESIGN
+===========================================================
+
+The generated timetable should be beautiful enough to serve as the official school timetable.
+
+Include:
+
+School Logo
+School Name
+Academic Session
+Examination Name
+Examination Type
+Date Range
+
+Then:
+
+Date
+Day
+Time
+Subject
+Applicable Classes
+
+Use proper school branding.
+
+Provide actions:
+
+[ Edit Schedule ]
+
+[ Download Timetable ]
+
+[ Print Timetable ]
+
+The timetable must use the actual school identity/configuration.
+
+Do not hardcode "Demo School" if real school data exists.
+
+===========================================================
+PART 44 — STUDENT DIGITAL EXPERIENCE
+===========================================================
+
+Student examination page should eventually feel like a proper digital exam dashboard.
+
+Example:
+
+EXAMINATION
+Unit Test 1
+
+Status:
+Form Submitted
+
+Exam Dates:
+10 Sep – 12 Sep
+
+[ View Timetable ]
+
+[ View Admit Card ]
+
+[ Download Admit Card ]
+
+[ View Submission ]
+
+Payment:
+Paid
+
+Submission:
+Completed
+
+If late:
+
+Submission:
+Auto-submitted
+Late Fee:
+₹XXX
+
+Keep it clean.
+
+===========================================================
+PART 45 — TEACHER EXPERIENCE
+===========================================================
+
+Relevant teachers/class teachers should eventually see the examination according to their permissions.
+
+If cash payment needs teacher authorization:
+
+Teacher should see students whose payment is pending.
+
+Authorized teacher can mark cash fee received.
+
+Do not give teachers Principal-level examination control.
+
+Use role permissions.
+
+===========================================================
+PART 46 — PRINCIPAL EXPERIENCE
+===========================================================
+
+Principal should have complete oversight:
+
+Create
+Edit
+Schedule
+Review
+Publish
+Monitor submissions
+Monitor payment status
+View timetable
+View admit cards
+Manage seating
+View results
+Archive
+
+But creation itself should remain simple.
+
+Do not confuse "powerful" with "complicated".
+
+===========================================================
+PART 47 — CUSTOM EXAMINATION
+===========================================================
+
+Custom Examination must remain available.
+
+But it should NOT dominate the UI.
+
+Make it a small secondary action such as:
+
+[ + Custom ]
+
+or a compact button.
+
+When selected, custom examination can expose additional configuration options.
+
+Do NOT make Custom Examination a huge card.
+
+Predefined examination types should be the primary experience.
+
+===========================================================
+PART 48 — REMOVE THE CURRENT BAD UI
+===========================================================
+
+Specifically remove the current problematic patterns:
+
+• oversized class cards
+• oversized empty containers
+• giant subject selection box
+• duplicate subject display
+• "auto-included subjects" counters
+• unnecessary maximum marks input for predefined exams
+• unnecessary theory input
+• unnecessary practical input
+• passing marks input
+• repeated stream configuration
+• giant top header container
+• giant bottom boxed footer form
+• unnecessary "Create Examination" repeated framing
+• unnecessary technical configuration text
+
+Replace with the new clean flow.
+
+===========================================================
+PART 49 — IMPORTANT: DO NOT USE FAKE DATA TO HIDE LOGIC PROBLEMS
+===========================================================
+
+Use the actual configured school data.
+
+If mock data is required because a particular connected backend feature does not yet exist:
+
+keep the mock data isolated and clearly structured.
+
+Do not hardcode fake values directly into UI components.
+
+Do not make the UI appear functional while the underlying state is disconnected.
+
+===========================================================
+PART 50 — IMPLEMENTATION STRATEGY
+===========================================================
+
+Do this carefully in stages internally:
+
+PHASE A
+Audit current Examination implementation.
+
+PHASE B
+Audit existing:
+• Examination Settings
+• School Settings
+• Students & Classes
+• Subjects
+• Streams
+• Academic Sessions
+• Teachers
+• Students
+• Notifications
+• Finance/Fee
+• existing timetable components
+• existing PDF/print infrastructure
+• existing permissions
+
+PHASE C
+Remove/rebuild current Create Examination implementation.
+
+PHASE D
+Implement clean Step 1.
+
+PHASE E
+Implement automatic academic resolution.
+
+PHASE F
+Implement scheduling engine.
+
+PHASE G
+Implement universal timetable preview/edit.
+
+PHASE H
+Implement final examination review.
+
+PHASE I
+Implement Save & Schedule.
+
+PHASE J
+Connect saved examination to Exams.
+
+PHASE K
+Implement publish workflow.
+
+PHASE L
+Connect student examination form.
+
+PHASE M
+Connect payment/submission logic.
+
+PHASE N
+Connect admit card.
+
+PHASE O
+Connect archive behavior.
+
+PHASE P
+Run complete regression testing.
+
+Do not stop after only changing the frontend.
+
+===========================================================
+PART 51 — TEST SCENARIOS
+===========================================================
+
+Test at minimum:
+
+TEST 1
+Select Unit Test 1.
+
+Expected:
+Unit Test rules automatically applied.
+
+TEST 2
+Select Unit Test 1 + classes 6–8.
+
+Expected:
+Subjects automatically resolved from those classes.
+
+TEST 3
+Select 9-A + 10-A.
+
+Expected:
+No duplicate subject UI.
+Each class retains its actual subject mapping.
+
+TEST 4
+Select Grade 11 PCM.
+
+Expected:
+Mathematics included.
+Biology NOT included.
+
+TEST 5
+Select Grade 11 PCB.
+
+Expected:
+Biology included.
+Mathematics NOT included.
+
+TEST 6
+School has only Science stream.
+
+Expected:
+Commerce and Humanities do not appear.
+
+TEST 7
+School adds Computer as additional subject to Class 9.
+
+Expected:
+Computer automatically becomes part of examination subject resolution.
+
+TEST 8
+School removes Computer from Class 9.
+
+Expected:
+Future examination creation no longer includes Computer.
+
+TEST 9
+Select Unit Test with 8 papers.
+
+Expected:
+Maximum 2 papers/day.
+1 hour each.
+15 minute gap.
+
+TEST 10
+Select Annual with 8 papers.
+
+Expected:
+Maximum 1 paper/day.
+3h15m each.
+
+TEST 11
+Start date is yesterday.
+
+Expected:
+Cannot select.
+
+TEST 12
+Last date before start date.
+
+Expected:
+Cannot continue.
+
+TEST 13
+Generated schedule has a conflict.
+
+Expected:
+System detects and prevents invalid schedule.
+
+TEST 14
+Principal manually moves a subject row.
+
+Expected:
+Drag-and-drop works and schedule revalidates.
+
+TEST 15
+Save & Schedule.
+
+Expected:
+Exam appears in Exams page.
+
+TEST 16
+Exam remains unpublished.
+
+Expected:
+Students do not see it.
+
+TEST 17
+Principal publishes exam.
+
+Expected:
+Relevant students/teachers can now see it.
+
+TEST 18
+Student has already paid.
+
+Expected:
+Student can submit examination form.
+
+TEST 19
+Student has unpaid required fee.
+
+Expected:
+Submission blocked until payment is resolved.
+
+TEST 20
+Authorized teacher/principal marks cash payment received.
+
+Expected:
+Student becomes eligible for submission.
+
+TEST 21
+Student submits.
+
+Expected:
+Submission recorded once.
+
+TEST 22
+Student does not submit by examination-day rule.
+
+Expected:
+Automatic submission with configured late fee.
+
+TEST 23
+Admit card generated.
+
+Expected:
+Student can view/download it.
+
+TEST 24
+Seating assigned.
+
+Expected:
+Room + Row + Seat appear on admit card.
+
+TEST 25
+Draft exam deleted.
+
+Expected:
+Draft disappears.
+
+TEST 26
+Published exam deletion attempted.
+
+Expected:
+Permanent deletion blocked.
+Archive action offered.
+
+===========================================================
+PART 52 — CODE QUALITY / FINAL AUDIT
+===========================================================
+
+After implementation:
+
+• run type checking
+• run lint
+• run build
+• run relevant tests
+• check browser console
+• check network errors
+• check responsive layout
+• check iPad layout
+• check all examination routes
+• check navigation
+• check persistence
+• check role permissions
+• check no duplicate records are created
+
+If build errors exist, fix them.
+
+If existing Examination code is unnecessarily large, refactor it.
+
+If any new component is unnecessarily large, split it into logical components.
+
+Do NOT simply suppress errors.
+
+===========================================================
+FINAL PRODUCT VISION
+===========================================================
+
+The final experience should feel like this:
+
+Principal opens:
+
+Examinations
+→ Exams
+→ + Create Examination
+
+Then:
+
+STEP 1
+Choose:
+Unit Test 1
+
+Name automatically:
+Unit Test 1
+
+Choose:
+Start Date
+Last Examination Date
+Start Time
+
+Choose:
+Classes
+
+Click:
+
+NEXT
+
+STEP 2
+
+Scholario automatically generates:
+
+OFFICIAL EXAMINATION TIMETABLE
+
+with:
+
+dates
+days
+times
+subjects
+classes
+duration
+gaps
+
+Principal can tap/edit anything editable.
+
+Principal can hold + drag timetable rows to reorder them.
+
+Then:
+
+NEXT / REVIEW
+
+STEP 3
+
+Beautiful complete examination preview.
+
+Everything automatically resolved.
+
+Principal clicks:
+
+SAVE & SCHEDULE
+
+Exam appears in:
+
+EXAMS
+
+Then Principal can:
+
+Open
+Edit
+Publish
+View Schedule
+Download Timetable
+Print Timetable
+
+Once Published:
+
+Students receive the examination.
+
+Students handle:
+
+Payment
+Form Submission
+Confirmation
+
+Then:
+
+Admit Card / Hall Ticket
+
+with:
+
+Student
+Class
+Roll Number
+Exam
+Subject
+Date
+Time
+Room
+Row
+Seat
+
+After the examination:
+
+Marks
+Results
+Top Performers
+Reports
+
+And finally:
+
+Archive
+
+This is the complete lifecycle.
+
+===========================================================
+MOST IMPORTANT INSTRUCTION
+===========================================================
+
+DO NOT TRY TO FINISH THIS BY MAKING A QUICK VISUAL MOCKUP.
+
+Build the actual connected system.
+
+Do not leave hidden broken states.
+
+Do not create UI that says something is working when it is not.
+
+Do not invent data relationships.
+
+Do not duplicate existing ERP data.
+
+Do not make the Principal fill information that the system already knows.
+
+Do not sacrifice logic for visual appearance.
+
+Do not sacrifice visual quality for functionality.
+
+The final result must have BOTH:
+
+ENTERPRISE-GRADE LOGIC
++
+PREMIUM, CLEAN SCHOLARIO UI/UX
+
+Take the time to inspect the existing architecture first.
+
+Then rebuild the Examination creation flow properly.
+
+Follow every rule above.
+
+Do not skip any section simply because the current UI does not have it.
+
+Where a connected backend feature already exists, integrate it.
+
+Where it does not exist, create the cleanest extensible foundation possible without breaking the current application.
+
+After implementation, perform a full end-to-end Examination workflow test and fix every issue you find before considering this task complete.

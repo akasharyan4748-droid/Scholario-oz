@@ -434,3 +434,67 @@ Stage Summary:
 - Confirmation dialogs for Publish/Delete/Archive
 - Session picker only on Overview (not duplicated on Exams/Reports/Settings)
 - Homework, Admissions, Teachers, Students & Classes, Timetable, Attendance, Finance, Communication — all untouched
+
+---
+Task ID: create-exam-final-refinement-6
+Agent: main (Super Z)
+Task: Final refinement of Create Examination flow — "Principal should select as little as possible. Scholario should already know the rest." Remove top header container, make subjects auto-included (read-only by default), clean Assessment UI with obvious Theory/Practical toggle, better section rhythm.
+
+Work Log:
+
+### Phase 1: Removed top "Create Examination" header container
+- The page previously had a bordered header bar + bordered footer bar, making the form feel trapped between two containers.
+- Removed the entire top header div. The page now starts directly with the Examination Type section.
+- Only the compact bottom action bar remains (Cancel · Create Examination).
+- Page breathes naturally like the rest of the Principal panel.
+
+### Phase 2: Subjects auto-included (READ-ONLY by default)
+- Subjects now auto-include from the selected classes' configuration — NO manual selection required by default.
+- Read-only mode: subjects displayed as plain chips inside a subtle muted container, with a small dashed "✎ Edit" button on the right.
+- Edit mode (toggled by clicking Edit): subjects become toggleable chips with check indicators. Principal can deselect individual subjects if needed. "Done" button returns to read-only mode.
+- The `deselectedSubjectNames` Set tracks explicit removals. `effectiveSubjects = autoSubjects.filter(s => !deselectedSubjectNames.has(s.name))`.
+- This eliminates the "select subjects manually" step entirely for the default workflow.
+
+### Phase 3: Assessment UI refinement
+- Replaced the "Include Practical" checkbox button with a proper Theory/Practical segmented toggle.
+- Toggle has obvious active state: active side gets `bg-card shadow-sm text-foreground` + emerald dot indicator; inactive side is `text-muted-foreground` with muted dot.
+- Removed the "33% pass (global)" text from the Assessment section — passing rule is global and shouldn't clutter this screen.
+- Removed manual max marks / theory / practical input fields — values are now auto-configured from the template ( Examination Settings) and shown as read-only summary: "50 max · 50 theory" or "100 max · 70 theory · 30 practical".
+- Practical toggle is gated: if the template has `practicalMarks === 0` (Unit Tests), toggling Practical ON shows an info toast "Practical not applicable for this examination type" and doesn't activate.
+
+### Phase 4: Section rhythm improvement
+- Increased section spacing from `space-y-6` to `space-y-8` for more breathing room.
+- Section header margin-bottom increased from `mb-2` to `mb-2.5`.
+- Added `pb-8` to the scrollable form area to prevent content from touching the bottom action bar.
+- Removed the "Draft · {academicYear}" badge from the top (was redundant — the draft status is implicit during creation).
+
+### Phase 5: Empty state for no classes
+- If no classes are configured in the school, the Classes section shows a helpful empty state: "No classes configured yet. Add classes in Students & Classes first."
+- This directs the Principal to configure the prerequisite data instead of inventing fallback subjects.
+
+### Phase 6: Data architecture confirmation
+- The form consumes existing school configuration end-to-end:
+  • Classes + their subjects come from Students & Classes (via useExamsList API)
+  • Streams come from each class's `stream` field (already configured per class)
+  • Exam rules (max marks, theory/practical split, duration, papers/day, gap, Sunday skip) come from the template engine ( Examination Settings defaults)
+- No hardcoded subject lists, no hardcoded stream structures, no hardcoded class data.
+- The principal's only required inputs are: examination type, classes (checkboxes), date range, start time.
+- Everything else is auto-derived.
+
+### Verification
+- TypeScript: 56 total errors (same as before — all pre-existing in unrelated modules). ZERO exam-related errors.
+- Dev server: restarted on PID 2346, home page HTTP 200 (13069 bytes).
+- All chunks load HTTP 200.
+- E2E create-exam test still passes:
+  • Scenario A (UT1 + Grade 9 + Grade 10): created as Draft, 6 subjects per class (deduped), 12 papers
+  • Scenario C (Annual + Grade 11 Science PCM): correct stream subjects (Physics, Chemistry, Math, English, PE — no Biology)
+  • Scenario D (Annual + Grade 12 Commerce): correct Commerce subjects (Accountancy, Business Studies, Economics, English, Math — no Physics/Biology)
+  • Scenario F-I (Publish/Archive lifecycle): Draft → Scheduled → Cancelled all work
+
+Stage Summary:
+- Create Examination page no longer has a top header container — only a compact bottom action bar.
+- Subjects are auto-included from selected classes' configuration (READ-ONLY by default), with a subtle Edit affordance for exceptional cases.
+- Assessment UI uses a clear Theory/Practical segmented toggle with obvious active state — no manual marks entry, no "33% pass" text.
+- Section spacing improved for better rhythm; no giant boxes, no fragmented feel.
+- The principal's required inputs are minimal: examination type, classes, date range, start time. Everything else is auto-derived from existing school configuration.
+- Homework, Admissions, Teachers, Students & Classes, Timetable, Attendance, Finance, Communication — all untouched.

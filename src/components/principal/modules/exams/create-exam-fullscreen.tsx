@@ -3,32 +3,36 @@
 /**
  * CreateExamFullScreen — single-page examination creation form.
  *
- * NOT a wizard. One well-organized page with logical sections:
- *   1. Examination Type (compact pills + small Custom)
- *   2. Examination Name (auto-filled from template)
- *   3. Classes (multi-select; senior classes are stream-aware)
- *   4. Subjects (smart deduplication by NAME — appears ONCE even when
- *      multiple classes share the subject; grouped by academic structure)
- *   5. Assessment (max marks + theory/practical — practical only when
- *      applicable; no passing marks field — 33% is global)
- *   6. Examination Window (start/end date — past dates blocked — start time)
- *   7. Generated Schedule (auto-preview, editable later)
+ * DESIGN PRINCIPLE: "Principal should select as little as possible.
+ * Scholario should already know the rest."
  *
- * Subject deduplication: when Grade 9-A and Grade 10-A both have
- * "Mathematics", the subject appears ONCE in the picker, and is associated
- * with both classes at create time. This fixes the duplicate-subject bug.
+ * The form consumes existing school configuration:
+ *   • Classes + their subjects come from Students & Classes
+ *   • Streams come from each class's `stream` field (already configured)
+ *   • Exam rules (max marks, duration, papers/day, gap, Sunday skip) come
+ *     from Examination Settings via the template engine
  *
- * Stream-aware: when Grade 11 or 12 classes are selected, their stream
- * (Science-PCM, Science-PCB, Commerce, Humanities) groups subjects so the
- * principal sees structured selections, not a flat list.
+ * Principal flow:
+ *   1. Pick examination type (UT1, UT2, Half-Yearly, UT3, UT4, Annual, Custom)
+ *      → name auto-fills, assessment auto-configures
+ *   2. Select classes (just checkboxes — streams are shown automatically)
+ *      → subjects auto-include from class configuration (READ-ONLY by default)
+ *   3. Pick start date / last date / start time (past dates blocked)
+ *      → schedule auto-generates with Sunday skip + conflict-safe slots
+ *   4. Review generated schedule
+ *   5. Create Examination → saved as DRAFT
  *
- * Validation: date range must fit required working days (Sundays skipped).
- * Past dates are blocked.
+ * Subjects are auto-included from the selected classes' configuration.
+ * The Principal can toggle "Edit" to remove/add exceptional subjects, but
+ * the default workflow requires ZERO manual subject selection.
+ *
+ * No layout container around the form — page breathes naturally like the
+ * rest of the Principal panel. Only a compact bottom action bar remains.
  */
 
 import { useState, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Check, Plus, X, AlertTriangle, Calendar, Clock } from 'lucide-react'
+import { ArrowLeft, Check, AlertTriangle, Calendar, Clock, Pencil, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -66,244 +70,134 @@ interface Props {
   onCreated: (exam: any) => void
 }
 
-// Grouped subject — keyed by name (so duplicates across classes collapse to one)
-interface GroupedSubject extends SubjectInfo {
-  // Which classes (from those selected) actually offer this subject
+// Deduped subject — appears once even when shared across multiple selected classes
+interface DedupedSubject extends SubjectInfo {
   availableInClassIds: string[]
   availableInClassNames: string[]
-}
-
-interface SubjectGroup {
-  // Academic structure label, e.g. "Classes 9-10", "Science — PCM", "Commerce"
-  label: string
-  // Stream key, if applicable
-  stream: string | null
-  subjects: GroupedSubject[]
 }
 
 export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated }: Props) {
   const [selectedTemplate, setSelectedTemplate] = useState<ExamTemplate | null>(null)
   const [name, setName] = useState('')
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([])
-  const [selectedSubjectIds, setSelectedSubjectIds] = useState<Set<string>>(new Set())
+  // subjectsEditable: when false (default), subjects are auto-included and
+  // shown read-only. When true, the principal can toggle individual subjects.
+  const [subjectsEditable, setSubjectsEditable] = useState(false)
+  const [deselectedSubjectNames, setDeselectedSubjectNames] = useState<Set<string>>(new Set())
   const [hasPractical, setHasPractical] = useState(false)
-  const [maxMarks, setMaxMarks] = useState(100)
-  const [theoryMarks, setTheoryMarks] = useState(100)
-  const [practicalMarks, setPracticalMarks] = useState(0)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [examTime, setExamTime] = useState('09:00')
   const { create, loading } = useCreateExam()
 
-  // Today's date in YYYY-MM-DD (used to block past dates)
+  // Today's date in YYYY-MM-DD (blocks past dates)
   const today = useMemo(() => {
     const d = new Date()
     d.setHours(0, 0, 0, 0)
     return d.toISOString().split('T')[0]
   }, [])
 
-  // When template is selected, auto-populate name + assessment defaults
+  // ─── Template selection → auto-fill name + assessment ────────────────
   const handleTemplateSelect = useCallback((t: ExamTemplate) => {
     setSelectedTemplate(t)
-    // Auto-fill name from template label (principal can edit)
     setName(t.label)
-    // Auto-apply assessment defaults
     const meta = getTemplateMeta(t.id)
-    setMaxMarks(meta.maxMarks)
-    setTheoryMarks(meta.theoryMarks)
-    setPracticalMarks(meta.practicalMarks)
     setHasPractical(meta.hasPractical)
   }, [])
 
   // ─── Class selection ────────────────────────────────────────────────
-  const toggleClass = (classId: string) => {
+  const handleClassToggle = (classId: string) => {
     setSelectedClassIds((prev) =>
       prev.includes(classId) ? prev.filter((c) => c !== classId) : [...prev, classId],
     )
   }
 
-  // Selected classes (full objects)
   const selectedClasses = useMemo(
     () => classes.filter((c) => selectedClassIds.includes(c.id)),
     [classes, selectedClassIds],
   )
 
-  // ─── Smart subject grouping ──────────────────────────────────────────
-  // Group selected classes into:
-  //   • Classes 6-10 (general stream) — common subjects
-  //   • Senior stream groups (Science-PCM, Science-PCB, Commerce, Humanities)
-  // Each group shows subjects DEDUPLICATED BY NAME — so selecting Grade 9-A
-  // and Grade 10-A produces ONE "Mathematics" entry, not two.
-  const subjectGroups = useMemo<SubjectGroup[]>(() => {
-    if (selectedClasses.length === 0) return []
-
-    // Bucket classes by academic structure
-    const juniorBuckets = new Map<string, ClassDTO[]>() // "6-8", "9-10"
-    const seniorBuckets = new Map<string, ClassDTO[]>() // stream key
-
+  // ─── Auto-included subjects (deduped by NAME across all selected classes) ───
+  // This is the source of truth — subjects come FROM the class configuration.
+  // No manual entry, no stream-selection step. The principal only verifies.
+  const autoSubjects = useMemo<DedupedSubject[]>(() => {
+    const byName = new Map<string, DedupedSubject>()
     for (const c of selectedClasses) {
-      const grade = parseInt(c.gradeLevel ?? '0', 10)
-      if (grade >= 11) {
-        const stream = c.stream ?? 'General'
-        if (!seniorBuckets.has(stream)) seniorBuckets.set(stream, [])
-        seniorBuckets.get(stream)!.push(c)
-      } else if (grade >= 9) {
-        const key = '9-10'
-        if (!juniorBuckets.has(key)) juniorBuckets.set(key, [])
-        juniorBuckets.get(key)!.push(c)
-      } else if (grade >= 6) {
-        const key = '6-8'
-        if (!juniorBuckets.has(key)) juniorBuckets.set(key, [])
-        juniorBuckets.get(key)!.push(c)
-      }
-    }
-
-    const groups: SubjectGroup[] = []
-
-    // Junior groups — common subjects (deduped by name)
-    for (const [key, bucketClasses] of juniorBuckets) {
-      const subjectsByName = new Map<string, GroupedSubject>()
-      for (const c of bucketClasses) {
-        for (const s of c.subjects) {
-          const existing = subjectsByName.get(s.name)
-          if (existing) {
-            if (!existing.availableInClassIds.includes(c.id)) {
-              existing.availableInClassIds.push(c.id)
-              existing.availableInClassNames.push(c.name)
-            }
-          } else {
-            subjectsByName.set(s.name, {
-              id: s.id, // first class's subject id — used as the canonical id
-              name: s.name,
-              code: s.code,
-              availableInClassIds: [c.id],
-              availableInClassNames: [c.name],
-            })
+      for (const s of c.subjects) {
+        const existing = byName.get(s.name)
+        if (existing) {
+          if (!existing.availableInClassIds.includes(c.id)) {
+            existing.availableInClassIds.push(c.id)
+            existing.availableInClassNames.push(c.name)
           }
+        } else {
+          byName.set(s.name, {
+            id: s.id, // canonical id from first class that has it
+            name: s.name,
+            code: s.code,
+            availableInClassIds: [c.id],
+            availableInClassNames: [c.name],
+          })
         }
       }
-      const label = key === '9-10' ? 'Classes 9–10 (Secondary)' : 'Classes 6–8 (Middle School)'
-      groups.push({
-        label,
-        stream: null,
-        subjects: Array.from(subjectsByName.values()).sort((a, b) => a.name.localeCompare(b.name)),
-      })
     }
-
-    // Senior groups — by stream
-    const STREAM_LABELS: Record<string, string> = {
-      'Science-PCM': 'Science — PCM',
-      'Science-PCB': 'Science — PCB',
-      'Science-PCMB': 'Science — PCMB',
-      'Commerce': 'Commerce',
-      'Humanities': 'Humanities / Arts',
-    }
-    for (const [stream, bucketClasses] of seniorBuckets) {
-      const subjectsByName = new Map<string, GroupedSubject>()
-      for (const c of bucketClasses) {
-        for (const s of c.subjects) {
-          const existing = subjectsByName.get(s.name)
-          if (existing) {
-            if (!existing.availableInClassIds.includes(c.id)) {
-              existing.availableInClassIds.push(c.id)
-              existing.availableInClassNames.push(c.name)
-            }
-          } else {
-            subjectsByName.set(s.name, {
-              id: s.id,
-              name: s.name,
-              code: s.code,
-              availableInClassIds: [c.id],
-              availableInClassNames: [c.name],
-            })
-          }
-        }
-      }
-      const label = STREAM_LABELS[stream] ?? stream
-      groups.push({
-        label,
-        stream,
-        subjects: Array.from(subjectsByName.values()).sort((a, b) => a.name.localeCompare(b.name)),
-      })
-    }
-
-    return groups
+    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name))
   }, [selectedClasses])
 
-  // All deduped subjects available across selected classes (flat list)
-  const allAvailableSubjects = useMemo(() => {
-    return subjectGroups.flatMap((g) => g.subjects)
-  }, [subjectGroups])
+  // Final subject list — auto-included MINUS any the principal explicitly deselected
+  const effectiveSubjects = useMemo(
+    () => autoSubjects.filter((s) => !deselectedSubjectNames.has(s.name)),
+    [autoSubjects, deselectedSubjectNames],
+  )
 
-  // Auto-suggest subjects when classes change (only if user hasn't manually
-  // deselected anything). For simplicity: when classIds change, reset to all
-  // available subjects.
-  const handleClassToggle = (classId: string) => {
-    const newSelectedClassIds = selectedClassIds.includes(classId)
-      ? selectedClassIds.filter((c) => c !== classId)
-      : [...selectedClassIds, classId]
-    setSelectedClassIds(newSelectedClassIds)
-    // Recompute available subjects and auto-select all (suggestion)
-    const newSelectedClasses = classes.filter((c) => newSelectedClassIds.includes(c.id))
-    const suggested = new Set<string>()
-    const seen = new Map<string, string>() // name → first subjectId
-    for (const c of newSelectedClasses) {
-      for (const s of c.subjects) {
-        if (!seen.has(s.name)) {
-          seen.set(s.name, s.id)
-          suggested.add(s.id)
-        }
-      }
-    }
-    setSelectedSubjectIds(suggested)
-  }
-
-  const toggleSubject = (subjectId: string) => {
-    setSelectedSubjectIds((prev) => {
+  const toggleSubjectDeselection = (subjectName: string) => {
+    setDeselectedSubjectNames((prev) => {
       const next = new Set(prev)
-      if (next.has(subjectId)) next.delete(subjectId)
-      else next.add(subjectId)
+      if (next.has(subjectName)) next.delete(subjectName)
+      else next.add(subjectName)
       return next
     })
   }
 
-  // Selected subject objects (full info)
-  const selectedSubjects = useMemo(
-    () => allAvailableSubjects.filter((s) => selectedSubjectIds.has(s.id)),
-    [allAvailableSubjects, selectedSubjectIds],
-  )
-
-  // ─── Assessment toggling ─────────────────────────────────────────────
-  const togglePractical = () => {
-    const newVal = !hasPractical
-    setHasPractical(newVal)
-    if (newVal && selectedTemplate) {
-      const meta = getTemplateMeta(selectedTemplate.id)
-      setTheoryMarks(meta.theoryMarks)
-      setPracticalMarks(meta.practicalMarks)
-    } else if (newVal) {
-      setTheoryMarks(70)
-      setPracticalMarks(30)
-    } else {
-      setTheoryMarks(maxMarks)
-      setPracticalMarks(0)
+  // ─── Assessment config (driven by template, not manual entry) ─────────
+  const assessment = useMemo(() => {
+    if (!selectedTemplate) return null
+    const meta = getTemplateMeta(selectedTemplate.id)
+    return {
+      maxMarks: meta.maxMarks,
+      theoryMarks: hasPractical ? meta.theoryMarks : meta.maxMarks,
+      practicalMarks: hasPractical ? meta.practicalMarks : 0,
+      hasPractical,
     }
+  }, [selectedTemplate, hasPractical])
+
+  const togglePractical = () => {
+    if (!selectedTemplate) return
+    const meta = getTemplateMeta(selectedTemplate.id)
+    // Only allow toggling practical ON if the template supports it
+    if (!hasPractical && meta.practicalMarks === 0) {
+      toast.info('Practical not applicable for this examination type', {
+        description: `${selectedTemplate.label} is theory-only by default.`,
+      })
+      return
+    }
+    setHasPractical(!hasPractical)
   }
 
   // ─── Date range validation ───────────────────────────────────────────
   const dateValidation = useMemo(() => {
-    if (!selectedTemplate || !startDate || selectedSubjects.length === 0) return null
+    if (!selectedTemplate || !startDate || effectiveSubjects.length === 0) return null
     return validateDateRange(
       selectedTemplate.id,
       startDate,
       endDate || startDate,
-      selectedSubjects.length,
+      effectiveSubjects.length,
     )
-  }, [selectedTemplate, startDate, endDate, selectedSubjects.length])
+  }, [selectedTemplate, startDate, endDate, effectiveSubjects.length])
 
   // ─── Generated schedule preview ──────────────────────────────────────
   const generatedSchedule = useMemo<GeneratedScheduleItem[]>(() => {
-    if (!selectedTemplate || !startDate || selectedSubjects.length === 0 || (dateValidation && !dateValidation.isValid)) {
+    if (!selectedTemplate || !startDate || effectiveSubjects.length === 0 || (dateValidation && !dateValidation.isValid)) {
       return []
     }
     const classInfos: ClassInfo[] = selectedClasses.map((c) => ({
@@ -320,24 +214,24 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
       startDate,
       endDate || startDate,
       classInfos,
-      selectedSubjects,
+      effectiveSubjects,
       examTime,
     )
     return config.schedule
-  }, [selectedTemplate, startDate, endDate, selectedClasses, selectedSubjects, name, examTime, dateValidation])
+  }, [selectedTemplate, startDate, endDate, selectedClasses, effectiveSubjects, name, examTime, dateValidation])
 
   // ─── Can create? ─────────────────────────────────────────────────────
   const canCreate =
     name.trim().length > 0 &&
     selectedTemplate !== null &&
     selectedClassIds.length > 0 &&
-    selectedSubjects.length > 0 &&
+    effectiveSubjects.length > 0 &&
     startDate.length > 0 &&
     (!dateValidation || dateValidation.isValid)
 
   // ─── Handle create ───────────────────────────────────────────────────
   const handleCreate = async () => {
-    if (!canCreate || !selectedTemplate) return
+    if (!canCreate || !selectedTemplate || !assessment) return
     try {
       const classInfos: ClassInfo[] = selectedClasses.map((c) => ({
         id: c.id,
@@ -354,45 +248,39 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
         startDate,
         endDate || startDate,
         classInfos,
-        selectedSubjects,
+        effectiveSubjects,
         examTime,
       )
 
-      // Override marks config from user input
+      // Apply assessment config from template (not manual entry)
       generated.subjects = generated.subjects.map((s) => ({
         ...s,
-        maxMarks,
-        theoryMarks: hasPractical ? theoryMarks : maxMarks,
-        practicalMarks: hasPractical ? practicalMarks : 0,
+        maxMarks: assessment.maxMarks,
+        theoryMarks: assessment.theoryMarks,
+        practicalMarks: assessment.practicalMarks,
       }))
 
       // Build subjectsByClass — for each selected class, filter to only
-      // subjects that exist in that class (by name, since IDs differ per class).
-      // This is the fix for the multi-class duplicate-subject bug.
+      // subjects that exist in that class (matched by name, since IDs differ).
       const subjectsByClass: Record<string, Array<{ subjectId: string; maxMarks: number; theoryMarks: number; practicalMarks: number }>> = {}
       for (const classId of selectedClassIds) {
         const cls = classes.find((c) => c.id === classId)
         if (!cls) continue
         const classSubjectNames = new Set(cls.subjects.map((s) => s.name))
-        // For each selected subject (canonical id from first class that had it),
-        // find the matching subject in THIS class by name
-        subjectsByClass[classId] = selectedSubjects
+        subjectsByClass[classId] = effectiveSubjects
           .filter((sel) => classSubjectNames.has(sel.name))
           .map((sel) => {
             const classSubj = cls.subjects.find((s) => s.name === sel.name)!
             return {
               subjectId: classSubj.id,
-              maxMarks,
-              theoryMarks: hasPractical ? theoryMarks : maxMarks,
-              practicalMarks: hasPractical ? practicalMarks : 0,
+              maxMarks: assessment.maxMarks,
+              theoryMarks: assessment.theoryMarks,
+              practicalMarks: assessment.practicalMarks,
             }
           })
       }
 
-      // Build schedule — one slot per selected subject, shared across all
-      // selected classes. Use the canonical subjectId from selectedSubjects.
-      // The service will validate that each subjectId exists for each class
-      // — we filter per-class to avoid validation errors.
+      // Build schedule — per-class filtering by name
       const fullSchedule = selectedClassIds.flatMap((classId) => {
         const cls = classes.find((c) => c.id === classId)
         if (!cls) return []
@@ -400,7 +288,6 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
         return generated.schedule
           .filter((s) => classSubjectNames.has(s.subjectName))
           .map((s) => {
-            // Find THIS class's subjectId for this subject name
             const classSubj = cls.subjects.find((cs) => cs.name === s.subjectName)!
             return {
               classId,
@@ -427,7 +314,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
       })
 
       toast.success('Examination created as Draft', {
-        description: `${selectedSubjects.length} subjects scheduled across ${selectedClassIds.length} classes. Review and publish when ready.`,
+        description: `${effectiveSubjects.length} subjects scheduled across ${selectedClassIds.length} classes. Review and publish when ready.`,
       })
       onCreated(exam)
     } catch (e: any) {
@@ -436,28 +323,12 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   }
 
   // ─── Render ──────────────────────────────────────────────────────────
+  // NO top header container. Page breathes naturally. Only bottom action bar.
   return (
     <div className="flex flex-col h-full">
-      {/* Compact header */}
-      <div className="border-b border-border bg-card px-4 sm:px-6 py-3 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={onBack}
-            aria-label="Back"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <h1 className="text-sm font-semibold">Create Examination</h1>
-        </div>
-        <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold bg-muted text-muted-foreground border-border">
-          Draft · {academicYear}
-        </span>
-      </div>
-
-      {/* Scrollable form area */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <div className="max-w-3xl mx-auto space-y-6">
+      {/* Scrollable form area — starts directly with content */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-8">
+        <div className="max-w-3xl mx-auto space-y-8">
           {/* ─── 1. Examination Type ─────────────────────────────────── */}
           <Section label="Examination Type" required>
             <TemplateSelection selectedTemplateId={selectedTemplate?.id ?? null} onSelect={handleTemplateSelect} />
@@ -468,7 +339,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25 }}
-              className="space-y-6"
+              className="space-y-8"
             >
               {/* ─── 2. Examination Name ──────────────────────────────── */}
               <Section label="Examination Name" required>
@@ -481,59 +352,71 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
               </Section>
 
               {/* ─── 3. Classes ──────────────────────────────────────── */}
-              <Section label="Classes" required hint="Senior classes (11-12) are stream-aware.">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {classes.map((cls) => {
-                    const isSelected = selectedClassIds.includes(cls.id)
-                    return (
-                      <label
-                        key={cls.id}
-                        className={cn(
-                          'flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors',
-                          isSelected ? 'border-primary/40 bg-primary/5' : 'border-border hover:bg-muted/30',
-                        )}
-                      >
-                        <Checkbox checked={isSelected} onCheckedChange={() => handleClassToggle(cls.id)} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium truncate">{cls.name}</p>
-                          {cls.stream && (
-                            <p className="text-[9px] text-muted-foreground truncate">{cls.stream}</p>
+              <Section
+                label="Classes"
+                required
+                hint={selectedClassIds.length > 0 ? `${selectedClassIds.length} selected` : undefined}
+              >
+                {classes.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/60 py-5 text-center">
+                    <p className="text-xs text-muted-foreground">
+                      No classes configured yet.
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/70 mt-1">
+                      Add classes in Students &amp; Classes first.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {classes.map((cls) => {
+                      const isSelected = selectedClassIds.includes(cls.id)
+                      return (
+                        <label
+                          key={cls.id}
+                          className={cn(
+                            'flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors',
+                            isSelected ? 'border-primary/40 bg-primary/5' : 'border-border hover:bg-muted/30',
                           )}
-                        </div>
-                        <span className="text-[9px] text-muted-foreground ml-auto shrink-0 tabular-nums">
-                          {cls.studentCount}
-                        </span>
-                      </label>
-                    )
-                  })}
-                </div>
+                        >
+                          <Checkbox checked={isSelected} onCheckedChange={() => handleClassToggle(cls.id)} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium truncate">{cls.name}</p>
+                            {cls.stream && (
+                              <p className="text-[9px] text-muted-foreground truncate">{cls.stream}</p>
+                            )}
+                          </div>
+                          <span className="text-[9px] text-muted-foreground ml-auto shrink-0 tabular-nums">
+                            {cls.studentCount}
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
               </Section>
 
-              {/* ─── 4. Subjects (grouped + deduped) ─────────────────── */}
-              {subjectGroups.length > 0 && (
+              {/* ─── 4. Subjects (auto-included, READ-ONLY by default) ──── */}
+              {autoSubjects.length > 0 && (
                 <Section
                   label="Subjects"
-                  required
-                  hint="Subjects appear once even when shared across classes."
+                  hint={`${effectiveSubjects.length} auto-included from selected classes`}
                 >
-                  <div className="space-y-3">
-                    {subjectGroups.map((group) => (
-                      <div key={group.label}>
-                        <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-1.5">
-                          {group.label}
-                        </p>
+                  <div className="rounded-lg border border-border bg-muted/20 p-3">
+                    {subjectsEditable ? (
+                      // Editable mode — principal can deselect individual subjects
+                      <div className="space-y-2">
                         <div className="flex flex-wrap gap-1.5">
-                          {group.subjects.map((subj) => {
-                            const isSelected = selectedSubjectIds.has(subj.id)
+                          {autoSubjects.map((subj) => {
+                            const isSelected = !deselectedSubjectNames.has(subj.name)
                             return (
                               <button
                                 key={subj.id}
-                                onClick={() => toggleSubject(subj.id)}
+                                onClick={() => toggleSubjectDeselection(subj.name)}
                                 className={cn(
-                                  'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs transition-all',
+                                  'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-all',
                                   isSelected
                                     ? 'border-primary/40 bg-primary/10 text-foreground'
-                                    : 'border-border bg-card text-muted-foreground hover:border-border hover:bg-muted/30',
+                                    : 'border-border bg-card text-muted-foreground/60 line-through',
                                 )}
                                 title={`Available in: ${subj.availableInClassNames.join(', ')}`}
                               >
@@ -547,7 +430,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                                 </span>
                                 {subj.name}
                                 {subj.availableInClassIds.length > 1 && (
-                                  <span className="text-[9px] text-muted-foreground ml-1">
+                                  <span className="text-[9px] text-muted-foreground ml-0.5">
                                     ×{subj.availableInClassIds.length}
                                   </span>
                                 )}
@@ -555,78 +438,114 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                             )
                           })}
                         </div>
+                        <div className="flex justify-end pt-1 border-t border-border/40">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-[10px] gap-1"
+                            onClick={() => {
+                              setSubjectsEditable(false)
+                              setDeselectedSubjectNames(new Set())
+                            }}
+                          >
+                            <CheckCircle2 className="h-3 w-3" /> Done
+                          </Button>
+                        </div>
                       </div>
-                    ))}
+                    ) : (
+                      // Read-only mode — subjects shown as plain chips, with subtle Edit affordance
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {effectiveSubjects.map((subj) => (
+                          <span
+                            key={subj.id}
+                            className="inline-flex items-center rounded-md bg-card border border-border/60 px-2 py-1 text-xs font-medium"
+                            title={`Available in: ${subj.availableInClassNames.join(', ')}`}
+                          >
+                            {subj.name}
+                            {subj.availableInClassIds.length > 1 && (
+                              <span className="text-[9px] text-muted-foreground ml-1">
+                                ×{subj.availableInClassIds.length}
+                              </span>
+                            )}
+                          </span>
+                        ))}
+                        <button
+                          onClick={() => setSubjectsEditable(true)}
+                          className="inline-flex items-center gap-1 rounded-md border border-dashed border-border/60 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground hover:border-border transition-colors ml-1"
+                          aria-label="Edit subjects"
+                        >
+                          <Pencil className="h-2.5 w-2.5" /> Edit
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </Section>
               )}
 
-              {/* ─── 5. Assessment ──────────────────────────────────── */}
-              {selectedSubjects.length > 0 && (
-                <Section
-                  label="Assessment"
-                  hint={hasPractical ? 'Theory + Practical' : 'Theory only · 33% pass (global)'}
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <button
-                      onClick={togglePractical}
-                      className={cn(
-                        'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium border transition-colors',
-                        hasPractical
-                          ? 'border-primary/40 bg-primary/10 text-foreground'
-                          : 'border-border bg-card text-muted-foreground hover:bg-muted/30',
-                      )}
-                    >
+              {/* ─── 5. Assessment (auto-configured from template) ─────── */}
+              {assessment && (
+                <Section label="Assessment">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* Theory / Practical toggle — obvious active state */}
+                    <div className="inline-flex items-center rounded-lg border border-border bg-muted/30 p-0.5">
                       <span
                         className={cn(
-                          'flex h-3 w-3 items-center justify-center rounded-full border',
-                          hasPractical ? 'border-primary bg-primary' : 'border-muted-foreground/40',
+                          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors',
+                          !hasPractical ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
                         )}
                       >
-                        {hasPractical && <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />}
-                      </span>
-                      Include Practical
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-md">
-                    <Field label="Maximum Marks">
-                      <Input
-                        type="number"
-                        value={maxMarks}
-                        onChange={(e) => setMaxMarks(Number(e.target.value))}
-                        className="h-8 text-xs"
-                      />
-                    </Field>
-                    <Field label="Theory">
-                      <Input
-                        type="number"
-                        value={theoryMarks}
-                        onChange={(e) => setTheoryMarks(Number(e.target.value))}
-                        className="h-8 text-xs"
-                        disabled={!hasPractical}
-                      />
-                    </Field>
-                    {hasPractical && (
-                      <Field label="Practical">
-                        <Input
-                          type="number"
-                          value={practicalMarks}
-                          onChange={(e) => setPracticalMarks(Number(e.target.value))}
-                          className="h-8 text-xs"
+                        <span
+                          className={cn(
+                            'h-2 w-2 rounded-full',
+                            !hasPractical ? 'bg-emerald-500' : 'bg-muted-foreground/40',
+                          )}
                         />
-                      </Field>
-                    )}
+                        Theory
+                      </span>
+                      <button
+                        onClick={togglePractical}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors',
+                          hasPractical ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                        )}
+                        aria-pressed={hasPractical}
+                      >
+                        <span
+                          className={cn(
+                            'h-2 w-2 rounded-full',
+                            hasPractical ? 'bg-emerald-500' : 'bg-muted-foreground/40',
+                          )}
+                        />
+                        Practical
+                      </button>
+                    </div>
+                    {/* Auto marks summary — read-only display, not inputs */}
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="font-semibold text-foreground tabular-nums">{assessment.maxMarks}</span>
+                        max
+                      </span>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="font-semibold text-foreground tabular-nums">{assessment.theoryMarks}</span>
+                        theory
+                      </span>
+                      {hasPractical && (
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="font-semibold text-foreground tabular-nums">{assessment.practicalMarks}</span>
+                            practical
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  {hasPractical && theoryMarks + practicalMarks !== maxMarks && (
-                    <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-2">
-                      ⚠ Theory ({theoryMarks}) + Practical ({practicalMarks}) = {theoryMarks + practicalMarks}, not {maxMarks}
-                    </p>
-                  )}
                 </Section>
               )}
 
               {/* ─── 6. Examination Window ──────────────────────────── */}
-              {selectedSubjects.length > 0 && (
+              {effectiveSubjects.length > 0 && (
                 <Section label="Examination Window" required>
                   <div className="grid grid-cols-2 gap-3 max-w-md">
                     <Field label="Start Date">
@@ -646,8 +565,8 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                       />
                     </Field>
                   </div>
-                  <div className="flex items-center gap-3 mt-3 max-w-md">
-                    <Field label="Examination Start Time">
+                  <div className="flex items-center gap-3 mt-3 max-w-md flex-wrap">
+                    <Field label="Start Time">
                       <Input
                         type="time"
                         value={examTime}
@@ -657,9 +576,9 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                     </Field>
                     <p className="text-[10px] text-muted-foreground mt-4">
                       {selectedTemplate.id.startsWith('unit-test')
-                        ? 'Unit Test · 2 papers/day · 1 hour each · 15-min gap'
+                        ? '2 papers/day · 1h each · 15-min gap'
                         : selectedTemplate.id === 'half-yearly' || selectedTemplate.id === 'annual'
-                          ? '1 paper/day · 3h 15m duration'
+                          ? '1 paper/day · 3h 15m'
                           : '1 paper/day'}
                     </p>
                   </div>
@@ -689,8 +608,8 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
               {/* ─── 7. Generated Schedule Preview ──────────────────── */}
               {generatedSchedule.length > 0 && (
                 <Section
-                  label="Generated Examination Schedule"
-                  hint={`${generatedSchedule.length} papers · Sundays skipped · ${selectedClassIds.length} classes share each slot`}
+                  label="Generated Schedule"
+                  hint={`${generatedSchedule.length} papers · Sundays skipped`}
                 >
                   <div className="rounded-lg border border-border overflow-hidden">
                     <div className="max-h-72 overflow-y-auto">
@@ -736,7 +655,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
         </div>
       </div>
 
-      {/* Compact footer */}
+      {/* Compact bottom action bar — the only persistent action area */}
       <div className="border-t border-border bg-card px-4 sm:px-6 py-2.5 flex justify-between items-center shrink-0">
         <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={onBack}>
           <ArrowLeft className="h-3.5 w-3.5" /> Cancel
@@ -773,7 +692,7 @@ function Section({
 }) {
   return (
     <section>
-      <div className="flex items-baseline gap-2 mb-2">
+      <div className="flex items-baseline gap-2 mb-2.5">
         <h2 className="text-[11px] uppercase font-bold tracking-wider text-muted-foreground">
           {label}
           {required && <span className="text-destructive ml-0.5">*</span>}
