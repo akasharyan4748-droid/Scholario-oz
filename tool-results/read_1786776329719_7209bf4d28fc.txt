@@ -1,0 +1,865 @@
+     1→// ──────────────────────────────────────────────────────────────────────
+     2→// Examinations service — P1 & P2 features.
+     3→// Splits: seating, exam attendance, invigilator roster, batch admit card,
+     4→// grace/moderation, promotion outcomes, CSV import, result publication.
+     5→// ──────────────────────────────────────────────────────────────────────
+     6→
+     7→import 'server-only'
+     8→import { db } from '@/lib/db'
+     9→import {
+    10→  type AuthUserLike,
+    11→  type ScheduleItemDTO,
+    12→  type StudentDTO,
+    13→  type ExamMarkDTO,
+    14→  type MarkStatus,
+    15→  type WorkflowStatus,
+    16→  type AuditLogDTO,
+    17→} from './types'
+    18→import { toScheduleDTO, toMarkDTO, audit } from './service'
+    19→import { getGradeForPercentage } from './types'
+    20→import { computeAllResults } from './result-engine'
+    21→
+    22→// ─── Schedule — Update existing item ─────────────────────────────────
+    23→
+    24→export async function updateScheduleItem(
+    25→  examId: string,
+    26→  itemId: string,
+    27→  schoolId: string,
+    28→  user: AuthUserLike | null,
+    29→  data: {
+    30→    date?: string
+    31→    startTime?: string
+    32→    endTime?: string
+    33→    room?: string
+    34→    invigilatorId?: string | null
+    35→    invigilatorName?: string | null
+    36→  }
+    37→): Promise<ScheduleItemDTO> {
+    38→  const item = await db.examScheduleItem.findFirst({
+    39→    where: { id: itemId, examId },
+    40→    include: { exam: true },
+    41→  })
+    42→  if (!item || item.exam.schoolId !== schoolId) throw new Error('Schedule item not found')
+    43→
+    44→  // Conflict detection on update (skip self)
+    45→  if (data.date && (data.startTime || data.room)) {
+    46→    const conflicts = await db.examScheduleItem.findMany({
+    47→      where: {
+    48→        examId,
+    49→        id: { not: itemId },
+    50→        date: new Date(data.date),
+    51→        startTime: data.startTime ?? item.startTime,
+    52→        OR: data.room ? [
+    53→          { classId: item.classId },
+    54→          { room: data.room },
+    55→        ] : [{ classId: item.classId }],
+    56→      },
+    57→    })
+    58→    if (conflicts.length > 0) {
+    59→      throw new Error('Schedule conflict: same class or room already booked at this time')
+    60→    }
+    61→  }
+    62→
+    63→  const updated = await db.examScheduleItem.update({
+    64→    where: { id: itemId },
+    65→    data: {
+    66→      ...(data.date !== undefined ? { date: new Date(data.date) } : {}),
+    67→      ...(data.startTime !== undefined ? { startTime: data.startTime } : {}),
+    68→      ...(data.endTime !== undefined ? { endTime: data.endTime } : {}),
+    69→      ...(data.room !== undefined ? { room: data.room } : {}),
+    70→      ...(data.invigilatorId !== undefined ? { invigilatorId: data.invigilatorId } : {}),
+    71→      ...(data.invigilatorName !== undefined ? { invigilatorName: data.invigilatorName } : {}),
+    72→    },
+    73→    include: { class: true, subject: true },
+    74→  })
+    75→  await audit(examId, user, 'SCHEDULE_UPDATED', 'SCHEDULE', itemId, item, data)
+    76→  return toScheduleDTO(updated)
+    77→}
+    78→
+    79→// ─── Invigilator Duty Roster ──────────────────────────────────────────
+    80→
+    81→export interface InvigilatorDTO {
+    82→  id: string
+    83→  name: string
+    84→  email: string | null
+    85→  department: string | null
+    86→  employeeId: string | null
+    87→  assignedCount: number
+    88→}
+    89→
+    90→export async function listTeachers(schoolId: string): Promise<InvigilatorDTO[]> {
+    91→  const teachers = await db.teacher.findMany({
+    92→    where: { schoolId },
+    93→    include: { user: { select: { name: true, email: true } } },
+    94→    orderBy: { user: { name: 'asc' } },
+    95→  })
+    96→  return teachers.map((t) => ({
+    97→    id: t.id,
+    98→    name: t.user?.name ?? '',
+    99→    email: t.user?.email ?? null,
+   100→    department: t.department,
+   101→    employeeId: t.employeeId,
+   102→    assignedCount: 0,
+   103→  }))
+   104→}
+   105→
+   106→export async function assignInvigilator(
+   107→  examId: string,
+   108→  scheduleItemId: string,
+   109→  schoolId: string,
+   110→  user: AuthUserLike | null,
+   111→  teacherId: string
+   112→): Promise<ScheduleItemDTO> {
+   113→  const exam = await db.exam.findFirst({ where: { id: examId, schoolId } })
+   114→  if (!exam) throw new Error('Exam not found')
+   115→  const item = await db.examScheduleItem.findFirst({
+   116→    where: { id: scheduleItemId, examId },
+   117→    include: { exam: true },
+   118→  })
+   119→  if (!item || item.exam.schoolId !== schoolId) throw new Error('Schedule item not found')
+   120→
+   121→  const teacher = await db.teacher.findFirst({
+   122→    where: { id: teacherId, schoolId },
+   123→    include: { user: { select: { name: true } } },
+   124→  })
+   125→  if (!teacher) throw new Error('Teacher not found')
+   126→
+   127→  // Check teacher availability — same date + overlapping time
+   128→  const sameDay = await db.examScheduleItem.findMany({
+   129→    where: {
+   130→      examId,
+   131→      invigilatorId: teacherId,
+   132→      id: { not: scheduleItemId },
+   133→      date: item.date,
+   134→    },
+   135→  })
+   136→  const overlap = sameDay.find((s) => {
+   137→    return !(item.endTime <= s.startTime || s.endTime <= item.startTime)
+   138→  })
+   139→  if (overlap) {
+   140→    throw new Error(`Teacher ${teacher.user?.name} already assigned to another exam at this time`)
+   141→  }
+   142→
+   143→  const updated = await db.examScheduleItem.update({
+   144→    where: { id: scheduleItemId },
+   145→    data: {
+   146→      invigilatorId: teacherId,
+   147→      invigilatorName: teacher.user?.name ?? null,
+   148→    },
+   149→    include: { class: true, subject: true },
+   150→  })
+   151→  await audit(examId, user, 'INVIGILATOR_ASSIGNED', 'SCHEDULE', scheduleItemId, null, {
+   152→    teacherId,
+   153→    teacherName: teacher.user?.name,
+   154→  })
+   155→  return toScheduleDTO(updated)
+   156→}
+   157→
+   158→// ─── Seating Plan ─────────────────────────────────────────────────────
+   159→
+   160→export interface SeatAssignmentDTO {
+   161→  id: string
+   162→  examId: string
+   163→  classId: string
+   164→  className: string
+   165→  studentId: string
+   166→  studentName: string
+   167→  studentRollNo: string | null
+   168→  room: string
+   169→  seatNumber: number
+   170→  row: number | null
+   171→  column: number | null
+   172→}
+   173→
+   174→export async function generateSeatingPlan(
+   175→  examId: string,
+   176→  classId: string,
+   177→  schoolId: string,
+   178→  user: AuthUserLike | null,
+   179→  rooms: Array<{ name: string; capacity: number }>
+   180→): Promise<{ generated: number }> {
+   181→  const exam = await db.exam.findFirst({ where: { id: examId, schoolId } })
+   182→  if (!exam) throw new Error('Exam not found')
+   183→  if (rooms.length === 0) throw new Error('At least one room is required')
+   184→
+   185→  // Get real students of this class
+   186→  const students = await db.student.findMany({
+   187→    where: { classId, schoolId },
+   188→    orderBy: { rollNo: 'asc' },
+   189→    include: { user: { select: { name: true } }, class: true },
+   190→  })
+   191→  if (students.length === 0) throw new Error('No students in this class')
+   192→
+   193→  // Total capacity check
+   194→  const totalCapacity = rooms.reduce((s, r) => s + r.capacity, 0)
+   195→  if (totalCapacity < students.length) {
+   196→    throw new Error(`Insufficient capacity: ${students.length} students, ${totalCapacity} seats available`)
+   197→  }
+   198→
+   199→  // Clear any existing assignments for this exam+class
+   200→  await db.examSeatAssignment.deleteMany({ where: { examId, classId } })
+   201→
+   202→  // Distribute students across rooms, sorted by roll number
+   203→  let seatCounter = 0
+   204→  for (const room of rooms) {
+   205→    for (let i = 0; i < room.capacity && seatCounter < students.length; i++) {
+   206→      const s = students[seatCounter]
+   207→      const seatNumber = i + 1
+   208→      const row = Math.floor(i / 5) + 1
+   209→      const col = (i % 5) + 1
+   210→      await db.examSeatAssignment.create({
+   211→        data: {
+   212→          examId,
+   213→          classId,
+   214→          studentId: s.id,
+   215→          room: room.name,
+   216→          seatNumber,
+   217→          row,
+   218→          column: col,
+   219→        },
+   220→      })
+   221→      seatCounter++
+   222→      if (seatCounter >= students.length) break
+   223→    }
+   224→  }
+   225→
+   226→  await audit(examId, user, 'SEATING_GENERATED', 'SEATING', null, null, {
+   227→    classId,
+   228→    studentCount: students.length,
+   229→    rooms,
+   230→  })
+   231→  return { generated: seatCounter }
+   232→}
+   233→
+   234→export async function getSeatingPlan(
+   235→  examId: string,
+   236→  classId: string | null,
+   237→  schoolId: string
+   238→): Promise<SeatAssignmentDTO[]> {
+   239→  const exam = await db.exam.findFirst({ where: { id: examId, schoolId } })
+   240→  if (!exam) return []
+   241→  const seats = await db.examSeatAssignment.findMany({
+   242→    where: { examId, ...(classId ? { classId } : {}) },
+   243→    include: { student: { include: { user: { select: { name: true } } } } },
+   244→    orderBy: [{ room: 'asc' }, { seatNumber: 'asc' }],
+   245→  })
+   246→  // Resolve classNames separately
+   247→  const classIds = [...new Set(seats.map((s) => s.classId))]
+   248→  const classes = await db.class.findMany({ where: { id: { in: classIds } }, select: { id: true, name: true } })
+   249→  const classMap = new Map(classes.map((c) => [c.id, c.name]))
+   250→  return seats.map((s) => ({
+   251→    id: s.id,
+   252→    examId: s.examId,
+   253→    classId: s.classId,
+   254→    className: classMap.get(s.classId) ?? '',
+   255→    studentId: s.studentId,
+   256→    studentName: s.student?.user?.name ?? '',
+   257→    studentRollNo: s.student?.rollNo ?? null,
+   258→    room: s.room,
+   259→    seatNumber: s.seatNumber,
+   260→    row: s.row,
+   261→    column: s.column,
+   262→  }))
+   263→}
+   264→
+   265→// ─── Exam Attendance ─────────────────────────────────────────────────
+   266→
+   267→export interface ExamAttendanceDTO {
+   268→  id: string
+   269→  examId: string
+   270→  scheduleItemId: string | null
+   271→  classId: string
+   272→  studentId: string
+   273→  studentName: string
+   274→  studentRollNo: string | null
+   275→  subjectId: string | null
+   276→  subjectName: string | null
+   277→  date: string
+   278→  status: MarkStatus
+   279→  remarks: string | null
+   280→}
+   281→
+   282→export async function markExamAttendance(
+   283→  examId: string,
+   284→  schoolId: string,
+   285→  user: AuthUserLike | null,
+   286→  input: {
+   287→    scheduleItemId?: string
+   288→    classId: string
+   289→    studentId: string
+   290→    subjectId?: string
+   291→    date: string
+   292→    status: MarkStatus
+   293→    remarks?: string
+   294→  }
+   295→): Promise<{ upserted: boolean }> {
+   296→  const exam = await db.exam.findFirst({ where: { id: examId, schoolId } })
+   297→  if (!exam) throw new Error('Exam not found')
+   298→
+   299→  // Use subjectId = "__null__" sentinel for uniqueness when subjectId not provided
+   300→  const subjectIdKey = input.subjectId || '__no_subject__'
+   301→
+   302→  await db.examAttendance.upsert({
+   303→    where: {
+   304→      examId_studentId_subjectId_date: {
+   305→        examId,
+   306→        studentId: input.studentId,
+   307→        subjectId: subjectIdKey,
+   308→        date: new Date(input.date),
+   309→      },
+   310→    },
+   311→    create: {
+   312→      examId,
+   313→      scheduleItemId: input.scheduleItemId ?? null,
+   314→      classId: input.classId,
+   315→      studentId: input.studentId,
+   316→      subjectId: input.subjectId ?? null,
+   317→      date: new Date(input.date),
+   318→      status: input.status,
+   319→      remarks: input.remarks ?? null,
+   320→      markedBy: user?.id ?? null,
+   321→    },
+   322→    update: {
+   323→      status: input.status,
+   324→      remarks: input.remarks ?? null,
+   325→      markedBy: user?.id ?? null,
+   326→    },
+   327→  })
+   328→  await audit(examId, user, 'EXAM_ATTENDANCE_MARKED', 'ATTENDANCE', input.studentId, null, input)
+   329→  return { upserted: true }
+   330→}
+   331→
+   332→export async function getExamAttendance(
+   333→  examId: string,
+   334→  classId: string | null,
+   335→  schoolId: string
+   336→): Promise<ExamAttendanceDTO[]> {
+   337→  const exam = await db.exam.findFirst({ where: { id: examId, schoolId } })
+   338→  if (!exam) return []
+   339→  const attendance = await db.examAttendance.findMany({
+   340→    where: { examId, ...(classId ? { classId } : {}) },
+   341→    include: {
+   342→      student: { include: { user: { select: { name: true } } } },
+   343→      scheduleItem: { include: { subject: true } },
+   344→    },
+   345→    orderBy: { date: 'asc' },
+   346→  })
+   347→  return attendance.map((a) => ({
+   348→    id: a.id,
+   349→    examId: a.examId,
+   350→    scheduleItemId: a.scheduleItemId,
+   351→    classId: a.classId,
+   352→    studentId: a.studentId,
+   353→    studentName: a.student?.user?.name ?? '',
+   354→    studentRollNo: a.student?.rollNo ?? null,
+   355→    subjectId: a.subjectId,
+   356→    subjectName: a.scheduleItem?.subject?.name ?? null,
+   357→    date: a.date.toISOString().split('T')[0],
+   358→    status: a.status as MarkStatus,
+   359→    remarks: a.remarks,
+   360→  }))
+   361→}
+   362→
+   363→export async function autoMarkAttendanceFromExamMarks(
+   364→  examId: string,
+   365→  classId: string,
+   366→  schoolId: string,
+   367→  user: AuthUserLike | null
+   368→): Promise<{ marked: number }> {
+   369→  const exam = await db.exam.findFirst({ where: { id: examId, schoolId } })
+   370→  if (!exam) throw new Error('Exam not found')
+   371→
+   372→  // For every mark where status != PRESENT, create exam attendance entry
+   373→  const marks = await db.examMark.findMany({
+   374→    where: { examId, classId, status: { not: 'PRESENT' } },
+   375→  })
+   376→  let count = 0
+   377→  for (const m of marks) {
+   378→    const scheduleItem = await db.examScheduleItem.findFirst({
+   379→      where: { examId, classId, subjectId: m.subjectId },
+   380→    })
+   381→    if (!scheduleItem) continue
+   382→    await db.examAttendance.upsert({
+   383→      where: {
+   384→        examId_studentId_subjectId_date: {
+   385→          examId,
+   386→          studentId: m.studentId,
+   387→          subjectId: m.subjectId,
+   388→          date: scheduleItem.date,
+   389→        },
+   390→      },
+   391→      create: {
+   392→        examId,
+   393→        scheduleItemId: scheduleItem.id,
+   394→        classId,
+   395→        studentId: m.studentId,
+   396→        subjectId: m.subjectId,
+   397→        date: scheduleItem.date,
+   398→        status: m.status as MarkStatus,
+   399→        markedBy: user?.id ?? null,
+   400→      },
+   401→      update: {
+   402→        status: m.status as MarkStatus,
+   403→        markedBy: user?.id ?? null,
+   404→      },
+   405→    })
+   406→    count++
+   407→  }
+   408→  await audit(examId, user, 'EXAM_ATTENDANCE_AUTO_MARKED', 'ATTENDANCE', null, null, { count })
+   409→  return { marked: count }
+   410→}
+   411→
+   412→// ─── Grace / Moderation ───────────────────────────────────────────────
+   413→
+   414→export async function applyGraceMarks(
+   415→  examId: string,
+   416→  schoolId: string,
+   417→  user: AuthUserLike | null,
+   418→  input: {
+   419→    markId: string
+   420→    graceMarks: number
+   421→    reason: string
+   422→  }
+   423→): Promise<ExamMarkDTO> {
+   424→  const exam = await db.exam.findFirst({ where: { id: examId, schoolId } })
+   425→  if (!exam) throw new Error('Exam not found')
+   426→  if (exam.resultStatus === 'Result Declared' && user?.role !== 'PRINCIPAL') {
+   427→    throw new Error('Grace marks after declaration require Principal override')
+   428→  }
+   429→
+   430→  const mark = await db.examMark.findUnique({
+   431→    where: { id: input.markId },
+   432→    include: { student: { include: { user: { select: { name: true } } } } },
+   433→  })
+   434→  if (!mark || mark.examId !== examId) throw new Error('Mark not found')
+   435→
+   436→  const oldValues = {
+   437→    marksObtained: mark.marksObtained,
+   438→    graceMarks: mark.graceMarks,
+   439→    originalMarks: mark.originalMarks,
+   440→  }
+   441→
+   442→  // Preserve original marks the first time grace is applied
+   443→  const originalMarks = mark.originalMarks ?? mark.marksObtained ?? 0
+   444→  const newMarksObtained = (mark.marksObtained ?? 0) + input.graceMarks
+   445→
+   446→  const updated = await db.examMark.update({
+   447→    where: { id: input.markId },
+   448→    data: {
+   449→      originalMarks,
+   450→      graceMarks: mark.graceMarks + input.graceMarks,
+   451→      graceReason: input.reason,
+   452→      graceBy: user?.id ?? null,
+   453→      marksObtained: newMarksObtained,
+   454→    },
+   455→    include: { student: { include: { user: { select: { name: true } } } } },
+   456→  })
+   457→
+   458→  await audit(examId, user, 'GRACE_APPLIED', 'MARK', mark.id, oldValues, {
+   459→    graceMarks: input.graceMarks,
+   460→    reason: input.reason,
+   461→    newTotal: newMarksObtained,
+   462→    appliedBy: user?.name,
+   463→  })
+   464→
+   465→  return toMarkDTO(updated)
+   466→}
+   467→
+   468→// ─── Promotion / Compartment / Retest ──────────────────────────────────
+   469→
+   470→export interface ResultOutcomeDTO {
+   471→  id: string
+   472→  examId: string
+   473→  studentId: string
+   474→  studentName: string
+   475→  studentRollNo: string | null
+   476→  classId: string
+   477→  className: string
+   478→  outcome: 'PROMOTED' | 'COMPARTMENT' | 'RETEST' | 'NOT_PROMOTED'
+   479→  reason: string | null
+   480→  overrideBy: string | null
+   481→  notes: string | null
+   482→  percentage: number
+   483→  grade: string
+   484→  passed: boolean
+   485→  subjectsFailed: number
+   486→}
+   487→
+   488→export async function computeAutoOutcomes(
+   489→  examId: string,
+   490→  classId: string,
+   491→  schoolId: string
+   492→): Promise<{ autoCount: number }> {
+   493→  const exam = await db.exam.findFirst({
+   494→    where: { id: examId, schoolId },
+   495→    include: {
+   496→      examSubjects: { where: { classId }, include: { subject: true } },
+   497→      marks: { where: { classId }, include: { student: { include: { user: { select: { name: true } } } } } },
+   498→      examClasses: { include: { class: true } },
+   499→    },
+   500→  })
+   501→  if (!exam) throw new Error('Exam not found')
+   502→  const classLink = exam.examClasses.find((ec) => ec.classId === classId)
+   503→  if (!classLink) throw new Error('Class not in this exam')
+   504→
+   505→  // Get real students
+   506→  const students = await db.student.findMany({
+   507→    where: { classId, schoolId },
+   508→    orderBy: { rollNo: 'asc' },
+   509→    include: { user: { select: { name: true } } },
+   510→  })
+   511→  const studentDTOs: StudentDTO[] = students.map((s) => ({
+   512→    id: s.id, rollNo: s.rollNo, admissionNo: s.admissionNo,
+   513→    name: s.user?.name ?? '', classId: s.classId,
+   514→  }))
+   515→  const subjectDTOs = exam.examSubjects.map((s) => ({
+   516→    id: s.id, examId: s.examId, classId: s.classId, subjectId: s.subjectId,
+   517→    subjectName: s.subject.name, subjectCode: s.subject.code,
+   518→    maxMarks: s.maxMarks, passMarks: s.passMarks,
+   519→    theoryMarks: s.theoryMarks, practicalMarks: s.practicalMarks, sortOrder: s.sortOrder,
+   520→  }))
+   521→  const markDTOs = exam.marks.map((m) => ({
+   522→    id: m.id, examId: m.examId, classId: m.classId, subjectId: m.subjectId, studentId: m.studentId,
+   523→    studentName: m.student?.user?.name ?? '', studentRollNo: m.student?.rollNo ?? null,
+   524→    marksObtained: m.marksObtained, status: m.status as MarkStatus,
+   525→    workflowStatus: m.workflowStatus as WorkflowStatus,
+   526→    originalMarks: m.originalMarks, graceMarks: m.graceMarks ?? 0,
+   527→    graceReason: m.graceReason, remarks: m.remarks, enteredBy: m.enteredBy,
+   528→    enteredAt: m.enteredAt?.toISOString() ?? null,
+   529→    verifiedBy: m.verifiedBy, verifiedAt: m.verifiedAt?.toISOString() ?? null, lockedBy: m.lockedBy,
+   530→  }))
+   531→
+   532→  const results = computeAllResults({
+   533→    students: studentDTOs, subjects: subjectDTOs, marks: markDTOs,
+   534→    passPercentage: exam.passPercentage,
+   535→  })
+   536→
+   537→  // Clear existing auto outcomes for this class
+   538→  await db.examResultOutcome.deleteMany({ where: { examId, classId } })
+   539→
+   540→  let count = 0
+   541→  for (const r of results) {
+   542→    let outcome: 'PROMOTED' | 'COMPARTMENT' | 'RETEST' | 'NOT_PROMOTED' = 'PROMOTED'
+   543→    if (r.passed) {
+   544→      outcome = 'PROMOTED'
+   545→    } else {
+   546→      const failedCount = r.subjectsCount - r.subjectsPassed
+   547→      if (failedCount === 1) outcome = 'COMPARTMENT'
+   548→      else if (failedCount === 2) outcome = 'RETEST'
+   549→      else outcome = 'NOT_PROMOTED'
+   550→    }
+   551→    await db.examResultOutcome.create({
+   552→      data: {
+   553→        examId,
+   554→        studentId: r.studentId,
+   555→        classId,
+   556→        outcome,
+   557→        reason: r.passed ? null : `${r.subjectsCount - r.subjectsPassed} subjects failed`,
+   558→      },
+   559→    })
+   560→    count++
+   561→  }
+   562→  return { autoCount: count }
+   563→}
+   564→
+   565→export async function overrideOutcome(
+   566→  examId: string,
+   567→  studentId: string,
+   568→  schoolId: string,
+   569→  user: AuthUserLike | null,
+   570→  input: { outcome: 'PROMOTED' | 'COMPARTMENT' | 'RETEST' | 'NOT_PROMOTED'; reason?: string; notes?: string }
+   571→): Promise<void> {
+   572→  const exam = await db.exam.findFirst({ where: { id: examId, schoolId } })
+   573→  if (!exam) throw new Error('Exam not found')
+   574→
+   575→  const existing = await db.examResultOutcome.findUnique({
+   576→    where: { examId_studentId: { examId, studentId } },
+   577→  })
+   578→  if (existing) {
+   579→    await db.examResultOutcome.update({
+   580→      where: { id: existing.id },
+   581→      data: {
+   582→        outcome: input.outcome,
+   583→        reason: input.reason ?? existing.reason,
+   584→        notes: input.notes ?? existing.notes,
+   585→        overrideBy: user?.id ?? null,
+   586→      },
+   587→    })
+   588→  } else {
+   589→    await db.examResultOutcome.create({
+   590→      data: {
+   591→        examId,
+   592→        studentId,
+   593→        classId: '', // Will be filled if needed
+   594→        outcome: input.outcome,
+   595→        reason: input.reason ?? null,
+   596→        notes: input.notes ?? null,
+   597→        overrideBy: user?.id ?? null,
+   598→      },
+   599→    })
+   600→  }
+   601→  await audit(examId, user, 'OUTCOME_OVERRIDDEN', 'OUTCOME', studentId, existing?.outcome, input)
+   602→}
+   603→
+   604→export async function getOutcomes(
+   605→  examId: string,
+   606→  classId: string | null,
+   607→  schoolId: string
+   608→): Promise<ResultOutcomeDTO[]> {
+   609→  const exam = await db.exam.findFirst({
+   610→    where: { id: examId, schoolId },
+   611→    include: {
+   612→      examSubjects: classId ? { where: { classId }, include: { subject: true } } : { include: { subject: true } },
+   613→      marks: classId ? { where: { classId }, include: { student: { include: { user: { select: { name: true } } } } } } : { include: { student: { include: { user: { select: { name: true } } } } } },
+   614→      examClasses: { include: { class: true } },
+   615→      resultOutcomes: true,
+   616→    },
+   617→  })
+   618→  if (!exam) return []
+   619→
+   620→  const classFilter = classId
+   621→  const filteredOutcomes = classFilter
+   622→    ? exam.resultOutcomes.filter((o) => o.classId === classFilter)
+   623→    : exam.resultOutcomes
+   624→
+   625→  if (filteredOutcomes.length === 0) return []
+   626→
+   627→  // Compute analytics for each student
+   628→  const students = await db.student.findMany({
+   629→    where: { id: { in: filteredOutcomes.map((o) => o.studentId) }, schoolId },
+   630→    include: { user: { select: { name: true } }, class: true },
+   631→  })
+   632→
+   633→  const studentDTOs: StudentDTO[] = students.map((s) => ({
+   634→    id: s.id, rollNo: s.rollNo, admissionNo: s.admissionNo,
+   635→    name: s.user?.name ?? '', classId: s.classId,
+   636→  }))
+   637→  const subjectDTOs = exam.examSubjects
+   638→    .filter((s) => !classFilter || s.classId === classFilter)
+   639→    .map((s) => ({
+   640→      id: s.id, examId: s.examId, classId: s.classId, subjectId: s.subjectId,
+   641→      subjectName: s.subject.name, subjectCode: s.subject.code,
+   642→      maxMarks: s.maxMarks, passMarks: s.passMarks,
+   643→      theoryMarks: s.theoryMarks, practicalMarks: s.practicalMarks, sortOrder: s.sortOrder,
+   644→    }))
+   645→  const markDTOs = exam.marks.map((m) => ({
+   646→    id: m.id, examId: m.examId, classId: m.classId, subjectId: m.subjectId, studentId: m.studentId,
+   647→    studentName: m.student?.user?.name ?? '', studentRollNo: m.student?.rollNo ?? null,
+   648→    marksObtained: m.marksObtained, status: m.status as MarkStatus,
+   649→    workflowStatus: m.workflowStatus as WorkflowStatus,
+   650→    originalMarks: m.originalMarks, graceMarks: m.graceMarks ?? 0,
+   651→    graceReason: m.graceReason, remarks: m.remarks, enteredBy: m.enteredBy,
+   652→    enteredAt: m.enteredAt?.toISOString() ?? null,
+   653→    verifiedBy: m.verifiedBy, verifiedAt: m.verifiedAt?.toISOString() ?? null, lockedBy: m.lockedBy,
+   654→  }))
+   655→
+   656→  const results = computeAllResults({
+   657→    students: studentDTOs, subjects: subjectDTOs, marks: markDTOs,
+   658→    passPercentage: exam.passPercentage,
+   659→  })
+   660→
+   661→  return filteredOutcomes.map((outcome) => {
+   662→    const r = results.find((x) => x.studentId === outcome.studentId)
+   663→    const student = students.find((s) => s.id === outcome.studentId)
+   664→    return {
+   665→      id: outcome.id,
+   666→      examId: outcome.examId,
+   667→      studentId: outcome.studentId,
+   668→      studentName: student?.user?.name ?? '',
+   669→      studentRollNo: student?.rollNo ?? null,
+   670→      classId: outcome.classId,
+   671→      className: student?.class?.name ?? '',
+   672→      outcome: outcome.outcome as 'PROMOTED' | 'COMPARTMENT' | 'RETEST' | 'NOT_PROMOTED',
+   673→      reason: outcome.reason,
+   674→      overrideBy: outcome.overrideBy,
+   675→      notes: outcome.notes,
+   676→      percentage: r?.percentage ?? 0,
+   677→      grade: r?.grade ?? 'E',
+   678→      passed: r?.passed ?? false,
+   679→      subjectsFailed: r ? (r.subjectsCount - r.subjectsPassed) : 0,
+   680→    }
+   681→  })
+   682→}
+   683→
+   684→// ─── CSV Import ──────────────────────────────────────────────────────
+   685→
+   686→export interface CsvImportRow {
+   687→  rollNo: string
+   688→  studentName: string
+   689→  marksObtained: number | null
+   690→  status: MarkStatus
+   691→  remarks?: string
+   692→}
+   693→
+   694→export interface CsvImportResult {
+   695→  accepted: number
+   696→  rejected: number
+   697→  errors: Array<{ row: number; message: string }>
+   698→  applied: Array<{ studentId: string; studentName: string; marks: number | null; status: MarkStatus }>
+   699→}
+   700→
+   701→export async function importMarksCsv(
+   702→  examId: string,
+   703→  classId: string,
+   704→  subjectId: string,
+   705→  schoolId: string,
+   706→  user: AuthUserLike | null,
+   707→  rows: CsvImportRow[]
+   708→): Promise<CsvImportResult> {
+   709→  const exam = await db.exam.findFirst({
+   710→    where: { id: examId, schoolId },
+   711→    include: {
+   712→      examSubjects: { where: { classId, subjectId }, include: { subject: true } },
+   713→      examClasses: { include: { class: true } },
+   714→    },
+   715→  })
+   716→  if (!exam) throw new Error('Exam not found')
+   717→  if (exam.resultStatus === 'Result Declared') {
+   718→    throw new Error('Cannot import marks after results are declared')
+   719→  }
+   720→  const subjConfig = exam.examSubjects[0]
+   721→  if (!subjConfig) throw new Error('Subject not configured for this exam/class')
+   722→
+   723→  const classLink = exam.examClasses.find((ec) => ec.classId === classId)
+   724→  if (!classLink) throw new Error('Class not in this exam')
+   725→
+   726→  // Get real students
+   727→  const students = await db.student.findMany({
+   728→    where: { classId, schoolId },
+   729→    include: { user: { select: { name: true } } },
+   730→  })
+   731→
+   732→  const result: CsvImportResult = {
+   733→    accepted: 0, rejected: 0,
+   734→    errors: [], applied: [],
+   735→  }
+   736→
+   737→  for (let i = 0; i < rows.length; i++) {
+   738→    const row = rows[i]
+   739→    const rowNum = i + 2 // header is row 1
+   740→    if (!row.rollNo || !row.rollNo.trim()) {
+   741→      result.errors.push({ row: rowNum, message: 'Roll number is required' })
+   742→      result.rejected++
+   743→      continue
+   744→    }
+   745→
+   746→    const student = students.find((s) => s.rollNo === row.rollNo.trim())
+   747→    if (!student) {
+   748→      result.errors.push({ row: rowNum, message: `No student with roll number "${row.rollNo}" in this class` })
+   749→      result.rejected++
+   750→      continue
+   751→    }
+   752→
+   753→    // Validate marks
+   754→    if (row.status === 'PRESENT' && row.marksObtained !== null) {
+   755→      if (row.marksObtained < 0) {
+   756→        result.errors.push({ row: rowNum, message: `Negative marks for "${row.rollNo}"` })
+   757→        result.rejected++
+   758→        continue
+   759→      }
+   760→      if (row.marksObtained > subjConfig.maxMarks) {
+   761→        result.errors.push({ row: rowNum, message: `Marks ${row.marksObtained} exceeds max ${subjConfig.maxMarks}` })
+   762→        result.rejected++
+   763→        continue
+   764→      }
+   765→    }
+   766→
+   767→    // Apply via upsert (preserve existing workflowStatus)
+   768→    const existing = await db.examMark.findUnique({
+   769→      where: {
+   770→        examId_classId_subjectId_studentId: {
+   771→          examId, classId, subjectId, studentId: student.id,
+   772→        },
+   773→      },
+   774→    })
+   775→    if (existing?.workflowStatus === 'LOCKED') {
+   776→      result.errors.push({ row: rowNum, message: `Mark for "${row.rollNo}" is locked` })
+   777→      result.rejected++
+   778→      continue
+   779→    }
+   780→
+   781→    await db.examMark.upsert({
+   782→      where: {
+   783→        examId_classId_subjectId_studentId: {
+   784→          examId, classId, subjectId, studentId: student.id,
+   785→        },
+   786→      },
+   787→      create: {
+   788→        examId, classId, subjectId, studentId: student.id,
+   789→        marksObtained: row.status === 'PRESENT' ? row.marksObtained : null,
+   790→        status: row.status,
+   791→        workflowStatus: 'DRAFT',
+   792→        originalMarks: row.status === 'PRESENT' ? row.marksObtained : null,
+   793→        remarks: row.remarks ?? null,
+   794→        enteredBy: user?.id ?? null,
+   795→        enteredAt: new Date(),
+   796→      },
+   797→      update: {
+   798→        marksObtained: row.status === 'PRESENT' ? row.marksObtained : null,
+   799→        status: row.status,
+   800→        remarks: row.remarks ?? existing?.remarks ?? null,
+   801→        enteredBy: user?.id ?? null,
+   802→        enteredAt: new Date(),
+   803→        ...(existing?.workflowStatus === 'SUBMITTED' ? { workflowStatus: 'DRAFT' as const } : {}),
+   804→      },
+   805→    })
+   806→
+   807→    result.applied.push({
+   808→      studentId: student.id,
+   809→      studentName: student.user?.name ?? '',
+   810→      marks: row.marksObtained,
+   811→      status: row.status,
+   812→    })
+   813→    result.accepted++
+   814→  }
+   815→
+   816→  await audit(examId, user, 'MARKS_IMPORTED_CSV', 'MARK', null, null, {
+   817→    classId, subjectId, total: rows.length, accepted: result.accepted, rejected: result.rejected,
+   818→  })
+   819→
+   820→  return result
+   821→}
+   822→
+   823→// ─── Result Publication ──────────────────────────────────────────────
+   824→
+   825→export async function publishResults(
+   826→  examId: string,
+   827→  schoolId: string,
+   828→  user: AuthUserLike | null,
+   829→  options: { notifyStudents?: boolean; notifyParents?: boolean } = {}
+   830→): Promise<{ published: boolean; notificationsSent: number }> {
+   831→  const exam = await db.exam.findFirst({ where: { id: examId, schoolId } })
+   832→  if (!exam) throw new Error('Exam not found')
+   833→  if (exam.resultStatus !== 'Result Declared') {
+   834→    throw new Error('Results must be declared before publishing')
+   835→  }
+   836→
+   837→  let notificationsSent = 0
+   838→  if (options.notifyStudents || options.notifyParents) {
+   839→    // Send notifications to all students of all classes in this exam
+   840→    const examClasses = await db.examClass.findMany({
+   841→      where: { examId },
+   842→      include: { class: { include: { students: { include: { user: true } } } } },
+   843→    })
+   844→    for (const ec of examClasses) {
+   845→      for (const student of ec.class.students) {
+   846→        if (student.userId) {
+   847→          await db.notification.create({
+   848→            data: {
+   849→              schoolId,
+   850→              title: `${exam.name} Results Published`,
+   851→              message: `Your results for ${exam.name} are now available. Please check the portal.`,
+   852→              audience: 'STUDENTS',
+   853→              priority: 'HIGH',
+   854→              senderId: user?.id ?? null,
+   855→            },
+   856→          })
+   857→          notificationsSent++
+   858→        }
+   859→      }
+   860→    }
+   861→  }
+   862→  await audit(examId, user, 'RESULT_PUBLISHED', 'EXAM', examId, null, options)
+   863→  return { published: true, notificationsSent }
+   864→}
+   865→

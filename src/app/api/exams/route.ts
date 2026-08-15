@@ -1,19 +1,16 @@
 import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
 import { withUser, schoolScoped } from '@/lib/api'
+import { listExams, createExam, getClasses } from '@/lib/exams/service'
+import { db } from '@/lib/db'
 
 export const runtime = 'nodejs'
 
 export async function GET() {
   return withUser(async (user) => {
     const schoolId = schoolScoped(user)
-    const exams = await db.exam.findMany({
-      where: { schoolId },
-      orderBy: { startDate: 'desc' },
-      include: { class: { select: { name: true } }, _count: { select: { results: true } } },
-      take: 50,
-    })
-    return exams
+    const school = await db.school.findUnique({ where: { id: schoolId }, select: { academicYear: true } })
+    const exams = await listExams(schoolId)
+    return { exams, classes: await getClasses(schoolId), academicYear: school?.academicYear ?? '2025-2026' }
   })
 }
 
@@ -22,21 +19,9 @@ export async function POST(req: NextRequest) {
     async (user) => {
       const schoolId = schoolScoped(user)
       const body = await req.json().catch(() => ({}))
-      const name = String(body.name || '').trim()
-      if (!name) throw new Error('Exam name required')
-      const e = await db.exam.create({
-        data: {
-          schoolId,
-          name,
-          term: body.term || 'TERM1',
-          classId: body.classId || null,
-          startDate: body.startDate ? new Date(body.startDate) : new Date(),
-          endDate: body.endDate ? new Date(body.endDate) : null,
-          status: body.status || 'SCHEDULED',
-        },
-      })
-      return e
+      const exam = await createExam(schoolId, user, body)
+      return exam
     },
-    { roles: ['PRINCIPAL', 'MANAGEMENT', 'TEACHER'] }
+    { roles: ['PRINCIPAL', 'MANAGEMENT'] }
   )
 }

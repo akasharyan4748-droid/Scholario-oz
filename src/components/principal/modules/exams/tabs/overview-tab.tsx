@@ -1,0 +1,294 @@
+'use client'
+
+/**
+ * ExamsOverviewTab — Principal Examination Control Dashboard.
+ *
+ * Deliberately simple. Three sections:
+ *   1. Four KPI cards (Examinations, Marks Entry, Results, Current Status)
+ *   2. Current/Next Examination card
+ *   3. Needs Attention list (only if items exist)
+ *
+ * No charts. No pipeline. No quick actions. No recent activity.
+ * All data from useExamsList (real API).
+ */
+
+import { useMemo } from 'react'
+import { motion } from 'framer-motion'
+import {
+  FileText, ClipboardList, CheckCircle2, Activity,
+  ArrowRight, AlertTriangle, ChevronRight,
+  Trophy, Medal, TrendingUp, GraduationCap, Crown, Award,
+} from 'lucide-react'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import type { ExamDTO } from '@/lib/exams/types'
+import { useOverviewAnalytics, type OverviewAnalytics } from '@/lib/exams/use-overview-analytics'
+import { PerformanceSection } from './performance-section'
+import { ExaminationContext } from './examination-context'
+
+interface Props {
+  exams: ExamDTO[]
+  classes: any[]
+  loading: boolean
+  error: string | null
+  onSelectExam: (id: string) => void
+  onGoToExams: () => void
+  onNavigate?: (section: string) => void
+}
+
+export function ExamsOverviewTab({ exams, classes, loading, error, onSelectExam, onNavigate }: Props) {
+  const data = useMemo(() => computeOverview(exams), [exams])
+
+  if (loading) return <OverviewSkeleton />
+  if (error) return <ErrorState error={error} />
+
+  return (
+    <div className="space-y-4">
+      {/* Session selector — top right, no heading */}
+      <div className="flex justify-end">
+        <Select defaultValue="2025-2026">
+          <SelectTrigger size="sm" className="w-[140px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="2025-2026">2025–2026</SelectItem>
+            <SelectItem value="2024-2025">2024–2025</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* 4 KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard
+          label="Examinations"
+          value={data.total}
+          sub={`${data.completed} Completed · ${data.ongoing} Ongoing · ${data.upcoming} Upcoming`}
+          icon={<FileText className="h-4 w-4" />}
+          tone="emerald"
+          delay={0}
+        />
+        <KpiCard
+          label="Marks Entry"
+          value={data.marksTotal > 0 ? `${data.marksEntered}/${data.marksTotal}` : '—'}
+          sub={data.marksSub}
+          icon={<ClipboardList className="h-4 w-4" />}
+          tone="amber"
+          delay={0.05}
+        />
+        <KpiCard
+          label="Results Declared"
+          value={data.total > 0 ? `${data.declared}/${data.total}` : '—'}
+          sub={data.resultsSub}
+          icon={<CheckCircle2 className="h-4 w-4" />}
+          tone="cyan"
+          delay={0.1}
+        />
+        <KpiCard
+          label="Current Status"
+          value={data.statusLabel}
+          sub={data.statusSub}
+          icon={<Activity className="h-4 w-4" />}
+          tone={data.statusTone}
+          delay={0.15}
+        />
+      </div>
+
+      {/* Context-aware Examination Status (LIVE / UPCOMING / PERFORMANCE) */}
+      <ExaminationContext exams={exams} onSelectExam={onSelectExam} onNavigate={onNavigate} />
+
+      {/* Last Examination Performance */}
+      <PerformanceSection classes={classes} onSelectExam={onSelectExam} onNavigate={onNavigate} />
+    </div>
+  )
+}
+
+// ─── Data computation ─────────────────────────────────────────────────
+
+interface OverviewData {
+  total: number
+  completed: number
+  ongoing: number
+  upcoming: number
+  declared: number
+  marksTotal: number
+  marksEntered: number
+  marksSub: string
+  resultsSub: string
+  statusLabel: string
+  statusSub: string
+  statusTone: 'emerald' | 'amber' | 'sky' | 'rose'
+  currentExam: ExamDTO | null
+  nextExam: ExamDTO | null
+}
+
+function computeOverview(exams: ExamDTO[]): OverviewData {
+  const total = exams.length
+  const completed = exams.filter((e) => e.status.toLowerCase() === 'completed').length
+  const ongoing = exams.filter((e) => e.status.toLowerCase() === 'ongoing').length
+  const upcoming = exams.filter((e) => ['scheduled', 'draft'].includes(e.status.toLowerCase())).length
+  const declared = exams.filter((e) => e.resultStatus.toLowerCase() === 'result declared').length
+
+  // Marks: aggregate across all exams
+  const marksTotal = exams.reduce((s, e) => s + e.markSummary.total, 0)
+  const marksEntered = exams.reduce((s, e) => s + e.markSummary.entered, 0)
+
+  let marksSub: string
+  if (marksTotal === 0) {
+    marksSub = 'No marks workflow active'
+  } else if (marksEntered === marksTotal) {
+    marksSub = 'All marks submitted'
+  } else {
+    const pct = marksTotal > 0 ? Math.round((marksEntered / marksTotal) * 100) : 0
+    marksSub = `${pct}% completed`
+  }
+
+  let resultsSub: string
+  if (total === 0) {
+    resultsSub = 'No examinations'
+  } else if (declared === total) {
+    resultsSub = 'All results declared'
+  } else {
+    resultsSub = `${total - declared} remaining`
+  }
+
+  // Current exam: prefer Ongoing, then most recent Scheduled
+  const currentExam = exams.find((e) => e.status.toLowerCase() === 'ongoing') ?? null
+
+  // Next exam: upcoming, sorted by start date
+  const nextExam = exams
+    .filter((e) => e.status.toLowerCase() === 'scheduled')
+    .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))[0] ?? null
+
+  // Status logic
+  let statusLabel: string
+  let statusSub: string
+  let statusTone: 'emerald' | 'amber' | 'sky' | 'rose'
+
+  if (currentExam) {
+    statusLabel = 'Ongoing'
+    statusSub = currentExam.name
+    statusTone = 'amber'
+  } else if (nextExam) {
+    const days = nextExam.startDate ? daysUntil(nextExam.startDate) : null
+    statusLabel = 'Upcoming'
+    statusSub = days !== null ? `${nextExam.name} · in ${days}d` : nextExam.name
+    statusTone = 'sky'
+  } else if (total > 0 && declared < total) {
+    statusLabel = 'Action Needed'
+    statusSub = `${total - declared} results pending`
+    statusTone = 'rose'
+  } else if (total > 0 && declared === total) {
+    statusLabel = 'On Track'
+    statusSub = 'All results declared'
+    statusTone = 'emerald'
+  } else {
+    statusLabel = '—'
+    statusSub = 'No examinations'
+    statusTone = 'emerald'
+  }
+
+  return {
+    total, completed, ongoing, upcoming, declared,
+    marksTotal, marksEntered, marksSub, resultsSub,
+    statusLabel, statusSub, statusTone,
+    currentExam, nextExam,
+  }
+}
+
+function daysUntil(dateStr: string): number {
+  const d = new Date(dateStr)
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  d.setHours(0, 0, 0, 0)
+  return Math.round((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+// ─── KPI Card ────────────────────────────────────────────────────────
+
+function KpiCard({ label, value, sub, icon, tone, delay }: {
+  label: string
+  value: string | number
+  sub: string
+  icon: React.ReactNode
+  tone: 'emerald' | 'amber' | 'sky' | 'rose' | 'cyan'
+  delay: number
+}) {
+  const tones: Record<string, { text: string; bg: string }> = {
+    emerald: { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/5' },
+    amber: { text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/5' },
+    sky: { text: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500/5' },
+    rose: { text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500/5' },
+    cyan: { text: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-500/5' },
+  }
+  const t = tones[tone] ?? tones.emerald
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={{ y: -2 }}
+      className={cn('rounded-xl border border-border bg-card p-4 transition-shadow hover:shadow-sm', t.bg)}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">{label}</span>
+        <span className={t.text}>{icon}</span>
+      </div>
+      <p className={cn('font-display text-2xl font-bold tabular-nums tracking-tight', t.text)}>{value}</p>
+      <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{sub}</p>
+    </motion.div>
+  )
+}
+
+// ─── (old CurrentExamination + NeedsAttention removed) ──
+
+// ─── Skeleton ────────────────────────────────────────────────────────
+
+function OverviewSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <div className="h-8 w-32 rounded-lg bg-muted animate-pulse" />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <div className="flex justify-between">
+              <div className="h-2.5 w-16 rounded bg-muted animate-pulse" />
+              <div className="h-4 w-4 rounded bg-muted animate-pulse" />
+            </div>
+            <div className="h-7 w-20 rounded bg-muted animate-pulse" />
+            <div className="h-2.5 w-24 rounded bg-muted/60 animate-pulse" />
+          </div>
+        ))}
+      </div>
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div className="h-3 w-32 rounded bg-muted animate-pulse" />
+        <div className="h-5 w-48 rounded bg-muted animate-pulse" />
+        <div className="grid grid-cols-4 gap-3">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="h-12 rounded-lg bg-muted/40 animate-pulse" />)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ErrorState({ error }: { error: string }) {
+  return (
+    <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-6 text-center">
+      <AlertTriangle className="h-8 w-8 text-rose-500/50 mx-auto mb-3" />
+      <p className="text-sm font-medium text-rose-700 dark:text-rose-300">Unable to load examination overview</p>
+      <p className="text-xs text-rose-600/70 mt-1">{error}</p>
+    </div>
+  )
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}

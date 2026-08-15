@@ -25,6 +25,7 @@ model School {
   plan         String   @default("STANDARD")
   status       String   @default("ACTIVE")
   academicYear String?
+  board        String   @default("CBSE") // CBSE | UP_BOARD | ICSE | STATE | CUSTOM
   isDemo       Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -49,6 +50,11 @@ model School {
   activityLogs        ActivityLog[]
   messages            Message[]
   events              SchoolEvent[]
+  examTypes           ExamTypeConfig[]
+  gradeScales         GradeScale[]
+  examRules           ExamRule[]
+  admitCardConfigs    AdmitCardConfig[]
+  reportCardConfigs   ReportCardConfig[]
   homeworks           Homework[]
   homeworkSubmissions HomeworkSubmission[]
   homeworkAuditLogs   HomeworkAuditLog[]
@@ -125,6 +131,10 @@ model Student {
   fees                Fee[]
   attendance          Attendance[]
   bookIssues          BookIssue[]
+  examMarks           ExamMark[]
+  examAttendance      ExamAttendance[]
+  seatAssignments     ExamSeatAssignment[]
+  resultOutcomes      ExamResultOutcome[]
   homeworkSubmissions HomeworkSubmission[]
 }
 
@@ -135,6 +145,7 @@ model Class {
   name           String
   gradeLevel     String?
   section        String?
+  stream         String? // Science-PCM | Science-PCB | Science-PCMB | Commerce | Humanities | General
   capacity       Int?     @default(40)
   room           String?
   classTeacherId String?
@@ -147,6 +158,10 @@ model Class {
   timetables    Timetable[]
   assignments   Assignment[]
   questionBanks QuestionBank[]
+  examClasses   ExamClass[]
+  examSubjects  ExamSubjectConfig[]
+  examSchedule  ExamScheduleItem[]
+  examMarks     ExamMark[]
   homeworks     Homework[]
 }
 
@@ -162,28 +177,194 @@ model Subject {
   passMarks Int?     @default(33)
   createdAt DateTime @default(now())
 
-  results       Result[]
-  timetables    Timetable[]
-  assignments   Assignment[]
-  questionBanks QuestionBank[]
-  homeworks     Homework[]
+  results         Result[]
+  timetables      Timetable[]
+  assignments     Assignment[]
+  questionBanks   QuestionBank[]
+  examSubjects    ExamSubjectConfig[]
+  examSchedule    ExamScheduleItem[]
+  examMarks       ExamMark[]
+  homeworks       Homework[]
+  examAttendances ExamAttendance[]
 }
 
 model Exam {
-  id        String    @id @default(cuid())
-  schoolId  String
-  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  name      String
-  term      String?
-  classId   String?
-  class     Class?    @relation(fields: [classId], references: [id])
-  startDate DateTime?
-  endDate   DateTime?
-  status    String    @default("SCHEDULED")
-  createdAt DateTime  @default(now())
+  id             String    @id @default(cuid())
+  schoolId       String
+  school         School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name           String
+  term           String?
+  type           String    @default("Unit Test")
+  session        String?   @default("2025-2026")
+  classId        String?
+  class          Class?    @relation(fields: [classId], references: [id])
+  startDate      DateTime?
+  endDate        DateTime?
+  status         String    @default("Draft")
+  resultStatus   String    @default("Not Started")
+  passPercentage Float     @default(33)
+  declaredAt     DateTime?
+  declaredBy     String?
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
 
-  results    Result[]
-  examPapers ExamPaper[]
+  results         Result[]
+  examPapers      ExamPaper[]
+  examClasses     ExamClass[]
+  examSubjects    ExamSubjectConfig[]
+  scheduleItems   ExamScheduleItem[]
+  marks           ExamMark[]
+  auditLogs       ExamAuditLog[]
+  examAttendance  ExamAttendance[]
+  seatAssignments ExamSeatAssignment[]
+  resultOutcomes  ExamResultOutcome[]
+}
+
+model ExamClass {
+  id        String   @id @default(cuid())
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([examId, classId])
+}
+
+model ExamSubjectConfig {
+  id             String   @id @default(cuid())
+  examId         String
+  exam           Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId        String
+  class          Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  maxMarks       Int      @default(100)
+  passMarks      Float    @default(33)
+  theoryMarks    Int      @default(100)
+  practicalMarks Int      @default(0)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@unique([examId, classId, subjectId])
+}
+
+model ExamScheduleItem {
+  id              String   @id @default(cuid())
+  examId          String
+  exam            Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId         String
+  class           Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId       String
+  subject         Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  date            DateTime
+  startTime       String
+  endTime         String
+  room            String?
+  invigilatorId   String?
+  invigilatorName String?
+  createdAt       DateTime @default(now())
+
+  examAttendance ExamAttendance[]
+}
+
+model ExamMark {
+  id             String    @id @default(cuid())
+  examId         String
+  exam           Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId        String
+  class          Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  marksObtained  Float?
+  status         String    @default("PRESENT")
+  workflowStatus String    @default("DRAFT")
+  originalMarks  Float?
+  graceMarks     Float     @default(0)
+  graceReason    String?
+  graceBy        String?
+  remarks        String?
+  enteredBy      String?
+  verifiedBy     String?
+  lockedBy       String?
+  enteredAt      DateTime?
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([examId, classId, subjectId, studentId])
+}
+
+model ExamAttendance {
+  id             String            @id @default(cuid())
+  examId         String
+  exam           Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  scheduleItemId String?
+  scheduleItem   ExamScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: SetNull)
+  classId        String
+  studentId      String
+  student        Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  date           DateTime
+  status         String            @default("PRESENT") // PRESENT, ABSENT, MEDICAL, EXEMPTED
+  remarks        String?
+  markedBy       String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([examId, studentId, subjectId, date])
+}
+
+model ExamSeatAssignment {
+  id         String   @id @default(cuid())
+  examId     String
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId    String
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  room       String
+  seatNumber Int
+  row        Int?
+  column     Int?
+  createdAt  DateTime @default(now())
+
+  @@unique([examId, classId, studentId])
+  @@unique([examId, room, seatNumber])
+}
+
+model ExamResultOutcome {
+  id         String   @id @default(cuid())
+  examId     String
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId    String
+  outcome    String   @default("PROMOTED") // PROMOTED, COMPARTMENT, RETEST, NOT_PROMOTED
+  reason     String?
+  overrideBy String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([examId, studentId])
+}
+
+model ExamAuditLog {
+  id        String   @id @default(cuid())
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  userId    String?
+  userName  String?
+  action    String
+  entity    String?
+  entityId  String?
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
 }
 
 model Result {
@@ -548,6 +729,81 @@ model SchoolEvent {
   createdBy   String?
   creator     User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
+}
+
+// ─── Examination Configuration (school-scoped, persisted) ─────────────
+
+model ExamTypeConfig {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String
+  code      String?
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, name])
+}
+
+model GradeScale {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  grade     String
+  minPct    Float
+  maxPct    Float    @default(100)
+  color     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, grade])
+}
+
+model ExamRule {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, key])
+}
+
+model AdmitCardConfig {
+  id               String   @id @default(cuid())
+  schoolId         String
+  school           School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  showPhoto        Boolean  @default(true)
+  showRollNumber   Boolean  @default(true)
+  showRoom         Boolean  @default(true)
+  showSeatNumber   Boolean  @default(true)
+  showTimetable    Boolean  @default(true)
+  showInstructions Boolean  @default(true)
+  showQrCode       Boolean  @default(false)
+  updatedAt        DateTime @updatedAt
+
+  @@unique([schoolId])
+}
+
+model ReportCardConfig {
+  id                   String   @id @default(cuid())
+  schoolId             String
+  school               School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  showAttendance       Boolean  @default(true)
+  showRank             Boolean  @default(true)
+  showPercentage       Boolean  @default(true)
+  showGrade            Boolean  @default(true)
+  showCoScholastic     Boolean  @default(false)
+  showRemarks          Boolean  @default(true)
+  showClassTeacherSign Boolean  @default(true)
+  showPrincipalSign    Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
+
+  @@unique([schoolId])
 }
 
 // ─── Homework Policy & Oversight (Principal) ──────────────────────────
