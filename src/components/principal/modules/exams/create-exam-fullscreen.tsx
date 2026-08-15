@@ -86,7 +86,19 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
     })), [classes, selectedClassIds])
 
   const toggleClass = (classId: string) => {
-    setSelectedClassIds((prev) => prev.includes(classId) ? prev.filter((c) => c !== classId) : [...prev, classId])
+    setSelectedClassIds((prev) => {
+      const newIds = prev.includes(classId) ? prev.filter((c) => c !== classId) : [...prev, classId]
+      // Auto-populate subjects from the newly selected class set
+      const selectedClasses = classes.filter((c) => newIds.includes(c.id))
+      const allSubjects = new Map<string, SubjectInfo>()
+      for (const cls of selectedClasses) {
+        for (const s of cls.subjects) {
+          allSubjects.set(s.id, { id: s.id, name: s.name, code: s.code })
+        }
+      }
+      setSelectedSubjects(Array.from(allSubjects.values()))
+      return newIds
+    })
   }
 
   const addSubject = (s: SubjectInfo) => {
@@ -177,17 +189,15 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
 
   return (
     <div className="flex flex-col h-full -mt-4 -mx-4 sm:-mx-6">
-      {/* Header */}
-      <div className="border-b border-border bg-card/80 backdrop-blur sticky top-0 z-20 px-4 sm:px-6 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} aria-label="Back" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <h1 className="text-base font-semibold">Create Examination</h1>
-          </div>
-          <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold bg-muted text-muted-foreground border-border">Draft</span>
+      {/* Compact header */}
+      <div className="border-b border-border bg-card px-4 sm:px-6 py-2.5 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5">
+          <button onClick={onBack} aria-label="Back" className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <h1 className="text-sm font-semibold">Create Examination</h1>
         </div>
+        <span className="inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold bg-muted text-muted-foreground border-border">Draft</span>
       </div>
 
       {/* Content */}
@@ -241,7 +251,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                   </div>
                 )}
                 {selectedSubjects.length === 0 ? (
-                  <p className="text-[10px] text-muted-foreground text-center py-2">{selectedClassIds.length === 0 ? 'Select classes first.' : 'No subjects added yet.'}</p>
+                  <p className="text-[10px] text-muted-foreground py-2">{selectedClassIds.length === 0 ? 'Select classes first.' : 'No subjects selected yet.'}</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {selectedSubjects.map((s) => (
@@ -321,8 +331,8 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-border bg-card/80 backdrop-blur sticky bottom-0 px-4 sm:px-6 py-3 flex justify-between">
+      {/* Compact footer */}
+      <div className="border-t border-border bg-card px-4 sm:px-6 py-2 flex justify-between shrink-0">
         <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={onBack}>
           <ArrowLeft className="h-3.5 w-3.5" /> Cancel
         </Button>
