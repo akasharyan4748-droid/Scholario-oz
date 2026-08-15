@@ -10,74 +10,69 @@ datasource db {
 }
 
 model School {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   name         String
-  slug         String    @unique
-  code         String    @unique
+  slug         String   @unique
+  code         String   @unique
   domain       String?
   address      String?
   city         String?
   phone        String?
   email        String?
-  themeColor   String    @default("#0f766e")
-  accentColor  String    @default("#f59e0b")
+  themeColor   String   @default("#0f766e")
+  accentColor  String   @default("#f59e0b")
   logoUrl      String?
-  plan         String    @default("STANDARD")
-  status       String    @default("ACTIVE")
+  plan         String   @default("STANDARD")
+  status       String   @default("ACTIVE")
   academicYear String?
-  isDemo       Boolean   @default(false)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  isDemo       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  users         User[]
-  teachers      Teacher[]
-  students      Student[]
-  classes       Class[]
-  subjects      Subject[]
-  exams         Exam[]
-  fees          Fee[]
-  attendance    Attendance[]
-  timetables    Timetable[]
-  assignments   Assignment[]
-  notifications Notification[]
-  libraryBooks  LibraryBook[]
-  drivers       Driver[]
-  routes        Route[]
-  vehicles      Vehicle[]
-  questionBanks QuestionBank[]
-  examPapers    ExamPaper[]
-  activityLogs  ActivityLog[]
-  messages      Message[]
-  events        SchoolEvent[]
-  examTypes     ExamTypeConfig[]
-  gradeScales   GradeScale[]
-  examRules     ExamRule[]
-  admitCardConfigs AdmitCardConfig[]
-  reportCardConfigs ReportCardConfig[]
-  homeworks     Homework[]
+  users               User[]
+  teachers            Teacher[]
+  students            Student[]
+  classes             Class[]
+  subjects            Subject[]
+  exams               Exam[]
+  fees                Fee[]
+  attendance          Attendance[]
+  timetables          Timetable[]
+  assignments         Assignment[]
+  notifications       Notification[]
+  libraryBooks        LibraryBook[]
+  drivers             Driver[]
+  routes              Route[]
+  vehicles            Vehicle[]
+  questionBanks       QuestionBank[]
+  examPapers          ExamPaper[]
+  activityLogs        ActivityLog[]
+  messages            Message[]
+  events              SchoolEvent[]
+  homeworks           Homework[]
   homeworkSubmissions HomeworkSubmission[]
-  homeworkAuditLogs HomeworkAuditLog[]
-  homeworkPolicies HomeworkPolicy[]
-  noHomeworkDates NoHomeworkDate[]
-  parentGrievances ParentGrievance[]
-  homeworkSurveys HomeworkSurvey[]
+  homeworkAuditLogs   HomeworkAuditLog[]
+  homeworkPolicies    HomeworkPolicy[]
+  noHomeworkDates     NoHomeworkDate[]
+  parentGrievances    ParentGrievance[]
+  homeworkSurveys     HomeworkSurvey[]
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   schoolId     String?
-  school       School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  email        String   @unique
+  school       School?   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  email        String    @unique
   passwordHash String?
   name         String?
-  role         String   @default("STUDENT")
+  role         String    @default("STUDENT")
   phone        String?
   avatar       String?
   avatarUrl    String?
-  status       String   @default("ACTIVE")
+  status       String    @default("ACTIVE")
   lastLoginAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   teacher            Teacher?
   student            Student?
@@ -86,10 +81,10 @@ model User {
   activityLogs       ActivityLog[]
   sentNotifications  Notification[]
   createdAssignments Assignment[]
-  sentMessages       Message[] @relation("MessageSender")
-  receivedMessages  Message[] @relation("MessageRecipient")
-  createdEvents     SchoolEvent[]
-  createdHomeworks  Homework[]
+  sentMessages       Message[]      @relation("MessageSender")
+  receivedMessages   Message[]      @relation("MessageRecipient")
+  createdEvents      SchoolEvent[]
+  createdHomeworks   Homework[]
 }
 
 model Teacher {
@@ -126,41 +121,33 @@ model Student {
   route         Route?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
 
-  results    Result[]
-  fees       Fee[]
-  attendance Attendance[]
-  bookIssues BookIssue[]
-  examMarks  ExamMark[]
-  examAttendance ExamAttendance[]
-  seatAssignments ExamSeatAssignment[]
-  resultOutcomes ExamResultOutcome[]
+  results             Result[]
+  fees                Fee[]
+  attendance          Attendance[]
+  bookIssues          BookIssue[]
   homeworkSubmissions HomeworkSubmission[]
 }
 
 model Class {
-  id             String    @id @default(cuid())
+  id             String   @id @default(cuid())
   schoolId       String
-  school         School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   name           String
   gradeLevel     String?
   section        String?
-  capacity       Int?      @default(40)
-  room            String?
+  capacity       Int?     @default(40)
+  room           String?
   classTeacherId String?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime @default(now())
 
-  students         Student[]
-  subjects         Subject[]
-  exams            Exam[]
-  attendance       Attendance[]
-  timetables       Timetable[]
-  assignments      Assignment[]
-  questionBanks    QuestionBank[]
-  examClasses      ExamClass[]
-  examSubjects     ExamSubjectConfig[]
-  examSchedule     ExamScheduleItem[]
-  examMarks       ExamMark[]
-  homeworks       Homework[]
+  students      Student[]
+  subjects      Subject[]
+  exams         Exam[]
+  attendance    Attendance[]
+  timetables    Timetable[]
+  assignments   Assignment[]
+  questionBanks QuestionBank[]
+  homeworks     Homework[]
 }
 
 model Subject {
@@ -175,192 +162,28 @@ model Subject {
   passMarks Int?     @default(33)
   createdAt DateTime @default(now())
 
-  results          Result[]
-  timetables       Timetable[]
-  assignments      Assignment[]
-  questionBanks    QuestionBank[]
-  examSubjects     ExamSubjectConfig[]
-  examSchedule     ExamScheduleItem[]
-  examMarks       ExamMark[]
-  homeworks       Homework[]
+  results       Result[]
+  timetables    Timetable[]
+  assignments   Assignment[]
+  questionBanks QuestionBank[]
+  homeworks     Homework[]
 }
 
 model Exam {
-  id              String    @id @default(cuid())
-  schoolId        String
-  school          School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  name            String
-  term            String?
-  type            String    @default("Unit Test")
-  session         String?   @default("2025-2026")
-  classId         String?
-  class           Class?    @relation(fields: [classId], references: [id])
-  startDate       DateTime?
-  endDate         DateTime?
-  status          String    @default("Draft")
-  resultStatus    String    @default("Not Started")
-  passPercentage  Float     @default(33)
-  declaredAt      DateTime?
-  declaredBy      String?
-  createdBy       String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @default(now()) @updatedAt
+  id        String    @id @default(cuid())
+  schoolId  String
+  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String
+  term      String?
+  classId   String?
+  class     Class?    @relation(fields: [classId], references: [id])
+  startDate DateTime?
+  endDate   DateTime?
+  status    String    @default("SCHEDULED")
+  createdAt DateTime  @default(now())
 
-  results        Result[]
-  examPapers     ExamPaper[]
-  examClasses    ExamClass[]
-  examSubjects   ExamSubjectConfig[]
-  scheduleItems  ExamScheduleItem[]
-  marks          ExamMark[]
-  auditLogs      ExamAuditLog[]
-  examAttendance ExamAttendance[]
-  seatAssignments ExamSeatAssignment[]
-  resultOutcomes ExamResultOutcome[]
-}
-
-model ExamClass {
-  id        String   @id @default(cuid())
-  examId    String
-  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-  classId   String
-  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
-  @@unique([examId, classId])
-}
-
-model ExamSubjectConfig {
-  id             String   @id @default(cuid())
-  examId         String
-  exam           Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-  classId        String
-  class          Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
-  subjectId      String
-  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  maxMarks       Int      @default(100)
-  passMarks      Float    @default(33)
-  theoryMarks    Int      @default(100)
-  practicalMarks Int      @default(0)
-  sortOrder      Int      @default(0)
-  createdAt      DateTime @default(now())
-
-  @@unique([examId, classId, subjectId])
-}
-
-model ExamScheduleItem {
-  id               String   @id @default(cuid())
-  examId           String
-  exam             Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-  classId          String
-  class            Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
-  subjectId        String?
-  subject          Subject? @relation(fields: [subjectId], references: [id])
-  date             DateTime
-  startTime        String
-  endTime          String
-  room             String?
-  invigilatorId    String?
-  invigilatorName  String?
-  createdAt        DateTime @default(now())
-
-  examAttendance ExamAttendance[]
-}
-
-model ExamMark {
-  id             String   @id @default(cuid())
-  examId         String
-  exam           Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-  classId        String
-  class          Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
-  subjectId      String
-  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  studentId      String
-  student        Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  marksObtained  Float?
-  status         String   @default("PRESENT")
-  workflowStatus String   @default("DRAFT")
-  originalMarks  Float?
-  graceMarks     Float    @default(0)
-  graceReason    String?
-  graceBy        String?
-  remarks        String?
-  enteredBy      String?
-  verifiedBy     String?
-  lockedBy       String?
-  enteredAt      DateTime?
-  verifiedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@unique([examId, classId, subjectId, studentId])
-}
-
-model ExamAttendance {
-  id            String   @id @default(cuid())
-  examId        String
-  exam          Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-  scheduleItemId String?
-  scheduleItem  ExamScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: SetNull)
-  classId       String
-  studentId     String
-  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  subjectId     String?
-  date          DateTime
-  status        String   @default("PRESENT") // PRESENT, ABSENT, MEDICAL, EXEMPTED
-  remarks       String?
-  markedBy      String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@unique([examId, studentId, subjectId, date])
-}
-
-model ExamSeatAssignment {
-  id        String   @id @default(cuid())
-  examId    String
-  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-  classId   String
-  studentId String
-  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  room      String
-  seatNumber Int
-  row       Int?
-  column    Int?
-  createdAt DateTime @default(now())
-
-  @@unique([examId, classId, studentId])
-  @@unique([examId, room, seatNumber])
-}
-
-model ExamResultOutcome {
-  id           String   @id @default(cuid())
-  examId       String
-  exam         Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-  studentId    String
-  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  classId      String
-  outcome      String   @default("PROMOTED") // PROMOTED, COMPARTMENT, RETEST, NOT_PROMOTED
-  reason       String?
-  overrideBy   String?
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([examId, studentId])
-}
-
-model ExamAuditLog {
-  id        String   @id @default(cuid())
-  examId    String
-  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-  userId    String?
-  userName  String?
-  action    String
-  entity    String?
-  entityId  String?
-  oldValue  String?
-  newValue  String?
-  createdAt DateTime @default(now())
+  results    Result[]
+  examPapers ExamPaper[]
 }
 
 model Result {
@@ -481,110 +304,110 @@ model Timetable {
 }
 
 model Assignment {
-  id            String    @id @default(cuid())
-  schoolId      String
-  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  classId       String?
-  class         Class?    @relation(fields: [classId], references: [id])
-  subjectId     String?
-  subject       Subject? @relation(fields: [subjectId], references: [id])
-  title         String
-  description   String?
-  dueDate       DateTime?
-  createdBy     String?
-  creator       User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
-  createdAt     DateTime  @default(now())
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId     String?
+  class       Class?    @relation(fields: [classId], references: [id])
+  subjectId   String?
+  subject     Subject?  @relation(fields: [subjectId], references: [id])
+  title       String
+  description String?
+  dueDate     DateTime?
+  createdBy   String?
+  creator     User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
   // Legacy compatibility — kept for old assignment routes
 }
 
 // ─── Homework (richer model with full lifecycle) ──────────────────────
 
 model Homework {
-  id              String    @id @default(cuid())
-  schoolId        String
-  school          School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  title           String
-  description     String?
-  classId         String
-  class           Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
-  subjectId       String?
-  subject         Subject? @relation(fields: [subjectId], references: [id])
-  teacherId       String?
-  teacherName     String?
-  topic           String?
-  chapter         String?
-  learningObjective String?
-  content         String?
-  attachments     String?   // JSON array of {name, url, type}
-  maxMarks        Float?
-  gradingType     String    @default("marks") // marks, grade, completion
-  assignedDate    DateTime
-  dueDate         DateTime
-  dueTime         String    @default("23:59")
-  status          String    @default("DRAFT") // DRAFT, PUBLISHED, ACTIVE, CLOSED, ARCHIVED
-  allowLateSubmission Boolean @default(true)
-  lateDeadline    DateTime?
-  latePenalty     Float     @default(0)
-  allowResubmission Boolean @default(true)
-  createdBy       String?
-  creator         User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
-  publishedAt     DateTime?
-  closedAt        DateTime?
-  originalDueDate DateTime?
-  deadlineChangedBy String?
-  deadlineChangedAt DateTime?
+  id                   String    @id @default(cuid())
+  schoolId             String
+  school               School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title                String
+  description          String?
+  classId              String
+  class                Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId            String?
+  subject              Subject?  @relation(fields: [subjectId], references: [id])
+  teacherId            String?
+  teacherName          String?
+  topic                String?
+  chapter              String?
+  learningObjective    String?
+  content              String?
+  attachments          String? // JSON array of {name, url, type}
+  maxMarks             Float?
+  gradingType          String    @default("marks") // marks, grade, completion
+  assignedDate         DateTime
+  dueDate              DateTime
+  dueTime              String    @default("23:59")
+  status               String    @default("DRAFT") // DRAFT, PUBLISHED, ACTIVE, CLOSED, ARCHIVED
+  allowLateSubmission  Boolean   @default(true)
+  lateDeadline         DateTime?
+  latePenalty          Float     @default(0)
+  allowResubmission    Boolean   @default(true)
+  createdBy            String?
+  creator              User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  publishedAt          DateTime?
+  closedAt             DateTime?
+  originalDueDate      DateTime?
+  deadlineChangedBy    String?
+  deadlineChangedAt    DateTime?
   deadlineChangeReason String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @default(now()) @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @default(now()) @updatedAt
 
-  submissions     HomeworkSubmission[]
-  auditLogs       HomeworkAuditLog[]
-  grievances      ParentGrievance[]
+  submissions HomeworkSubmission[]
+  auditLogs   HomeworkAuditLog[]
+  grievances  ParentGrievance[]
 }
 
 model HomeworkSubmission {
-  id              String    @id @default(cuid())
-  homeworkId      String
-  homework        Homework  @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
-  studentId       String
-  student         Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  schoolId        String
-  school          School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  attemptNumber   Int       @default(1)
-  status          String    @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, SUBMITTED, LATE, RETURNED, RESUBMISSION_REQUIRED, REVIEWED
-  responseText    String?
-  attachments     String?   // JSON array
-  submittedAt     DateTime?
-  submittedLate   Boolean   @default(false)
-  lateByMinutes   Int?
-  marks           Float?
-  grade           String?
-  feedback        String?
-  privateNote     String?
-  reviewedBy      String?
-  reviewedAt      DateTime?
-  returnedAt      DateTime?
+  id                 String    @id @default(cuid())
+  homeworkId         String
+  homework           Homework  @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  studentId          String
+  student            Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  schoolId           String
+  school             School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  attemptNumber      Int       @default(1)
+  status             String    @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, SUBMITTED, LATE, RETURNED, RESUBMISSION_REQUIRED, REVIEWED
+  responseText       String?
+  attachments        String? // JSON array
+  submittedAt        DateTime?
+  submittedLate      Boolean   @default(false)
+  lateByMinutes      Int?
+  marks              Float?
+  grade              String?
+  feedback           String?
+  privateNote        String?
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  returnedAt         DateTime?
   resubmissionReason String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @default(now()) @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
 
   @@unique([homeworkId, studentId, attemptNumber])
 }
 
 model HomeworkAuditLog {
-  id          String   @id @default(cuid())
-  homeworkId  String
-  homework    Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
-  schoolId    String
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  userId      String?
-  userName    String?
-  action      String
-  entity      String?
-  entityId    String?
-  oldValue    String?
-  newValue    String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  homeworkId String
+  homework   Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId     String?
+  userName   String?
+  action     String
+  entity     String?
+  entityId   String?
+  oldValue   String?
+  newValue   String?
+  createdAt  DateTime @default(now())
 }
 
 model Notification {
@@ -712,125 +535,50 @@ model Message {
 }
 
 model SchoolEvent {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   schoolId    String
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   title       String
   description String?
-  type        String   @default("EVENT")
+  type        String    @default("EVENT")
   startDate   DateTime
   endDate     DateTime?
   location    String?
-  audience    String   @default("ALL")
+  audience    String    @default("ALL")
   createdBy   String?
-  creator     User?    @relation(fields: [createdBy], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
-}
-
-// ─── Examination Configuration (school-scoped, persisted) ─────────────
-
-model ExamTypeConfig {
-  id        String   @id @default(cuid())
-  schoolId  String
-  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  name      String
-  code      String?
-  enabled   Boolean  @default(true)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([schoolId, name])
-}
-
-model GradeScale {
-  id        String   @id @default(cuid())
-  schoolId  String
-  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  grade     String
-  minPct    Float
-  maxPct    Float    @default(100)
-  color     String?
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([schoolId, grade])
-}
-
-model ExamRule {
-  id                  String   @id @default(cuid())
-  schoolId            String
-  school              School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  key                 String
-  value               String
-  updatedAt           DateTime @updatedAt
-
-  @@unique([schoolId, key])
-}
-
-model AdmitCardConfig {
-  id              String   @id @default(cuid())
-  schoolId        String
-  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  showPhoto       Boolean  @default(true)
-  showRollNumber  Boolean  @default(true)
-  showRoom        Boolean  @default(true)
-  showSeatNumber  Boolean  @default(true)
-  showTimetable   Boolean  @default(true)
-  showInstructions Boolean @default(true)
-  showQrCode      Boolean  @default(false)
-  updatedAt       DateTime @updatedAt
-
-  @@unique([schoolId])
-}
-
-model ReportCardConfig {
-  id                  String   @id @default(cuid())
-  schoolId            String
-  school              School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  showAttendance      Boolean  @default(true)
-  showRank            Boolean  @default(true)
-  showPercentage      Boolean  @default(true)
-  showGrade           Boolean  @default(true)
-  showCoScholastic    Boolean  @default(false)
-  showRemarks         Boolean  @default(true)
-  showClassTeacherSign Boolean @default(true)
-  showPrincipalSign   Boolean  @default(true)
-  updatedAt           DateTime @updatedAt
-
-  @@unique([schoolId])
+  creator     User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
 }
 
 // ─── Homework Policy & Oversight (Principal) ──────────────────────────
 
 model HomeworkPolicy {
-  id              String   @id @default(cuid())
-  schoolId        String
-  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  gradeLevel      String   // "1", "2", ..., "9", "10", "11", "12", "all"
-  maxMinutesPerDay Int     @default(30) // max daily homework minutes
-  enabled         Boolean  @default(true)
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  schoolId         String
+  school           School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  gradeLevel       String // "1", "2", ..., "9", "10", "11", "12", "all"
+  maxMinutesPerDay Int      @default(30) // max daily homework minutes
+  enabled          Boolean  @default(true)
+  updatedAt        DateTime @updatedAt
 
   @@unique([schoolId, gradeLevel])
 }
 
 model NoHomeworkDate {
-  id          String   @id @default(cuid())
-  schoolId    String
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  date        DateTime
-  reason      String?  // "Sports Day", "Festival", "Exam Week"
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  date      DateTime
+  reason    String? // "Sports Day", "Festival", "Exam Week"
+  createdAt DateTime @default(now())
 
   @@unique([schoolId, date])
 }
 
 model ParentGrievance {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   schoolId    String
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   homeworkId  String?
   homework    Homework? @relation(fields: [homeworkId], references: [id], onDelete: SetNull)
   parentId    String?
@@ -838,24 +586,24 @@ model ParentGrievance {
   studentName String?
   subject     String
   description String
-  category    String   @default("workload") // workload, ambiguous, missing_link, other
-  status      String   @default("open") // open, acknowledged, resolved, dismissed
+  category    String    @default("workload") // workload, ambiguous, missing_link, other
+  status      String    @default("open") // open, acknowledged, resolved, dismissed
   response    String?
   resolvedBy  String?
   resolvedAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model HomeworkSurvey {
-  id            String   @id @default(cuid())
-  schoolId      String
-  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  term          String   // "term1", "term2", "annual"
-  respondentType String  @default("parent") // parent, student
-  manageable    Boolean  @default(true)
-  stressful     Boolean  @default(false)
-  rating        Int      @default(3) // 1-5
-  feedback      String?
-  createdAt     DateTime @default(now())
+  id             String   @id @default(cuid())
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  term           String // "term1", "term2", "annual"
+  respondentType String   @default("parent") // parent, student
+  manageable     Boolean  @default(true)
+  stressful      Boolean  @default(false)
+  rating         Int      @default(3) // 1-5
+  feedback       String?
+  createdAt      DateTime @default(now())
 }
