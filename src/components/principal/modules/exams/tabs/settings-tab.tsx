@@ -5,14 +5,17 @@
  *
  * Left-nav sections:
  *   General | Exam Types | Grading | Marks & Results | Attendance |
- *   Admit Cards | Report Cards | Publication
+ *   Admit Cards | Report Cards | Publication | Archive
+ *
+ * The Archive entry opens the full-screen Archive view (historical records)
+ * — distinct from the active session picker on Overview.
  *
  * All settings persist to DB via /api/exams/settings/*.
  * Settings affect result engine, admit cards, report cards.
  */
 
 import { useState, useEffect } from 'react'
-import { Settings as SettingsIcon, GraduationCap, Award, ClipboardCheck, Calendar, Ticket, FileText, Send, Plus, Trash2, Save, Check } from 'lucide-react'
+import { Settings as SettingsIcon, GraduationCap, Award, ClipboardCheck, Calendar, Ticket, FileText, Send, Plus, Trash2, Save, Check, Archive as ArchiveIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,7 +34,7 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-type Section = 'general' | 'types' | 'grading' | 'rules' | 'admit' | 'report' | 'publication'
+type Section = 'general' | 'types' | 'grading' | 'rules' | 'admit' | 'report' | 'publication' | 'archive'
 
 const SECTIONS = [
   { value: 'general', label: 'General', icon: SettingsIcon },
@@ -41,31 +44,54 @@ const SECTIONS = [
   { value: 'admit', label: 'Admit Cards', icon: Ticket },
   { value: 'report', label: 'Report Cards', icon: FileText },
   { value: 'publication', label: 'Publication', icon: Send },
+  { value: 'archive', label: 'Archive', icon: ArchiveIcon, isArchive: true },
 ] as const
 
-export function SettingsTab() {
+interface SettingsTabProps {
+  onOpenArchive?: () => void
+}
+
+export function SettingsTab({ onOpenArchive }: SettingsTabProps) {
   const [section, setSection] = useState<Section>('general')
   const gate = useRoleGate()
   const readOnly = !gate.canEdit
+
+  const handleSectionClick = (s: typeof SECTIONS[number]) => {
+    if ('isArchive' in s && s.isArchive && onOpenArchive) {
+      onOpenArchive()
+      return
+    }
+    setSection(s.value as Section)
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-4">
       {/* Left nav */}
       <div className="rounded-xl border border-border bg-card p-2 lg:sticky lg:top-0 lg:self-start">
         <div className="space-y-0.5">
-          {SECTIONS.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => setSection(s.value as Section)}
-              className={cn(
-                'w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors text-left',
-                section === s.value ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-              )}
-            >
-              <s.icon className="h-3.5 w-3.5 shrink-0" />
-              <span>{s.label}</span>
-            </button>
-          ))}
+          {SECTIONS.map((s) => {
+            const isArchive = 'isArchive' in s && s.isArchive
+            return (
+              <button
+                key={s.value}
+                onClick={() => handleSectionClick(s)}
+                className={cn(
+                  'w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors text-left',
+                  section === s.value && !isArchive
+                    ? 'bg-primary/10 text-primary'
+                    : isArchive
+                      ? 'text-muted-foreground hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-300 border-t border-border/40 mt-1 pt-2.5'
+                      : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground',
+                )}
+              >
+                <s.icon className={cn('h-3.5 w-3.5 shrink-0', isArchive && 'text-amber-600 dark:text-amber-400')} />
+                <span>{s.label}</span>
+                {isArchive && (
+                  <span className="ml-auto text-[9px] text-muted-foreground/70">→</span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 

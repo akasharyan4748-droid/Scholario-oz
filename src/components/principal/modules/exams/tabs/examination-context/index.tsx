@@ -161,63 +161,137 @@ function UpcomingExamination({ ctx, onSelectExam, onNavigate }: {
   const exam = ctx.nextExam
   if (!exam) return null
 
-  return (
-    <div className="rounded-xl border border-border bg-card p-5">
-      <div className="flex items-center gap-2 mb-3">
-        <Calendar className="h-4 w-4 text-sky-500" />
-        <span className="text-[10px] uppercase font-bold tracking-wider text-sky-600 dark:text-sky-400">Upcoming Examination</span>
-      </div>
+  const readiness = ctx.readiness
+  const dateRange = exam.startDate && exam.endDate
+    ? `${formatDate(exam.startDate)} — ${formatDate(exam.endDate)}`
+    : exam.startDate ? formatDate(exam.startDate) : 'Date TBD'
 
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <h2 className="font-display text-base font-bold tracking-tight truncate">{exam.name}</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            {exam.type} · {exam.classes.map((c) => c.className).join(', ') || '—'}
-          </p>
-          {exam.startDate && exam.endDate && (
-            <p className="text-[11px] text-muted-foreground">{formatDate(exam.startDate)} — {formatDate(exam.endDate)}</p>
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      className="rounded-xl border border-sky-500/20 bg-card overflow-hidden"
+    >
+      {/* ─── Top band: exam identity ──────────────────────────────── */}
+      <div className="px-5 py-4 bg-gradient-to-r from-sky-500/5 via-transparent to-transparent border-b border-border/40">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75 motion-reduce:animate-none" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-sky-500" />
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-sky-600 dark:text-sky-400">
+                Upcoming Examination
+              </span>
+            </div>
+            <h2 className="font-display text-lg font-bold tracking-tight truncate">{exam.name}</h2>
+            <div className="flex items-center gap-2 mt-1 flex-wrap text-[11px] text-muted-foreground">
+              <span className="font-medium text-foreground/80">{exam.type}</span>
+              <span className="text-muted-foreground/40">•</span>
+              <span className="flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                {dateRange}
+              </span>
+              {exam.classes.length > 0 && (
+                <>
+                  <span className="text-muted-foreground/40">•</span>
+                  <span className="truncate">{exam.classes.map((c) => c.className).join(', ')}</span>
+                </>
+              )}
+            </div>
+          </div>
+          {/* Days-until countdown */}
+          {ctx.daysUntilNext !== null && (
+            <div className="text-right shrink-0 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20">
+              <p className="font-display text-2xl font-bold tabular-nums text-sky-600 dark:text-sky-400 leading-none">
+                {ctx.daysUntilNext === 0 ? 'Today' : ctx.daysUntilNext === 1 ? '1' : `${ctx.daysUntilNext}`}
+              </p>
+              <p className="text-[9px] text-sky-600/80 dark:text-sky-400/80 mt-0.5 font-medium uppercase tracking-wider">
+                {ctx.daysUntilNext === 0 ? 'starting soon' : ctx.daysUntilNext === 1 ? 'day left' : 'days left'}
+              </p>
+            </div>
           )}
         </div>
-        {ctx.daysUntilNext !== null && (
-          <div className="text-right shrink-0">
-            <p className="font-display text-2xl font-bold tabular-nums text-sky-600 dark:text-sky-400">
-              {ctx.daysUntilNext === 0 ? 'Today' : ctx.daysUntilNext === 1 ? '1 day' : `${ctx.daysUntilNext}d`}
-            </p>
-            <p className="text-[9px] text-muted-foreground">{ctx.daysUntilNext === 0 ? 'starting soon' : 'until start'}</p>
+      </div>
+
+      {/* ─── Middle: Exam Readiness + scheduled papers ─────────────── */}
+      <div className="px-5 py-4 grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5">
+        {/* Readiness column */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+              Exam Readiness
+            </span>
+            <span className={cn(
+              'font-display text-sm font-bold tabular-nums',
+              readiness.overallPct >= 80 ? 'text-emerald-600 dark:text-emerald-400' :
+              readiness.overallPct >= 50 ? 'text-amber-600 dark:text-amber-400' :
+              'text-rose-600 dark:text-rose-400',
+            )}>
+              {readiness.overallPct}%
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden mb-3">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${readiness.overallPct}%` }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className={cn(
+                'h-full rounded-full',
+                readiness.overallPct >= 80 ? 'bg-emerald-500' :
+                readiness.overallPct >= 50 ? 'bg-amber-500' : 'bg-rose-500',
+              )}
+            />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1.5">
+            <ReadinessItem label="Timetable" done={readiness.schedule} />
+            <ReadinessItem label="Rooms" done={readiness.rooms} />
+            <ReadinessItem label="Invigilators" done={readiness.invigilators} />
+            <ReadinessItem label="Seating" done={readiness.seating} />
+            <ReadinessItem label="Marks Setup" done={readiness.marksSetup} />
+          </div>
+        </div>
+
+        {/* Scheduled papers column */}
+        {ctx.upcomingPapers.length > 0 ? (
+          <div>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block mb-2">
+              Scheduled Papers
+            </span>
+            <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+              {ctx.upcomingPapers.slice(0, 4).map((p, i) => (
+                <motion.div
+                  key={p.id}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                  className="flex items-center gap-2 p-1.5 rounded-md bg-muted/30 border border-border/40 text-[10px]"
+                >
+                  <div className="flex flex-col items-center w-9 shrink-0 py-0.5 rounded bg-card border border-border/60">
+                    <span className="text-[8px] uppercase text-muted-foreground leading-none">{formatMonth(p.date)}</span>
+                    <span className="font-display text-sm font-bold leading-tight">{formatDay(p.date)}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">{p.subjectName ?? '—'}</p>
+                    <p className="text-muted-foreground tabular-nums">{p.startTime} · {p.className}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="hidden lg:flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-[10px] text-muted-foreground italic">No papers scheduled yet</p>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Upcoming papers */}
-      {ctx.upcomingPapers.length > 0 && (
-        <div className="mb-3">
-          <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1.5">Scheduled Papers</p>
-          <div className="space-y-1">
-            {ctx.upcomingPapers.slice(0, 4).map((p, i) => (
-              <motion.div
-                key={p.id}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.04 }}
-                className="flex items-center gap-2 p-1.5 rounded border border-border/40 text-[10px]"
-              >
-                <div className="flex flex-col items-center w-10 shrink-0">
-                  <span className="text-[8px] uppercase text-muted-foreground">{formatMonth(p.date)}</span>
-                  <span className="font-display text-sm font-bold">{formatDay(p.date)}</span>
-                </div>
-                <span className="font-medium truncate flex-1">{p.subjectName ?? '—'}</span>
-                <span className="text-muted-foreground tabular-nums">{p.startTime}</span>
-                <span className="text-muted-foreground">{p.className}</span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Readiness */}
-      <ReadinessPanel readiness={ctx.readiness} />
-
-      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/40">
+      {/* ─── Action band ──────────────────────────────────────────── */}
+      <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border/40 bg-muted/20">
         <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => onSelectExam(exam.id)}>
           Open Examination <ArrowRight className="h-3 w-3" />
         </Button>
@@ -227,40 +301,27 @@ function UpcomingExamination({ ctx, onSelectExam, onNavigate }: {
           </Button>
         )}
       </div>
-    </div>
+    </motion.div>
   )
 }
 
-function ReadinessPanel({ readiness }: { readiness: ExamContext['readiness'] }) {
-  const items = [
-    { label: 'Timetable', done: readiness.schedule },
-    { label: 'Rooms', done: readiness.rooms },
-    { label: 'Invigilators', done: readiness.invigilators },
-    { label: 'Seating', done: readiness.seating },
-    { label: 'Marks Setup', done: readiness.marksSetup },
-  ]
+function ReadinessItem({ label, done }: { label: string; done: boolean }) {
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[10px] uppercase font-semibold text-muted-foreground">Exam Readiness</span>
-        <span className="text-[10px] font-bold tabular-nums">{readiness.overallPct}%</span>
-      </div>
-      <div className="h-1 rounded-full bg-muted/60 overflow-hidden mb-2">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${readiness.overallPct}%` }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className={cn('h-full rounded-full', readiness.overallPct >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
-        />
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1">
-        {items.map((item) => (
-          <span key={item.label} className="text-[9px] flex items-center gap-0.5">
-            <span className={cn('h-1.5 w-1.5 rounded-full', item.done ? 'bg-emerald-500' : 'bg-muted-foreground/30')} />
-            {item.label}
-          </span>
-        ))}
-      </div>
+    <div className="flex items-center gap-1.5">
+      <span className={cn(
+        'flex h-3.5 w-3.5 items-center justify-center rounded-full shrink-0 text-[8px] font-bold',
+        done
+          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+          : 'bg-muted text-muted-foreground/60',
+      )}>
+        {done ? '✓' : '○'}
+      </span>
+      <span className={cn(
+        'text-[10px] truncate',
+        done ? 'text-foreground font-medium' : 'text-muted-foreground',
+      )}>
+        {label}
+      </span>
     </div>
   )
 }

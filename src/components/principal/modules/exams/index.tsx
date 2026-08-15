@@ -4,22 +4,31 @@
  * ExamsModule — Principal-facing Examinations workspace.
  *
  * Architecture: 4 top-level tabs + full-screen workspaces.
- *   • List view: Overview / Exams / Reports / Settings  +  compact session picker (right)
+ *   • List view: Overview / Exams / Reports / Settings
+ *     - Overview/Exams/Reports show a compact session picker (right side)
+ *     - Settings shows an Archive button (right side) — Archive is the
+ *       historical records entry, conceptually distinct from the active
+ *       session switcher on Overview
  *   • Exam Workspace (full-screen, 7 grouped sections)
  *   • Create Examination (full-screen, single-page form)
+ *   • Archive (full-screen historical records viewer)
  *
  * Schedule, Marks, Results are NOT top-level tabs — they live INSIDE the
  * Exam Workspace. This removes the previous duplication where the same data
  * appeared in two places (top-level tab + workspace sub-tab).
  *
- * The compact session picker sits on the SAME row as the tabs (right side),
- * is small, and drives the Session Top Performers section in the Overview.
+ * The active session picker drives the Session Top Performers section in
+ * Overview and represents the CURRENT academic context.
+ *
+ * Archive is for HISTORICAL sessions — past academic years, published
+ * results, student historical performance.
  *
  * Reads exclusively from /api/exams/* — no localStorage, no mock data.
+ * Archive uses mock historical records (src/lib/exams/archive-data.ts).
  */
 
 import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Archive as ArchiveIcon } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs } from '../shared/segmented-tabs'
@@ -29,11 +38,12 @@ import { ExamsOverviewTab } from './tabs/overview-tab'
 import { ExamsListTab } from './tabs/exams-list-tab'
 import { ReportsTab } from './tabs/reports-tab'
 import { SettingsTab } from './tabs/settings-tab'
+import { ArchiveView } from './tabs/archive-view'
 import { CreateExamFullScreen } from './create-exam-fullscreen'
 import { ExamWorkspace } from './exam-workspace'
 
 type SectionTab = 'overview' | 'exams' | 'reports' | 'settings'
-type View = { kind: 'list' } | { kind: 'exam'; examId: string } | { kind: 'create' }
+type View = { kind: 'list' } | { kind: 'exam'; examId: string } | { kind: 'create' } | { kind: 'archive' }
 
 const SECTION_TABS = [
   { value: 'overview', label: 'Overview' },
@@ -45,7 +55,7 @@ const SECTION_TABS = [
 export function ExamsModule() {
   const [section, setSection] = useState<SectionTab>('overview')
   const [view, setView] = useState<View>({ kind: 'list' })
-  // Session picker drives the Session Top Performers section in Overview.
+  // Active session picker drives the Session Top Performers section in Overview.
   // Default to the current academic year from the API.
   const { exams, classes, academicYear, loading, error, reload } = useExamsList()
   const [session, setSession] = useState<string>(academicYear || '2025-2026')
@@ -73,18 +83,30 @@ export function ExamsModule() {
       />
     )
   }
+  if (view.kind === 'archive') {
+    return <ArchiveView onBack={() => setView({ kind: 'list' })} />
+  }
 
   // List view — the standard Examinations landing
+  // On Settings tab, the right-side control is the Archive button (historical
+  // records entry), NOT the session picker — the session picker is the
+  // active-context control for Overview/Exams/Reports.
+  const showSessionPicker = section !== 'settings'
+
   return (
     <PageTransition className="space-y-4">
-      {/* Tab row + compact session picker (right side, same row) */}
+      {/* Tab row + right-side control (session picker OR archive button) */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <SegmentedTabs
           tabs={SECTION_TABS}
           value={section}
           onValueChange={(v) => setSection(v as SectionTab)}
         />
-        <SessionPicker value={session} onChange={setSession} />
+        {showSessionPicker ? (
+          <SessionPicker value={session} onChange={setSession} />
+        ) : (
+          <ArchiveButton onClick={() => setView({ kind: 'archive' })} />
+        )}
       </div>
 
       <AnimatePresence mode="wait">
@@ -145,7 +167,7 @@ export function ExamsModule() {
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.2 }}
           >
-            <SettingsTab />
+            <SettingsTab onOpenArchive={() => setView({ kind: 'archive' })} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -158,10 +180,9 @@ export function ExamsModule() {
 // Sits on the same row as the Overview/Exams/Reports/Settings tabs,
 // on the right side. Small, subtle, professional — feels like a small
 // control rather than a form field.
+// NOT shown on Settings — Settings has the Archive button instead.
 
 function SessionPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  // Use a native <select> for compactness + accessibility, styled to
-  // match the SegmentedTabs visual language (h-9, rounded-full, muted bg).
   return (
     <div className="relative inline-flex items-center">
       <select
@@ -183,4 +204,23 @@ function SessionPicker({ value, onChange }: { value: string; onChange: (v: strin
     </div>
   )
 }
+
+// ─── Archive Button (shown on Settings tab right side) ───────────────
+//
+// Archive is the historical records entry — past academic sessions,
+// published examination results, student historical performance.
+// Conceptually distinct from the active session picker.
+
+function ArchiveButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-medium rounded-full bg-muted/60 hover:bg-muted text-foreground border border-transparent hover:border-border/60 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30"
+    >
+      <ArchiveIcon className="h-3.5 w-3.5" />
+      <span>Archive</span>
+    </button>
+  )
+}
+
 

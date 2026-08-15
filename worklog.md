@@ -207,3 +207,113 @@ Stage Summary:
 - Old "No declared examination results yet" empty state replaced with premium Session Top Performers showcase (Top 3 podium + Top Performers list + count-up animations + polished empty state).
 - Homework, Admissions, Teachers, Students & Classes, Timetable, Attendance, Finance, Communication, Teacher panel, Student panel — all untouched.
 - Exams creation flow, templates, scheduling logic, marks-entry logic — all untouched.
+
+---
+Task ID: overview-exams-archive-polish-4
+Agent: main (Super Z)
+Task: Surgical UI/UX polish to Principal → Examinations. (1) Keep session switcher on Overview, (2) add Archive entry in Settings with full-screen historical records view, (3) improve Upcoming Examination card, (4) elevate Exams tab card design, (5) preserve Session Top Performers.
+
+Work Log:
+
+### Phase 1: File size audit
+- Audited all exam files (largest is exam-workspace.tsx at 804 lines, already sectioned).
+- Created 2 new files: archive-data.ts (mock historical records) + archive-view.tsx (full-screen Archive viewer).
+- No refactor of existing files needed.
+
+### Phase 2: Archive foundation
+- Created src/lib/exams/archive-data.ts:
+  - ArchivedExam interface (id, name, type, dates, classes, students, subjects, papers, avg%, passRate, topperName, topperPercentage, status, publishedAt)
+  - ArchivedSession interface (session, label, examCount, totalStudents, averagePercentage, topper, exams[])
+  - Mock data for 3 archived sessions: 2024-2025 (3 exams), 2023-2024 (2 exams), 2022-2023 (1 exam)
+  - getArchivedSessions(), getArchivedSession(session), searchArchive({query, session, className}), getArchivedClassNames()
+  - Search supports: student name (matches topper as proxy), exam name/type, class name, session filter
+- Created src/components/principal/modules/exams/tabs/archive-view.tsx:
+  - Full-screen view (like Exam Workspace / Create Exam) with back button
+  - Header: "Examination Archive" + archived session count
+  - Search/filter bar: text input + Session dropdown + Class dropdown + Reset
+  - Browse mode (no search active): left rail with archived sessions + right pane with session detail
+  - Session detail: summary card (examCount, students, avg%, topper) + examinations list (each with name, type, classes, date range, papers, topper, avg%, pass rate, "Published" pill)
+  - Search mode: table-style results with columns (Examination, Session, Top Student, %, Pass Rate)
+  - Empty state for no results
+  - Animations: AnimatePresence between browse/search modes, staggered row entry
+
+### Phase 3: Archive entry in Settings + index.tsx wiring
+- Modified src/components/principal/modules/exams/tabs/settings-tab.tsx:
+  - Added `onOpenArchive?: () => void` prop to SettingsTab
+  - Added Archive entry to left-nav SECTIONS array (with ArchiveIcon, amber accent, separator border-top, → arrow indicator)
+  - handleSectionClick: when Archive is clicked and onOpenArchive is provided, calls it instead of setting section
+  - Archive entry is visually distinct from other settings sections (amber accent, separator)
+- Modified src/components/principal/modules/exams/index.tsx:
+  - Added `view.kind === 'archive'` to View union type
+  - Added full-screen ArchiveView render when view.kind === 'archive'
+  - Added `showSessionPicker = section !== 'settings'` — Settings shows Archive button instead of session picker
+  - Added ArchiveButton component (compact, h-9, rounded-full, matches SegmentedTabs visual language) shown on Settings tab right side
+  - SettingsTab now receives `onOpenArchive={() => setView({ kind: 'archive' })}` prop
+
+### Phase 4: Upcoming Examination card redesign
+- Modified src/components/principal/modules/exams/tabs/examination-context/index.tsx:
+  - Redesigned UpcomingExamination component as a command-center card with 3 visual bands:
+    1. Top band (sky-500/5 gradient bg): exam identity — pulsing sky dot + "Upcoming Examination" label + exam name + type/date/classes meta + days-until countdown box (sky-500/10 bg, prominent number)
+    2. Middle band (2-column grid): Exam Readiness column + Scheduled Papers column
+       - Readiness: progress bar (color-coded: emerald≥80%, amber≥50%, rose<50%) + 5 ReadinessItem components (✓ for done, ○ for not done) in a 2×3 grid
+       - Scheduled Papers: scrollable list with date-tile cards (month + day) + subject + time/class
+    3. Action band (muted/20 bg): Open Examination + View Schedule buttons
+  - Replaced old ReadinessPanel (flat dot row) with richer ReadinessItem components showing state clearly
+  - Border is sky-500/20 to match the upcoming theme
+  - Animations: section fade-in + paper stagger
+  - Empty "No papers scheduled yet" state when no upcoming papers
+
+### Phase 5: Exams list card design elevation
+- Rewrote src/components/principal/modules/exams/tabs/exams-list-tab.tsx:
+  - Added VARIANT_STYLES config object: per-variant visual tokens (accentText, accentBg, accentBorder, cardBorder, cardHoverBorder, barColor, headerBg, pillClass)
+    - live → emerald accent
+    - upcoming → sky accent
+    - completed → teal accent
+  - Section headers: 7×7 icon tile (with variant accent bg) + title + count badge (variant accent bg + text)
+  - Exam cards:
+    - Left accent bar (4px wide, variant color) — subtle visual identity
+    - Header: name + type/session + status pill (LIVE/DRAFT/UPCOMING/DONE with appropriate color)
+    - LIVE pill has pulsing dot (with motion-reduce:animate-none)
+    - Date row with Calendar icon
+    - 3-stat grid (Classes, Subjects, Students) with icons in each stat
+    - Marks entry progress bar (animated width, color-coded by completion)
+    - Footer: papers count + result status + animated chevron (group-hover)
+  - Toolbar: search input (h-9), type filter (h-9), Create button (h-9, emerald bg, shadow-sm) — all aligned
+  - Empty states preserved (dashed border)
+  - Card grid: 1 col mobile / 2 col sm / 3 col lg — responsive for tablet
+
+### Phase 6: Session Top Performers preservation
+- Verified src/components/principal/modules/exams/tabs/session-top-performers.tsx is UNTOUCHED — still shows Top 3 podium with colorful avatars, count-up animations, Top Performers list, polished empty state
+- Verified src/components/principal/modules/exams/tabs/overview-tab.tsx still imports and renders SessionTopPerformers
+- Verified session picker on Overview still drives SessionTopPerformers (session prop flows through)
+
+### Verification
+- TypeScript: 56 total errors (same as before — all pre-existing in unrelated modules). ZERO exam-related errors.
+- Dev server: restarted on PID 21888, home page HTTP 200 (13061 bytes)
+- All chunks load HTTP 200
+- All exam APIs respond HTTP 200 (list, school-context, settings/*)
+- Other modules verified untouched:
+  • /api/homework: HTTP 200
+  • /api/students: HTTP 200
+  • /api/teachers: HTTP 200
+  • /api/attendance: HTTP 200
+- No imports of deleted files
+- Session picker hidden on Settings (Archive button shown instead)
+- Archive button on Settings opens full-screen ArchiveView
+- Archive left-nav entry also opens ArchiveView
+- Archive search supports student/class/session/examination filters
+- Upcoming Examination card now feels like a command center
+- Exams list cards have tasteful status color accents (emerald/sky/teal) + left accent bar
+
+Stage Summary:
+- Session switcher KEPT on Overview (compact, right-aligned, drives Session Top Performers) — per user's explicit requirement
+- Archive entry added to Settings left-nav (amber accent, archive icon, → indicator)
+- Archive button replaces session picker on Settings tab right side
+- Archive full-screen view built with: session list rail + session detail + search/filter + results table
+- Archive uses mock historical data (3 sessions, 6 archived exams total)
+- Upcoming Examination card redesigned as command-center: identity band + readiness/papers grid + action band
+- Exams list cards elevated: left accent bar, richer stats with icons, color-coded status pills, animated marks progress
+- Section headers improved: icon tile + status-colored count badge
+- Session Top Performers section UNTOUCHED — preserved exactly as designed
+- Homework, Admissions, Teachers, Students & Classes, Timetable, Attendance, Finance, Communication, Teacher panel, Student panel — all untouched
+- Examination creation flow, templates, scheduling logic, marks entry, result calculation, result publication logic — all untouched
