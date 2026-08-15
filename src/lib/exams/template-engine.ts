@@ -1,10 +1,11 @@
 // ──────────────────────────────────────────────────────────────────────
-// Smart template engine — generates complete exam configuration from
-// a template + dates + real school data.
-// Fixed 33% passing rule — no UI field for passing percentage.
+// Smart template engine — generates exam config + schedule from
+// template + dates + real school data.
+//
+// KEY PRINCIPLE: One schedule slot per SUBJECT (not per class).
+// Multiple selected classes share the same slot.
+// Sunday is always skipped.
 // ──────────────────────────────────────────────────────────────────────
-
-import type { ExamTemplate } from '@/components/principal/modules/exams/tabs/exam-templates'
 
 export const FIXED_PASS_PERCENTAGE = 33
 
@@ -23,164 +24,215 @@ export interface ClassInfo {
 }
 
 export interface GeneratedScheduleItem {
-  classId: string
   subjectId: string
+  subjectName: string
   date: string
   startTime: string
   endTime: string
   room: string
   invigilatorName: string
-  shift: number // 1 = morning, 2 = afternoon
+  classIds: string[] // multiple classes share one slot
 }
 
 export interface GeneratedSubjectConfig {
   subjectId: string
   maxMarks: number
-  passMarks: number
   theoryMarks: number
   practicalMarks: number
+}
+
+export interface TemplateMeta {
+  maxMarks: number
+  theoryMarks: number
+  practicalMarks: number
+  papersPerDay: number
+  paperDurationMin: number
+  gapMin: number
 }
 
 export interface GeneratedExamConfig {
   name: string
   type: string
-  templateId: string
   startDate: string
   endDate: string
   passPercentage: number
-  gradingType: string
-  allowLateSubmission: boolean
-  allowResubmission: boolean
   selectedClassIds: string[]
-  subjectsByClass: Record<string, GeneratedSubjectConfig[]>
+  subjects: GeneratedSubjectConfig[]
   schedule: GeneratedScheduleItem[]
   hasPractical: boolean
-  summary: {
-    totalPapers: number
-    totalStudents: number
-    totalClasses: number
-    totalSubjects: number
-    marksPerSubject: number
-  }
 }
 
-// ─── Generate exam config from template + dates + real school data ──
+export const TEMPLATE_METAS: Record<string, TemplateMeta> = {
+  'unit-test-1': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15 },
+  'unit-test-2': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15 },
+  'unit-test-3': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15 },
+  'unit-test-4': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15 },
+  'half-yearly': { maxMarks: 100, theoryMarks: 70, practicalMarks: 30, papersPerDay: 1, paperDurationMin: 195, gapMin: 0 },
+  'annual': { maxMarks: 100, theoryMarks: 70, practicalMarks: 30, papersPerDay: 1, paperDurationMin: 195, gapMin: 0 },
+  'custom': { maxMarks: 100, theoryMarks: 100, practicalMarks: 0, papersPerDay: 1, paperDurationMin: 180, gapMin: 0 },
+}
+
+export function getTemplateMeta(templateId: string): TemplateMeta {
+  return TEMPLATE_METAS[templateId] ?? TEMPLATE_METAS['custom']
+}
+
+// ─── Generate exam config ────────────────────────────────────────────
 
 export function generateExamConfig(
-  template: ExamTemplate,
+  templateId: string,
+  templateLabel: string,
   startDate: string,
   endDate: string,
   classes: ClassInfo[],
+  subjects: SubjectInfo[],
 ): GeneratedExamConfig {
-  const meta = template.metadata
+  const meta = getTemplateMeta(templateId)
+  const hasPractical = meta.practicalMarks > 0
   const selectedClassIds = classes.map((c) => c.id)
-  const hasPractical = (meta.practicalMarks ?? 0) > 0
 
-  // Generate subjects per class
-  const subjectsByClass: Record<string, GeneratedSubjectConfig[]> = {}
-  for (const cls of classes) {
-    subjectsByClass[cls.id] = cls.subjects.map((s) => ({
-      subjectId: s.id,
-      maxMarks: meta.maxMarks,
-      passMarks: Math.round(meta.maxMarks * FIXED_PASS_PERCENTAGE / 100),
-      theoryMarks: meta.theoryMarks ?? meta.maxMarks,
-      practicalMarks: meta.practicalMarks ?? 0,
-    }))
-  }
+  const subjectConfigs: GeneratedSubjectConfig[] = subjects.map((s) => ({
+    subjectId: s.id,
+    maxMarks: meta.maxMarks,
+    theoryMarks: meta.theoryMarks,
+    practicalMarks: meta.practicalMarks,
+  }))
 
-  // Generate schedule
-  const schedule = generateSchedule(template, startDate, endDate, classes)
-
-  const totalSubjects = Object.values(subjectsByClass).reduce((s, subs) => s + subs.length, 0)
-  const totalStudents = classes.reduce((s, c) => s + c.studentCount, 0)
+  const schedule = generateSchedule(templateId, startDate, endDate, subjects, classes, meta)
 
   return {
-    name: template.label,
-    type: template.name,
-    templateId: template.id,
+    name: templateLabel,
+    type: templateLabel,
     startDate,
     endDate: endDate || startDate,
     passPercentage: FIXED_PASS_PERCENTAGE,
-    gradingType: 'marks',
-    allowLateSubmission: template.category === 'unit-test',
-    allowResubmission: template.category === 'unit-test',
     selectedClassIds,
-    subjectsByClass,
+    subjects: subjectConfigs,
     schedule,
     hasPractical,
-    summary: {
-      totalPapers: schedule.length,
-      totalStudents,
-      totalClasses: classes.length,
-      totalSubjects,
-      marksPerSubject: meta.maxMarks,
-    },
   }
 }
 
 // ─── Smart scheduling engine ────────────────────────────────────────
+// KEY: One slot per subject. All selected classes share that slot.
+// Sunday is always skipped.
 
 function generateSchedule(
-  template: ExamTemplate,
+  templateId: string,
   startDateStr: string,
   endDateStr: string,
+  subjects: SubjectInfo[],
   classes: ClassInfo[],
+  meta: TemplateMeta,
 ): GeneratedScheduleItem[] {
-  const meta = template.metadata
   const start = new Date(startDateStr)
   const end = new Date(endDateStr || startDateStr)
 
-  // Collect working days (skip Sunday=0)
-  const days: Date[] = []
+  // Collect working days (skip Sunday = 0)
+  const workingDays: Date[] = []
   const current = new Date(start)
   while (current <= end) {
-    if (current.getDay() !== 0) days.push(new Date(current))
+    if (current.getDay() !== 0) workingDays.push(new Date(current))
     current.setDate(current.getDate() + 1)
   }
-  if (days.length === 0) days.push(new Date(start))
+  if (workingDays.length === 0) workingDays.push(new Date(start))
 
+  const allClassIds = classes.map((c) => c.id)
   const items: GeneratedScheduleItem[] = []
+
+  let dayIdx = 0
+  let papersToday = 0
   const startTimeBase = '09:00'
 
-  for (const cls of classes) {
-    let dayIdx = 0
-    let papersToday = 0
+  for (const subject of subjects) {
+    const date = workingDays[dayIdx % workingDays.length]
+    const dateStr = date.toISOString().split('T')[0]
 
-    for (let i = 0; i < cls.subjects.length; i++) {
-      const subject = cls.subjects[i]
-      const date = days[dayIdx % days.length]
-      const dateStr = date.toISOString().split('T')[0]
+    if (meta.papersPerDay === 2) {
+      // Unit Test: 2 papers/day, 1hr each, 15min gap
+      const shift = papersToday // 0 = first, 1 = second
+      const startTime = shift === 0 ? '09:00' : '10:15'
+      const endTime = shift === 0 ? '10:00' : '11:15'
 
-      if (meta.papersPerDay === 2) {
-        // Unit Test: 2 papers/day, 1hr each, 15min gap
-        const shift = papersToday === 0 ? 1 : 2
-        const startTime = shift === 1 ? '09:00' : '10:15'
-        const endTime = shift === 1 ? '10:00' : '11:15'
+      items.push({
+        subjectId: subject.id,
+        subjectName: subject.name,
+        date: dateStr,
+        startTime,
+        endTime,
+        room: '',
+        invigilatorName: '',
+        classIds: [...allClassIds], // ALL classes share this slot
+      })
 
-        items.push({
-          classId: cls.id, subjectId: subject.id, date: dateStr,
-          startTime, endTime, room: '', invigilatorName: '', shift,
-        })
-
-        papersToday++
-        if (papersToday >= meta.papersPerDay) {
-          papersToday = 0
-          dayIdx++
-        }
-      } else {
-        // Half-Yearly/Annual: 1 paper/day, 3h15m
-        const endTime = addMinutes(startTimeBase, meta.paperDurationMin)
-        items.push({
-          classId: cls.id, subjectId: subject.id, date: dateStr,
-          startTime: startTimeBase, endTime, room: '', invigilatorName: '', shift: 1,
-        })
+      papersToday++
+      if (papersToday >= meta.papersPerDay) {
+        papersToday = 0
         dayIdx++
       }
+    } else {
+      // Half-Yearly/Annual: 1 paper/day, 3h15m
+      const endTime = addMinutes(startTimeBase, meta.paperDurationMin)
+      items.push({
+        subjectId: subject.id,
+        subjectName: subject.name,
+        date: dateStr,
+        startTime: startTimeBase,
+        endTime,
+        room: '',
+        invigilatorName: '',
+        classIds: [...allClassIds],
+      })
+      dayIdx++
     }
   }
 
   return items
 }
+
+// ─── Validate date range ────────────────────────────────────────────
+
+export interface ScheduleValidation {
+  isValid: boolean
+  requiredDays: number
+  availableDays: number
+  message: string
+}
+
+export function validateDateRange(
+  templateId: string,
+  startDateStr: string,
+  endDateStr: string,
+  subjectCount: number,
+): ScheduleValidation {
+  const meta = getTemplateMeta(templateId)
+  const start = new Date(startDateStr)
+  const end = new Date(endDateStr || startDateStr)
+
+  // Count working days (skip Sunday)
+  let availableDays = 0
+  const current = new Date(start)
+  while (current <= end) {
+    if (current.getDay() !== 0) availableDays++
+    current.setDate(current.getDate() + 1)
+  }
+  if (availableDays === 0) availableDays = 1
+
+  // Required days = ceil(subjects / papersPerDay)
+  const requiredDays = Math.ceil(subjectCount / meta.papersPerDay)
+
+  if (availableDays < requiredDays) {
+    return {
+      isValid: false,
+      requiredDays,
+      availableDays,
+      message: `Selected examination period is too short. ${subjectCount} subjects require ${requiredDays} working days (max ${meta.papersPerDay} papers/day), but only ${availableDays} working days are available.`,
+    }
+  }
+
+  return { isValid: true, requiredDays, availableDays, message: '' }
+}
+
+// ─── Helper ─────────────────────────────────────────────────────────
 
 function addMinutes(time: string, minutes: number): string {
   const [h, m] = time.split(':').map(Number)
@@ -188,72 +240,4 @@ function addMinutes(time: string, minutes: number): string {
   const hrs = Math.floor(total / 60)
   const mins = total % 60
   return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
-}
-
-// ─── Validate schedule ──────────────────────────────────────────────
-
-export interface ScheduleWarning {
-  type: 'insufficient_dates' | 'duplicate_subject' | 'overlap'
-  message: string
-  affectedItems?: string[]
-}
-
-export function validateSchedule(
-  config: GeneratedExamConfig,
-  template: ExamTemplate,
-): ScheduleWarning[] {
-  const warnings: ScheduleWarning[] = []
-  const meta = template.metadata
-
-  // Check if enough dates for one-paper-per-day
-  if (meta.papersPerDay === 1) {
-    for (const cls of config.selectedClassIds) {
-      const classSubjects = config.subjectsByClass[cls] ?? []
-      const classSchedule = config.schedule.filter((s) => s.classId === cls)
-      const uniqueDates = new Set(classSchedule.map((s) => s.date))
-      const requiredDays = classSubjects.length
-
-      if (uniqueDates.size < requiredDays) {
-        warnings.push({
-          type: 'insufficient_dates',
-          message: `Selected date range is insufficient. ${classSubjects.length} subjects require ${requiredDays} examination days (1 paper/day), but only ${uniqueDates.size} days are available.`,
-        })
-        break
-      }
-    }
-  }
-
-  // Check for duplicate subject on same day (for one-paper-per-day)
-  if (meta.papersPerDay === 1) {
-    const seen = new Map<string, string>()
-    for (const item of config.schedule) {
-      const key = `${item.classId}-${item.date}`
-      if (seen.has(key)) {
-        warnings.push({
-          type: 'duplicate_subject',
-          message: 'Two papers scheduled on the same day for a one-paper-per-day examination.',
-        })
-        break
-      }
-      seen.set(key, item.subjectId)
-    }
-  }
-
-  // Check for more than allowed papers per day
-  const dayMap = new Map<string, number>()
-  for (const item of config.schedule) {
-    const key = `${item.classId}-${item.date}`
-    dayMap.set(key, (dayMap.get(key) ?? 0) + 1)
-  }
-  for (const [key, count] of dayMap) {
-    if (count > meta.papersPerDay) {
-      warnings.push({
-        type: 'overlap',
-        message: `${count} papers on the same day. Maximum allowed: ${meta.papersPerDay}.`,
-      })
-      break
-    }
-  }
-
-  return warnings
 }

@@ -8,7 +8,7 @@
 import { motion } from 'framer-motion'
 import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { EXAM_TEMPLATES, getMetadataBadges, type ExamTemplate } from './exam-templates'
+import { EXAM_TEMPLATES, type ExamTemplate } from './exam-templates'
 
 interface Props {
   selectedTemplateId: string | null
@@ -27,34 +27,19 @@ const accentClasses: Record<string, { bg: string; text: string; border: string; 
 
 export function TemplateSelection({ selectedTemplateId, onSelect }: Props) {
   const templates = EXAM_TEMPLATES
-  const standardTemplates = templates.filter((t) => !t.isCustom)
-  const customTemplate = templates.find((t) => t.isCustom)
+  const standard = templates.filter((t) => !t.isCustom)
+  const custom = templates.find((t) => t.isCustom)
 
   return (
     <div className="space-y-3">
-      {/* Standard templates */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-        {standardTemplates.map((template, i) => (
-          <TemplateCard
-            key={template.id}
-            template={template}
-            isSelected={selectedTemplateId === template.id}
-            onSelect={onSelect}
-            delay={i}
-          />
+        {standard.map((t, i) => (
+          <TemplateCard key={t.id} template={t} isSelected={selectedTemplateId === t.id} onSelect={onSelect} delay={i} />
         ))}
       </div>
-
-      {/* Custom Examination — separate */}
-      {customTemplate && (
+      {custom && (
         <div className="pt-2 border-t border-border/40">
-          <TemplateCard
-            template={customTemplate}
-            isSelected={selectedTemplateId === customTemplate.id}
-            onSelect={onSelect}
-            delay={standardTemplates.length}
-            isFullWidth
-          />
+          <TemplateCard template={custom} isSelected={selectedTemplateId === custom.id} onSelect={onSelect} delay={standard.length} isFullWidth />
         </div>
       )}
     </div>
@@ -62,59 +47,28 @@ export function TemplateSelection({ selectedTemplateId, onSelect }: Props) {
 }
 
 function TemplateCard({ template, isSelected, onSelect, delay, isFullWidth }: {
-  template: ExamTemplate
-  isSelected: boolean
-  onSelect: (t: ExamTemplate) => void
-  delay: number
-  isFullWidth?: boolean
+  template: ExamTemplate; isSelected: boolean; onSelect: (t: ExamTemplate) => void; delay: number; isFullWidth?: boolean
 }) {
   const accent = accentClasses[template.accent] ?? accentClasses.slate
-  const badges = getMetadataBadges(template)
-
   return (
     <motion.button
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
       transition={{ delay: delay * 0.04, duration: 0.25 }}
-      whileHover={{ y: -3 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }}
       onClick={() => onSelect(template)}
-      className={cn(
-        'relative text-left rounded-xl border p-3.5 transition-all',
-        isFullWidth && 'w-full',
-        isSelected
-          ? cn(accent.bg, accent.border, 'ring-2', accent.ring)
-          : 'border-border bg-card hover:border-border hover:shadow-sm',
-      )}
+      className={cn('relative text-left rounded-xl border p-3.5 transition-all', isFullWidth && 'w-full',
+        isSelected ? cn(accent.bg, accent.border, 'ring-2', accent.ring) : 'border-border bg-card hover:border-border hover:shadow-sm')}
     >
       <div className="flex items-start gap-3">
-        <div className={cn(
-          'flex h-9 w-9 items-center justify-center rounded-lg shrink-0',
-          isSelected ? cn(accent.bg, accent.text) : 'bg-muted/50 text-muted-foreground'
-        )}>
+        <div className={cn('flex h-9 w-9 items-center justify-center rounded-lg shrink-0',
+          isSelected ? cn(accent.bg, accent.text) : 'bg-muted/50 text-muted-foreground')}>
           {template.icon}
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-foreground leading-tight">{template.label}</p>
           <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{template.description}</p>
         </div>
-        {isSelected && (
-          <div className={cn('flex h-5 w-5 items-center justify-center rounded-full shrink-0', accent.text)}>
-            <Check className="h-3.5 w-3.5" />
-          </div>
-        )}
-      </div>
-
-      {/* Metadata badges */}
-      <div className="flex flex-wrap gap-1 mt-2">
-        {badges.map((badge, i) => (
-          <span key={i} className={cn(
-            'inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-medium',
-            isSelected ? cn(accent.bg, accent.text) : 'bg-muted/40 text-muted-foreground'
-          )}>
-            {badge}
-          </span>
-        ))}
+        {isSelected && <div className={cn('flex h-5 w-5 items-center justify-center rounded-full shrink-0', accent.text)}><Check className="h-3.5 w-3.5" /></div>}
       </div>
     </motion.button>
   )
