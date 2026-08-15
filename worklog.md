@@ -317,3 +317,120 @@ Stage Summary:
 - Session Top Performers section UNTOUCHED — preserved exactly as designed
 - Homework, Admissions, Teachers, Students & Classes, Timetable, Attendance, Finance, Communication, Teacher panel, Student panel — all untouched
 - Examination creation flow, templates, scheduling logic, marks entry, result calculation, result publication logic — all untouched
+
+---
+Task ID: create-exam-flow-refinement-5
+Agent: main (Super Z)
+Task: Complete redesign of Principal → Examinations → Create Examination flow + lifecycle (Draft/Publish/Delete/Archive). Single-page form, smart subject deduplication by name, stream-aware Class 11-12, automatic schedule generation with Sunday-skip + date-range validation, status-aware actions, session picker only on Overview.
+
+Work Log:
+
+### Phase 1: Examination templates — fixed order + subtle Custom
+- Updated src/components/principal/modules/exams/tabs/exam-templates.tsx:
+  - Reordered to academic calendar order: UT1, UT2, Half-Yearly, UT3, UT4, Annual
+  - Half-Yearly sits BETWEEN UT2 and UT3 (not at the end)
+  - Custom is now a secondary template with `isCustom: true` flag
+  - Added `shortLabel` (UT 1, Half-Yearly, etc.) for compact display
+  - Exported STANDARD_TEMPLATES + CUSTOM_TEMPLATE constants
+- Rewrote src/components/principal/modules/exams/tabs/template-selection.tsx:
+  - Compact grid of 6 standard templates (2-col mobile, 6-col desktop)
+  - Each pill: small icon + shortLabel + tiny description + check indicator
+  - Custom is now a small "+ Custom" button below the grid (subtle, secondary)
+  - Hover/tap micro-interactions
+
+### Phase 2: Template engine — Sunday skip + date validation + schedule rules
+- Updated src/lib/exams/template-engine.ts:
+  - TEMPLATE_METAS now includes `hasPractical` boolean flag
+  - Unit Tests (1-4): 50 marks, 2 papers/day, 1hr each, 15min gap, no practical
+  - Half-Yearly/Annual: 100 marks (70 theory + 30 practical), 1 paper/day, 3h15m
+  - generateSchedule: honors user-set examTime (was hardcoded to 09:00)
+  - validateDateRange: counts working days (Sunday-skipped), surfaces required vs available days
+  - Clear error message: "X subjects require Y working days (max Z papers/day, Sundays skipped), but only W working days are available."
+
+### Phase 3: Class 11-12 stream-aware classes added to DB
+- Created scripts/add-senior-classes.ts — adds 6 new classes via Prisma:
+  • Grade 11 - Science PCM (stream=Science-PCM, 5 subjects: Eng, Phy, Chem, Math, PE)
+  • Grade 11 - Science PCB (stream=Science-PCB, 5 subjects: Eng, Phy, Chem, Bio, PE)
+  • Grade 11 - Commerce (stream=Commerce, 5 subjects: Eng, Acc, BST, Eco, Math)
+  • Grade 11 - Humanities (stream=Humanities, 5 subjects: Eng, His, Pol, Geo, Eco)
+  • Grade 12 - Science PCM (stream=Science-PCM, 5 subjects)
+  • Grade 12 - Commerce (stream=Commerce, 5 subjects)
+- Normalized Grade 9 Mathematics code from MATH → MAT for consistency
+
+### Phase 4: Create Examination full rewrite
+- Rewrote src/components/principal/modules/exams/create-exam-fullscreen.tsx:
+  - Single-page form (NOT a wizard) with logical sections:
+    1. Examination Type (compact pills + small Custom)
+    2. Examination Name (auto-filled from template, editable)
+    3. Classes (multi-select, senior classes show stream label)
+    4. Subjects (smart deduplication by NAME — appears ONCE even when shared across classes; grouped by academic structure: "Classes 9-10", "Science — PCM", "Commerce", etc.)
+    5. Assessment (max marks + theory + practical — practical only shown when "Include Practical" toggled on; NO passing marks field — 33% is global)
+    6. Examination Window (start/end dates with past-date blocking via minDate=today; start time input)
+    7. Generated Examination Schedule (auto-preview, grouped by date, shows time + subject + class count; Sundays skipped)
+  - Date validation warning appears inline when range is too short
+  - Compact footer (h-8 buttons, modest padding, no overlap)
+  - Subject deduplication: when Grade 9-A and Grade 10-A both have "Mathematics", it appears ONCE in the picker with a "×2" indicator showing it's shared. At create time, each class's own subjectId is used for subjectsByClass and schedule (per-class filtering by name).
+  - Theoretical/practical consistency check: warns if theory + practical ≠ max marks
+  - Micro-interactions: staggered template pills, section reveal animation, subject chip selection animation
+
+### Phase 5: Status-aware actions (Publish / Delete / Archive)
+- Rewrote src/components/principal/modules/exams/tabs/exams-list-tab.tsx:
+  - Added DropdownMenu (MoreVertical ⋮) on each exam card
+  - Status-aware action visibility:
+    • Draft → Open · Publish · Delete (with confirmation dialogs)
+    • Scheduled → Open · Archive
+    • Ongoing → Open
+    • Completed → Open · Archive
+    • Archived (Cancelled status) → Open only
+  - Publish action: PATCH /api/exams/[id] with { status: 'Scheduled' } — confirmation dialog explains activation
+  - Delete action: only for Drafts — confirmation dialog with "This will permanently remove..."
+  - Archive action: PATCH with { status: 'Cancelled' } — preserved in DB, removed from active list
+  - All 3 actions have AlertDialog confirmation with clear messaging
+  - Toast notifications on success/failure
+  - Status pills now include SCHEDULED and ARCHIVED states (in addition to LIVE/DRAFT/DONE)
+
+### Phase 6: Session picker scope reduction
+- Updated src/components/principal/modules/exams/index.tsx:
+  - Session picker now shown ONLY on Overview tab (was on all tabs except Settings)
+  - Settings tab still shows Archive button
+  - Exams and Reports tabs inherit session context without showing a duplicate picker
+  - Cleaner: `showSessionPicker = section === 'overview'`, `showArchiveButton = section === 'settings'`
+
+### Verification — E2E test (scripts/e2e-create-exam.mjs)
+All scenarios passed:
+- A: UT1 + Grade 9 + Grade 10 → Draft created, 6 subjects per class (deduped), 12 papers total
+- C: Grade 11 Science PCM → Physics, Chemistry, Mathematics, English, PE (correct stream, no Biology)
+- D: Grade 12 Commerce → Accountancy, Business Studies, Economics, English, Mathematics (no Physics/Biology)
+- F: Created exam has status Draft ✓
+- H: Publish → status Scheduled (Delete hidden, Archive available)
+- I: Archive → status Cancelled (preserved in DB)
+- Module isolation: Homework/Students/Teachers/Attendance all HTTP 200
+
+### TS check
+- 56 total errors (same as before — all pre-existing in unrelated modules)
+- ZERO exam-related errors
+
+### Dev server
+- Restarted on PID 1923
+- Home page HTTP 200, all chunks HTTP 200
+- All exam APIs HTTP 200
+- No errors in dev log
+
+Stage Summary:
+- Create Examination is now ONE well-organized page (not a wizard)
+- Examination types in correct academic order: UT1, UT2, Half-Yearly, UT3, UT4, Annual
+- Custom is a subtle "+ Custom" button, not a primary card
+- Subject deduplication by NAME — appears ONCE even when shared across classes
+- Stream-aware Class 11-12 with 6 new senior classes (PCM, PCB, Commerce, Humanities)
+- No passing marks field (33% is global)
+- Practical field only shown when "Include Practical" toggled
+- Date picker blocks past dates (minDate=today)
+- Date range validation surfaces required vs available working days
+- Sunday is always skipped in schedule generation
+- Unit Test: 2 papers/day, 1hr each, 15min gap
+- Half-Yearly/Annual: 1 paper/day, 3h15m
+- Generated schedule preview shows before creation
+- Status-aware actions: Draft can Delete/Publish; Published can only Archive
+- Confirmation dialogs for Publish/Delete/Archive
+- Session picker only on Overview (not duplicated on Exams/Reports/Settings)
+- Homework, Admissions, Teachers, Students & Classes, Timetable, Attendance, Finance, Communication — all untouched

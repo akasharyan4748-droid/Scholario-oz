@@ -2,9 +2,14 @@
 // Smart template engine — generates exam config + schedule from
 // template + dates + real school data.
 //
-// KEY PRINCIPLE: One schedule slot per SUBJECT (not per class).
-// Multiple selected classes share the same slot.
-// Sunday is always skipped.
+// KEY PRINCIPLES:
+//   • One schedule slot per SUBJECT (not per class). Multiple selected
+//     classes share the same slot.
+//   • Sunday is always skipped (day index 0).
+//   • Unit Test: 2 papers/day, 1hr each, 15min gap (09:00-10:00, 10:15-11:15)
+//   • Half-Yearly/Annual: 1 paper/day, 3h15m (09:00-12:15)
+//   • Pass percentage is FIXED at 33% globally — not configurable per exam.
+//   • Date range validation surfaces required vs available working days.
 // ──────────────────────────────────────────────────────────────────────
 
 export const FIXED_PASS_PERCENTAGE = 33
@@ -19,6 +24,7 @@ export interface ClassInfo {
   id: string
   name: string
   gradeLevel: string | null
+  stream: string | null
   studentCount: number
   subjects: SubjectInfo[]
 }
@@ -48,6 +54,7 @@ export interface TemplateMeta {
   papersPerDay: number
   paperDurationMin: number
   gapMin: number
+  hasPractical: boolean
 }
 
 export interface GeneratedExamConfig {
@@ -63,13 +70,13 @@ export interface GeneratedExamConfig {
 }
 
 export const TEMPLATE_METAS: Record<string, TemplateMeta> = {
-  'unit-test-1': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15 },
-  'unit-test-2': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15 },
-  'unit-test-3': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15 },
-  'unit-test-4': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15 },
-  'half-yearly': { maxMarks: 100, theoryMarks: 70, practicalMarks: 30, papersPerDay: 1, paperDurationMin: 195, gapMin: 0 },
-  'annual': { maxMarks: 100, theoryMarks: 70, practicalMarks: 30, papersPerDay: 1, paperDurationMin: 195, gapMin: 0 },
-  'custom': { maxMarks: 100, theoryMarks: 100, practicalMarks: 0, papersPerDay: 1, paperDurationMin: 180, gapMin: 0 },
+  'unit-test-1': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15, hasPractical: false },
+  'unit-test-2': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15, hasPractical: false },
+  'unit-test-3': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15, hasPractical: false },
+  'unit-test-4': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15, hasPractical: false },
+  'half-yearly': { maxMarks: 100, theoryMarks: 70, practicalMarks: 30, papersPerDay: 1, paperDurationMin: 195, gapMin: 0, hasPractical: true },
+  'annual': { maxMarks: 100, theoryMarks: 70, practicalMarks: 30, papersPerDay: 1, paperDurationMin: 195, gapMin: 0, hasPractical: true },
+  'custom': { maxMarks: 100, theoryMarks: 100, practicalMarks: 0, papersPerDay: 1, paperDurationMin: 180, gapMin: 0, hasPractical: false },
 }
 
 export function getTemplateMeta(templateId: string): TemplateMeta {
@@ -85,6 +92,7 @@ export function generateExamConfig(
   endDate: string,
   classes: ClassInfo[],
   subjects: SubjectInfo[],
+  examTime: string = '09:00',
 ): GeneratedExamConfig {
   const meta = getTemplateMeta(templateId)
   const hasPractical = meta.practicalMarks > 0
@@ -97,7 +105,7 @@ export function generateExamConfig(
     practicalMarks: meta.practicalMarks,
   }))
 
-  const schedule = generateSchedule(templateId, startDate, endDate, subjects, classes, meta)
+  const schedule = generateSchedule(templateId, startDate, endDate, subjects, classes, meta, examTime)
 
   return {
     name: templateLabel,
@@ -113,7 +121,7 @@ export function generateExamConfig(
 }
 
 // ─── Smart scheduling engine ────────────────────────────────────────
-// KEY: One slot per subject. All selected classes share that slot.
+// One slot per subject. All selected classes share that slot.
 // Sunday is always skipped.
 
 function generateSchedule(
@@ -123,6 +131,7 @@ function generateSchedule(
   subjects: SubjectInfo[],
   classes: ClassInfo[],
   meta: TemplateMeta,
+  examTime: string = '09:00',
 ): GeneratedScheduleItem[] {
   const start = new Date(startDateStr)
   const end = new Date(endDateStr || startDateStr)
@@ -130,10 +139,14 @@ function generateSchedule(
   // Collect working days (skip Sunday = 0)
   const workingDays: Date[] = []
   const current = new Date(start)
+  current.setHours(0, 0, 0, 0)
+  end.setHours(0, 0, 0, 0)
   while (current <= end) {
     if (current.getDay() !== 0) workingDays.push(new Date(current))
     current.setDate(current.getDate() + 1)
   }
+
+  // If no working days (e.g. range is entirely Sundays), fall back to start date
   if (workingDays.length === 0) workingDays.push(new Date(start))
 
   const allClassIds = classes.map((c) => c.id)
@@ -141,7 +154,7 @@ function generateSchedule(
 
   let dayIdx = 0
   let papersToday = 0
-  const startTimeBase = '09:00'
+  const startTimeBase = examTime || '09:00'
 
   for (const subject of subjects) {
     const date = workingDays[dayIdx % workingDays.length]
@@ -150,8 +163,8 @@ function generateSchedule(
     if (meta.papersPerDay === 2) {
       // Unit Test: 2 papers/day, 1hr each, 15min gap
       const shift = papersToday // 0 = first, 1 = second
-      const startTime = shift === 0 ? '09:00' : '10:15'
-      const endTime = shift === 0 ? '10:00' : '11:15'
+      const startTime = shift === 0 ? startTimeBase : addTime(startTimeBase, meta.paperDurationMin + meta.gapMin)
+      const endTime = addTime(startTime, meta.paperDurationMin)
 
       items.push({
         subjectId: subject.id,
@@ -171,7 +184,7 @@ function generateSchedule(
       }
     } else {
       // Half-Yearly/Annual: 1 paper/day, 3h15m
-      const endTime = addMinutes(startTimeBase, meta.paperDurationMin)
+      const endTime = addTime(startTimeBase, meta.paperDurationMin)
       items.push({
         subjectId: subject.id,
         subjectName: subject.name,
@@ -207,6 +220,8 @@ export function validateDateRange(
   const meta = getTemplateMeta(templateId)
   const start = new Date(startDateStr)
   const end = new Date(endDateStr || startDateStr)
+  start.setHours(0, 0, 0, 0)
+  end.setHours(0, 0, 0, 0)
 
   // Count working days (skip Sunday)
   let availableDays = 0
@@ -215,26 +230,34 @@ export function validateDateRange(
     if (current.getDay() !== 0) availableDays++
     current.setDate(current.getDate() + 1)
   }
-  if (availableDays === 0) availableDays = 1
 
   // Required days = ceil(subjects / papersPerDay)
   const requiredDays = Math.ceil(subjectCount / meta.papersPerDay)
+
+  if (availableDays === 0) {
+    return {
+      isValid: false,
+      requiredDays,
+      availableDays,
+      message: `Selected date range contains no working days (all Sundays?). Choose a different date range.`,
+    }
+  }
 
   if (availableDays < requiredDays) {
     return {
       isValid: false,
       requiredDays,
       availableDays,
-      message: `Selected examination period is too short. ${subjectCount} subjects require ${requiredDays} working days (max ${meta.papersPerDay} papers/day), but only ${availableDays} working days are available.`,
+      message: `Selected date range is not sufficient for all papers. ${subjectCount} subjects require ${requiredDays} working days (max ${meta.papersPerDay} papers/day, Sundays skipped), but only ${availableDays} working days are available.`,
     }
   }
 
   return { isValid: true, requiredDays, availableDays, message: '' }
 }
 
-// ─── Helper ─────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────
 
-function addMinutes(time: string, minutes: number): string {
+function addTime(time: string, minutes: number): string {
   const [h, m] = time.split(':').map(Number)
   const total = h * 60 + m + minutes
   const hrs = Math.floor(total / 60)

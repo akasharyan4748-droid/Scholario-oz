@@ -1,14 +1,19 @@
 'use client'
 
 /**
- * TemplateSelection — premium grid of examination templates.
- * 4 Unit Tests + Half-Yearly + Annual + Custom.
+ * TemplateSelection — compact examination-type selector.
+ *
+ * Standard examinations appear as compact pills/cards in academic order:
+ *   UT 1 · UT 2 · Half-Yearly · UT 3 · UT 4 · Annual
+ *
+ * Custom is a small secondary affordance shown below ("+ Custom") — not
+ * a primary card. Selecting it lets the principal build freely.
  */
 
 import { motion } from 'framer-motion'
-import { Check } from 'lucide-react'
+import { Check, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { EXAM_TEMPLATES, type ExamTemplate } from './exam-templates'
+import { STANDARD_TEMPLATES, CUSTOM_TEMPLATE, type ExamTemplate } from './exam-templates'
 
 interface Props {
   selectedTemplateId: string | null
@@ -26,50 +31,81 @@ const accentClasses: Record<string, { bg: string; text: string; border: string; 
 }
 
 export function TemplateSelection({ selectedTemplateId, onSelect }: Props) {
-  const templates = EXAM_TEMPLATES
-  const standard = templates.filter((t) => !t.isCustom)
-  const custom = templates.find((t) => t.isCustom)
-
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-        {standard.map((t, i) => (
-          <TemplateCard key={t.id} template={t} isSelected={selectedTemplateId === t.id} onSelect={onSelect} delay={i} />
+    <div className="space-y-2">
+      {/* Compact grid of standard examination types — academic order */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
+        {STANDARD_TEMPLATES.map((t, i) => (
+          <TemplatePill key={t.id} template={t} isSelected={selectedTemplateId === t.id} onSelect={onSelect} delay={i} />
         ))}
       </div>
-      {custom && (
-        <div className="pt-2 border-t border-border/40">
-          <TemplateCard template={custom} isSelected={selectedTemplateId === custom.id} onSelect={onSelect} delay={standard.length} isFullWidth />
-        </div>
-      )}
+
+      {/* Custom — subtle secondary affordance */}
+      <div className="pt-1">
+        <CustomButton
+          isSelected={selectedTemplateId === CUSTOM_TEMPLATE.id}
+          onSelect={() => onSelect(CUSTOM_TEMPLATE)}
+        />
+      </div>
     </div>
   )
 }
 
-function TemplateCard({ template, isSelected, onSelect, delay, isFullWidth }: {
-  template: ExamTemplate; isSelected: boolean; onSelect: (t: ExamTemplate) => void; delay: number; isFullWidth?: boolean
+function TemplatePill({ template, isSelected, onSelect, delay }: {
+  template: ExamTemplate
+  isSelected: boolean
+  onSelect: (t: ExamTemplate) => void
+  delay: number
 }) {
   const accent = accentClasses[template.accent] ?? accentClasses.slate
   return (
     <motion.button
-      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: delay * 0.04, duration: 0.25 }}
-      whileHover={{ y: -3 }} whileTap={{ scale: 0.98 }}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: delay * 0.03, duration: 0.2 }}
+      whileTap={{ scale: 0.97 }}
       onClick={() => onSelect(template)}
-      className={cn('relative text-left rounded-xl border p-3.5 transition-all', isFullWidth && 'w-full',
-        isSelected ? cn(accent.bg, accent.border, 'ring-2', accent.ring) : 'border-border bg-card hover:border-border hover:shadow-sm')}
+      className={cn(
+        'relative flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left transition-all',
+        isSelected
+          ? cn(accent.bg, accent.border, 'ring-2', accent.ring)
+          : 'border-border bg-card hover:border-border hover:bg-muted/30',
+      )}
     >
-      <div className="flex items-start gap-3">
-        <div className={cn('flex h-9 w-9 items-center justify-center rounded-lg shrink-0',
-          isSelected ? cn(accent.bg, accent.text) : 'bg-muted/50 text-muted-foreground')}>
-          {template.icon}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-foreground leading-tight">{template.label}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{template.description}</p>
-        </div>
-        {isSelected && <div className={cn('flex h-5 w-5 items-center justify-center rounded-full shrink-0', accent.text)}><Check className="h-3.5 w-3.5" /></div>}
+      <span className={cn(
+        'flex h-7 w-7 items-center justify-center rounded-md shrink-0',
+        isSelected ? cn(accent.bg, accent.text) : 'bg-muted/40 text-muted-foreground',
+      )}>
+        {template.icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold leading-tight">{template.shortLabel}</p>
+        <p className="text-[9px] text-muted-foreground leading-tight mt-0.5 truncate">
+          {template.description}
+        </p>
       </div>
+      {isSelected && (
+        <span className={cn('flex h-4 w-4 items-center justify-center rounded-full shrink-0', accent.text)}>
+          <Check className="h-3 w-3" />
+        </span>
+      )}
     </motion.button>
+  )
+}
+
+function CustomButton({ isSelected, onSelect }: { isSelected: boolean; onSelect: () => void }) {
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors',
+        isSelected
+          ? 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border border-slate-500/30'
+          : 'text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent',
+      )}
+    >
+      <Plus className="h-3 w-3" />
+      Custom
+    </button>
   )
 }

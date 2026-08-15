@@ -88,25 +88,23 @@ export function ExamsModule() {
   }
 
   // List view — the standard Examinations landing
-  // On Settings tab, the right-side control is the Archive button (historical
-  // records entry), NOT the session picker — the session picker is the
-  // active-context control for Overview/Exams/Reports.
-  const showSessionPicker = section !== 'settings'
+  // Session picker is shown ONLY on Overview (it drives the session context
+  // for the Overview dashboard). Settings shows the Archive button instead.
+  // Exams and Reports inherit the session context without showing a picker.
+  const showSessionPicker = section === 'overview'
+  const showArchiveButton = section === 'settings'
 
   return (
     <PageTransition className="space-y-4">
-      {/* Tab row + right-side control (session picker OR archive button) */}
+      {/* Tab row + right-side control (session picker on Overview, archive button on Settings) */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <SegmentedTabs
           tabs={SECTION_TABS}
           value={section}
           onValueChange={(v) => setSection(v as SectionTab)}
         />
-        {showSessionPicker ? (
-          <SessionPicker value={session} onChange={setSession} />
-        ) : (
-          <ArchiveButton onClick={() => setView({ kind: 'archive' })} />
-        )}
+        {showSessionPicker && <SessionPicker value={session} onChange={setSession} />}
+        {showArchiveButton && <ArchiveButton onClick={() => setView({ kind: 'archive' })} />}
       </div>
 
       <AnimatePresence mode="wait">
