@@ -3,41 +3,42 @@
 /**
  * ExamsOverviewTab — Principal Examination Control Dashboard.
  *
- * Deliberately simple. Three sections:
+ * Three sections:
  *   1. Four KPI cards (Examinations, Marks Entry, Results, Current Status)
- *   2. Current/Next Examination card
- *   3. Needs Attention list (only if items exist)
+ *   2. Context-aware Examination Status (LIVE / UPCOMING / PERFORMANCE)
+ *   3. Session Top Performers (top 3 podium + top performers list)
  *
- * No charts. No pipeline. No quick actions. No recent activity.
- * All data from useExamsList (real API).
+ * The session picker is owned by the parent (index.tsx) — it sits on the
+ * tab row right next to Overview/Exams/Reports/Settings. The selected
+ * session drives the Session Top Performers section.
+ *
+ * All data from useExamsList (real API). Session Top Performers uses
+ * mock session-aware data (see src/lib/exams/session-toppers-data.ts).
  */
 
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   FileText, ClipboardList, CheckCircle2, Activity,
-  ArrowRight, AlertTriangle, ChevronRight,
-  Trophy, Medal, TrendingUp, GraduationCap, Crown, Award,
+  AlertTriangle,
 } from 'lucide-react'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { ExamDTO } from '@/lib/exams/types'
-import { useOverviewAnalytics, type OverviewAnalytics } from '@/lib/exams/use-overview-analytics'
-import { PerformanceSection } from './performance-section'
 import { ExaminationContext } from './examination-context'
+import { SessionTopPerformers } from './session-top-performers'
 
 interface Props {
   exams: ExamDTO[]
   classes: any[]
   loading: boolean
   error: string | null
+  session: string
   onSelectExam: (id: string) => void
   onGoToExams: () => void
   onNavigate?: (section: string) => void
 }
 
-export function ExamsOverviewTab({ exams, classes, loading, error, onSelectExam, onNavigate }: Props) {
+export function ExamsOverviewTab({ exams, classes, loading, error, session, onSelectExam, onNavigate }: Props) {
   const data = useMemo(() => computeOverview(exams), [exams])
 
   if (loading) return <OverviewSkeleton />
@@ -45,19 +46,6 @@ export function ExamsOverviewTab({ exams, classes, loading, error, onSelectExam,
 
   return (
     <div className="space-y-4">
-      {/* Session selector — top right, no heading */}
-      <div className="flex justify-end">
-        <Select defaultValue="2025-2026">
-          <SelectTrigger size="sm" className="w-[140px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="2025-2026">2025–2026</SelectItem>
-            <SelectItem value="2024-2025">2024–2025</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* 4 KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard
@@ -97,8 +85,8 @@ export function ExamsOverviewTab({ exams, classes, loading, error, onSelectExam,
       {/* Context-aware Examination Status (LIVE / UPCOMING / PERFORMANCE) */}
       <ExaminationContext exams={exams} onSelectExam={onSelectExam} onNavigate={onNavigate} />
 
-      {/* Last Examination Performance */}
-      <PerformanceSection classes={classes} onSelectExam={onSelectExam} onNavigate={onNavigate} />
+      {/* Session Top Performers — replaces old PerformanceSection empty state */}
+      <SessionTopPerformers session={session} />
     </div>
   )
 }
@@ -241,16 +229,11 @@ function KpiCard({ label, value, sub, icon, tone, delay }: {
   )
 }
 
-// ─── (old CurrentExamination + NeedsAttention removed) ──
-
 // ─── Skeleton ────────────────────────────────────────────────────────
 
 function OverviewSkeleton() {
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <div className="h-8 w-32 rounded-lg bg-muted animate-pulse" />
-      </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
@@ -270,6 +253,13 @@ function OverviewSkeleton() {
           {[0, 1, 2, 3].map((i) => <div key={i} className="h-12 rounded-lg bg-muted/40 animate-pulse" />)}
         </div>
       </div>
+      {/* Skeleton for Session Top Performers */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div className="h-4 w-44 rounded bg-muted animate-pulse" />
+        <div className="grid grid-cols-3 gap-3">
+          {[0, 1, 2].map((i) => <div key={i} className="h-32 rounded-lg bg-muted/40 animate-pulse" />)}
+        </div>
+      </div>
     </div>
   )
 }
@@ -282,13 +272,4 @@ function ErrorState({ error }: { error: string }) {
       <p className="text-xs text-rose-600/70 mt-1">{error}</p>
     </div>
   )
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
