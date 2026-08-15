@@ -25,6 +25,8 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { useCreateExam } from '@/lib/exams/use-exams'
 import { EXAM_TYPES, type ExamDTO } from '@/lib/exams/types'
+import { TemplateSelection } from './tabs/template-selection'
+import { type ExamTemplate, getTemplateById } from './tabs/exam-templates'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -65,6 +67,7 @@ interface SubjectConfig {
 
 export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated }: Props) {
   const [step, setStep] = useState<Step>('Details')
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [type, setType] = useState<string>('Unit Test')
   const [startDate, setStartDate] = useState('')
@@ -74,7 +77,21 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   const [subjectsByClass, setSubjectsByClass] = useState<Record<string, SubjectConfig[]>>({})
   const [passPercentage, setPassPercentage] = useState(33)
   const [graceLimit, setGraceLimit] = useState(5)
+  const [gradingType, setGradingType] = useState('marks')
+  const [allowLateSubmission, setAllowLateSubmission] = useState(true)
+  const [allowResubmission, setAllowResubmission] = useState(true)
   const { create, loading } = useCreateExam()
+
+  // Handle template selection — apply defaults
+  const handleTemplateSelect = (template: ExamTemplate) => {
+    setSelectedTemplateId(template.id)
+    setType(template.defaults.type)
+    setName(template.defaults.defaultName)
+    setPassPercentage(template.defaults.passPercentage)
+    setGradingType(template.defaults.gradingType)
+    setAllowLateSubmission(template.defaults.allowLateSubmission)
+    setAllowResubmission(template.defaults.allowResubmission)
+  }
 
   // Auto-select subjects when a class is added
   useEffect(() => {
@@ -113,7 +130,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
 
   const stepIndex = STEPS.indexOf(step)
   const canProceed = () => {
-    if (step === 'Details') return name.trim() && startDate
+    if (step === 'Details') return selectedTemplateId !== null && name.trim() !== '' && startDate !== ''
     if (step === 'Classes & Subjects') return selectedClassIds.length > 0 && Object.values(subjectsByClass).every((s) => s.length > 0)
     return true
   }
@@ -280,48 +297,77 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
               transition={{ duration: 0.15 }}
               className="space-y-4"
             >
-              {/* ── Step 1: Details ── */}
+              {/* ── Step 1: Choose Template & Customize ── */}
               {step === 'Details' && (
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-border bg-card p-4">
-                    <h3 className="text-sm font-semibold mb-3">Examination Details</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label>Examination Name <span className="text-destructive">*</span></Label>
-                        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Half-Yearly Examination" className="text-sm" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Examination Type</Label>
-                        <Select value={type} onValueChange={(v) => setType(v)}>
-                          <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {EXAM_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Pass Percentage</Label>
-                        <Input type="number" value={passPercentage} onChange={(e) => setPassPercentage(Number(e.target.value))} className="text-sm" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Start Date <span className="text-destructive">*</span></Label>
-                        <DatePicker value={startDate} onChange={setStartDate} placeholder="Start date" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>End Date</Label>
-                        <DatePicker value={endDate} onChange={setEndDate} placeholder="End date" />
-                      </div>
-                    </div>
+                  {/* Template Selection */}
+                  <div>
+                    <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2">Choose Examination Type</p>
+                    <TemplateSelection
+                      selectedTemplateId={selectedTemplateId}
+                      onSelect={handleTemplateSelect}
+                      availableGradeLevels={selectedClassIds.length > 0
+                        ? selectedClassIds.map(id => classes.find(c => c.id === id)?.gradeLevel).filter(Boolean) as string[]
+                        : undefined
+                      }
+                    />
                   </div>
-                  <div className="rounded-xl border border-border bg-card p-4">
-                    <h3 className="text-sm font-semibold mb-3">Additional Information</h3>
-                    <div className="space-y-3">
-                      <div className="space-y-1.5">
-                        <Label>Description / Instructions</Label>
-                        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional notes visible to staff and students" className="text-sm min-h-[80px]" />
+
+                  {/* Details (only show after template selected) */}
+                  {selectedTemplateId && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      transition={{ duration: 0.3 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-3 pt-2">
+                        {/* Name + Type */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label>Examination Name <span className="text-destructive">*</span></Label>
+                            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Half-Yearly Examination" className="text-sm" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Examination Type</Label>
+                            <Select value={type} onValueChange={(v) => setType(v)}>
+                              <SelectTrigger className="w-full text-sm"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {EXAM_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* Dates + Pass */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          <div className="space-y-1.5">
+                            <Label>Start Date <span className="text-destructive">*</span></Label>
+                            <DatePicker value={startDate} onChange={setStartDate} placeholder="Start date" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>End Date</Label>
+                            <DatePicker value={endDate} onChange={setEndDate} placeholder="End date" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Pass Percentage</Label>
+                            <Input type="number" value={passPercentage} onChange={(e) => setPassPercentage(Number(e.target.value))} className="text-sm" />
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        <div className="space-y-1.5">
+                          <Label>Description / Instructions</Label>
+                          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional notes visible to staff and students" className="text-sm min-h-[60px]" />
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    </motion.div>
+                  )}
+
+                  {/* Hint to select template first */}
+                  {!selectedTemplateId && (
+                    <p className="text-xs text-muted-foreground text-center py-2">Select an examination type above to begin.</p>
+                  )}
                 </div>
               )}
 
@@ -509,7 +555,6 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                       <ReviewField label="Name" value={name || '—'} />
                       <ReviewField label="Type" value={type} />
-                      <ReviewField label="Session" value={academicYear} />
                       <ReviewField label="Pass %" value={`${passPercentage}%`} />
                       <ReviewField label="Start" value={startDate || '—'} />
                       <ReviewField label="End" value={endDate || '—'} />
