@@ -656,3 +656,651 @@ Stage Summary:
 - **12 one-shot scripts archived** to `scripts/one-shot/` (keeps `scripts/` focused on actively-used tooling)
 - **Type safety improved**: 4 `exam: any` → `exam: ExamDTO` in exam-workspace
 - Codebase is now: 1005 source files, 105K lines, 0 TS errors, 0 ESLint errors, fully E2E-verified
+
+---
+Task ID: phase-0-subject-ecosystem-audit
+Agent: main (Super Z)
+Task: PHASE 0 FORENSIC AUDIT — Subject Ecosystem + Students & Classes Subject Management. INSPECT ONLY. NO code changes, NO migrations, NO deletions.
+
+Work Log:
+- Inspected prisma/schema.prisma (Subject, Class, ExamSubjectConfig, ExamMark, Result, Timetable, Homework, Assignment, QuestionBank models)
+- Inspected src/app/api/subjects/route.ts (CRUD API)
+- Inspected src/lib/exams/service.ts getClasses() + createExam() — how Examination resolves subjects
+- Inspected src/lib/store/students-store/{constants,seed-data,store,types}.ts — Students & Classes state architecture
+- Inspected src/components/principal/modules/classes/details/class-subjects.tsx — Subject UI
+- Inspected src/components/principal/modules/exams/create-exam-fullscreen.tsx — how Examination consumes subjects
+- Inspected src/lib/exams/template-engine.ts — stream alternative (Mathematics/Biology) logic
+- Ran DB audit script: 69 Subject rows total, 14 canonical-name duplicates (same name across multiple classes)
+- Searched codebase for hardcoded subject arrays, mock data, and subject-name-as-identity usage
+
+============================================================
+PHASE 0 — FORENSIC AUDIT REPORT
+============================================================
+
+────────────────────────────────────────────────────────────
+1. CURRENT SUBJECT MODEL (Prisma)
+────────────────────────────────────────────────────────────
+
+`prisma/schema.prisma` lines 168–189:
+
+  model Subject {
+    id        String   @id @default(cuid())
+    schoolId  String
+    school    School   @relation(...)
+    classId   String?                              ← PROBLEM
+    class     Class?   @relation(...)
+    name      String
+    code      String?
+    fullMarks Int?     @default(100)
+    passMarks Int?     @default(33)
+    createdAt DateTime @default(now())
+    ... (relations to ExamSubjectConfig, ExamMark, Result, etc.)
+  }
+
+KEY FINDING: `Subject` has a `classId` FK. This means each class has its
+OWN copy of "Hindi", "English", etc. There is NO canonical Subject entity
+shared across classes.
+
+────────────────────────────────────────────────────────────
+2. CURRENT CLASS / SECTION / STREAM MODEL
+────────────────────────────────────────────────────────────
+
+  model Class {
+    id             String   @id @default(cuid())
+    schoolId       String
+    name           String                              ← "Class 6", "Class 11 — Science PCM"
+    gradeLevel     String?                              ← "6", "11"
+    section        String?                              ← "A", "B" (CURRENTLY ALWAYS "A" or "B")
+    stream         String?                              ← "Science-PCM" | "Science-PCB" | null
+    ...
+  }
+
+KEY FINDINGS:
+- Section is a string column on Class, not a separate model.
+- Each row in `Class` is a class+section combo (e.g. "Class 9" with section "A").
+- There is NO Section model — sections are inline.
+- Stream is a string column on Class (no Stream model).
+- Current DB has 9 Class rows: Class 6 through Class 12, each with one section.
+- Spec §7 requires class-level subject config shared by all sections — currently
+  NOT possible because each Class row (section) has its own Subject rows.
+
+────────────────────────────────────────────────────────────
+3. CURRENT CLASS-SUBJECT RELATIONSHIP
+────────────────────────────────────────────────────────────
+
+Direct 1:N from `Class.subjects` → `Subject.classId`.
+
+There is NO `ClassSubjectAssignment` join table. Each Subject row belongs to
+exactly one Class row.
+
+DB state (from audit):
+- Total Subject rows: 69
+- Canonical-name duplicates: 14
+- "Hindi" appears 9 times (one per class)
+- "English" appears 12 times
+- "Mathematics" appears 9 times
+- "Physics" appears 4 times (one per senior Science class)
+- "Chemistry" appears 4 times
+- "Biology" appears 2 times (PCB only)
+- "Computer Science" appears 3 times (Class 6, 7, 8)
+
+Each "Hindi" row has a DIFFERENT `id`. Spec §13/§14/§49 require ONE canonical
+Subject ID per academic subject — currently NOT the case.
+
+────────────────────────────────────────────────────────────
+4. EXAMINATION-SUBJECT RELATIONSHIP
+────────────────────────────────────────────────────────────
+
+  model ExamSubjectConfig {
+    id             String   @id @default(cuid())
+    examId         String
+    classId        String
+    subjectId      String                              ← references Subject.id (class-scoped)
+    maxMarks       Int      @default(100)
+    passMarks      Float    @default(33)
+    theoryMarks    Int      @default(100)
+    practicalMarks Int      @default(0)
+    sortOrder      Int      @default(0)
+    @@unique([examId, classId, subjectId])
+  }
+
+KEY FINDING: ExamSubjectConfig references `Subject.id`. Since each Subject
+row is class-scoped (not canonical), the examination's subject identity is
+tied to the specific class's copy. If the class is deleted, the ExamSubjectConfig
+breaks (no cascade — `onDelete: Cascade` is on the Subject→ExamSubjectConfig
+relation, so deleting a class's Subject row will DELETE the exam config).
+
+Currently 0 ExamSubjectConfig rows in DB (no exams created yet from new flow).
+
+────────────────────────────────────────────────────────────
+5. EXAMMARK RELATIONSHIP
+────────────────────────────────────────────────────────────
+
+  model ExamMark {
+    examId        String
+    classId       String
+    subjectId     String                              ← references Subject.id
+    studentId     String
+    marksObtained Float?
+    ...
+    @@unique([examId, classId, subjectId, studentId])
+  }
+
+Same issue: references class-scoped Subject.id, not canonical.
+
+Currently 0 ExamMark rows in DB.
+
+────────────────────────────────────────────────────────────
+6. RESULT RELATIONSHIP
+────────────────────────────────────────────────────────────
+
+  model Result {
+    studentId  String
+    examId     String
+    subjectId  String                              ← references Subject.id
+    marks      Float
+    totalMarks Float    @default(100)
+    grade      String?
+  }
+
+Currently 36 Result rows in DB (from `prisma/seed.ts`). All reference
+class-scoped Subject IDs.
+
+────────────────────────────────────────────────────────────
+7. TIMETABLE / HOMEWORK / ASSIGNMENT / QUESTIONBANK
+────────────────────────────────────────────────────────────
+
+All four models have `subjectId String?` referencing Subject.id.
+All are class-scoped subject references.
+
+────────────────────────────────────────────────────────────
+8. STUDENTS & CLASSES SUBJECT UI
+────────────────────────────────────────────────────────────
+
+File: src/components/principal/modules/classes/details/class-subjects.tsx
+
+CRITICAL FINDING: The UI uses `useStudentsStore` (Zustand store), NOT the
+database. The Zustand store is seeded from `src/lib/store/students-store/seed-data.ts`
+and `constants.ts` — these are MOCK data, not DB data.
+
+  // from class-subjects.tsx
+  const liveClass = useStudentsStore((s) => s.getClassById(cls.id)) ?? cls
+  const addClassSubject = useStudentsStore((s) => s.addClassSubject)
+  ...
+  const available = useMemo(
+    () => (SUBJECTS_BY_LEVEL[cls.level] || []).filter((s) => !existingSubjects.includes(s)),
+    [existingSubjects, cls.level]
+  )
+
+KEY FINDINGS:
+- The "Add Subject" dialog pulls from `SUBJECTS_BY_LEVEL` constant (HARDCODED).
+- Subject identity in the store is a STRING (the subject name), not a Subject ID.
+- `addClassSubject(classId, subject: string)` just pushes the string into `cls.subjects: string[]`.
+- No backend persistence — mutations are in-memory Zustand only.
+- Archive/restore just moves the string between `subjects` and `archivedSubjects` arrays.
+
+`SUBJECTS_BY_LEVEL` from `src/lib/store/students-store/constants.ts`:
+  'Pre-Primary': ['English', 'Mathematics', 'EVS', 'Hindi', 'Art & Craft', 'Music'],
+  Primary:       ['English', 'Mathematics', 'EVS', 'Hindi', 'Computer Science', 'Art & Craft'],
+  Middle:        ['English', 'Mathematics', 'Science', 'Social Studies', 'Hindi', 'Computer Science'],
+  Secondary:     ['English', 'Mathematics', 'Science', 'Social Studies', 'Hindi', 'Computer Science'],
+  'Senior Secondary': ['English', 'Physics', 'Chemistry', 'Mathematics', 'Biology', 'Computer Science']
+
+ISSUES vs spec:
+- Uses "Mathematics" (spec §24 requires "Maths")
+- Uses "Social Studies" (spec §16 requires "Social Science")
+- Hardcoded — no canonical Subject identity
+- Not stream-aware (Senior Secondary has both Maths AND Biology for everyone — violates §6)
+- Not DB-backed — Students & Classes UI is completely disconnected from Examination UI
+
+────────────────────────────────────────────────────────────
+9. EXAMINATION SUBJECT RESOLUTION
+────────────────────────────────────────────────────────────
+
+File: src/lib/exams/service.ts `getClasses()`:
+
+  const classes = await db.class.findMany({
+    where: { schoolId },
+    include: { subjects: { orderBy: { name: 'asc' } }, _count: { select: { students: true } } },
+  })
+  ...
+  return sorted.map((c) => ({
+    id: c.id, name: c.name, gradeLevel: c.gradeLevel, section: c.section, stream: c.stream,
+    studentCount: c._count.students,
+    subjects: c.subjects.map((s) => ({
+      id: s.id, name: s.name, code: s.code, fullMarks: s.fullMarks ?? 100, passMarks: s.passMarks ?? 33,
+    })),
+  }))
+
+KEY FINDINGS:
+- Examination reads from DB (Prisma) — NOT from the Students & Classes Zustand store.
+- This means Examination and Students & Classes are using TWO COMPLETELY DIFFERENT
+  data sources for "subjects":
+    • Students & Classes UI → Zustand store (mock, hardcoded, in-memory)
+    • Examination UI → PostgreSQL via Prisma (real, persistent)
+- The two are NOT synchronized. Adding "Computer Science" in Students & Classes
+  Zustand store does NOT add it to the DB. Examination will NOT see it.
+- This is the #1 architectural problem to fix.
+
+In `create-exam-fullscreen.tsx`:
+  const autoSubjects = useMemo<DedupedSubject[]>(() => {
+    const byName = new Map<string, DedupedSubject>()
+    for (const c of selectedClasses) {
+      for (const s of c.subjects) {
+        ...
+        byName.set(s.name, { id: s.id, name: s.name, code: s.code, ... })
+      }
+    }
+    ...
+  }, [selectedClasses])
+
+KEY FINDING: Subjects are deduped by NAME across classes. Since each class
+has its own Subject row with a different ID, the dedup-by-name picks one ID
+arbitrarily. This works for display but means:
+- The "canonical" subject ID used for `subjectsByClass` is per-class (correct
+  for storage), but the display layer assumes names are unique.
+- If "Hindi" is renamed in Class 6 but not Class 7, the display layer breaks.
+
+────────────────────────────────────────────────────────────
+10. STREAM ALTERNATIVE (Mathematics/Biology)
+────────────────────────────────────────────────────────────
+
+File: src/lib/exams/template-engine.ts
+
+  export const STREAM_ALTERNATIVE_PAIRS: Array<[string, string]> = [
+    ['Mathematics', 'Biology'],
+  ]
+
+Status: IMPLEMENTED and working (verified by E2E test Scenario H).
+- `countScheduleSlots()` collapses Mathematics + Biology into 1 slot.
+- `generateSchedule()` places both on the same date+time slot.
+- Display layer merges them into "Mathematics / Biology" row.
+
+CAVEAT: Spec §24 wants "Maths" not "Mathematics". Current code uses
+"Mathematics" throughout (DB + UI + template-engine). Need to rename
+display name OR update the spec-pair to match whatever the canonical name is.
+
+────────────────────────────────────────────────────────────
+11. HARDCODED SUBJECT SOURCES
+────────────────────────────────────────────────────────────
+
+(A) `src/lib/store/students-store/constants.ts` — SUBJECTS_BY_LEVEL
+    Used by: class-subjects.tsx, subject-card.tsx, archived-subjects-panel.tsx,
+             timetable/slot-editor-dialog.tsx
+    Status: ACTIVE — drives the Students & Classes UI "Add Subject" picker.
+
+(B) `src/lib/store/school-settings-store/initial-state.ts` — subjects array
+    8 hardcoded subjects (English Core, Mathematics, Physics, Chemistry, Biology,
+    Computer Science, Accountancy, Physical Education).
+    Used by: school settings UI (subject master list display).
+    Status: ACTIVE but separate from Examination.
+
+(C) `src/lib/mock/teachers.ts` — teacher.subjects: string[]
+    Used by: teacher directory, teacher assignment.
+    Status: ACTIVE mock data.
+
+(D) `src/lib/mock/resources.ts` — subject: 'Mathematics' / 'Social Studies' etc.
+    Used by: resource library mock.
+    Status: ACTIVE mock data.
+
+(E) `src/lib/exams/template-engine.ts` — STREAM_ALTERNATIVE_PAIRS
+    Used by: schedule generation.
+    Status: ACTIVE — already aligned with canonical architecture.
+
+(F) DB Subject table — class-scoped rows
+    Used by: Examination, Marks, Results, Reports.
+    Status: ACTIVE but architecturally wrong (no canonical identity).
+
+────────────────────────────────────────────────────────────
+12. SEED DATA
+────────────────────────────────────────────────────────────
+
+(A) `prisma/seed.ts` — creates demo school + 5 subjects (Mathematics, Physics,
+    English, Chemistry, Biology) for Class 9 & 10. Uses code "MATH" (was
+    normalized to "MAT" in earlier fix).
+    Status: One-time seed, already executed. DB has 69 Subject rows from
+            subsequent migrations.
+
+(B) `src/lib/store/students-store/seed-data.ts` — generates mock students with
+    `subjects: SUBJECTS_BY_LEVEL[c.level].map(...)` — populates student.academics.subjects
+    with hardcoded names.
+    Status: ACTIVE — drives student profile UI.
+
+(C) `src/lib/store/teachers-store/seed-data.ts` — `subjects: ['Mathematics', 'Computer Science']`
+    Status: ACTIVE mock data.
+
+────────────────────────────────────────────────────────────
+13. CURRICULUM FILES
+────────────────────────────────────────────────────────────
+
+`src/lib/exams/curriculum.ts` was DELETED in an earlier commit (Phase 7 audit).
+The only preserved pieces are the `Board` and `Stream` type definitions,
+now inlined into `src/lib/exams/types.ts`.
+
+No other curriculum files exist.
+
+────────────────────────────────────────────────────────────
+14. SUBJECT-NAME-AS-IDENTITY USAGE
+────────────────────────────────────────────────────────────
+
+The codebase has TWO patterns:
+
+PATTERN A (DB-backed, correct-ish): Examination / Marks / Results / Reports
+  - Store `subjectId` (FK to Subject.id) in DB rows.
+  - Display layer joins `subject.name` for rendering.
+  - Issue: Subject.id is class-scoped, not canonical. But within one class,
+    the ID is stable.
+  - Files: src/lib/exams/service.ts, src/lib/exams/types.ts,
+           src/app/api/exams/*, src/app/api/subjects/route.ts
+
+PATTERN B (Store-backed, anti-pattern): Students & Classes UI
+  - Store subject NAME as string in `cls.subjects: string[]`.
+  - No subjectId at all — name IS the identity.
+  - Files: src/lib/store/students-store/{constants,seed-data,store,types}.ts,
+           src/components/principal/modules/classes/details/class-subjects.tsx,
+           src/components/principal/modules/classes/details/subject-card.tsx,
+           src/components/principal/modules/classes/details/archived-subjects-panel.tsx,
+           src/components/principal/modules/timetable/slot-editor-dialog.tsx
+
+PATTERN C (Display-only): Mock data files
+  - subjectName: string as a property of mock entities (homework, resources, etc.)
+  - Used only for display, no identity semantics.
+  - Files: src/lib/mock/{resources,attendance,flashcards,...}.ts
+
+────────────────────────────────────────────────────────────
+15. CACHE / QUERY ARCHITECTURE
+────────────────────────────────────────────────────────────
+
+NO React Query / TanStack Query / SWR in use. Caching is via:
+
+(A) Zustand stores (client-side, in-memory, persisted to localStorage via middleware)
+    - `useStudentsStore` — Students & Classes data
+    - `useTeachersStore` — Teachers data
+    - `useSchoolSettingsStore` — School settings (incl. subject master list)
+    - Mutations update the store; subscribers re-render automatically.
+    - NO automatic server sync — store is the source of truth for UI.
+
+(B) Custom `useExamsList` / `useExam` hooks (in src/lib/exams/use-exams.ts)
+    - useState + useEffect + fetch
+    - `reloadKey` state forces refetch
+    - NO automatic invalidation on unrelated mutations (e.g. subject rename in
+      Students & Classes does NOT trigger Exams refetch).
+
+(C) No server-side cache (no Redis, no Next.js fetch cache for /api/exams).
+
+CACHE INVALIDATION STATUS:
+- Within Zustand store: mutations propagate to subscribers instantly. ✓
+- Across stores (Students → Exams): NO invalidation. ✗
+- After DB mutation via API: caller must manually trigger refetch. ✓ (exam-workspace does this via `reload()`)
+
+────────────────────────────────────────────────────────────
+16. STUDENTS & CLASSES SUBJECT IMPLEMENTATION (current)
+────────────────────────────────────────────────────────────
+
+UI: src/components/principal/modules/classes/details/class-subjects.tsx
+State: Zustand `useStudentsStore`
+Data flow:
+  1. User clicks "Add Subject" → AddSubjectDialog opens
+  2. Dialog shows `SUBJECTS_BY_LEVEL[cls.level]` (hardcoded constant)
+  3. User picks "Computer Science" → `addClassSubject(classId, 'Computer Science')`
+  4. Zustand store pushes string into `cls.subjects: string[]`
+  5. UI re-renders, showing "Computer Science" card
+  6. NO API call. NO DB write. Mutation is in-memory only.
+
+Archive flow:
+  1. User clicks "Archive" on a subject card
+  2. `archiveClassSubject(classId, 'Computer Science')` called
+  3. Zustand store moves string from `cls.subjects` to `cls.archivedSubjects`
+  4. UI re-renders, subject disappears from active list
+  5. NO API call. NO DB write.
+
+Restore flow:
+  1. User opens Archived panel
+  2. Clicks "Restore" on an archived subject
+  3. `restoreClassSubject(classId, 'Computer Science')` called
+  4. Zustand moves string back from `archivedSubjects` to `subjects`
+  5. NO API call. NO DB write.
+
+ISSUES:
+- All mutations are ephemeral. Page refresh = data lost (unless localStorage
+  persistence is on — need to verify).
+- No subjectId. No canonical identity.
+- No backend persistence.
+- Examination module reads from DB, not this store → mutations have ZERO
+  effect on Examination.
+- Spec §26-28 require Students & Classes to be the source of truth. Currently
+  it is NOT — DB is the source of truth for Examination, and Students & Classes
+  store is a parallel mock universe.
+
+────────────────────────────────────────────────────────────
+17. EXAMINATION SUBJECT IMPLEMENTATION (current)
+────────────────────────────────────────────────────────────
+
+UI: src/components/principal/modules/exams/create-exam-fullscreen.tsx
+Data source: `useExamsList()` hook → `GET /api/exams` → `getClasses(schoolId)` from
+             `src/lib/exams/service.ts` → `db.class.findMany({ include: { subjects } })`
+
+Data flow:
+  1. Page loads → `useExamsList` fetches `/api/exams`
+  2. API returns `{ exams, classes, academicYear }` where each class has `subjects: [{id, name, code, ...}]`
+  3. User selects classes (checkboxes)
+  4. `autoSubjects` useMemo dedupes subjects by NAME across selected classes
+  5. Schedule generated via `generateExamConfig()` from template-engine
+  6. On submit → POST /api/exams with `subjectsByClass: Record<classId, [{subjectId, ...}]>`
+  7. Server creates ExamSubjectConfig rows referencing class-scoped Subject.id
+
+ISSUES:
+- Subjects come from DB (correct), but DB subjects are class-scoped (not canonical).
+- Dedup by name works for display, but `subjectsByClass` uses per-class subjectId
+  (correct for storage, but breaks if subject is renamed in one class only).
+- No way to add a subject from this UI — must go to Students & Classes (which
+  doesn't persist to DB anyway).
+
+────────────────────────────────────────────────────────────
+18. STALE / DUPLICATE SUBJECT RECORDS IN DB
+────────────────────────────────────────────────────────────
+
+From DB audit (69 Subject rows total):
+
+Canonical-name duplicates (same name, multiple Subject rows):
+  Hindi:                9 rows (one per class)
+  English:              12 rows (one per class + 3 orphaned with classId=NULL)
+  Mathematics:          9 rows (one per class where applicable + orphans)
+  Science:              5 rows (Class 6-10)
+  Social Science:       5 rows (Class 6-10)
+  Physics:              4 rows (Class 11/12 PCM + PCB)
+  Chemistry:            4 rows (Class 11/12 PCM + PCB)
+  Biology:              2 rows (Class 11/12 PCB)
+  Computer Science:     3 rows (Class 6, 7, 8)
+  Arts & Drawing:       2 rows (Class 9, 10)
+  Physical Education:   4 rows (Class 11/12 all streams)
+  Accountancy:          2 rows (orphaned, classId=NULL — from deleted Commerce classes)
+  Business Studies:     2 rows (orphaned, classId=NULL)
+  Economics:            3 rows (orphaned, classId=NULL)
+
+ORPHANED SUBJECTS: 7 rows with classId=NULL (Accountancy, Business Studies,
+Economics, English, Mathematics) — left over from earlier deletion of
+Commerce/Humanities classes. These should be cleaned up OR reassigned.
+
+────────────────────────────────────────────────────────────
+19. CONFLICTS FOUND
+────────────────────────────────────────────────────────────
+
+CONFLICT 1: Two parallel subject data sources
+  - Students & Classes UI → Zustand store (mock, in-memory, name-as-identity)
+  - Examination UI → DB via Prisma (real, persistent, class-scoped ID)
+  - They NEVER sync. Spec §26 requires ONE source of truth.
+
+CONFLICT 2: "Mathematics" vs "Maths"
+  - DB has "Mathematics" (was normalized from "Maths" in earlier work)
+  - Spec §24 requires "Maths"
+  - SUBJECTS_BY_LEVEL constant uses "Mathematics"
+  - template-engine STREAM_ALTERNATIVE_PAIRS uses "Mathematics"
+  - Need to rename to "Maths" everywhere per spec §24.
+
+CONFLICT 3: "Social Studies" vs "Social Science"
+  - DB has "Social Science" (correct per spec §16)
+  - SUBJECTS_BY_LEVEL uses "Social Studies" (wrong)
+  - Mock data files use "Social Studies" (wrong)
+  - Need to normalize to "Social Science".
+
+CONFLICT 4: Stream contamination in Senior Secondary
+  - SUBJECTS_BY_LEVEL['Senior Secondary'] has BOTH Mathematics AND Biology
+    in the same list — violates spec §6 (Maths/Biology are stream alternatives).
+  - DB correctly separates them (PCM has Maths, PCB has Biology).
+  - Need to make SUBJECTS_BY_LEVEL stream-aware OR remove it entirely.
+
+CONFLICT 5: No ClassSubjectAssignment table
+  - Spec §19/§20 requires separating Subject from ClassSubjectAssignment.
+  - Current schema has Subject.classId FK (direct ownership).
+  - Migration would require: new ClassSubjectAssignment table, backfill from
+    existing Subject.classId, update all consumers.
+
+CONFLICT 6: Subject code collisions
+  - "English" has code "ENG" in all 12 rows — good.
+  - "Mathematics" has code "MAT" in all 9 rows — good.
+  - But there's no unique constraint on (schoolId, code) — possible to create
+    two subjects with same code in same school.
+
+CONFLICT 7: Orphaned subjects with classId=NULL
+  - 7 Subject rows have classId=NULL (Accountancy, Business Studies, Economics,
+    some English/Mathematics).
+  - These are unreachable from any class UI.
+  - Examination cannot select them (since they're not assigned to a class).
+  - Need to either reassign to active classes OR delete safely (after checking
+    no ExamSubjectConfig/ExamMark/Result references them — currently 0 such
+    references, so safe to delete).
+
+────────────────────────────────────────────────────────────
+20. SAFEST MIGRATION ARCHITECTURE
+────────────────────────────────────────────────────────────
+
+PROPOSED TARGET ARCHITECTURE (conceptual — NOT implementing yet):
+
+  Subject (canonical, school-scoped, NOT class-scoped)
+    id, schoolId, name, code, status (Active|Archived), createdAt, updatedAt
+    @@unique([schoolId, code])
+
+  ClassSubjectAssignment (join table)
+    id, schoolId, classId, subjectId, stream (nullable), isCore, isActive,
+    displayOrder, examinable (default true), createdAt
+    @@unique([schoolId, classId, subjectId, stream])
+
+  ExamSubjectConfig (existing, minor change)
+    subjectId → still references Subject.id, but now Subject is canonical.
+    No schema change needed — just data migration.
+
+  ExamMark / Result / Timetable / Homework / Assignment / QuestionBank
+    subjectId → still references Subject.id (canonical). No schema change.
+
+MIGRATION PATH (safest order):
+
+  STEP 1: Add `status` field to Subject (default 'Active'). No data loss.
+  STEP 2: Create canonical Subject rows by deduplicating existing rows.
+          For each (schoolId, name, code) combination, pick one Subject.id
+          as canonical. Update all FK references (ExamSubjectConfig,
+          ExamMark, Result, Timetable, Homework, Assignment, QuestionBank)
+          to point to the canonical ID. Then delete the duplicate rows.
+  STEP 3: NULL out `Subject.classId` (canonical subjects are not class-scoped).
+          The column can remain in schema for backward-compat, but should be
+          unused going forward.
+  STEP 4: Create `ClassSubjectAssignment` table.
+  STEP 5: Backfill ClassSubjectAssignment from existing (Subject.classId,
+          Subject.name) — one row per (class, subject) pair.
+  STEP 6: Update Students & Classes UI to call new API endpoints that read/
+          write ClassSubjectAssignment (instead of Zustand store).
+  STEP 7: Update Examination `getClasses()` to include `subjects` from
+          ClassSubjectAssignment joined to canonical Subject.
+  STEP 8: Add subject rename endpoint that updates Subject.name — all
+          consumers automatically pick up the new name via JOIN.
+  STEP 9: Add subject archive/reactivate endpoints.
+  STEP 10: Remove `SUBJECTS_BY_LEVEL` constant. Replace with API call to
+           fetch canonical subject catalogue for the school.
+  STEP 11: Normalize "Mathematics" → "Maths" and "Social Studies" →
+           "Social Science" in DB and all remaining mock data.
+  STEP 12: Clean up 7 orphaned subjects (classId=NULL) — verify zero FK
+           references, then delete.
+
+RISKS:
+- 36 existing Result rows reference class-scoped Subject IDs. Migration must
+  update these to canonical IDs (Step 2 handles this).
+- Zustand store has 10+ consumers. Switching to API-backed data requires
+  refactoring each consumer. Risk of UI regressions.
+- No React Query cache invalidation framework — need to add one (or use
+  manual `reload()` pattern consistently).
+- Subject rename will instantly propagate to ALL historical records. Spec
+  §15/§50 mentions a possible "subject-name history" mechanism — out of
+  scope for Phase 1, but should be flagged.
+
+────────────────────────────────────────────────────────────
+PROPOSED IMPLEMENTATION PHASES (per spec §66)
+────────────────────────────────────────────────────────────
+
+PHASE 1 — Subject data foundation
+  • Add `status` field to Subject schema (Active|Archived)
+  • Add `@@unique([schoolId, code])` constraint
+  • Run Prisma migration
+  • Create canonical Subject rows by deduplicating
+  • Update all FK references (ExamSubjectConfig, ExamMark, Result, etc.)
+  • Delete duplicate Subject rows
+  • Normalize "Mathematics" → "Maths", "Social Studies" → "Social Science"
+  • Clean up 7 orphaned subjects
+  • Verify DB integrity
+  • Commit
+
+PHASE 2 — ClassSubjectAssignment table
+  • Add ClassSubjectAssignment model to schema
+  • Add `isCore`, `displayOrder`, `examinable` fields
+  • Run migration
+  • Backfill from existing (Subject.classId, Subject.name) pairs
+  • Add API endpoints: GET /api/classes/[id]/subjects, POST /api/classes/[id]/subjects,
+    DELETE /api/classes/[id]/subjects/[subjectId], PATCH /api/subjects/[id]
+  • Commit
+
+PHASE 3 — Students & Classes subject management
+  • Refactor class-subjects.tsx to fetch from /api/classes/[id]/subjects
+  • Replace useStudentsStore with API-backed hook
+  • Implement Add/Edit/Remove/Archive UI on top of new API
+  • Add subject rename dialog with "this will update across the system" warning
+  • Commit
+
+PHASE 4 — Subject change propagation
+  • Add cache invalidation: after subject mutation, refetch affected queries
+  • Either add React Query OR add cross-hook invalidation via custom event bus
+  • Verify rename propagates to Examination UI without manual refresh
+  • Commit
+
+PHASE 5 — Examination integration
+  • Update getClasses() to join ClassSubjectAssignment + Subject
+  • Examination reads from canonical Subject (no longer class-scoped)
+  • Verify stream alternatives (Maths/Biology) still work
+  • Commit
+
+PHASE 6 — Marks / Results / Reports
+  • Verify all modules JOIN through Subject to get current name
+  • No schema changes needed (subjectId FK already correct)
+  • Add display-name resolution helper if needed
+  • Commit
+
+PHASE 7 — Cleanup
+  • Delete SUBJECTS_BY_LEVEL constant
+  • Delete students-store subject mock data
+  • Update mock files (resources, attendance, flashcards) to use canonical names
+  • Remove Subject.classId from schema (now unused) — final migration
+  • Commit
+
+PHASE 8 — Full testing
+  • Typecheck, ESLint, build, E2E
+  • Manual UI verification per spec §58
+  • Commit
+
+PHASE 9 — GitHub push
+  • Review diff, push to main
+  • Report any push failures honestly
+
+Stage Summary:
+- Phase 0 audit complete. NO code changes made. NO migrations run.
+- 20 audit questions answered with file paths, line numbers, and DB state.
+- 7 conflicts identified and documented.
+- Safest migration path proposed with 9 steps + 9 implementation phases.
+- Awaiting user instruction to proceed with Phase 1.
