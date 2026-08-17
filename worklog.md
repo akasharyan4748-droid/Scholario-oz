@@ -498,3 +498,92 @@ Stage Summary:
 - Section spacing improved for better rhythm; no giant boxes, no fragmented feel.
 - The principal's required inputs are minimal: examination type, classes, date range, start time. Everything else is auto-derived from existing school configuration.
 - Homework, Admissions, Teachers, Students & Classes, Timetable, Attendance, Finance, Communication — all untouched.
+
+---
+Task ID: phase-7-canonical-naming-stream-alt
+Agent: main (Super Z)
+Task: Phase 7 of Subject Ecosystem + Examinations spec — canonical naming (Spec §9, §16), server-side past-date validation (Spec §37), and stream alternative Mathematics/Biology (Spec §13, §41).
+
+Work Log:
+
+### Phase 7-A: Database class renames (Spec §9, §30)
+- Created scripts/normalize-class-subject-names.ts
+- Renamed all 9 classes from "Grade X - A" / "Grade X - Science PCM" to canonical "Class X" / "Class X — Science PCM":
+  • Grade 6 - A   → Class 6
+  • Grade 7 - A   → Class 7
+  • Grade 8 - A   → Class 8
+  • Grade 9 - A   → Class 9
+  • Grade 10 - A  → Class 10
+  • Grade 11 - Science PCM → Class 11 — Science PCM
+  • Grade 11 - Science PCB → Class 11 — Science PCB
+  • Grade 12 - Science PCM → Class 12 — Science PCM
+  • Grade 12 - Science PCB → Class 12 — Science PCB
+- 9 class rows updated. Historical exam/marks/schedule records reference classId FK — preserved.
+
+### Phase 7-B: Subject name normalization (Spec §16)
+- Same script renamed "Computer" → "Computer Science" (3 rows: Class 6, 7, 8).
+- No "English Core", "Maths", or "Social Studies" variants existed in DB — already canonical.
+- Subject IDs preserved → all ExamSubject / ExamMark / ExamScheduleItem FK references remain valid (Spec §25 historical safety).
+
+### Phase 7-C: Server-side past date validation (Spec §37)
+- Updated src/lib/exams/service.ts createExam():
+  • Rejects startDate < today with "Examination start date cannot be in the past"
+  • Rejects endDate < startDate with "Examination end date cannot be before the start date"
+- Updated src/lib/exams/service.ts updateExam():
+  • Same validation but only enforces past-date rule on Draft exams (Published/Archived may keep historical dates).
+  • Merges pending updates onto existing exam dates so partial patches are validated correctly.
+- Errors surface via withUser() wrapper as HTTP 400 with { ok: false, error: msg }.
+
+### Phase 7-D: Stream alternative Mathematics/Biology (Spec §13, §41)
+- Updated src/lib/exams/template-engine.ts:
+  • Added STREAM_ALTERNATIVE_PAIRS = [['Mathematics', 'Biology']]
+  • Added getStreamAlternative(name) → returns partner name or null
+  • Added countScheduleSlots(subjectNames) → collapses alternative pairs into 1 slot
+  • Modified generateSchedule() to detect active alternative pairs and schedule both subjects on the SAME date+time slot. Each subject still gets its own schedule item (so per-class storage routes correctly), but they share the slot.
+- Updated src/components/principal/modules/exams/create-exam-fullscreen.tsx:
+  • Date validation now uses countScheduleSlots() instead of raw subject count — so required-days calculation matches what scheduler actually generates.
+  • groupScheduleByDate() now merges items sharing the same date+startTime+endTime into ONE row with combined label "Mathematics / Biology".
+- Result: when PCM + PCB are both selected, the timetable shows ONE row "Mathematics / Biology" instead of two separate rows on different days.
+
+### Phase 7-E: UI label fix + mock data normalization
+- Fixed stream label in create-exam-fullscreen.tsx normalizeToExamClasses():
+  • Was: stream.replace('Science-', '') → "PCM"
+  • Now: "Science PCM" (full stream name per Spec §9)
+  • Label: "Class 11 — Science PCM" (not "Class 11 — PCM")
+- Updated mock data files via sed:
+  • src/lib/exams/session-toppers-data.ts (13 occurrences)
+  • src/lib/exams/archive-data.ts (10 occurrences)
+  • All "Grade X - A" → "Class X", "Grade X - Science PCM" → "Class X — Science PCM"
+- Verified Examination module is decoupled from src/lib/mock/school.ts (which still has "Grade 9/10" — left untouched per Spec §56 No Unnecessary UI Rewrite; not exam-related).
+
+### Verification — E2E test (scripts/e2e-create-exam.mjs)
+- Updated test to use new class names ("Class 9", "Class 11 — Science PCM", etc.)
+- Updated test to use future dates (2026-09-07 onwards) since past-date validation now blocks 2026-03-09
+- Added Scenario J: server-side past date rejection
+- All scenarios pass:
+  • A: UT1 + Class 9 + Class 10 → Draft created, 6 subjects per class (deduped), 12 papers ✓
+  • C: Annual + Class 11 Science PCM → Physics, Chemistry, Mathematics, English, Hindi, PE (no Biology) ✓
+  • D: Annual + Class 11 Science PCB → Physics, Chemistry, Biology, English, Hindi, PE (no Mathematics) ✓
+  • H: Stream alternative — combined 7 subjects → 6 slots (Mathematics/Biology collapse) ✓
+  • J: Past date rejected with HTTP 400 + "Examination start date cannot be in the past" ✓
+  • F-I: Draft → Scheduled → Cancelled lifecycle works ✓
+  • Module isolation: Homework, Students, Teachers, Attendance all HTTP 200 ✓
+
+### TS check
+- 56 total errors (same as baseline — all pre-existing in seed.ts and unrelated modules)
+- ZERO errors in exam-related files (create-exam-fullscreen, template-engine, service, archive-data, session-toppers-data)
+
+### Dev server
+- Already running on PID 2785/2797 (next-server v16.3.0)
+- All exam APIs HTTP 200
+- Class list API returns new "Class X" / "Class X — Science PCM" names
+
+Stage Summary:
+- DB classes renamed to canonical "Class X" / "Class X — Science PCM" terminology (Spec §9)
+- Subject "Computer" normalized to "Computer Science" (Spec §16)
+- Server-side past date validation in createExam + updateExam (Spec §37) — frontend min=today is now backed by server enforcement
+- Stream alternative Mathematics/Biology collapses into ONE schedule slot when PCM + PCB are both selected (Spec §13, §41)
+- UI label "Class 11 — Science PCM" (was "Class 11 — PCM")
+- Mock data normalized (session-toppers-data, archive-data) — no more "Grade X - A" leakage in Examination UI
+- create-exam-fullscreen.tsx, template-engine.ts, service.ts — all exam-related files TS-clean
+- Homework, Admissions, Teachers, Students & Classes, Timetable, Attendance, Finance, Communication — all untouched

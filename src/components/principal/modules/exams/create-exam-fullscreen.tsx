@@ -45,6 +45,7 @@ import {
   getTemplateMeta,
   generateExamConfig,
   validateDateRange,
+  countScheduleSlots,
   FIXED_PASS_PERCENTAGE,
   type ClassInfo,
   type SubjectInfo,
@@ -97,8 +98,13 @@ function normalizeToExamClasses(classes: ClassDTO[]): ExamClass[] {
         }
       }
     } else {
-      // Create new examination-level class
-      const streamLabel = stream ? stream.replace('Science-', '') : null
+      // Create new examination-level class — Spec §9 canonical labels:
+      // "Class 6" / "Class 11 — Science PCM" / "Class 11 — Science PCB"
+      const streamLabel = stream
+        ? stream.startsWith('Science-')
+          ? `Science ${stream.slice('Science-'.length)}`
+          : stream
+        : null
       const label = streamLabel
         ? `Class ${grade} — ${streamLabel}`
         : `Class ${grade}`
@@ -259,15 +265,19 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   }
 
   // ─── Date range validation ───────────────────────────────────────────
+  // Use slot count (collapses Mathematics/Biology stream alternatives into
+  // one slot per Spec §13/§41) so the required-days calculation matches
+  // what the scheduler will actually generate.
   const dateValidation = useMemo(() => {
     if (!selectedTemplate || !startDate || effectiveSubjects.length === 0) return null
+    const slotCount = countScheduleSlots(effectiveSubjects.map((s) => s.name))
     return validateDateRange(
       selectedTemplate.id,
       startDate,
       endDate || startDate,
-      effectiveSubjects.length,
+      slotCount,
     )
-  }, [selectedTemplate, startDate, endDate, effectiveSubjects.length])
+  }, [selectedTemplate, startDate, endDate, effectiveSubjects])
 
   // ─── Generated schedule preview ──────────────────────────────────────
   const generatedSchedule = useMemo<GeneratedScheduleItem[]>(() => {
@@ -764,16 +774,49 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 // ─── Schedule grouping helper ─────────────────────────────────────────
+// Groups schedule items by date. Within a date, items sharing the SAME
+// start+end time (e.g. Mathematics and Biology on the same slot per
+// Spec §13/§41) are merged into a single row labelled "A / B".
 
 function groupScheduleByDate(items: GeneratedScheduleItem[]): Array<{ date: string; items: GeneratedScheduleItem[] }> {
-  const map = new Map<string, GeneratedScheduleItem[]>()
+  // First group by date
+  const byDate = new Map<string, GeneratedScheduleItem[]>()
   for (const it of items) {
-    if (!map.has(it.date)) map.set(it.date, [])
-    map.get(it.date)!.push(it)
+    if (!byDate.has(it.date)) byDate.set(it.date, [])
+    byDate.get(it.date)!.push(it)
   }
-  return Array.from(map.entries())
+
+  return Array.from(byDate.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, dayItems]) => ({ date, items: dayItems.sort((a, b) => a.startTime.localeCompare(b.startTime)) }))
+    .map(([date, dayItems]) => {
+      // Merge items that share the same startTime+endTime into one row.
+      // Use a stable order by startTime, then by subjectName.
+      const bySlot = new Map<string, GeneratedScheduleItem[]>()
+      for (const it of dayItems) {
+        const key = `${it.startTime}|${it.endTime}`
+        if (!bySlot.has(key)) bySlot.set(key, [])
+        bySlot.get(key)!.push(it)
+      }
+      const merged: GeneratedScheduleItem[] = []
+      for (const [, group] of bySlot) {
+        if (group.length === 1) {
+          merged.push(group[0])
+        } else {
+          // Combine — sort by subjectName for stable display, dedupe names.
+          const names = Array.from(new Set(group.map((g) => g.subjectName.split(' / ')[0])))
+          const classIds = Array.from(new Set(group.flatMap((g) => g.classIds)))
+          // Use the subjectName of the first item but rewrite as "A / B / ..."
+          const combined = group[0]
+          merged.push({
+            ...combined,
+            subjectName: names.join(' / '),
+            classIds,
+          })
+        }
+      }
+      merged.sort((a, b) => a.startTime.localeCompare(b.startTime))
+      return { date, items: merged }
+    })
 }
 
 function formatDateLong(dateStr: string): string {

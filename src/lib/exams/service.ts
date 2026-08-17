@@ -294,6 +294,27 @@ export async function createExam(
   if (!input.name?.trim()) throw new Error('Examination name is required')
   if (input.classIds.length === 0) throw new Error('At least one class is required')
 
+  // Spec §37: Server-side past date validation (frontend min=today is not enough)
+  // Start date must be today or future; End date must be on/after start date.
+  if (input.startDate) {
+    const start = new Date(input.startDate)
+    start.setHours(0, 0, 0, 0)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (start.getTime() < today.getTime()) {
+      throw new Error('Examination start date cannot be in the past')
+    }
+  }
+  if (input.startDate && input.endDate) {
+    const start = new Date(input.startDate)
+    const end = new Date(input.endDate)
+    start.setHours(0, 0, 0, 0)
+    end.setHours(0, 0, 0, 0)
+    if (end.getTime() < start.getTime()) {
+      throw new Error('Examination end date cannot be before the start date')
+    }
+  }
+
   // Validate classes belong to school
   const validClasses = await db.class.findMany({
     where: { id: { in: input.classIds }, schoolId },
@@ -412,6 +433,31 @@ export async function updateExam(
 ): Promise<ExamDTO> {
   const exam = await db.exam.findFirst({ where: { id: examId, schoolId } })
   if (!exam) throw new Error('Exam not found')
+
+  // Spec §37: server-side date validation on update too.
+  // Merge pending updates onto existing exam dates so partial patches are validated correctly.
+  const effectiveStart = updates.startDate !== undefined ? updates.startDate : (exam.startDate?.toISOString().split('T')[0] ?? null)
+  const effectiveEnd = updates.endDate !== undefined ? updates.endDate : (exam.endDate?.toISOString().split('T')[0] ?? null)
+  // Only validate past-start-date for Draft exams — Published/Archived exams may keep historical dates.
+  if (exam.status === 'Draft' && effectiveStart) {
+    const start = new Date(effectiveStart)
+    start.setHours(0, 0, 0, 0)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (start.getTime() < today.getTime()) {
+      throw new Error('Examination start date cannot be in the past')
+    }
+  }
+  if (effectiveStart && effectiveEnd) {
+    const start = new Date(effectiveStart)
+    const end = new Date(effectiveEnd)
+    start.setHours(0, 0, 0, 0)
+    end.setHours(0, 0, 0, 0)
+    if (end.getTime() < start.getTime()) {
+      throw new Error('Examination end date cannot be before the start date')
+    }
+  }
+
   const oldSnapshot = { name: exam.name, type: exam.type, status: exam.status, resultStatus: exam.resultStatus }
   const updated = await db.exam.update({
     where: { id: examId },
