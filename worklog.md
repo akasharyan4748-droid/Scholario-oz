@@ -587,3 +587,72 @@ Stage Summary:
 - Mock data normalized (session-toppers-data, archive-data) — no more "Grade X - A" leakage in Examination UI
 - create-exam-fullscreen.tsx, template-engine.ts, service.ts — all exam-related files TS-clean
 - Homework, Admissions, Teachers, Students & Classes, Timetable, Attendance, Finance, Communication — all untouched
+
+---
+Task ID: full-project-audit-2026-08-17
+Agent: main (Super Z)
+Task: Complete project audit — fix all TypeScript errors, ESLint errors, dead code, and structural issues. Make codebase modular, future-proof, and scalable.
+
+Work Log:
+
+### Phase 1: Diagnostics baseline
+- Restarted dev server (Next.js 16.3.0 + Turbopack)
+- Baseline: 56 TypeScript errors, 4 ESLint errors, 0 build errors
+
+### Phase 2: TypeScript fixes (56 → 0)
+- prisma/seed.ts: typed `students[]` as `Awaited<ReturnType<typeof db.student.create>>[]` (was inferred as `never[]` — caused 7 cascading errors)
+- src/lib/auth.ts: handle nullable `name` and `academicYear` (use `?? ''` fallback)
+- src/app/api/auth/login/route.ts: guard against null `passwordHash` + nullable name
+- src/app/api/notifications-feed/route.ts: optional-chain `m.sender` (sender can be null)
+- FeeStructureStep/types.ts: add optional `paymentMethod` + `selectedFeeHeadIds` to `FeeDataState` (4 admission components referenced these)
+- finance-dashboard/reports.tsx: drop invalid `t.count` reference from tab config
+- shared/segmented-tabs.tsx: make component generic `<T extends string>` so `Dispatch<SetStateAction<Tab>>` is accepted by all 7 consumer modules (alumni, compliance, event-management, health-wellness, hostel, procurement, recruitment)
+- shared/charts/legacy-bar.tsx: wrap `BarChart` + `<style jsx>` in fragment (ResponsiveContainer expects single child)
+- shared/{empty,error,loading}-state.tsx + sidebar.tsx + topbar.tsx: change import from `'motion/react'` to `'framer-motion'` (motion package was never installed — 5 broken imports)
+- admission-store/defaults.ts: add missing `country`/`city`/`permCountry`/`permCity` fields to default form data
+- teachers-store/workload-slice.ts: remove duplicate `qrVerificationId` + `reportingAuthority` keys in object literal
+
+### Phase 3: ESLint fixes (4 → 0)
+- admission/field-config/FieldRulesTab.tsx: extract `JSON.stringify(fieldRules)` into a const so the useMemo dep is a simple expression
+- admission/field-config/SeatCapacityTab.tsx: same fix for `seatCapacity`
+- homework/dashboard.tsx: refactor SubjectDonut to compute cumulative offsets via `reduce` instead of mutating `let offset` inside `.map()`
+- timetable/schedule-grid.tsx: convert empty interface `TimetableRow` to a type alias to satisfy `@typescript-eslint/no-empty-object-type`
+
+### Phase 4: Dead code removal
+- **Deleted src/lib/exams/curriculum.ts (125 lines)**
+  - Audit showed the only consumers were:
+    1. `types.ts` importing `Board` + `Stream` types (inlined into types.ts)
+    2. Zero consumers of `MIDDLE_SCHOOL_SUBJECTS`, `SECONDARY_SUBJECTS`, `SCIENCE_PCM_SUBJECTS`, `SCIENCE_PCB_SUBJECTS`, `SCIENCE_PCMB_SUBJECTS`, `COMMERCE_SUBJECTS`, `HUMANITIES_SUBJECTS`, `STREAM_PRESETS`, `STREAM_LABELS`, `suggestSubjectsForClass`, `SubjectPreset`.
+  - Schools configure subjects per class+stream directly in Students & Classes; the preset arrays were dead speculative code from an earlier design.
+
+### Phase 5: Type safety improvements
+- exams/exam-workspace.tsx: replaced 4x `exam: any` with `exam: ExamDTO` for OverviewSection / ScheduleSection / MarksSection / ResultsSection.
+
+### Phase 6: Scripts reorganization
+- Moved 12 one-shot DB fix scripts to `scripts/one-shot/`:
+  - add-grade-68.ts, add-hindi-senior.ts, add-senior-classes.ts
+  - fix-db.ts, fix-subject-codes.ts
+  - normalize-subjects.ts, normalize-class-subject-names.ts, test-normalize.ts
+  - check-classes.mjs, check-tables.mjs
+  - convert-tabs.py, convert-all-tabs.py
+- Updated relative imports in moved scripts (`../src/lib/db` → `../../src/lib/db`)
+- `scripts/` now contains only actively-useful files: `e2e-create-exam.mjs`, `e2e-exam-test.mjs`, `e2e-exam-workflow.mjs`, `start-dev.sh`
+
+### Verification
+- TypeScript: **0 errors** (was 56)
+- ESLint: **0 errors** (was 4)
+- E2E: all scenarios pass (A/C/D/H/J/F-I + module isolation)
+- Server: home HTTP 200, login HTTP 200, all module APIs HTTP 200
+- Total source: 1005 files, 105,259 lines
+- No duplicate service/component implementations (verified)
+- No backup/temp files (`*.bak`, `*.old`, `*.tmp`, `*~`)
+- Zero `console.log` debug statements in source
+- All `motion/react` imports fixed → using `framer-motion` consistently (294 files)
+
+Stage Summary:
+- **56 → 0 TypeScript errors**
+- **4 → 0 ESLint errors**
+- **125 lines of dead curriculum.ts removed** (only Board/Stream types preserved, inlined into types.ts)
+- **12 one-shot scripts archived** to `scripts/one-shot/` (keeps `scripts/` focused on actively-used tooling)
+- **Type safety improved**: 4 `exam: any` → `exam: ExamDTO` in exam-workspace
+- Codebase is now: 1005 source files, 105K lines, 0 TS errors, 0 ESLint errors, fully E2E-verified
