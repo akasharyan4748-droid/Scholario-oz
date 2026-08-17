@@ -63,6 +63,66 @@ export interface ClassDTO {
   subjects: Array<{ id: string; name: string; code: string | null; fullMarks: number; passMarks: number }>
 }
 
+/** Examination-level class — sections collapsed into one selectable unit. */
+interface ExamClass {
+  key: string           // unique key: `${gradeLevel}-${stream ?? 'general'}`
+  label: string         // "Class 9" or "Class 11 — Science PCM"
+  gradeLevel: string
+  stream: string | null
+  sectionIds: string[]  // all section class IDs that belong to this exam class
+  sectionCount: number
+  studentCount: number
+  subjects: ClassDTO['subjects']  // merged subjects from all sections (deduped by name)
+}
+
+/** Transform raw DB classes (with sections) into examination-level classes. */
+function normalizeToExamClasses(classes: ClassDTO[]): ExamClass[] {
+  const byKey = new Map<string, ExamClass>()
+  for (const cls of classes) {
+    const grade = cls.gradeLevel ?? '0'
+    const stream = cls.stream ?? null
+    const key = `${grade}-${stream ?? 'general'}`
+    const existing = byKey.get(key)
+    if (existing) {
+      // Merge section into existing exam class
+      existing.sectionIds.push(cls.id)
+      existing.sectionCount++
+      existing.studentCount += cls.studentCount
+      // Merge subjects (dedupe by name — keep first occurrence)
+      const existingNames = new Set(existing.subjects.map(s => s.name))
+      for (const subj of cls.subjects) {
+        if (!existingNames.has(subj.name)) {
+          existing.subjects.push(subj)
+          existingNames.add(subj.name)
+        }
+      }
+    } else {
+      // Create new examination-level class
+      const streamLabel = stream ? stream.replace('Science-', '') : null
+      const label = streamLabel
+        ? `Class ${grade} — ${streamLabel}`
+        : `Class ${grade}`
+      byKey.set(key, {
+        key,
+        label,
+        gradeLevel: grade,
+        stream,
+        sectionIds: [cls.id],
+        sectionCount: 1,
+        studentCount: cls.studentCount,
+        subjects: [...cls.subjects],
+      })
+    }
+  }
+  // Sort numerically by gradeLevel, then by stream
+  return Array.from(byKey.values()).sort((a, b) => {
+    const ga = parseInt(a.gradeLevel, 10)
+    const gb = parseInt(b.gradeLevel, 10)
+    if (ga !== gb) return ga - gb
+    return (a.stream ?? '').localeCompare(b.stream ?? '')
+  })
+}
+
 interface Props {
   classes: ClassDTO[]
   academicYear: string
@@ -79,9 +139,7 @@ interface DedupedSubject extends SubjectInfo {
 export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated }: Props) {
   const [selectedTemplate, setSelectedTemplate] = useState<ExamTemplate | null>(null)
   const [name, setName] = useState('')
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([])
-  // subjectsEditable: when false (default), subjects are auto-included and
-  // shown read-only. When true, the principal can toggle individual subjects.
+  const [selectedExamClassKeys, setSelectedExamClassKeys] = useState<string[]>([])
   const [subjectsEditable, setSubjectsEditable] = useState(false)
   const [deselectedSubjectNames, setDeselectedSubjectNames] = useState<Set<string>>(new Set())
   const [hasPractical, setHasPractical] = useState(false)
@@ -89,6 +147,27 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   const [endDate, setEndDate] = useState('')
   const [examTime, setExamTime] = useState('09:00')
   const { create, loading } = useCreateExam()
+
+  // Normalize raw DB classes into examination-level classes
+  const examClasses = useMemo(() => normalizeToExamClasses(classes), [classes])
+
+  // Selected exam classes (full objects)
+  const selectedExamClasses = useMemo(
+    () => examClasses.filter((c) => selectedExamClassKeys.includes(c.key)),
+    [examClasses, selectedExamClassKeys],
+  )
+
+  // Expand to all section-level class IDs for API calls
+  const selectedClassIds = useMemo(
+    () => selectedExamClasses.flatMap((c) => c.sectionIds),
+    [selectedExamClasses],
+  )
+
+  // Selected classes as ClassDTO[] for schedule generation
+  const selectedClasses = useMemo(
+    () => classes.filter((c) => selectedClassIds.includes(c.id)),
+    [classes, selectedClassIds],
+  )
 
   // Today's date in YYYY-MM-DD (blocks past dates)
   const today = useMemo(() => {
@@ -106,16 +185,11 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   }, [])
 
   // ─── Class selection ────────────────────────────────────────────────
-  const handleClassToggle = (classId: string) => {
-    setSelectedClassIds((prev) =>
-      prev.includes(classId) ? prev.filter((c) => c !== classId) : [...prev, classId],
+  const handleClassToggle = (examClassKey: string) => {
+    setSelectedExamClassKeys((prev) =>
+      prev.includes(examClassKey) ? prev.filter((k) => k !== examClassKey) : [...prev, examClassKey],
     )
   }
-
-  const selectedClasses = useMemo(
-    () => classes.filter((c) => selectedClassIds.includes(c.id)),
-    [classes, selectedClassIds],
-  )
 
   // ─── Auto-included subjects (deduped by NAME across all selected classes) ───
   // This is the source of truth — subjects come FROM the class configuration.
@@ -224,7 +298,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   const canCreate =
     name.trim().length > 0 &&
     selectedTemplate !== null &&
-    selectedClassIds.length > 0 &&
+    selectedExamClassKeys.length > 0 &&
     effectiveSubjects.length > 0 &&
     startDate.length > 0 &&
     startDate >= today &&
@@ -357,30 +431,22 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
               <Section
                 label="Classes"
                 required
-                hint={selectedClassIds.length > 0 ? `${selectedClassIds.length} selected` : undefined}
+                hint={selectedExamClassKeys.length > 0 ? `${selectedExamClassKeys.length} selected` : undefined}
               >
-                {classes.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border/60 py-5 text-center">
-                    <p className="text-xs text-muted-foreground">
-                      No classes configured yet.
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/70 mt-1">
-                      Add classes in Students &amp; Classes first.
-                    </p>
-                  </div>
+                {examClasses.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-3">No classes configured. Add classes in Students &amp; Classes first.</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
-                    {classes.map((cls) => {
-                      const isSelected = selectedClassIds.includes(cls.id)
-                      const streamLabel = cls.stream ? cls.stream.replace('Science-', '') : null
+                    {examClasses.map((examCls) => {
+                      const isSelected = selectedExamClassKeys.includes(examCls.key)
                       return (
                         <div
-                          key={cls.id}
+                          key={examCls.key}
                           role="checkbox"
                           aria-checked={isSelected}
                           tabIndex={0}
-                          onClick={() => handleClassToggle(cls.id)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClassToggle(cls.id) } }}
+                          onClick={() => handleClassToggle(examCls.key)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClassToggle(examCls.key) } }}
                           className={cn(
                             'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-medium transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30',
                             isSelected ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground hover:bg-muted/30',
@@ -389,8 +455,8 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                           <span className={cn('flex h-3.5 w-3.5 items-center justify-center rounded-full border shrink-0', isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40')}>
                             {isSelected && <Check className="h-2.5 w-2.5" />}
                           </span>
-                          <span>{cls.name}</span>
-                          {streamLabel && <span className="text-[9px] text-muted-foreground/70">· {streamLabel}</span>}
+                          <span>{examCls.label}</span>
+                          {examCls.sectionCount > 1 && <span className="text-[9px] text-muted-foreground/60">· {examCls.sectionCount} sections</span>}
                         </div>
                       )
                     })}
@@ -421,22 +487,11 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                                     ? 'border-primary/40 bg-primary/10 text-foreground'
                                     : 'border-border bg-card text-muted-foreground/60 line-through',
                                 )}
-                                title={`Available in: ${subj.availableInClassNames.join(', ')}`}
                               >
-                                <span
-                                  className={cn(
-                                    'flex h-3.5 w-3.5 items-center justify-center rounded-full border shrink-0',
-                                    isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40',
-                                  )}
-                                >
+                                <span className={cn('flex h-3.5 w-3.5 items-center justify-center rounded-full border shrink-0', isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40')}>
                                   {isSelected && <Check className="h-2.5 w-2.5" />}
                                 </span>
                                 {subj.name}
-                                {subj.availableInClassIds.length > 1 && (
-                                  <span className="text-[9px] text-muted-foreground ml-0.5">
-                                    ×{subj.availableInClassIds.length}
-                                  </span>
-                                )}
                               </button>
                             )
                           })}
@@ -462,14 +517,8 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                           <span
                             key={subj.id}
                             className="inline-flex items-center rounded-md bg-card border border-border/60 px-2 py-1 text-xs font-medium"
-                            title={`Available in: ${subj.availableInClassNames.join(', ')}`}
                           >
                             {subj.name}
-                            {subj.availableInClassIds.length > 1 && (
-                              <span className="text-[9px] text-muted-foreground ml-1">
-                                ×{subj.availableInClassIds.length}
-                              </span>
-                            )}
                           </span>
                         ))}
                         <button
