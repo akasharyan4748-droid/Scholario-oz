@@ -37,7 +37,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
-import { Checkbox } from '@/components/ui/checkbox'
+
 import { useCreateExam } from '@/lib/exams/use-exams'
 import { TemplateSelection } from './tabs/template-selection'
 import { type ExamTemplate } from './tabs/exam-templates'
@@ -227,6 +227,8 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
     selectedClassIds.length > 0 &&
     effectiveSubjects.length > 0 &&
     startDate.length > 0 &&
+    startDate >= today &&
+    (!endDate || endDate >= startDate) &&
     (!dateValidation || dateValidation.isValid)
 
   // ─── Handle create ───────────────────────────────────────────────────
@@ -367,28 +369,29 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {classes.map((cls) => {
                       const isSelected = selectedClassIds.includes(cls.id)
+                      const streamLabel = cls.stream ? cls.stream.replace('Science-', '') : null
                       return (
-                        <label
+                        <div
                           key={cls.id}
+                          role="checkbox"
+                          aria-checked={isSelected}
+                          tabIndex={0}
+                          onClick={() => handleClassToggle(cls.id)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClassToggle(cls.id) } }}
                           className={cn(
-                            'flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors',
-                            isSelected ? 'border-primary/40 bg-primary/5' : 'border-border hover:bg-muted/30',
+                            'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-medium transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30',
+                            isSelected ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground hover:bg-muted/30',
                           )}
                         >
-                          <Checkbox checked={isSelected} onCheckedChange={() => handleClassToggle(cls.id)} />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium truncate">{cls.name}</p>
-                            {cls.stream && (
-                              <p className="text-[9px] text-muted-foreground truncate">{cls.stream}</p>
-                            )}
-                          </div>
-                          <span className="text-[9px] text-muted-foreground ml-auto shrink-0 tabular-nums">
-                            {cls.studentCount}
+                          <span className={cn('flex h-3.5 w-3.5 items-center justify-center rounded-full border shrink-0', isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40')}>
+                            {isSelected && <Check className="h-2.5 w-2.5" />}
                           </span>
-                        </label>
+                          <span>{cls.name}</span>
+                          {streamLabel && <span className="text-[9px] text-muted-foreground/70">· {streamLabel}</span>}
+                        </div>
                       )
                     })}
                   </div>
@@ -556,11 +559,11 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                         minDate={today}
                       />
                     </Field>
-                    <Field label="Last Examination Date">
+                    <Field label="End Date">
                       <DatePicker
                         value={endDate}
                         onChange={setEndDate}
-                        placeholder="Last date"
+                        placeholder="End date"
                         minDate={startDate || today}
                       />
                     </Field>
@@ -571,7 +574,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                         type="time"
                         value={examTime}
                         onChange={(e) => setExamTime(e.target.value)}
-                        className="h-8 text-xs w-32"
+                        className="h-9 text-xs w-32"
                       />
                     </Field>
                     <p className="text-[10px] text-muted-foreground mt-4">
@@ -655,23 +658,21 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
         </div>
       </div>
 
-      {/* Compact bottom action bar — the only persistent action area */}
-      <div className="border-t border-border bg-card px-4 sm:px-6 py-2.5 flex justify-between items-center shrink-0">
-        <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={onBack}>
-          <ArrowLeft className="h-3.5 w-3.5" /> Cancel
-        </Button>
-        <Button
-          size="sm"
-          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-          onClick={handleCreate}
-          disabled={loading || !canCreate}
-        >
-          {loading ? 'Creating…' : (
-            <>
-              <Check className="h-3.5 w-3.5" /> Create Examination
-            </>
-          )}
-        </Button>
+      {/* Lightweight action row — no card/slab */}
+      <div className="px-4 sm:px-6 pb-4 pt-2 shrink-0">
+        <div className="max-w-3xl mx-auto flex justify-between items-center">
+          <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1" onClick={onBack}>
+            <ArrowLeft className="h-3 w-3" /> Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 text-[11px] gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={handleCreate}
+            disabled={loading || !canCreate}
+          >
+            {loading ? 'Creating…' : (<><Check className="h-3 w-3" /> Create Examination</>)}
+          </Button>
+        </div>
       </div>
     </div>
   )

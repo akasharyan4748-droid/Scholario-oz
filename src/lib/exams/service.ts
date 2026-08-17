@@ -193,13 +193,19 @@ export async function getExam(examId: string, schoolId: string): Promise<ExamDTO
 export async function getClasses(schoolId: string) {
   const classes = await db.class.findMany({
     where: { schoolId },
-    orderBy: [{ gradeLevel: 'asc' }, { section: 'asc' }],
     include: {
       subjects: { orderBy: { name: 'asc' } },
       _count: { select: { students: true } },
     },
   })
-  return classes.map((c) => ({
+  // Sort numerically by gradeLevel, then by stream
+  const sorted = classes.sort((a, b) => {
+    const ga = parseInt(a.gradeLevel ?? '0', 10)
+    const gb = parseInt(b.gradeLevel ?? '0', 10)
+    if (ga !== gb) return ga - gb
+    return (a.stream ?? '').localeCompare(b.stream ?? '')
+  })
+  return sorted.map((c) => ({
     id: c.id,
     name: c.name,
     gradeLevel: c.gradeLevel,
