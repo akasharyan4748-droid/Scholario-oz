@@ -1,0 +1,2162 @@
+SCHOLARIO / SCHOLARIO-OS
+SUBJECT ECOSYSTEM ARCHITECTURE — STUDENTS & CLASSES + EXAMINATIONS
+FULL CROSS-MODULE IMPLEMENTATION
+
+IMPORTANT:
+DO NOT RUSH THIS IMPLEMENTATION.
+
+This is NOT a small UI change.
+
+We are now fixing the underlying SUBJECT architecture of the school ERP.
+
+Students & Classes and Examinations must be treated as TWO CONNECTED MODULES of the SAME academic data system.
+
+The goal is to establish one clean, reliable, normalized Subject ecosystem that can later be consumed consistently by:
+
+Students & Classes
+Examinations
+Timetable
+Marks Entry
+Results
+Report Cards
+Reports / Analytics
+Teacher workflows
+Student workflows
+and any future academic module.
+
+Take your time.
+
+First inspect the existing project architecture, database/schema, services, APIs, seed data, class model, section model, stream model, subject model, examination model, result/marks model and all existing subject-related logic.
+
+Do NOT blindly create a second parallel subject system.
+
+Do NOT hardcode the same subjects independently in multiple modules.
+
+Do NOT solve this with visual filtering only.
+
+Implement the correct underlying architecture so the entire ecosystem remains synchronized.
+
+============================================================
+PART 1 — CORE PRODUCT DECISION
+============================================================
+
+We are establishing this rule:
+
+STUDENTS & CLASSES is the primary source of truth for which subjects exist for each class/stream.
+
+EXAMINATIONS must consume those configured subjects.
+
+RESULTS / REPORTS / MARKS must consume the same canonical subject identity.
+
+The same subject must NOT become different subjects simply because it appears in different modules.
+
+For example:
+
+Hindi in Class 6,
+Hindi in Class 7,
+Hindi in Class 9,
+Hindi in Class 10
+
+must still resolve to the same canonical subject identity where appropriate, while maintaining its class applicability.
+
+Likewise:
+
+Physics for Class 11 Science PCM
+Physics for Class 11 Science PCB
+Physics for Class 12 Science PCM
+Physics for Class 12 Science PCB
+
+must resolve through the same canonical subject concept, with class/stream applicability determining where it is available.
+
+The UI may display subjects in class-specific contexts, but the underlying identity must remain normalized.
+
+============================================================
+PART 2 — DO NOT CONFUSE CLASS, SECTION AND STREAM
+============================================================
+
+This distinction is CRITICAL.
+
+CLASS:
+6, 7, 8, 9, 10, 11, 12
+
+SECTION:
+A, B, C etc.
+
+STREAM:
+Science PCM
+Science PCB
+
+Examination creation works at:
+
+CLASS level
+
+or
+
+STREAM level when the class has different academic subject structures.
+
+It does NOT work at section level.
+
+For example:
+
+Class 9
+  Section A
+  Section B
+  Section C
+
+means the examination system sees:
+
+Class 9
+
+not:
+
+Class 9-A
+Class 9-B
+Class 9-C
+
+Sections remain available elsewhere for:
+
+students
+attendance
+teacher assignment
+marks entry
+student lists
+section-specific teacher workflows
+
+but examination creation must not create separate examination subjects/papers for each section.
+
+============================================================
+PART 3 — DEFAULT SUBJECT CONFIGURATION
+============================================================
+
+We need a proper default subject configuration.
+
+For:
+
+Nursery through Class 10
+
+the default/core subjects must be:
+
+1. Hindi
+2. English
+3. Mathematics
+4. Science
+5. Social Science
+
+These are the default subjects that should exist for the applicable classes.
+
+IMPORTANT:
+
+Do not interpret this as saying Nursery–10 can never have additional subjects.
+
+These are the DEFAULT / CORE subjects.
+
+Schools must be able to add additional subjects.
+
+Examples of additional subjects may include:
+
+Computer
+Arts & Drawing
+Sanskrit
+Physical Education
+General Knowledge
+etc.
+
+Do NOT hardcode this example list as the only allowed additional subjects.
+
+The system must provide an Add Subject capability.
+
+============================================================
+PART 4 — CLASS 11 AND 12 SCIENCE
+============================================================
+
+For:
+
+Class 11 — Science PCM
+Class 11 — Science PCB
+Class 12 — Science PCM
+Class 12 — Science PCB
+
+the default/core subjects must be:
+
+Hindi
+English
+Physics
+Chemistry
+
+plus the stream-specific alternative:
+
+PCM → Mathematics
+
+PCB → Biology
+
+Therefore:
+
+Class 11 Science PCM:
+
+Hindi
+English
+Physics
+Chemistry
+Mathematics
+
+Class 11 Science PCB:
+
+Hindi
+English
+Physics
+Chemistry
+Biology
+
+Class 12 Science PCM:
+
+Hindi
+English
+Physics
+Chemistry
+Mathematics
+
+Class 12 Science PCB:
+
+Hindi
+English
+Physics
+Chemistry
+Biology
+
+============================================================
+PART 5 — MATHEMATICS / BIOLOGY IS AN ALTERNATIVE GROUP
+============================================================
+
+This is extremely important.
+
+Do NOT treat Mathematics and Biology as two simultaneously required subjects for a single stream.
+
+They are an alternative subject group.
+
+Conceptually:
+
+Group:
+"Mathematics / Biology"
+
+PCM:
+  Mathematics
+
+PCB:
+  Biology
+
+This distinction must be understood by:
+
+subject configuration
+examination scheduler
+timetable
+marks
+results
+reports
+
+For example, if an examination has:
+
+Class 11 Science PCM
+Class 11 Science PCB
+
+and Mathematics/Biology is scheduled in one examination slot, the timetable should represent the common slot as:
+
+Mathematics / Biology
+
+Internally:
+
+PCM students → Mathematics
+PCB students → Biology
+
+DO NOT create two independent examination slots merely because the subjects differ by stream.
+
+This is a stream alternative, not two simultaneous papers for the same student.
+
+============================================================
+PART 6 — SUBJECTS MUST BE CONFIGURED IN STUDENTS & CLASSES
+============================================================
+
+The Students & Classes module currently already has a proper class-level subject interface.
+
+For example, the existing UI can show:
+
+Class 6
+Subjects
+
+English
+Mathematics
+Science
+Social Studies
+Hindi
+Computer Science
+
+and:
+
+Class 10
+Subjects
+
+English
+Mathematics
+Science
+Social Studies
+Hindi
+Computer Science
+
+and:
+
+Class 12
+Subjects
+
+English
+Physics
+Chemistry
+Mathematics
+Biology
+Computer Science
+
+Use the existing Students & Classes design language.
+
+DO NOT create an unrelated new UI.
+
+The subject configuration should become a proper, usable academic configuration area.
+
+============================================================
+PART 7 — DEFAULT SUBJECTS MUST BE SEEDED CORRECTLY
+============================================================
+
+Inspect the current database.
+
+Do not assume the existing seed data is correct.
+
+Audit:
+
+all classes
+all sections
+all streams
+all subjects
+all class-subject relationships
+
+Then establish the correct default configuration.
+
+For Classes 6–10:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+
+For Classes 11–12 Science PCM:
+
+Hindi
+English
+Physics
+Chemistry
+Mathematics
+
+For Classes 11–12 Science PCB:
+
+Hindi
+English
+Physics
+Chemistry
+Biology
+
+Do NOT add:
+
+Commerce
+Humanities
+
+to the current examination subject ecosystem unless those streams are genuinely configured elsewhere in the school.
+
+Do not reintroduce old deleted Commerce/Humanities seed records.
+
+============================================================
+PART 8 — WHAT ABOUT NURSERY TO CLASS 5?
+============================================================
+
+The requested default subject configuration explicitly says:
+
+Nursery → Class 10:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+
+Therefore implement those defaults consistently for Nursery through Class 10 according to the existing class structure.
+
+However, do not break any existing pre-primary-specific functionality or class hierarchy.
+
+If the application currently has KG/Nursery/LKG/UKG/pre-primary class identifiers, map them correctly into the same subject configuration architecture.
+
+The subject system must not depend on hardcoded "6–10 only" assumptions.
+
+============================================================
+PART 9 — ADDITIONAL SUBJECTS
+============================================================
+
+The school must be able to add subjects beyond the default subjects.
+
+Example:
+
+Class 6:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+Computer Science
+
+The school administrator/principal should be able to add:
+
+Computer Science
+
+without modifying application code.
+
+The subject should become part of that class's configured subjects.
+
+Likewise, another school could add:
+
+Sanskrit
+
+or:
+
+Art & Drawing
+
+or another legitimate academic subject.
+
+The architecture must support this dynamically.
+
+============================================================
+PART 10 — SUBJECT REMOVAL
+============================================================
+
+Schools must also be able to remove a subject from a class.
+
+But this MUST NOT be implemented as destructive deletion of the canonical subject record.
+
+Separate:
+
+SUBJECT MASTER
+
+from:
+
+CLASS SUBJECT ASSIGNMENT
+
+Example:
+
+Subject:
+Computer Science
+
+can exist in the subject master.
+
+But:
+
+Class 6 → Computer Science
+
+can be assigned or unassigned.
+
+Therefore "Remove Subject" should normally mean:
+
+remove/unassign this subject from this class/stream configuration.
+
+It should NOT necessarily delete the canonical subject globally.
+
+This prevents one school's Class 6 configuration from accidentally deleting Computer Science from every other class.
+
+============================================================
+PART 11 — DO NOT ALLOW DESTRUCTIVE DATA LOSS
+============================================================
+
+This is critical because subjects may already be referenced by:
+
+examinations
+marks
+results
+report cards
+teacher assignments
+question papers
+timetables
+student records
+
+If a subject has historical records, do NOT physically delete it.
+
+Use:
+
+active/inactive
+archived
+unassigned
+
+semantics as appropriate.
+
+Example:
+
+Computer Science was used in an old examination.
+
+The school removes Computer Science from Class 6 for the future.
+
+Historical examination records must continue to show:
+
+Computer Science
+
+correctly.
+
+Do not break historical records.
+
+============================================================
+PART 12 — CANONICAL SUBJECT IDENTITY
+============================================================
+
+Create/use a canonical Subject entity.
+
+Each subject should have a stable ID.
+
+Example conceptual structure:
+
+Subject
+- id
+- name
+- code
+- category/type
+- active
+- createdAt
+- updatedAt
+
+Then use a relationship such as:
+
+ClassSubject
+
+or equivalent existing project architecture:
+
+- id
+- classId / academicClassId
+- subjectId
+- streamId if required
+- isCore
+- isActive
+- ordering
+- applicability metadata if required
+
+DO NOT create:
+
+"Class6Hindi"
+"Class7Hindi"
+"Class9Hindi"
+
+as separate subject identities.
+
+Hindi should remain one canonical subject.
+
+Class applicability is a relationship.
+
+============================================================
+PART 13 — STREAM-SPECIFIC APPLICABILITY
+============================================================
+
+For Class 11/12 Science:
+
+The system must understand:
+
+Subject:
+Mathematics
+
+Applicable to:
+Science PCM
+
+Subject:
+Biology
+
+Applicable to:
+Science PCB
+
+Subject:
+Physics
+
+Applicable to:
+Science PCM + Science PCB
+
+Subject:
+Chemistry
+
+Applicable to:
+Science PCM + Science PCB
+
+Subject:
+Hindi
+
+Applicable to:
+Science PCM + Science PCB
+
+Subject:
+English
+
+Applicable to:
+Science PCM + Science PCB
+
+Do not duplicate the canonical subject unnecessarily.
+
+Use applicability relationships.
+
+============================================================
+PART 14 — EXAMINATION MODULE MUST STOP OWNING ITS OWN SUBJECT LIST
+============================================================
+
+This is one of the most important architectural changes.
+
+Examination should NOT have an independent hardcoded list like:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+Physics
+Chemistry
+Biology
+Computer
+etc.
+
+Instead:
+
+Examination asks:
+
+"What subjects are configured for the selected class/stream?"
+
+and receives the answer from the academic subject configuration.
+
+Therefore:
+
+Students & Classes config
+        ↓
+Class/Stream Subject Assignments
+        ↓
+Examination subject resolver
+        ↓
+Timetable
+        ↓
+Marks
+        ↓
+Results
+        ↓
+Reports
+
+ONE SOURCE OF TRUTH.
+
+============================================================
+PART 15 — EXAMINATION EXAMPLE
+============================================================
+
+Suppose the Principal selects:
+
+Class 6
+Class 7
+Class 8
+Class 9
+Class 10
+
+The Examination module should resolve:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+
+as the common subject set.
+
+It should NOT show:
+
+Hindi ×5
+English ×5
+Mathematics ×5
+Science ×5
+Social Science ×5
+
+It should show:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+
+once each.
+
+The subjects are common across these selected classes.
+
+============================================================
+PART 16 — EXAMINATION STREAM EXAMPLE
+============================================================
+
+Suppose the Principal selects:
+
+Class 11 — Science PCM
+Class 11 — Science PCB
+Class 12 — Science PCM
+Class 12 — Science PCB
+
+The resolved subjects should conceptually be:
+
+Hindi
+English
+Physics
+Chemistry
+Mathematics / Biology
+
+NOT:
+
+Hindi ×4
+English ×4
+Physics ×4
+Chemistry ×4
+Mathematics ×2
+Biology ×2
+
+The ×N representation is not useful in the Principal's examination configuration UI.
+
+Normalize it.
+
+============================================================
+PART 17 — MIXED CLASS EXAMPLE
+============================================================
+
+Suppose Principal selects:
+
+Class 6
+Class 7
+Class 8
+Class 9
+Class 10
+Class 11 Science PCM
+Class 11 Science PCB
+
+The subject resolver should produce a clean normalized set:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+Physics
+Chemistry
+Mathematics / Biology
+
+But be careful:
+
+Mathematics already exists as a common subject for 6–10 and Mathematics is also the PCM alternative.
+
+Do NOT accidentally create duplicate Mathematics entries.
+
+The UI should have one canonical Mathematics subject identity while applicability metadata determines:
+
+Classes 6–10 → Mathematics
+Class 11 PCM → Mathematics
+Class 11 PCB → Biology
+
+This is exactly why the subject identity must be normalized.
+
+============================================================
+PART 18 — ADDITIONAL SUBJECTS MUST AUTOMATICALLY FLOW INTO EXAMINATION
+============================================================
+
+Example:
+
+Principal goes to:
+
+Students & Classes
+→ Class 9
+→ Subjects
+→ Add Subject
+→ Computer Science
+
+After saving:
+
+Examination
+→ Create Examination
+→ Class 9
+
+must automatically be able to resolve:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+Computer Science
+
+No second configuration should be necessary inside Examination.
+
+Do NOT require the Principal to manually "add Computer Science" again inside Examination if it is already assigned to Class 9.
+
+============================================================
+PART 19 — REMOVING SUBJECT MUST FLOW TOO
+============================================================
+
+Example:
+
+Class 9 currently has:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+Computer Science
+
+Principal removes Computer Science from Class 9's active subject configuration.
+
+Future Examination creation for Class 9 must no longer automatically include Computer Science.
+
+However:
+
+past examinations containing Computer Science must remain intact.
+
+Historical data must not change.
+
+============================================================
+PART 20 — RESULTS AND REPORTS
+============================================================
+
+This architecture must also prepare the system for Results and Reports.
+
+Do not treat Examination as an isolated module.
+
+The same canonical subject ID should be used when storing:
+
+marks
+exam papers
+results
+report-card subject rows
+teacher mark entry
+student result views
+reports
+
+Example:
+
+Class 10
+Hindi
+
+The marks record must reference the canonical Hindi subject identity plus the relevant examination/class context.
+
+Do not store only display strings like:
+
+"Maths"
+
+and later try to match strings.
+
+Use IDs.
+
+This prevents:
+
+Mathematics
+Maths
+MATH
+Math
+
+from becoming accidental duplicates.
+
+============================================================
+PART 21 — SUBJECT CODE / NORMALIZATION
+============================================================
+
+Where appropriate, establish stable subject codes.
+
+Example:
+
+HIN
+ENG
+MAT
+SCI
+SST
+PHY
+CHE
+BIO
+
+Additional subjects can receive their own stable code.
+
+Do not generate unstable IDs based only on the display name.
+
+Names can be edited.
+
+Identity should remain stable.
+
+If the existing project already has a subject code system, inspect and reuse it rather than creating another incompatible one.
+
+============================================================
+PART 22 — "SOCIAL SCIENCE" VS "SOCIAL STUDIES"
+============================================================
+
+Audit the existing data.
+
+The screenshots currently show:
+
+"Social Studies"
+
+while the required default subject is:
+
+"Social Science"
+
+Do not allow both to accidentally become two separate canonical subjects.
+
+Determine the intended canonical subject:
+
+Social Science
+
+Then normalize legacy/mock/seed references appropriately without breaking historical data.
+
+If legacy records use "Social Studies", map them to the canonical subject where it is semantically the same subject.
+
+Do not create duplicate academic subjects merely because the display wording differs.
+
+============================================================
+PART 23 — "MATHS" VS "MATHEMATICS"
+============================================================
+
+Use one canonical display name consistently:
+
+Mathematics
+
+The system may internally use:
+
+MAT
+
+as the subject code.
+
+Do not create:
+
+Maths
+Mathematics
+
+as two separate subjects.
+
+============================================================
+PART 24 — SUBJECT ORDER
+============================================================
+
+Default subject order should be deterministic.
+
+For Classes Nursery–10:
+
+1. Hindi
+2. English
+3. Mathematics
+4. Science
+5. Social Science
+6. Additional subjects
+
+For Science PCM:
+
+1. Hindi
+2. English
+3. Physics
+4. Chemistry
+5. Mathematics
+6. Additional subjects
+
+For Science PCB:
+
+1. Hindi
+2. English
+3. Physics
+4. Chemistry
+5. Biology
+6. Additional subjects
+
+Schools may later reorder subjects if the existing architecture supports it.
+
+Do not use random/alphabetical order unless explicitly configured.
+
+============================================================
+PART 25 — STUDENTS & CLASSES UI
+============================================================
+
+Use the existing Students & Classes visual language.
+
+The current class pages already show:
+
+Class 6
+Class 10
+Class 12
+
+with:
+
+Overview
+Students
+Subjects
+Teachers
+
+and a Subjects section.
+
+Keep that design system.
+
+Improve the subject management area rather than replacing the entire Students & Classes module.
+
+The subject section should make it obvious:
+
+CORE SUBJECTS
+
+and:
+
+ADDITIONAL SUBJECTS
+
+if that distinction is useful.
+
+But keep it clean and minimal.
+
+Do not turn it into a huge settings dashboard.
+
+============================================================
+PART 26 — ADD SUBJECT UX
+============================================================
+
+When the user clicks:
+
++ Add Subject
+
+provide a clean selector.
+
+It should support:
+
+- selecting an existing subject from the subject master
+- creating a new subject if the school needs one, if the current product architecture allows this
+
+Before creating a new subject, search for existing canonical subjects to prevent duplicates.
+
+Example:
+
+If "Computer Science" already exists globally,
+
+do not create another:
+
+Computer Science #2
+
+Instead assign the existing canonical subject to the class.
+
+============================================================
+PART 27 — DUPLICATE PREVENTION
+============================================================
+
+The system must prevent:
+
+duplicate subject assignments
+duplicate subject master records
+duplicate class-subject relationships
+duplicate stream-subject relationships
+
+Examples:
+
+Class 9 + Hindi
+
+must exist only once as an active relationship.
+
+The user must not be able to accidentally add Hindi twice.
+
+Likewise:
+
+Class 11 PCM + Mathematics
+
+must not be duplicated.
+
+Use database constraints where appropriate, not only frontend checks.
+
+============================================================
+PART 28 — SCHOOL TENANCY
+============================================================
+
+This is a multi-school ERP.
+
+Subject configuration must be school/tenant safe.
+
+If School A adds:
+
+Computer Science
+
+to Class 9,
+
+that must NOT automatically add Computer Science to School B.
+
+Likewise, removing a subject from School A must not affect School B.
+
+Inspect the existing tenant/school architecture and ensure subject configuration respects it.
+
+If the subject master is globally shared, class/school assignment must still be tenant-scoped.
+
+============================================================
+PART 29 — CURRENT CLASS DATA AUDIT
+============================================================
+
+Before changing anything:
+
+Inspect the actual current class records.
+
+The intended current examination-level classes are:
+
+Class 6
+Class 7
+Class 8
+Class 9
+Class 10
+Class 11 — Science PCM
+Class 11 — Science PCB
+Class 12 — Science PCM
+Class 12 — Science PCB
+
+Sections may exist underneath these.
+
+Do NOT display them in Examination selection.
+
+Commerce and Humanities should not be reintroduced merely because an old seed/template contains them.
+
+If legacy records exist, determine whether they are actually active academic configurations or stale seed data.
+
+Do not blindly delete unrelated production data.
+
+============================================================
+PART 30 — DATA MIGRATION
+============================================================
+
+Before migration:
+
+BACK UP / preserve existing relationships.
+
+Then:
+
+1. Audit existing subjects.
+2. Identify duplicate subjects.
+3. Identify duplicate naming variants.
+4. Identify class-subject assignments.
+5. Identify stream-subject assignments.
+6. Identify examination subject references.
+7. Identify marks/results references.
+8. Normalize where safe.
+9. Preserve historical references.
+10. Add missing default assignments.
+11. Remove stale/incorrect default assignments only where safe.
+12. Add database constraints.
+
+Do not run destructive cleanup without understanding references.
+
+============================================================
+PART 31 — DO NOT BREAK EXISTING STUDENTS
+============================================================
+
+Student records must remain intact.
+
+Students currently assigned to:
+
+Class 6 / Section A
+
+must remain there.
+
+The subject architecture must not alter:
+
+student identity
+section membership
+roll number
+admission data
+attendance
+teacher assignments
+
+Only subject configuration should be changed.
+
+============================================================
+PART 32 — DO NOT BREAK TEACHERS
+============================================================
+
+Teacher-subject/class relationships must remain valid.
+
+If a subject is removed from future class configuration:
+
+do not erase historical teacher assignments or marks.
+
+If the existing teacher module depends on class-subject relationships, update it to consume the normalized relationship.
+
+============================================================
+PART 33 — EXAMINATION SUBJECT RESOLUTION
+============================================================
+
+Build one reliable subject-resolution function/service.
+
+Conceptually:
+
+resolveSubjectsForExam(selectedAcademicContexts)
+
+where the selected contexts are:
+
+Class 6
+Class 7
+Class 8
+Class 9
+Class 10
+Class 11 PCM
+Class 11 PCB
+Class 12 PCM
+Class 12 PCB
+
+The function should:
+
+1. Fetch active subject assignments.
+2. Resolve canonical subject IDs.
+3. Remove duplicate identities.
+4. Respect stream applicability.
+5. Identify alternative groups.
+6. Preserve subject ordering.
+7. Return normalized subject objects.
+8. Never include inactive/unassigned subjects.
+9. Never use section as a separate academic subject context.
+
+Use this same resolver wherever possible rather than duplicating logic.
+
+============================================================
+PART 34 — TIMETABLE INTEGRATION
+============================================================
+
+The Examination timetable must consume the normalized subject model.
+
+Example for Classes 6–10:
+
+Date:
+17 Aug
+
+Slot 1:
+Hindi
+
+Slot 2:
+Mathematics
+
+Another day:
+
+English
+Science
+
+Another day:
+
+Social Science
+Additional Subject
+
+For Science 11–12:
+
+Slot:
+
+Physics
+
+Another:
+
+Chemistry
+
+Another:
+
+Hindi / English
+
+Another:
+
+Mathematics / Biology
+
+The scheduler must understand that:
+
+Mathematics/Biology
+
+is an alternative stream group.
+
+It should not schedule two separate papers unnecessarily.
+
+============================================================
+PART 35 — COMMON SUBJECT SCHEDULING
+============================================================
+
+If the same subject applies to all selected classes:
+
+Hindi
+
+then one examination timetable entry should represent Hindi for all those classes.
+
+Do NOT create:
+
+Class 6 Hindi
+Class 7 Hindi
+Class 8 Hindi
+Class 9 Hindi
+Class 10 Hindi
+
+as five separate papers.
+
+It is:
+
+Hindi
+
+with applicability:
+
+Class 6–10.
+
+This dramatically simplifies the timetable.
+
+============================================================
+PART 36 — SUBJECT APPLICABILITY IN TIMETABLE
+============================================================
+
+The timetable may internally know:
+
+Hindi
+→ Classes 6–10
+
+Physics
+→ Class 11 PCM
+→ Class 11 PCB
+→ Class 12 PCM
+→ Class 12 PCB
+
+Mathematics
+→ Classes 6–10
+→ Class 11 PCM
+→ Class 12 PCM
+
+Biology
+→ Class 11 PCB
+→ Class 12 PCB
+
+The UI should remain simple.
+
+Do not dump this metadata everywhere.
+
+============================================================
+PART 37 — RESULTS ARCHITECTURE
+============================================================
+
+Before changing schemas, inspect how Results currently works.
+
+The final architecture should support:
+
+Examination
+  ↓
+Examination Subject
+  ↓
+Canonical Subject
+  ↓
+Class/Stream applicability
+  ↓
+Student/Section
+  ↓
+Marks
+  ↓
+Result
+
+Do not duplicate subject names across result records if IDs can be used.
+
+Historical examination results must remain stable even if a school later changes its current subject configuration.
+
+============================================================
+PART 38 — REPORTS
+============================================================
+
+Reports must use the same canonical subject mapping.
+
+For example:
+
+Class 10 Result:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+Computer Science
+
+If Computer Science was removed later, an old result must still show Computer Science.
+
+A current future report should follow the current class subject configuration.
+
+Historical and current states must be separated correctly.
+
+============================================================
+PART 39 — CACHE / STALE DATA
+============================================================
+
+The current project has previously shown cases where old class data appeared again after being removed.
+
+Therefore inspect:
+
+seed scripts
+mock data
+fallback arrays
+API caches
+client state
+local storage
+server cache
+static constants
+old examination template data
+
+Do not assume the database is the only source.
+
+If the UI shows Commerce/Humanities after database cleanup, identify the actual source and remove the stale path.
+
+Similarly, do not allow old hardcoded subject arrays to override the new subject configuration.
+
+============================================================
+PART 40 — NO PARALLEL HARD-CODED SUBJECT LISTS
+============================================================
+
+Search the entire project for hardcoded subject arrays.
+
+Look for things like:
+
+const subjects = [...]
+defaultSubjects
+examSubjects
+availableSubjects
+classSubjects
+mockSubjects
+subjectOptions
+etc.
+
+Do not blindly delete them.
+
+Determine what each is used for.
+
+Replace duplicated academic truth with the canonical subject service where appropriate.
+
+The goal is:
+
+ONE canonical subject model.
+
+Not:
+
+Students & Classes subjects
++
+Examination subjects
++
+Results subjects
++
+Reports subjects
+
+as four unrelated systems.
+
+============================================================
+PART 41 — VALIDATION
+============================================================
+
+Add validation at both UI and server/database levels where appropriate.
+
+Examples:
+
+Cannot assign the same subject twice to a class.
+
+Cannot assign Mathematics to a PCB stream as its PCM alternative.
+
+Cannot assign Biology as the PCM alternative.
+
+Cannot create duplicate canonical subjects with the same normalized identity.
+
+Cannot remove a subject in a way that destroys historical examination/result records.
+
+Cannot create an examination subject that does not belong to the selected class/stream unless explicitly allowed as an override.
+
+============================================================
+PART 42 — EXPLICIT OVERRIDE SUPPORT
+============================================================
+
+The user said:
+
+"Feeded subjects ke baad jo aur subjects hote hai schools me vo add karne ka option bhi hai."
+
+Therefore additional subjects are allowed.
+
+Do not over-constrain the system so only the five default subjects can ever exist.
+
+The default configuration is the starting point.
+
+School-specific academic configuration is the final active configuration.
+
+============================================================
+PART 43 — EXAMINATION UI AFTER THIS CHANGE
+============================================================
+
+When the Principal opens:
+
+Examinations
+→ Create Examination
+
+and selects:
+
+Class 6
+Class 7
+Class 8
+Class 9
+Class 10
+
+the subject section should look clean and normalized:
+
+SUBJECTS
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+
+If Computer Science has been added to Class 9 and 10:
+
+Computer Science
+
+should appear as an additional applicable subject.
+
+No:
+
+×2
+×4
+×5
+
+No section names.
+
+No duplicated subject pills.
+
+No "Grade".
+
+Use:
+
+Class
+
+============================================================
+PART 44 — SCIENCE EXAMPLE
+============================================================
+
+If selected:
+
+Class 11 — Science PCM
+Class 11 — Science PCB
+Class 12 — Science PCM
+Class 12 — Science PCB
+
+show:
+
+SUBJECTS
+
+Hindi
+English
+Physics
+Chemistry
+Mathematics / Biology
+
+The underlying resolver knows:
+
+Mathematics → PCM
+Biology → PCB
+
+The Principal does not need to understand the internal mapping unless useful in a subtle explanatory UI.
+
+============================================================
+PART 45 — UI TERMINOLOGY
+============================================================
+
+Use these terms consistently:
+
+Class 6
+Class 7
+Class 8
+Class 9
+Class 10
+Class 11 — Science PCM
+Class 11 — Science PCB
+Class 12 — Science PCM
+Class 12 — Science PCB
+
+NOT:
+
+Grade 6
+Grade 6 - A
+Grade 11 - Science PCM - A
+Grade 12 - Science PCB - B
+
+Sections are not examination class labels.
+
+============================================================
+PART 46 — DO NOT REDESIGN THE ENTIRE ERP
+============================================================
+
+Preserve the existing Scholario visual language.
+
+White/light background.
+
+Clean enterprise UI.
+
+Subtle green accent.
+
+Compact controls.
+
+Good spacing.
+
+Professional typography.
+
+No unnecessary dark UI.
+
+No giant cards.
+
+No excessive decoration.
+
+No AI-generated-looking UI.
+
+No unnecessary redesign of unrelated modules.
+
+Only improve the areas required for this architecture.
+
+============================================================
+PART 47 — IMPLEMENTATION ORDER
+============================================================
+
+Do NOT start by editing the Examination JSX.
+
+Follow this order:
+
+PHASE 1
+Audit current architecture.
+
+Identify:
+
+- database schema
+- Subject model
+- class model
+- section model
+- stream model
+- class-subject relationships
+- examination subject relationships
+- marks relationships
+- result relationships
+- report relationships
+- seed scripts
+- mock/fallback data
+
+PHASE 2
+Design the canonical subject model.
+
+PHASE 3
+Normalize existing subject data.
+
+PHASE 4
+Create/update class-subject and stream-subject relationships.
+
+PHASE 5
+Seed the required defaults.
+
+PHASE 6
+Implement safe add/remove subject management in Students & Classes.
+
+PHASE 7
+Make Examination consume the subject configuration.
+
+PHASE 8
+Update timetable resolution.
+
+PHASE 9
+Verify marks/results/reports compatibility.
+
+PHASE 10
+Run migration/data integrity checks.
+
+PHASE 11
+Run UI and end-to-end tests.
+
+PHASE 12
+Only then polish the UI.
+
+============================================================
+PART 48 — DO NOT MAKE ASSUMPTIONS ABOUT EXISTING SCHEMA
+============================================================
+
+Before creating new tables/models:
+
+inspect the current project.
+
+If an equivalent model already exists:
+
+reuse and improve it.
+
+Do NOT create:
+
+Subject2
+AcademicSubject
+ExamSubjectMaster
+NewSubjectModel
+
+just because the current code is inconvenient.
+
+Avoid unnecessary duplication.
+
+============================================================
+PART 49 — DATABASE INTEGRITY
+============================================================
+
+Where the database technology supports it, use constraints/indexes for:
+
+unique canonical subject code
+unique school + subject assignment
+unique class + subject assignment
+unique stream + subject assignment
+
+Use foreign keys where appropriate.
+
+Make relationships explicit.
+
+============================================================
+PART 50 — TEST MATRIX
+============================================================
+
+Test at minimum:
+
+TEST A
+Class 6 selected.
+
+Expected:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+
+TEST B
+Class 10 selected.
+
+Expected:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+
+TEST C
+Class 11 PCM selected.
+
+Expected:
+
+Hindi
+English
+Physics
+Chemistry
+Mathematics
+
+TEST D
+Class 11 PCB selected.
+
+Expected:
+
+Hindi
+English
+Physics
+Chemistry
+Biology
+
+TEST E
+Class 12 PCM selected.
+
+Expected:
+
+Hindi
+English
+Physics
+Chemistry
+Mathematics
+
+TEST F
+Class 12 PCB selected.
+
+Expected:
+
+Hindi
+English
+Physics
+Chemistry
+Biology
+
+TEST G
+Class 6 + 7 + 8 + 9 + 10 selected.
+
+Expected:
+
+ONE unique set:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+
+TEST H
+Class 11 PCM + PCB selected.
+
+Expected:
+
+Hindi
+English
+Physics
+Chemistry
+Mathematics / Biology
+
+No duplicates.
+
+TEST I
+Add Computer Science to Class 9.
+
+Then create examination for Class 9.
+
+Expected:
+
+Computer Science appears automatically.
+
+TEST J
+Remove Computer Science from Class 9.
+
+Create a FUTURE examination.
+
+Expected:
+
+Computer Science no longer appears automatically.
+
+TEST K
+Old examination already contains Computer Science.
+
+Remove Computer Science from current Class 9 configuration.
+
+Expected:
+
+Old examination remains unchanged.
+
+TEST L
+Class 9 has Sections A/B/C.
+
+Examination selection:
+
+ONE option:
+
+Class 9
+
+NOT:
+
+Class 9-A
+Class 9-B
+Class 9-C
+
+TEST M
+Class 11 PCM has multiple sections.
+
+Examination selection:
+
+ONE option:
+
+Class 11 — Science PCM
+
+NOT section-level options.
+
+TEST N
+Class 11 PCB.
+
+Expected:
+
+Biology.
+
+NOT Mathematics.
+
+TEST O
+Class 11 PCM.
+
+Expected:
+
+Mathematics.
+
+NOT Biology.
+
+============================================================
+PART 51 — CONFLICT TESTING
+============================================================
+
+Test:
+
+duplicate subjects
+duplicate assignments
+missing subjects
+inactive subjects
+deleted/archived subjects
+old examinations
+old marks
+old results
+new examinations
+additional subjects
+stream alternatives
+multiple sections
+multiple classes
+mixed-class examinations
+
+No data corruption.
+
+No duplicate subjects.
+
+No subject disappearing from historical records.
+
+============================================================
+PART 52 — PERFORMANCE
+============================================================
+
+Do not create N API calls for N sections.
+
+If Class 9 has:
+
+A
+B
+C
+D
+
+the Examination subject resolver should not make four independent subject-resolution operations simply because there are four sections.
+
+Resolve at the class/stream level.
+
+This should be both cleaner and more efficient.
+
+Avoid unnecessary database queries.
+
+Use proper joins/batched queries where appropriate.
+
+============================================================
+PART 53 — ERROR HANDLING
+============================================================
+
+If subject configuration cannot be loaded:
+
+do not silently display an incorrect hardcoded subject list.
+
+Show a proper recoverable error state.
+
+If a class has no configured subjects:
+
+clearly indicate:
+
+"No subjects configured for this class."
+
+Do not invent subjects.
+
+If a subject has become inactive but is referenced by a historical examination:
+
+preserve the historical reference.
+
+============================================================
+PART 54 — BACKWARD COMPATIBILITY
+============================================================
+
+This is an existing ERP.
+
+Do not break:
+
+existing students
+existing sections
+existing teachers
+existing examinations
+existing marks
+existing results
+existing reports
+
+Migrate carefully.
+
+If existing examination records use old subject references, create a compatibility mapping where necessary.
+
+Do not rewrite historical academic records merely to make the new UI look clean.
+
+============================================================
+PART 55 — FINAL ARCHITECTURE GOAL
+============================================================
+
+The final architecture should conceptually become:
+
+SCHOOL
+  ↓
+ACADEMIC CLASSES
+  ↓
+CLASS / STREAM
+  ↓
+SUBJECT ASSIGNMENTS
+  ↓
+CANONICAL SUBJECT
+  ↓
+EXAMINATION
+  ↓
+EXAMINATION SUBJECT
+  ↓
+TIMETABLE
+  ↓
+MARKS
+  ↓
+RESULTS
+  ↓
+REPORTS
+
+Sections exist alongside the class structure and participate in student/teacher/marks workflows, but they are NOT used to duplicate examination subjects.
+
+============================================================
+PART 56 — MOST IMPORTANT RULE
+============================================================
+
+Do not solve this as:
+
+"Make the Examination UI show cleaner labels."
+
+The actual objective is:
+
+MAKE THE ENTIRE SCHOOL ERP UNDERSTAND SUBJECTS CORRECTLY.
+
+Students & Classes defines:
+
+"What subjects does this class/stream have?"
+
+Examination asks:
+
+"What subjects does this class/stream have?"
+
+Timetable asks:
+
+"How should those subjects be scheduled?"
+
+Marks asks:
+
+"What marks were obtained in this canonical subject?"
+
+Results asks:
+
+"What are this student's marks for these subjects?"
+
+Reports asks:
+
+"How should those subject results be displayed?"
+
+All of them must refer to the SAME underlying subject identity.
+
+============================================================
+PART 57 — FINAL VERIFICATION BEFORE YOU SAY "DONE"
+============================================================
+
+Do not just run TypeScript.
+
+Do all of the following:
+
+1. Inspect database state.
+2. Inspect subject records.
+3. Inspect class-subject assignments.
+4. Inspect stream-subject assignments.
+5. Inspect examination subject resolution.
+6. Inspect current seed scripts.
+7. Search for old hardcoded subject lists.
+8. Search for old Grade/section-level examination labels.
+9. Search for duplicated subject logic.
+10. Verify migration.
+11. Verify existing historical examination references.
+12. Verify marks/results references.
+13. Verify Students & Classes UI.
+14. Verify Examination UI.
+15. Verify timetable.
+16. Test add subject.
+17. Test remove subject.
+18. Test PCM.
+19. Test PCB.
+20. Test multiple sections.
+21. Test multiple classes.
+22. Test mixed classes.
+23. Test historical examination preservation.
+24. Test duplicate prevention.
+25. Test API responses.
+26. Test actual rendered UI.
+
+Do not report completion based only on source-code inspection.
+
+Open the actual UI and verify the behavior.
+
+============================================================
+FINAL EXPECTED RESULT
+============================================================
+
+The school should now have ONE coherent subject ecosystem.
+
+Students & Classes controls the active subjects for each class/stream.
+
+Default subjects are automatically present:
+
+NURSERY → CLASS 10:
+
+Hindi
+English
+Mathematics
+Science
+Social Science
+
+CLASS 11–12 SCIENCE PCM:
+
+Hindi
+English
+Physics
+Chemistry
+Mathematics
+
+CLASS 11–12 SCIENCE PCB:
+
+Hindi
+English
+Physics
+Chemistry
+Biology
+
+Schools can:
+
+ADD additional subjects
+REMOVE/UNASSIGN subjects safely
+preserve historical data
+
+Examination automatically reflects the configured subjects.
+
+Results automatically use the same subject identity.
+
+Reports automatically use the same subject identity.
+
+Marks automatically use the same subject identity.
+
+Timetable automatically uses the same subject identity.
+
+No section duplication.
+
+No duplicate subjects.
+
+No hardcoded parallel subject systems.
+
+No stale seed data reappearing.
+
+No Commerce/Humanities unless genuinely configured.
+
+No "Grade" terminology in the Examination class selector.
+
+Use "Class".
+
+No ×N duplicate subject indicators.
+
+No unnecessary manual re-entry of subjects inside Examination.
+
+PCM/PCB alternative logic remains correct.
+
+Historical records remain safe.
+
+The architecture should be production-grade, deterministic, tenant-safe, extensible and maintainable.
+
+TAKE THE TIME REQUIRED TO DO THIS PROPERLY.
+
+Do not rush to make the screen look correct while leaving the underlying architecture broken.
+
+First understand the existing project.
+
+Then implement the data model.
+
+Then migrate safely.
+
+Then connect Students & Classes.
+
+Then connect Examination.
+
+Then connect downstream consumers.
+
+Then test the entire flow.
+
+Only after everything is verified should you report completion.
