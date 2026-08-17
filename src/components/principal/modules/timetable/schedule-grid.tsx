@@ -21,7 +21,11 @@ import { SlotCard, MobileSlotCard } from './slot-cards'
  * Brief section 15: `.time` is ALWAYS DERIVED via `recomputeRowTimes` from
  * `durationMin`. Never mutate `.time` directly outside the time engine.
  */
-export interface TimetableRow extends TimelineRow {}
+// Re-export the timeline row type under a module-local alias. Kept as a
+// type alias (not an empty interface) so we don't trip the
+// @typescript-eslint/no-empty-object-type rule — the underlying type is
+// fully inherited via `type`.
+export type TimetableRow = TimelineRow
 
 interface ScheduleGridProps {
   selectedDay: DayType; selectedClass: string; filteredSlots: TimetableSlot[]

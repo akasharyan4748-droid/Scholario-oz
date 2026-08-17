@@ -1,5 +1,5 @@
 // Add Hindi to all Grade 11-12 Science classes (missing from spec defaults)
-import { db } from '../src/lib/db'
+import { db } from '../../src/lib/db'
 
 async function main() {
   const school = await db.school.findFirst({ where: { isDemo: true } })

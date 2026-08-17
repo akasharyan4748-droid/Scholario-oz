@@ -40,7 +40,8 @@ export function FieldRulesTab() {
   const store = useSchoolSettingsStore()
   const fieldRules = store.admissionSettings.fieldRules || []
 
-  const initial = useMemo(() => fieldRules.map((r) => ({ ...r })), [JSON.stringify(fieldRules)])
+  const fieldRulesKey = JSON.stringify(fieldRules)
+  const initial = useMemo(() => fieldRules.map((r) => ({ ...r })), [fieldRulesKey])
   const [draft, setDraft] = useState(initial)
   useEffect(() => { setDraft(initial) }, [initial])
 

@@ -33,7 +33,7 @@
 // The main fix needed: "English Core" → "English" for consistency across all classes.
 // This establishes canonical naming.
 
-import { db } from '../src/lib/db'
+import { db } from '../../src/lib/db'
 
 async function main() {
   const school = await db.school.findFirst({ where: { isDemo: true } })

@@ -1,4 +1,4 @@
-import { db } from '../src/lib/db'
+import { db } from '../../src/lib/db'
 async function main() {
   // Normalize Mathematics code to MAT across all Grade 9 subjects (was MATH)
   const updated = await db.subject.updateMany({ where: { code: 'MATH', name: 'Mathematics' }, data: { code: 'MAT' } })

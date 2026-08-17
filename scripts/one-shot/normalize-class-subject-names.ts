@@ -5,7 +5,7 @@
 //
 // Run with: ./node_modules/.bin/tsx scripts/normalize-class-subject-names.ts
 
-import { db } from '../src/lib/db'
+import { db } from '../../src/lib/db'
 
 async function main() {
   console.log('🔄 Normalizing class + subject names to canonical form...\n')

@@ -3,7 +3,12 @@
 // All DTOs live here. No duplicate type definitions anywhere else.
 // ──────────────────────────────────────────────────────────────────────
 
-import type { Board, Stream } from './curriculum'
+// Board / Stream canonical types (formerly in curriculum.ts; the rest of
+// that file — subject preset arrays — was dead code and has been removed).
+// Schools configure subjects per class+stream directly in Students &
+// Classes; no preset arrays are needed anywhere else in the app.
+export type Board = 'CBSE' | 'UP_BOARD' | 'ICSE' | 'STATE' | 'CUSTOM'
+export type Stream = 'General' | 'Science-PCM' | 'Science-PCB' | 'Science-PCMB' | 'Commerce' | 'Humanities'
 
 export interface AuthUserLike {
   id: string
@@ -450,7 +455,3 @@ export interface SchoolContextDTO {
   academicYear: string | null
   board: Board
 }
-
-// ─── Board / Stream re-exports for convenience ──────────────────────
-
-export type { Board, Stream }

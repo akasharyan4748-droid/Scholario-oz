@@ -1,4 +1,4 @@
-import { db } from '../src/lib/db'
+import { db } from '../../src/lib/db'
 async function main() {
   const school = await db.school.findFirst({ where: { isDemo: true } })
   if (!school) process.exit(0)

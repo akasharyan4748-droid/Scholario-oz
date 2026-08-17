@@ -1,5 +1,5 @@
 // Fix DB: delete Commerce/Humanities classes, add Grade 12 PCB if missing
-import { db } from '../src/lib/db'
+import { db } from '../../src/lib/db'
 
 async function main() {
   const school = await db.school.findFirst({ where: { isDemo: true } })

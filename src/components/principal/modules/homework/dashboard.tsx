@@ -283,28 +283,31 @@ const DONUT_COLORS = ['oklch(0.55 0.14 162)', 'oklch(0.7 0.15 200)', 'oklch(0.75
 
 function SubjectDonut({ data }: { data: Array<{ subjectName: string; count: number; pct: number }> }) {
   const total = data.reduce((s, d) => s + d.count, 0)
-  let offset = 0
   const circumference = 2 * Math.PI * 42
+  // Build slices with cumulative offset via reduce — no mutation, pure expression.
+  const slices = data.reduce<
+    Array<{ i: number; dash: number; gap: number; offset: number; color: string }>
+  >((acc, s, i) => {
+    const pct = total > 0 ? s.count / total : 0
+    const dash = pct * circumference
+    const gap = circumference - dash
+    const offset = acc.length > 0 ? acc[acc.length - 1].offset + acc[acc.length - 1].dash : 0
+    acc.push({ i, dash, gap, offset, color: DONUT_COLORS[i % DONUT_COLORS.length] })
+    return acc
+  }, [])
   return (
     <svg viewBox="0 0 110 110" className="w-full h-full -rotate-90">
-      {data.map((s, i) => {
-        const pct = total > 0 ? s.count / total : 0
-        const dash = pct * circumference
-        const gap = circumference - dash
-        const seg = (
-          <circle
-            key={i}
-            cx="55" cy="55" r="42"
-            fill="none"
-            stroke={DONUT_COLORS[i % DONUT_COLORS.length]}
-            strokeWidth="12"
-            strokeDasharray={`${dash} ${gap}`}
-            strokeDashoffset={-offset}
-          />
-        )
-        offset += dash
-        return seg
-      })}
+      {slices.map(({ i, dash, gap, offset, color }) => (
+        <circle
+          key={i}
+          cx="55" cy="55" r="42"
+          fill="none"
+          stroke={color}
+          strokeWidth="12"
+          strokeDasharray={`${dash} ${gap}`}
+          strokeDashoffset={-offset}
+        />
+      ))}
       <text x="55" y="50" textAnchor="middle" className="fill-foreground" style={{ fontSize: 18, fontWeight: 700, transform: 'rotate(90deg)', transformOrigin: '55px 55px' }}>
         {total}
       </text>

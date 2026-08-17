@@ -33,6 +33,7 @@ import {
   useAuditLogs,
   useClassResults,
 } from '@/lib/exams/use-exams'
+import type { ExamDTO } from '@/lib/exams/types'
 import {
   useUpdateScheduleItemV2,
   useTeachers,
@@ -211,7 +212,7 @@ function ResultStatusPill({ status }: { status: string }) {
 
 // ─── Overview Section with Exam Readiness ─────────────────────────────
 
-function OverviewSection({ exam, onReload, onNavigate }: { exam: any; onReload: () => void; onNavigate: (t: Tab) => void }) {
+function OverviewSection({ exam, onReload, onNavigate }: { exam: ExamDTO; onReload: () => void; onNavigate: (t: Tab) => void }) {
   const { update } = useUpdateExam()
   const gate = useRoleGate()
   const [editing, setEditing] = useState(false)
@@ -365,7 +366,7 @@ function DetailField({ label, value }: { label: string; value: string }) {
 
 // ─── Schedule Section (in-place edit + invigilator assignment) ────────
 
-function ScheduleSection({ exam, onReload }: { exam: any; onReload: () => void }) {
+function ScheduleSection({ exam, onReload }: { exam: ExamDTO; onReload: () => void }) {
   const { add } = useAddScheduleItem()
   const { remove } = useDeleteScheduleItem()
   const { update: updateItem } = useUpdateScheduleItemV2()
@@ -592,7 +593,7 @@ function Trash({ className }: { className?: string }) {
 
 // ─── Marks Section (workflow controls) ────────────────────────────────
 
-function MarksSection({ exam, onReload }: { exam: any; onReload: () => void }) {
+function MarksSection({ exam, onReload }: { exam: ExamDTO; onReload: () => void }) {
   const { submit } = useSubmitMarks()
   const { verify } = useVerifyMarks()
   const { lock } = useLockMarks()
@@ -704,7 +705,7 @@ function Stat({ label, value }: { label: string; value: number | string }) {
 
 // ─── Results Section ─────────────────────────────────────────────────
 
-function ResultsSection({ exam, onReload }: { exam: any; onReload: () => void }) {
+function ResultsSection({ exam, onReload }: { exam: ExamDTO; onReload: () => void }) {
   void onReload
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
   return (

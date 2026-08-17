@@ -2,7 +2,7 @@
 // No schema changes — uses existing Class.stream + Subject models.
 // Run with: ./node_modules/.bin/tsx scripts/add-senior-classes.ts
 
-import { db } from '../src/lib/db'
+import { db } from '../../src/lib/db'
 
 async function main() {
   console.log('🌱 Adding Class 11-12 stream-aware classes...')

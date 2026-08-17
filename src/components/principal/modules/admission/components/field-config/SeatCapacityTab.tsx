@@ -12,9 +12,10 @@ export function SeatCapacityTab() {
   const seatCapacity = store.admissionSettings.seatCapacity
 
   // Draft state — full copy of seat capacity
+  const seatCapacityKey = JSON.stringify(seatCapacity)
   const initial = useMemo(
     () => seatCapacity.map((c) => ({ ...c })),
-    [JSON.stringify(seatCapacity)]
+    [seatCapacityKey]
   )
   const [draft, setDraft] = useState(initial)
   useEffect(() => { setDraft(initial) }, [initial])
