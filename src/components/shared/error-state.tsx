@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { AlertTriangle, RefreshCw, ArrowLeft, Terminal } from 'lucide-react';
 
 interface ErrorStateProps {

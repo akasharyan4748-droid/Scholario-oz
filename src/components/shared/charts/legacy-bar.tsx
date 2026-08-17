@@ -49,6 +49,7 @@ export function BarTrend({
   const glowId = `bar-glow-${uid}`
   return (
     <ResponsiveContainer width="100%" height={height}>
+      <>
       <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'} margin={{ top: showLabels && !horizontal ? 24 : 10, right: 14, left: horizontal ? 24 : -16, bottom: 0 }}>
         <defs>
           {horizontal ? (
@@ -119,6 +120,7 @@ export function BarTrend({
           opacity: 0.85;
         }
       `}</style>
+      </>
     </ResponsiveContainer>
   )
 }
@@ -147,6 +149,7 @@ export function GroupedBar({
   const uid = useId().replace(/:/g, '')
   return (
     <ResponsiveContainer width="100%" height={height}>
+      <>
       <BarChart data={data} margin={{ top: showLabels ? 28 : 12, right: 14, left: -16, bottom: 0 }}>
         <defs>
           {series.map((s) => (
@@ -199,6 +202,7 @@ export function GroupedBar({
           opacity: 0.75;
         }
       `}</style>
+      </>
     </ResponsiveContainer>
   )
 }

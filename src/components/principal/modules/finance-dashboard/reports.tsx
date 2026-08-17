@@ -19,7 +19,7 @@ import { SegmentedTabs } from '../shared/segmented-tabs'
 export function TabButtons({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   return (
     <SegmentedTabs
-      tabs={statementTabs.map((t) => ({ value: t.id, label: t.label, icon: t.icon, badge: t.count }))}
+      tabs={statementTabs.map((t) => ({ value: t.id, label: t.label, icon: t.icon }))}
       value={tab}
       onValueChange={setTab}
     />

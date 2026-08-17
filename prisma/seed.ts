@@ -124,7 +124,7 @@ async function main() {
   // Students
   const studentFirstNames = ['Aarav', 'Diya', 'Vivaan', 'Ananya', 'Aditya', 'Saanvi', 'Arjun', 'Ishita', 'Reyansh', 'Myra', 'Kabir', 'Aadhya', 'Veer', 'Anika', 'Riya', 'Dhruv', 'Pari', 'Arnav', 'Navya', 'Yash']
   const studentLastNames = ['Sharma', 'Patel', 'Reddy', 'Gupta', 'Singh', 'Nair', 'Iyer', 'Verma', 'Joshi', 'Mehta']
-  const students = []
+  const students: Awaited<ReturnType<typeof db.student.create>>[] = []
   for (let i = 0; i < 18; i++) {
     const fn = studentFirstNames[i % studentFirstNames.length]
     const ln = studentLastNames[i % studentLastNames.length]

@@ -104,7 +104,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   return {
     id: u.id,
     email: u.email,
-    name: u.name,
+    name: u.name ?? '',
     role: u.role,
     schoolId: u.schoolId,
     avatarUrl: u.avatarUrl,
@@ -119,7 +119,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
           themeColor: u.school.themeColor,
           accentColor: u.school.accentColor,
           logoUrl: u.school.logoUrl,
-          academicYear: u.school.academicYear,
+          academicYear: u.school.academicYear ?? '',
           plan: u.school.plan,
         }
       : null,

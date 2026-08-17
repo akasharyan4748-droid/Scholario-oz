@@ -53,11 +53,9 @@ export const createWorkloadSlice: StateCreator<
         'Notice period of 60 days required prior to resignation during academic session.',
       ],
       principalName: 'Dr. Ananya Iyer',
-      qrVerificationId: 'QR-APT-EMP-014-2015D4E5F6',
-      reportingAuthority: 'Dr. Ananya Iyer, Principal',
-      schoolSealAttached: true,
       qrVerificationId: `QR-APT-${teacher.employeeId}-${Date.now().toString(36).toUpperCase()}`,
       reportingAuthority: 'Dr. Ananya Iyer, Principal',
+      schoolSealAttached: true,
     }
 
     set((s) => ({

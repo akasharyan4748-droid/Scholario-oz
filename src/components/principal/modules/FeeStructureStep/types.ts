@@ -21,6 +21,10 @@ export interface FeeDataState {
   waiverAppliedBy?: string
   waiverApprovalAuthority?: string
   waiverReason?: string
+  // Issuance/verification summary fields (used by FeeReceiptTab + SectionDataContent)
+  // These are populated at issuance time and persisted on the application record.
+  paymentMethod?: string
+  selectedFeeHeadIds?: string[]
 }
 
 export const defaultFeeDataState: FeeDataState = {

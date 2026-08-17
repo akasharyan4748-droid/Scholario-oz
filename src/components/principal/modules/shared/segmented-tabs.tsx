@@ -34,16 +34,16 @@ export interface SegmentedTab {
   disabled?: boolean
 }
 
-interface SegmentedTabsProps {
+interface SegmentedTabsProps<T extends string = string> {
   tabs: SegmentedTab[]
-  value: string
-  onValueChange: (value: string) => void
+  value: T
+  onValueChange: (value: T) => void
   className?: string
 }
 
-export function SegmentedTabs({
+export function SegmentedTabs<T extends string = string>({
   tabs, value, onValueChange, className,
-}: SegmentedTabsProps) {
+}: SegmentedTabsProps<T>) {
   return (
     <div
       className={cn(
@@ -58,7 +58,7 @@ export function SegmentedTabs({
             key={tab.value}
             type="button"
             disabled={tab.disabled}
-            onClick={() => !tab.disabled && onValueChange(tab.value)}
+            onClick={() => !tab.disabled && onValueChange(tab.value as T)}
             className={cn(
               'flex items-center gap-1.5 px-3.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200',
               isActive

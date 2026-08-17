@@ -33,7 +33,7 @@ export async function GET() {
       ...unreadMessages.map((m) => ({
         id: m.id,
         type: 'MESSAGE',
-        title: m.sender.name,
+        title: m.sender?.name ?? 'Unknown sender',
         description: m.subject,
         timestamp: m.createdAt,
         read: false,

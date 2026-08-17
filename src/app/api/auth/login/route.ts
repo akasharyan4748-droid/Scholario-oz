@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     })
     if (!user) throw new Error('Invalid email or password')
     if (user.status !== 'ACTIVE') throw new Error('Account is not active')
-    if (!verifyPassword(password, user.passwordHash)) throw new Error('Invalid email or password')
+    if (!user.passwordHash || !verifyPassword(password, user.passwordHash)) throw new Error('Invalid email or password')
 
     const token = await createSession(user.id)
     await setSessionCookie(token)
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return {
       id: user.id,
       email: user.email,
-      name: user.name,
+      name: user.name ?? '',
       role: user.role,
       schoolId: user.schoolId,
       school: user.school
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
             themeColor: user.school.themeColor,
             accentColor: user.school.accentColor,
             logoUrl: user.school.logoUrl,
-            academicYear: user.school.academicYear,
+            academicYear: user.school.academicYear ?? '',
             plan: user.school.plan,
           }
         : null,
