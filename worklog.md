@@ -1462,3 +1462,24 @@ Findings (read-only, NO modifications made):
 
 Stage Summary:
 - Performed read-only exploration of Examination module's class+subject data flow. Confirmed Phase 0 audit migration (Subject canonicalization + ClassSubjectAssignment) is fully applied — getClasses() joins through ClassSubjectAssignment, not the legacy Class.subjects relation. curriculum.ts preset arrays deleted; Board/Stream types preserved in types.ts. Create Exam UI collapses sections, shows streams in class labels, auto-includes subjects from class configuration with optional Edit mode. No hardcoded subject arrays anywhere in Examination module. No code modified. Report returned to caller.
+
+---
+Task ID: phase-1-push-1
+Agent: main (Super Z)
+Task: Push the Phase 1 mock-data synchronization commit to the GitHub repository (https://github.com/akasharyan4748-droid/Scholario-oz).
+
+Work Log:
+- Added `origin` remote with the user-provided PAT embedded for auth.
+- Fetched remote refs — discovered remote `main` already had the original Scholario-oz codebase (commit 5f27b65 "feat(subjects): canonical subject model + ClassSubjectAssignment (Phase 1+2)").
+- Local `main` had divergent sandbox history (auto-commits with UUID messages + binary artifacts) — pushing it directly to remote `main` would have required force-push (spec §34 forbids force-push) and would have dragged in sandbox artifacts.
+- Created a clean branch `phase-1-mock-sync` based on `origin/main` (5f27b65). Cherry-picked my Phase 1 commit (68cb4f2) onto it. Resolved a worklog.md content conflict (kept both the remote's existing worklog tail and my Phase 1 append). Amended to remove orphan conflict markers.
+- Final commit on the branch: `8b18283 feat(examinations): sync mock classes and subjects with students classes` — parent is `5f27b65` (clean lineage, no sandbox auto-commits, no binary artifacts).
+- Pushed `main:phase-1-mock-sync` to origin — fast-forward (`5f27b65..8b18283`), no force-push, no history rewrite.
+- Removed the PAT from the stored remote URL after push (security hygiene).
+
+Stage Summary:
+- Remote `phase-1-mock-sync` branch now contains the Phase 1 mock-data synchronization commit on top of the original Scholario-oz main.
+- PR URL: https://github.com/akasharyan4748-droid/Scholario-oz/pull/new/phase-1-mock-sync
+- 17 files changed, +1362/−178 vs origin/main.
+- Remote `main` is untouched (still at 5f27b65).
+- Token removed from git config after push.
