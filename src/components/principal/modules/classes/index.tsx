@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { useStudentsStore, getVirtualOccupied } from '@/lib/store/students-store'
 import type { ClassRecord } from '@/lib/store/students-store'
 import { getTeacherById } from '@/lib/mock/teachers'
+import { classStreamBadge } from './class-display'
 import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
 import { SearchFilterBar, type FilterConfig } from '../shared/search-filter-bar'
 
@@ -71,6 +72,8 @@ function ClassCard({ cls, index, onClick }: { cls: ClassRecord; index: number; o
   const tight = pct >= 90
   const teacher = cls.classTeacherId ? getTeacherById(cls.classTeacherId) : null
   const avatarText = cls.name.replace('Class ', 'C').replace('Pre-', 'P').slice(0, 3)
+  // Spec §4 / §6 — show stream badge so Class 11 PCM vs PCB cards are distinguishable.
+  const streamBadge = classStreamBadge(cls)
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * 0.03, 0.2) }} onClick={onClick}
@@ -80,7 +83,12 @@ function ClassCard({ cls, index, onClick }: { cls: ClassRecord; index: number; o
         <div className="flex items-center gap-2.5">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-semibold text-xs">{avatarText}</div>
           <div className="min-w-0">
-            <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate">{cls.name}</p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate">{cls.name}</p>
+              {streamBadge && (
+                <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 border-primary/40 bg-primary/5 text-primary shrink-0">{streamBadge}</Badge>
+              )}
+            </div>
             <p className="text-[10px] text-muted-foreground">{cls.level} · {cls.sections.length} sections</p>
           </div>
         </div>

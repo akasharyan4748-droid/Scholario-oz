@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { getVirtualOccupied, useStudentsStore } from '@/lib/store/students-store'
 import type { ClassRecord, StudentRecord } from '@/lib/store/students-store'
 import { formatINR } from '@/lib/format'
+import { classStreamBadge } from './class-display'
 import { SegmentedTabs } from '../shared/segmented-tabs'
 import { ClassOverview } from './details/class-overview'
 import { ClassSubjects } from './details/class-subjects'
@@ -27,6 +28,8 @@ export function ClassDetailsPage({ cls, onBack, store, onStudentClick }: {
   const cap = liveClass.capacity * liveClass.sections.length
   const enr = liveClass.sections.reduce((a, s) => a + getVirtualOccupied(s.id, s.capacity), 0)
   const pct = cap > 0 ? Math.round((enr / cap) * 100) : 0
+  // Spec §4 / §6 — show stream badge so Class 11 PCM vs PCB details are distinguishable.
+  const streamBadge = classStreamBadge(liveClass)
 
   return (
     <PageTransition>
@@ -34,13 +37,24 @@ export function ClassDetailsPage({ cls, onBack, store, onStudentClick }: {
         <Button variant="ghost" size="sm" onClick={onBack} className="h-8 px-2 text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Button>
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-semibold text-sm">{liveClass.name.replace('Class ', 'C').replace('Pre-', 'P').slice(0, 3)}</div>
-          <div className="min-w-0"><h1 className="text-xl font-semibold tracking-tight text-foreground truncate">{liveClass.name}</h1><p className="text-xs text-muted-foreground truncate">{liveClass.level} · {liveClass.sections.length} sections · Room {liveClass.room}</p></div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground truncate">{liveClass.name}</h1>
+              {streamBadge && (
+                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/40 bg-primary/5 text-primary shrink-0">{streamBadge}</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground truncate">{liveClass.level} · {liveClass.sections.length} sections · Room {liveClass.room}</p>
+          </div>
         </div>
         <SegmentedTabs tabs={[{ value: 'overview', label: 'Overview' }, { value: 'students', label: 'Students', badge: students.length }, { value: 'subjects', label: 'Subjects' }, { value: 'teachers', label: 'Teachers' }]} value={detailTab} onValueChange={setDetailTab} />
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4">
         <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px]">{liveClass.level}</Badge>
+        {streamBadge && (
+          <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] font-mono">{streamBadge}</Badge>
+        )}
         <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px]">{liveClass.sections.length} sections</Badge>
         <Badge variant="secondary" className={cn('text-[10px]', pct >= 90 ? 'bg-amber-500/10 text-amber-700' : 'bg-emerald-500/10 text-emerald-700')}>{pct}% full</Badge>
         <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px]">{liveClass.subjects.length} subjects</Badge>
