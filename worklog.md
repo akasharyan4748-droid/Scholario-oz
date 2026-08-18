@@ -1625,3 +1625,75 @@ Unresolved:
 - Push to GitHub requires a fresh PAT (the previous one is revoked).
 - The Settings tab still calls `/api/exams/settings/*` which will 401 in mock mode. This is acceptable for this phase — Settings is a DB-backed admin feature (grade scales, rules, admit cards), not part of the Examination list/create flow. A future phase can mock it if needed.
 - The ExamWorkspace's schedule/marks hooks still call the real API. They only fire on user action (not on load), so the workspace renders fine. A future phase can mock them when marks-entry is in scope.
+
+---
+Task ID: phase-3-schedule-1
+Agent: main (Super Z)
+Task: Examination Phase 3 — Advanced Schedule Builder + Date Validation. Fix date picker (today/past disabled, earliest = tomorrow), fix end-date validation, fix the "18 Aug" schedule date bug, convert the vertical schedule list into a per-class timetable table, support 2-papers/day + 1-paper/day, ensure class-specific subjects (no cross-contamination), add drag-and-drop reorder.
+
+Work Log:
+
+### Phase 1: Audit current implementation
+- Found the date bug root cause: `generateSchedule()` in template-engine.ts used `new Date(startDateStr)` which parses as UTC midnight, then `.toISOString().split('T')[0]` converts back — causing a timezone off-by-one that produced "18 Aug" when start was "19 Aug".
+- Found the cross-contamination root cause: the old scheduler assigned ALL subjects to ALL classes (`classIds: [...allClassIds]` on every item) — taking the UNION of subjects and applying it to every class. This violated Spec §11.
+- Found the date picker issue: `minDate={today}` allowed TODAY to be selected. Spec §1 requires earliest = TOMORROW.
+- The schedule display was a vertical date-grouped list, not a timetable.
+
+### Phase 2: Built modular schedule engine (5 new files, all < 300 LOC)
+- `schedule-types.ts` (87 LOC): Per-class timetable types.
+- `schedule-generator.ts` (188 LOC): Pure `generateScheduleTimetable()` — local-date parsing (no UTC), per-class subject allocation (no cross-contamination), Sundays skipped, fit check + additionalDaysNeeded. Also exports `validateScheduleWindow`, `todayISO`, `tomorrowISO`.
+- `schedule-reorder.ts` (135 LOC): `swapCells()` / `moveSubject()` — vertical reorder within same column, swap semantics (no duplicates), `flattenTimetable()` for submission.
+- `use-schedule-state.ts` (84 LOC): React hook — regenerates on input change, exposes `moveSubjectCell`.
+- `format-helpers.ts` (28 LOC): Local date parse/format (formatDateLong, formatDateShort).
+- `schedule-table.tsx` (226 LOC): Timetable UI — sticky header + sticky Day/Date column, row-span on date cells, subject pills with codes + time ranges, HTML5 DnD within class columns, "too short" warning.
+
+### Phase 3: Targeted edits to create-exam-fullscreen.tsx
+- `minStartDate = tomorrow` (Spec §1) — DatePicker prevents selection at picker level.
+- End Date `minDate = startDate` + useEffect auto-clears if startDate moves past it (Spec §2).
+- Replaced vertical schedule list with `<ScheduleTable>`.
+- Removed dead code: `groupScheduleByDate`, `formatDateLong`, `generatedSchedule` useMemo, `GeneratedScheduleItem` import, `Calendar`/`Clock` icon imports. Net -55 lines (842 → 787).
+- `handleCreate` now submits `scheduleState.flattened` (per-class timetable, reflects drag edits).
+
+### Phase 4: Verification (agent-browser, all 13 spec tests)
+
+| Test | Result |
+|------|--------|
+| A — Today (18 Aug) disabled in date picker | ✓ "Today, Tuesday, August 18th, 2026" marked [disabled] |
+| B — Past dates disabled | ✓ Aug 17, July 26-29 all [disabled] |
+| C — End Date >= Start Date | ✓ End Date minDate = startDate (Aug 19) |
+| D — No date outside window | ✓ Start=19, End=22 → schedule shows 19,20,21,22 only (NO 18) |
+| E — 2 papers/day → 2 rows per date | ✓ Slot 1 (09:00–10:00) + Slot 2 (10:15–11:15) |
+| F — 1 paper/day → 1 row per date | ✓ "Single" slot label, no Slot 2 |
+| G — Table structure | ✓ DAY/DATE | CLASS 6 | CLASS 11 PCB | CLASS 11 PCM |
+| H — Class 11 PCM = Hindi/English/Physics/Chemistry/Maths | ✓ No Biology |
+| I — Class 11 PCB = Hindi/English/Physics/Chemistry/Biology | ✓ No Maths |
+| J — Drag reorder (code logic) | ✓ swapCells enforces same-column + no-dup |
+| K — No duplicates after drag | ✓ Swap semantics guarantee this |
+| L — Deselect class → column disappears | ✓ Class 6 column removed on deselect |
+| M — Reselect class → column reappears | ✓ Class 6 column restored with correct subjects |
+
+### Phase 5: Quality gates
+- `bun run lint` → clean.
+- All 5 new files under 300 LOC (87 / 188 / 135 / 84 / 28 / 226).
+- Modified create-exam-fullscreen.tsx: 787 LOC (was 842 — net -55 from dead-code removal).
+- Zero console errors.
+- No new dependencies (HTML5 DnD instead of adding dnd-kit setup).
+- Existing SCHOLARIO visual design preserved.
+
+### Phase 6: Git checkpoint
+- Committed locally: `0bb2c79 feat(exams): per-class timetable schedule builder with date validation` (7 files, +828/−134).
+- Push to `phase-1-mock-sync` branch: FAILED — token still revoked. Commit saved locally.
+
+Stage Summary:
+- Date validation fixed: today + past dates disabled at picker level; earliest = tomorrow.
+- End-date validation fixed: minDate = startDate; auto-clears if startDate moves past it.
+- Schedule date bug fixed: local-date parsing eliminates the UTC off-by-one.
+- Schedule converted to class-column timetable: sticky header + Day/Date column, one column per selected class, horizontal scroll, row-span on date cells.
+- 2-papers/day: each date has Slot 1 + Slot 2 with time ranges.
+- 1-paper/day: each date has one "Single" slot.
+- Class-specific subjects: each class column contains ONLY its own subjects (no union, no cross-contamination).
+- Drag/reorder: HTML5 DnD within class columns, swap semantics guarantee no duplicates.
+
+Unresolved:
+- Push to GitHub requires a fresh PAT (previous one revoked).
+- Drag-and-drop was verified via code logic (swapCells invariants), not via a live drag interaction (agent-browser doesn't simulate HTML5 DnD mouse events well). The swap semantics in schedule-reorder.ts mathematically guarantee no duplicates and no cross-class movement.
