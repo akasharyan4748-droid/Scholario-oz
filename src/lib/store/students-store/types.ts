@@ -79,8 +79,11 @@ export interface SectionRecord {
   room: string
 }
 
-/** Archived subject within a class — preserved for restore. */
+/** Archived subject within a class — preserved for restore (Spec §7 / §25). */
 export interface ArchivedSubject {
+  /** Canonical subject id (stable across renames). */
+  id: string
+  /** Display name at archive time (snapshot — rename does NOT update this). */
   name: string
   archivedAt: string
 }
@@ -95,11 +98,26 @@ export interface ClassRecord {
   classTeacherId: string
   /** Class-level Assistant Class Teacher (real persisted assignment). */
   assistantTeacherId?: string
+  /**
+   * Canonical subject ids (Spec §28 — IDs are stable across renames).
+   * The Students & Classes UI hydrates display names from the store's
+   * `academicSubjects` registry. This is the source of truth consumed
+   * by Examination.
+   */
+  subjectIds: string[]
+  /**
+   * Subject display names (legacy / convenience). Derived from
+   * `subjectIds` + the `academicSubjects` registry. Mutations to
+   * subjects should go through `subjectIds`, NOT this array. We keep
+   * it for backward-compat with components that still read names.
+   */
   subjects: string[]
   /** Subjects archived from this class — preserved for restore. */
   archivedSubjects: ArchivedSubject[]
-  /** Per-subject teacher assignment map (subject name → teacher ID). */
+  /** Per-subject teacher assignment map (subject id → teacher ID). */
   subjectTeachers: Record<string, string>
+  /** Stream key — only set for Class 11/12 (e.g. 'PCM' / 'PCB'). */
+  stream?: import('@/lib/mock/academic').StreamKey | null
   room: string
   status: 'Active' | 'Archived'
 }
@@ -148,6 +166,12 @@ export interface StudentsState {
   houses: House[]
   promotions: PromotionRecord[]
   transfers: TransferRecord[]
+  /**
+   * Canonical subject registry (Spec §28). Each entry has a stable id and
+   * a display name that may be renamed. Both Students & Classes UI and
+   * Examination hydrate subject names by looking up ids in this list.
+   */
+  academicSubjects: import('@/lib/mock/academic').SubjectDef[]
   archiveStudent: (id: string, reason: string, by: string) => void
   restoreStudent: (id: string, by: string) => void
   transferStudent: (id: string, type: TransferRecord['type'], toClass: string, reason: string, by: string) => void
@@ -166,16 +190,42 @@ export interface StudentsState {
   updateSectionTeacher: (classId: string, sectionId: string, teacherId: string | null) => void
   /** Replace a section's Assistant Class Teacher. Pass null/undefined to clear. */
   updateSectionAssistantTeacher: (classId: string, sectionId: string, teacherId: string | null) => void
-  /** Add a subject to a class (no-op if already allocated). */
-  addClassSubject: (classId: string, subject: string) => void
-  /** Archive a subject from a class — moves it to archivedSubjects for recovery. */
-  archiveClassSubject: (classId: string, subject: string) => void
-  /** Restore a previously-archived subject — moves it back to active subjects. */
-  restoreClassSubject: (classId: string, subject: string) => void
+  /**
+   * Add an EXISTING canonical subject to a class (Spec §8). No-op if the
+   * class already has the subject id. Does NOT create a new canonical
+   * subject — use `createCustomSubject` for that.
+   */
+  addClassSubject: (classId: string, subjectId: string) => void
+  /**
+   * Archive a subject from a class — moves it to archivedSubjects for
+   * recovery (Spec §7 / §25). Archived subjects do NOT appear in
+   * Examination's class picker.
+   */
+  archiveClassSubject: (classId: string, subjectId: string) => void
+  /** Restore a previously-archived subject — moves it back to active. */
+  restoreClassSubject: (classId: string, subjectId: string) => void
   /** Permanently delete an archived subject (no recovery). */
-  deleteArchivedSubject: (classId: string, subject: string) => void
-  /** Assign / replace a teacher for a specific subject in a class. */
-  updateSubjectTeacher: (classId: string, subject: string, teacherId: string | null) => void
+  deleteArchivedSubject: (classId: string, subjectId: string) => void
+  /** Assign / replace a teacher for a specific subject in a class (by id). */
+  updateSubjectTeacher: (classId: string, subjectId: string, teacherId: string | null) => void
+  /**
+   * Rename a canonical subject (Spec §9). Updates the display name in the
+   * `academicSubjects` registry — every consumer (Students & Classes,
+   * Examination) instantly sees the new name because they resolve names
+   * by id lookup. Id stays stable.
+   */
+  renameSubject: (subjectId: string, newName: string) => void
+  /**
+   * Create a NEW custom canonical subject and add it to a class (Spec §8).
+   * Generates a stable id from the name. If a subject with the same name
+   * already exists, returns its id instead of creating a duplicate.
+   */
+  createCustomSubject: (classId: string, name: string) => string
+  /**
+   * Look up a subject by id from the canonical registry.
+   * Returns undefined if not found or archived.
+   */
+  getSubjectById: (subjectId: string) => import('@/lib/mock/academic').SubjectDef | undefined
   getStudentById: (id: string) => StudentRecord | undefined
   getClassById: (id: string) => ClassRecord | undefined
   getClassStudents: (classId: string) => StudentRecord[]

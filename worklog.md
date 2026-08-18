@@ -1304,3 +1304,161 @@ Stage Summary:
 - 7 conflicts identified and documented.
 - Safest migration path proposed with 9 steps + 9 implementation phases.
 - Awaiting user instruction to proceed with Phase 1.
+
+---
+Task ID: migration-import-1
+Agent: main (orchestrator)
+Task: Import the uploaded Scholario-oz-main.zip project into the /home/z/my-project sandbox, install all dependencies, seed the database, start the dev server, and perform end-to-end browser verification before scheduling ongoing web-dev review cycles.
+
+Work Log:
+
+### Phase 1: Inventory and assessment
+- Inspected the uploaded zip `/home/z/my-project/upload/Scholario-oz-main.zip` (1321 entries).
+- Extracted to `/tmp/scholario_extract/Scholario-oz-main/` for inspection.
+- Confirmed it is the Scholario-OS school ERP (Next.js 16 + Prisma + shadcn/ui) with a comprehensive multi-role portal (Principal / Teacher / Student / Super Admin) plus a public school website, examination module, finance, operations, library, transport, inventory, certificates, downloads, etc.
+- Read the existing `worklog.md` (1306 lines) — the project was at the end of an "examination module rebuild + Phase 0 audit" cycle, with 56 pre-existing TS errors in unrelated modules and a fully-working examination pipeline.
+
+### Phase 2: File migration (preserve sandbox infrastructure)
+- The existing `/home/z/my-project` is a Next.js sandbox with the gateway (Caddyfile :81 with `XTransformPort` query handling), `.zscripts/` dev/build tooling, `.env` (DATABASE_URL=file:/home/z/my-project/db/custom.db), `.git/`, `node_modules/`, `skills/`, `upload/`, `examples/websocket/`, `tests/` already configured. These MUST be preserved.
+- Removed the blank scaffold `src/`, `prisma/`, `public/`, etc.
+- Copied from Scholario: `src/`, `prisma/` (schema.prisma + seed.ts + dev.db), `public/`, `scripts/`, `docs/`, `examples/` (overwrote websocket demo with Scholario version), `download/`, `server.mjs`, `dev-watchdog.sh`, `keep-alive.sh`, `metadata.json`, `tailwind.config.ts`, `eslint.config.mjs`, `tsconfig.json`, `next.config.ts`, `components.json`, `postcss.config.mjs`, `worklog.md`.
+
+### Phase 3: Dependency merge (additive only)
+- Read the existing `package.json` — it already had most deps (z-ai-web-dev-sdk, all radix-ui, framer-motion, recharts, zustand, etc.).
+- Added Scholario-only deps: `@google/genai`, `@supabase/supabase-js`, `jsbarcode`, `jspdf`, `jspdf-autotable`, `qrcode.react`.
+- Added Scholario devDeps: `@types/node`, `server-only`, `tsx`.
+- Added Scholario scripts: `db:seed`, `postinstall`.
+- Ran `bun install` — 76 packages installed cleanly, Prisma client generated.
+
+### Phase 4: Database setup
+- Copied `prisma/dev.db` (528KB of pre-seeded demo data) → `db/custom.db`.
+- Ran `bunx prisma db push --accept-data-loss` — schema synced.
+- Initial Prisma count returned 0 rows for all tables (db push reset the borrowed dev.db schema).
+- Ran `bun run db:seed` — seed completed successfully with all demo data:
+  - 1 school, 47 users, 19 students, 4 teachers, 2 classes, 5 subjects, 3 exams.
+  - Demo credentials surfaced: `principal@demoschool.edu / password123`, `student1@demoschool.edu / password123`, `teacher1@demoschool.edu / password123`, `admin@scholario.cloud / admin123`.
+
+### Phase 5: Dev server stabilization
+- The sandbox `bun run dev` script pipes through `tee dev.log` and the shell-level `nohup ... &` was being killed when the parent Bash tool returned (the process group received SIGHUP).
+- Solved by writing `start-dev-detached.sh` using a double-fork pattern (`setsid bash -c 'exec bun run dev ...'`) so the dev server reparents to PID 1 and survives the orchestrator shell exit.
+- First Turbopack compile takes ~44s (large codebase). After warm-up, page renders in ~40ms.
+- Dev server now stably listening on `*:3000`, health check returns HTTP 200, 22127 bytes.
+
+### Phase 6: End-to-end browser verification (agent-browser)
+- Opened `http://localhost:3000/` → landing page renders correctly:
+  - Header with "Demo OF SCHOLARIO" branding, nav (About / Academics / Facilities / Admissions / Contact), Login Portal button, theme toggle.
+  - Hero "Empowering Minds, Inspiring Excellence" with Apply for Admission CTA.
+  - "Why families choose us" 4-up feature grid (Academic Excellence, Holistic Growth, Modern Facilities, Safe & Inclusive).
+  - "A journey for every stage" (Primary / Middle / Senior School).
+  - "World-class facilities" (Smart Classrooms / Science Labs / Sports Complex / Library).
+  - Admissions inquiry form (name, email, phone, grade dropdown, child name, message) + Submit button.
+  - Footer with Contact info, Quick Links, Portal Access button.
+- Clicked "Login Portal" → login page with 4 role tabs (Principal / Teacher / Student / Super Admin) and email/password form.
+- Logged in as `principal@demoschool.edu / password123`:
+  - POST `/api/auth/login` returned HTTP 200.
+  - Principal dashboard loaded with full sidebar (Overview, Academics, Finance, Operations, System — 6 top-level groups, 18 nav items including badges for Dashboard "6" and Admissions "3").
+  - "Good morning, Dr. Ananya" greeting.
+  - Live Operations Alerts panel: 6 active (1 critical, 2 high, 2 info, 1 low) — bus delay, admission applications, teacher absent, fees collected, library overdue, inventory low stock. Each alert has Snooze / Resolve buttons. Filter chips (All 6, Critical 1, High 2, Info 2, Low 1).
+  - Revenue vs Expenses chart, Fee Collection chart, Quick Actions (6 buttons: New Admission / Mark Attendance / Collect Fees / Create Exam / Add Notice / Pay Salary), Notice Board, Recent Admissions table (6 rows with student/admission no/class/guardian/fee status), Upcoming Events, Class 2-A Top Performers, Pending Reviews.
+- Navigated to Examinations module (`/api/exams` returned HTTP 200 in 709ms):
+  - 4 top-level tabs as designed (Overview / Exams / Reports / Settings) — confirms the earlier 7→4 tab cleanup is in place.
+  - Academic session picker (2025–26 / 2024–25) on the tab row right side — confirms the SessionPicker move.
+  - "Unit Test 2" exam card with Open Examination / View Schedule buttons.
+  - "Session Top Performers" section rendered (confirms the empty-state replacement work).
+- Mobile viewport test (375×812): landing page renders responsively, no horizontal overflow.
+- Console: only React DevTools info + HMR/Fast Refresh logs — zero runtime errors, zero hydration mismatches.
+- Errors panel: empty.
+
+### Phase 7: Lint and dev log verification
+- `bun run lint` → passes with zero warnings/errors (Scholario's eslint config disables noisy rules).
+- `dev.log` shows clean startup, no compile errors, all API routes returning 200.
+
+### Phase 8: Screenshots
+- Saved `/home/z/my-project/screenshots/principal-dashboard.png` (1280×577).
+- Saved `/home/z/my-project/screenshots/examinations-overview.png` (1280×577).
+- Saved `/home/z/my-project/screenshots/mobile-landing.png` (375×812).
+
+Stage Summary:
+- Scholario-OS fully imported into the /home/z/my-project sandbox with all infrastructure (Caddy gateway, .zscripts, .env, .git) preserved.
+- All 8 new dependencies installed cleanly; `bun install` reports 76 packages added with no peer-dep conflicts.
+- Database seeded with demo data (1 school, 47 users, 19 students, 4 teachers, 2 classes, 5 subjects, 3 exams).
+- Dev server stabilized via double-fork detach script (`start-dev-detached.sh`) — survives orchestrator shell exits.
+- End-to-end browser verification PASSED: public website renders, login works for principal role, principal dashboard fully populated with live alerts + charts + tables + quick actions, examinations module loads with the rebuilt 4-tab layout + session picker + Session Top Performers section.
+- Mobile responsive verified.
+- Zero console errors, zero runtime errors, zero lint errors.
+- Project is ready for the recurring 15-minute web-dev review cycle.
+
+Unresolved issues / risks for next phase:
+- 56 pre-existing TypeScript errors in unrelated modules (alumni, compliance, finance-dashboard) — flagged in the prior worklog but `next.config.ts` sets `typescript.ignoreBuildErrors: true` so they don't block dev/build. Should be cleaned up opportunistically.
+- Subject data architecture audit (Phase 0 in prior worklog) proposed a 9-phase migration to canonical Subject + ClassSubjectAssignment table. Not yet started — waiting on user direction.
+- The recurring review agent should prioritize: (a) running agent-browser QA on each role portal (Teacher, Student, Super Admin) which were not exhaustively tested this round, (b) fixing any TS errors opportunistically, (c) advancing the subject canonicalization migration if directed, (d) polishing UI details and adding features per the recurring task brief.
+
+---
+Task ID: explore-1-a
+Agent: Explore subagent
+Task: READ-ONLY inspection of Students & Classes mock data, store, UI, and constants.
+
+Findings (read-only, no modifications made):
+- Store + mock data: src/lib/store/students-store/ (6 files, 570 LOC total)
+  • types.ts (182) — ClassRecord/StudentRecord/ArchivedSubject interfaces + StudentsState contract
+  • constants.ts (33) — SUBJECTS_BY_LEVEL (5 levels) + CLASS_DEFS (10 classes incl. Pre-Nursery/KG/2/4/6/8/9/10/11/12) + HOUSE_DEFS
+  • seed-data.ts (155) — deterministic genStudents() + genClasses() populating SS/SC exports
+  • store.ts (167) — useStudentsStore Zustand create() with full action set
+  • helpers.ts (10) — getVirtualOccupied() deterministic occupancy
+  • index.ts (23) — barrel re-exports
+- UI components: src/components/principal/modules/classes/ (10 files)
+  • index.tsx ClassesView (125) — class list grid
+  • class-details.tsx (101) — SegmentedTabs: Overview/Students/Subjects/Teachers
+  • add-class-page.tsx (312) — new class form
+  • archived-view.tsx (82)
+  • details/class-subjects.tsx (222) — Add/Archive/Restore subject dialog flow
+  • details/subject-card.tsx (74), archived-subjects-panel.tsx (93)
+  • details/class-teachers.tsx (394), teacher-assignment-control.tsx (278)
+  • details/class-overview.tsx (130)
+  • src/components/principal/modules/students-classes.tsx (193) — StudentsClassesModule wrapper
+- API: src/app/api/subjects/route.ts (42 LOC) + src/app/api/classes/route.ts (45 LOC). NO /api/subjects/[id] route yet (rename/archive endpoints absent).
+- Naming gap confirmed: SUBJECTS_BY_LEVEL uses "Mathematics"/"Social Studies"/"Art & Craft"; user spec wants "Maths"/"Social Science"/"Arts & Drawing". Per worklog phase-0-subject-ecosystem-audit, curriculum.ts was deleted in earlier cleanup; only Board/Stream types preserved in src/lib/exams/types.ts.
+- Routes: Students & Classes is not a Next.js app/ route — it is mounted inside Principal panel via principal-panel.tsx → StudentsClassesModule. No src/app/(principal)/classes/page.tsx exists. Only src/app/page.tsx (public site) is a Next route.
+
+Stage Summary:
+- Performed read-only exploration of Students & Classes data layer (store + seed + constants), UI layer (10 components), and API surface (subjects + classes). No code modified. Report returned to caller.
+
+---
+Task ID: explore-1-b
+Agent: Explore subagent
+Task: READ-ONLY inspection of Examination module — Create Exam UI, service.ts getClasses, /api/exams route, types.ts, curriculum.ts status, hardcoded subject arrays, class selector rendering, stream handling.
+
+Findings (read-only, NO modifications made):
+
+1. Create Exam UI: src/components/principal/modules/exams/create-exam-fullscreen.tsx (835 LOC).
+   • Consumes `classes: ClassDTO[]` prop from parent <ExamsModule> (src/components/principal/modules/exams/index.tsx line 75) which gets them from useExamsList hook.
+   • useExamsList: src/lib/exams/use-exams.ts (385 LOC) — fetches GET /api/exams and stores `classes` as ClassesDTO[] (local interface, lines 26-34).
+   • ClassDTO is defined LOCALLY in create-exam-fullscreen.tsx (lines 57-74), NOT imported from types.ts.
+
+2. Examination service: src/lib/exams/service.ts (975 LOC).
+   • `getClasses(schoolId: string)` at line 193. Does NOT use `db.class.findMany({ include: { subjects } })` — instead uses ClassSubjectAssignment join (Phase 5 migration already applied):
+     db.class.findMany({ where: { schoolId }, include: { subjectAssignments: { where: { isActive: true }, include: { subject: { select: { id, name, code, fullMarks, passMarks, status } } }, orderBy: { displayOrder: 'asc' } }, _count: { select: { students: true } } } })
+   • Returns objects shaped: { id, name, gradeLevel, section, stream, studentCount, subjects: Array<{ id, name, code, fullMarks, passMarks, isCore, examinable, displayOrder }> } — Active subjects only.
+
+3. Examination API route: src/app/api/exams/route.ts (27 LOC).
+   • GET returns { exams, classes: await getClasses(schoolId), academicYear } — single endpoint serves both lists + class catalogue.
+   • POST creates exam (roles: PRINCIPAL, MANAGEMENT).
+
+4. Examination types: src/lib/exams/types.ts (457 LOC).
+   • NO ClassDTO / SubjectDTO interfaces — only ExamClassDTO (line 108, the class entry inside an Exam: { id, examId, classId, className, gradeLevel, section, stream, studentCount }) and ExamSubjectConfigDTO (line 94). The Create Exam "class with subjects" type is the ad-hoc shape returned by getClasses + mirrored by local ClassDTO in create-exam-fullscreen.tsx.
+   • Board type: 'CBSE' | 'UP_BOARD' | 'ICSE' | 'STATE' | 'CUSTOM' (line 10).
+   • Stream type: 'General' | 'Science-PCM' | 'Science-PCB' | 'Science-PCMB' | 'Commerce' | 'Humanities' (line 11).
+
+5. Hardcoded subject arrays in Examination module: NONE. The worklog Phase 3b `curriculum.ts` file was DELETED (confirmed: no file at src/lib/exams/curriculum.ts, zero consumers of MIDDLE_SCHOOL_SUBJECTS/SECONDARY_SUBJECTS/SCIENCE_PCM_SUBJECTS/SCIENCE_PCB_SUBJECTS/SCIENCE_PCMB_SUBJECTS/COMMERCE_SUBJECTS/HUMANITIES_SUBJECTS/suggestSubjectsForClass). types.ts comment (lines 6-9) confirms removal: "the rest of that file — subject preset arrays — was dead code and has been removed. Schools configure subjects per class+stream directly in Students & Classes."
+   • The ONLY remaining hardcoded subject catalogue is SUBJECTS_BY_LEVEL in src/lib/store/students-store/constants.ts (33 LOC) — consumed ONLY by Classes + Timetable modules, NOT Examination.
+
+6. Examination curriculum file src/lib/exams/curriculum.ts: DOES NOT EXIST. Only `Board` and `Stream` type aliases survived, moved into src/lib/exams/types.ts (lines 10-11).
+
+7. How Create Exam shows classes: SECTIONS COLLAPSED. normalizeToExamClasses (lines 89-139) groups raw DB class rows by `${gradeLevel}-${stream ?? 'general'}` so "Class 6-A" + "Class 6-B" appear as a single chip "Class 6" with a "· 2 sections" suffix. Rendering at lines 459-482: chip-style checkboxes with the merged label, check icon, section count badge.
+
+8. Class 11/12 streams: Stream is shown as PART OF THE CLASS LABEL, not as a separate picker. Stream label logic at lines 112-119: "Science-PCM" → "Science PCM" → label = "Class 11 — Science PCM". Other streams (Commerce/Humanities/General) shown verbatim. No separate stream dropdown — selecting "Class 11 — Science PCM" implicitly sets the stream context for subject auto-inclusion.
+
+9. Examination class selector component: NO SEPARATE FILE — picker is INLINE inside create-exam-fullscreen.tsx (Section "Classes", lines 449-484). The "examClass" chip uses role="checkbox", aria-checked, tabIndex=0, keyboard handler (Enter/Space), and the same click handler.
+
+Stage Summary:
+- Performed read-only exploration of Examination module's class+subject data flow. Confirmed Phase 0 audit migration (Subject canonicalization + ClassSubjectAssignment) is fully applied — getClasses() joins through ClassSubjectAssignment, not the legacy Class.subjects relation. curriculum.ts preset arrays deleted; Board/Stream types preserved in types.ts. Create Exam UI collapses sections, shows streams in class labels, auto-includes subjects from class configuration with optional Edit mode. No hardcoded subject arrays anywhere in Examination module. No code modified. Report returned to caller.

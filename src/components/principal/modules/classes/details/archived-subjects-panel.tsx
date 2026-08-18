@@ -4,35 +4,35 @@
  * ArchivedSubjectsPanel — subject-specific archive content built on the
  * universal UniversalArchivePanel.
  *
- * Brief section 6: Subject archive uses THE SAME universal archive panel
- *   as Teachers. No separate centered modal.
- *
- * Each subject card shows: subject name + code + category + archived date.
- * Restore + Delete (type-to-confirm) shared via the universal panel.
+ * Spec §7 / §25: archived subjects are preserved per-class for restore.
+ * The panel reads from `liveClass.archivedSubjects` (which now stores
+ * subject IDs + a display-name snapshot from archive time). Code and
+ * category are resolved from the canonical `academicSubjects` registry.
  */
+
 import { useMemo } from 'react'
 import { Archive } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useStudentsStore } from '@/lib/store/students-store'
-import { SUBJECTS_BY_LEVEL } from '@/lib/store/students-store/constants'
 import type { ClassRecord, ArchivedSubject } from '@/lib/store/students-store'
 import { UniversalArchivePanel, type ArchiveItem } from '../../shared/universal-archive-panel'
 import { toast } from 'sonner'
 
 function toArchiveItem(a: ArchivedSubject): ArchiveItem {
-  return { id: a.name, name: a.name, archivedAt: a.archivedAt }
+  // ArchivedSubject stores both id (canonical) and name (snapshot at archive time).
+  // Use id as the unique key so restore/delete actions hit the right subject.
+  return { id: a.id, name: a.name, archivedAt: a.archivedAt }
 }
 
 export function ArchivedSubjectsPanel({ open, onOpenChange, cls, onRestore, onDelete }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   cls: ClassRecord
-  onRestore: (subject: string) => void
-  onDelete: (subject: string) => void
+  onRestore: (subjectId: string) => void
+  onDelete: (subjectId: string) => void
 }) {
-  // Subscribe to canonical class so archived subjects reflect immediately
-  // even if the user archives a subject while the panel is open.
   const liveClass = useStudentsStore((s) => s.getClassById(cls.id)) ?? cls
+  const academicSubjects = useStudentsStore((s) => s.academicSubjects)
 
   const archivedItems: ArchiveItem[] = useMemo(
     () => (liveClass.archivedSubjects ?? []).map(toArchiveItem),
@@ -48,11 +48,11 @@ export function ArchivedSubjectsPanel({ open, onOpenChange, cls, onRestore, onDe
       searchPlaceholder="Search archived subjects…"
       items={archivedItems}
       onRestore={(item) => {
-        onRestore(item.name)
+        onRestore(item.id)
         toast.success(`${item.name} restored`)
       }}
       onDelete={(item) => {
-        onDelete(item.name)
+        onDelete(item.id)
         toast.success(`${item.name} permanently deleted`)
       }}
       emptyState={
@@ -65,9 +65,12 @@ export function ArchivedSubjectsPanel({ open, onOpenChange, cls, onRestore, onDe
         </div>
       }
       renderItem={(item) => {
-        const levelSubjects = SUBJECTS_BY_LEVEL[liveClass.level] || []
-        const category = levelSubjects.includes(item.name) ? 'Core' : 'Elective'
-        const code = item.name.substring(0, 3).toUpperCase()
+        // Resolve canonical metadata by id (Spec §28). If the subject has
+        // been renamed since archiving, the snapshot name is shown but the
+        // code/category reflect the current registry state.
+        const subj = academicSubjects.find((s) => s.id === item.id)
+        const category = subj?.category ?? 'Core'
+        const code = subj?.code ?? item.name.substring(0, 3).toUpperCase()
         return (
           <div className="flex items-start gap-2.5">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">

@@ -1,5 +1,6 @@
 import type { ClassRecord, FeeStatus, StudentRecord } from './types'
-import { CLASS_DEFS, HOUSE_DEFS, SUBJECTS_BY_LEVEL } from './constants'
+import { CLASS_DEFS, HOUSE_DEFS, SUBJECTS_BY_LEVEL, SEED_SUBJECTS } from './constants'
+import { streamKeyFromDbValue, type StreamKey } from '@/lib/mock/academic'
 
 // ============================================================
 // SEED DATA — Compact, generated lazily
@@ -78,8 +79,11 @@ function genClasses(): ClassRecord[] {
     'C11': 'T-029', // Anjali Desai's colleague — Suresh Pillai
     'C12': 'T-038', // Rajesh Khanna's colleague — Pooja Bhatt
     'C13': 'T-041', // Pooja Bhatt's colleague — Arjun Kapoor
-    'C14': 'T-044', // Arjun Kapoor's colleague — Shalini Agarwal
-    'C15': 'T-050', // Shalini Agarwal's colleague — Lakshmi Venkat
+    // Class 11/12 stream classes (Spec §4 — one ClassRecord per grade+stream)
+    'C14-PCM': 'T-044', // Arjun Kapoor's colleague — Shalini Agarwal
+    'C14-PCB': 'T-041',
+    'C15-PCM': 'T-050', // Shalini Agarwal's colleague — Lakshmi Venkat
+    'C15-PCB': 'T-047',
   }
   // Per-section assistant overrides (mostly undefined → uses class-level assistant).
   // Section-level Class Teacher overrides are populated so "Separate by section"
@@ -98,10 +102,11 @@ function genClasses(): ClassRecord[] {
     'C12-B': 'T-038', // Pooja Bhatt
     'C13-A': 'T-038', // Pooja Bhatt
     'C13-B': 'T-041', // Arjun Kapoor
-    'C14-Sci-A': 'T-041',
-    'C14-Com-A': 'T-044',
-    'C15-Sci-A': 'T-041',
-    'C15-Com-A': 'T-044',
+    // Class 11/12 stream class sections (Spec §4 — single section 'A')
+    'C14-PCM-A': 'T-041',
+    'C14-PCB-A': 'T-044',
+    'C15-PCM-A': 'T-041',
+    'C15-PCB-A': 'T-044',
     'C01-A': 'T-002',
     'C01-B': 'T-005',
     'C03-A': 'T-008',
@@ -113,13 +118,28 @@ function genClasses(): ClassRecord[] {
     'C09-A': 'T-032',
   }
   return CLASS_DEFS.map((c) => {
-    const subjects = SUBJECTS_BY_LEVEL[c.level]
+    // Resolve canonical subject ids from the new academic catalog
+    // (Spec §28). Falls back to SUBJECTS_BY_LEVEL names if a class def
+    // somehow has no subjectIds (defensive — should not happen).
+    const subjectIds: string[] = c.subjectIds && c.subjectIds.length > 0
+      ? [...c.subjectIds]
+      : (SUBJECTS_BY_LEVEL[c.level] || [])
+          .map((name) => SEED_SUBJECTS.find((s) => s.name === name)?.id)
+          .filter((id): id is string => Boolean(id))
+    // Subject display names (legacy convenience — derived from ids + registry).
+    const subjects: string[] = subjectIds
+      .map((id) => SEED_SUBJECTS.find((s) => s.id === id)?.name)
+      .filter((n): n is string => Boolean(n))
+    // Stream key (Spec §4) — only set for Class 11/12 Science streams.
+    const stream: StreamKey | null = c.stream ? streamKeyFromDbValue(c.stream) : null
+
     // Subject teacher map — for the first 3 subjects, assign the class teacher;
     // for the rest, rotate through a small pool of related teachers.
+    // Keyed by subject ID (canonical — survives renames).
     const subjectTeachers: Record<string, string> = {}
     const altPool = ['T-011', 'T-014', 'T-017', 'T-020', 'T-023']
-    subjects.forEach((subj, i) => {
-      subjectTeachers[subj] = i % 2 === 0 ? c.classTeacherId : altPool[i % altPool.length]
+    subjectIds.forEach((subId, i) => {
+      subjectTeachers[subId] = i % 2 === 0 ? c.classTeacherId : altPool[i % altPool.length]
     })
     return {
       id: c.id, name: c.name, grade: c.grade, level: c.level,
@@ -135,9 +155,11 @@ function genClasses(): ClassRecord[] {
       capacity: c.capacity,
       classTeacherId: c.classTeacherId,
       assistantTeacherId: ASSISTANT_BY_CLASS[c.id],
+      subjectIds,
       subjects,
       archivedSubjects: [],
       subjectTeachers,
+      stream,
       room: c.room,
       status: 'Active' as const,
     }
@@ -148,7 +170,11 @@ export const SS: StudentRecord[] = genStudents()
 export const SC: ClassRecord[] = genClasses()
 
 // Assign senior students as house captains / vice-captains (deterministic).
-const sn = SS.filter((s) => s.classId === 'C15' || s.classId === 'C14')
+// Spec §4 — Class 11/12 now have stream class ids (C14-PCM, C14-PCB, C15-PCM, C15-PCB).
+const sn = SS.filter((s) =>
+  s.classId === 'C15-PCM' || s.classId === 'C15-PCB' ||
+  s.classId === 'C14-PCM' || s.classId === 'C14-PCB'
+)
 HOUSE_DEFS[0].captainId = sn[0]?.id; HOUSE_DEFS[0].viceCaptainId = sn[1]?.id
 HOUSE_DEFS[1].captainId = sn[2]?.id; HOUSE_DEFS[1].viceCaptainId = sn[3]?.id
 HOUSE_DEFS[2].captainId = sn[4]?.id; HOUSE_DEFS[2].viceCaptainId = sn[5]?.id

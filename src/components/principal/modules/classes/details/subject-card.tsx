@@ -6,41 +6,48 @@
  * Built on the shared `EntityCard` primitive — same surface / border /
  * typography / spacing as TeacherCard, StudentCard, etc.
  *
- * Brief section 11 + 12: ONE SubjectCard used by both Overview (read-only)
- * and Subjects (management) tabs. Variant is selected via the `manageable`
- * prop — no markup duplication.
+ * Spec §28: Subject metadata (code, category) is resolved from the
+ * canonical `academicSubjects` registry in the Zustand store — NOT from
+ * a local `SUBJECTS_BY_LEVEL` constant. This means renames and code
+ * changes propagate automatically (Spec §9).
  *
- * Brief section 14: Normal mode stays clean. Management mode reveals
- * the Archive action intentionally — destructive actions are NOT exposed
- * constantly to prevent accidental clicks.
- *
- * Brief section 38: Same visual grammar as TeacherCard.
+ * The card receives a subject NAME (for backward-compat with callers
+ * that haven't migrated to ids yet) and looks up the matching subject
+ * in the registry by name. If not found, it falls back to a derived code.
  */
-import { BookOpen, Archive } from 'lucide-react'
+
+import { BookOpen, Archive, Pencil } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { EntityCard } from '../../shared/entity-card'
-import { SUBJECTS_BY_LEVEL } from '@/lib/store/students-store/constants'
+import { useStudentsStore } from '@/lib/store/students-store'
 import { useTeachersMockStore } from '@/lib/store/teachers-mock-store'
 import type { ClassRecord } from '@/lib/store/students-store'
+import { RenameSubjectDialog } from './rename-subject-dialog'
 
 export interface SubjectCardProps {
-  /** Subject display name, e.g. "English" */
+  /** Subject display name (e.g. "English"). */
   subject: string
-  /** Class context — used to resolve Core vs Elective + look up assigned teacher */
+  /** Class context — used to look up the assigned teacher. */
   cls: ClassRecord
-  /** When true, exposes the inline Archive action. Default false (read-only). */
+  /** When true, exposes the inline Archive + Rename actions. Default false. */
   manageable?: boolean
-  /** Optional handler invoked when user clicks Archive. Required when manageable=true. */
+  /** Optional handler invoked when user clicks Archive. */
   onArchive?: (subject: string) => void
-  /** Optional className to tweak surface from caller */
+  /** Optional className to tweak surface from caller. */
   className?: string
 }
 
 export function SubjectCard({ subject, cls, manageable = false, onArchive, className }: SubjectCardProps) {
-  const levelSubjects = SUBJECTS_BY_LEVEL[cls.level] || []
-  const category = levelSubjects.includes(subject) ? 'Core' : 'Elective'
-  const code = subject.substring(0, 3).toUpperCase()
-  const teacherId = cls.subjectTeachers?.[subject]
+  // Spec §28 — resolve metadata from the canonical registry.
+  const subj = useStudentsStore((s) =>
+    s.academicSubjects.find((x) => x.name === subject || x.id === subject),
+  )
+  const category = subj?.category ?? 'Core'
+  const code = subj?.code ?? subject.substring(0, 3).toUpperCase()
+
+  // Look up the assigned teacher. Subject teachers are keyed by subject id
+  // (Spec §28 — survives renames). For backward-compat, also try by name.
+  const teacherId = cls.subjectTeachers?.[subject] ?? (subj ? cls.subjectTeachers?.[subj.id] : undefined)
   const teacher = useTeachersMockStore((s) =>
     teacherId ? s.teachers.find((t) => t.id === teacherId) : undefined
   )
@@ -58,15 +65,36 @@ export function SubjectCard({ subject, cls, manageable = false, onArchive, class
       }
       metadata={teacher && !teacher.archived ? `${teacher.name} · ${teacher.employeeId}` : 'No teacher assigned'}
       action={
-        manageable && onArchive ? (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onArchive(subject) }}
-            className="text-[10px] text-amber-600 hover:text-amber-700 font-medium px-1.5 py-0.5 rounded hover:bg-amber-500/10 transition-colors inline-flex items-center gap-1"
-          >
-            <Archive className="h-3 w-3" />
-            Archive
-          </button>
+        manageable ? (
+          <div className="flex items-center gap-0.5">
+            {subj && (
+              <RenameSubjectDialog
+                subjectId={subj.id}
+                subjectName={subj.name}
+                trigger={(open) => (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); open() }}
+                    className="text-[10px] text-muted-foreground hover:text-foreground font-medium px-1.5 py-0.5 rounded hover:bg-muted/60 transition-colors inline-flex items-center gap-1"
+                    title="Rename subject"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Rename
+                  </button>
+                )}
+              />
+            )}
+            {onArchive && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onArchive(subject) }}
+                className="text-[10px] text-amber-600 hover:text-amber-700 font-medium px-1.5 py-0.5 rounded hover:bg-amber-500/10 transition-colors inline-flex items-center gap-1"
+              >
+                <Archive className="h-3 w-3" />
+                Archive
+              </button>
+            )}
+          </div>
         ) : undefined
       }
     />

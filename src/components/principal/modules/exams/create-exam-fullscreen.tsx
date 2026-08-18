@@ -107,16 +107,22 @@ function normalizeToExamClasses(classes: ClassDTO[]): ExamClass[] {
         }
       }
     } else {
-      // Create new examination-level class — Spec §9 canonical labels:
-      // "Class 6" / "Class 11 — Science PCM" / "Class 11 — Science PCB"
+      // Create new examination-level class — Spec §9 canonical labels.
+      // Prefer `cls.name` (e.g. "Pre-Nursery", "KG", "Class 6") over a
+      // reconstructed "Class ${grade}" so non-numeric grade levels render
+      // with their proper display name (Spec §21 — use "Class", not grade).
       const streamLabel = stream
         ? stream.startsWith('Science-')
           ? `Science ${stream.slice('Science-'.length)}`
           : stream
         : null
+      // Spec §21: prefer the canonical class name from Students & Classes.
+      // For classes whose name already starts with "Class " (e.g. "Class 6"),
+      // use it verbatim. For others (Pre-Nursery, KG) use the name as-is.
+      const baseName = cls.name || `Class ${grade}`
       const label = streamLabel
-        ? `Class ${grade} — ${streamLabel}`
-        : `Class ${grade}`
+        ? `${baseName} — ${streamLabel}`
+        : baseName
       byKey.set(key, {
         key,
         label,

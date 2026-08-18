@@ -27,19 +27,21 @@
  * Archive uses mock historical records (src/lib/exams/archive-data.ts).
  */
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { ChevronDown, Archive as ArchiveIcon } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs } from '../shared/segmented-tabs'
 import { useExamsList } from '@/lib/exams/use-exams'
 import { AVAILABLE_SESSIONS } from '@/lib/exams/session-toppers-data'
+import { useAcademicClasses } from '@/lib/mock/academic/use-academic-classes'
+import type { ExamLevelClass } from '@/lib/mock/academic'
 import { ExamsOverviewTab } from './tabs/overview-tab'
 import { ExamsListTab } from './tabs/exams-list-tab'
 import { ReportsTab } from './tabs/reports-tab'
 import { SettingsTab } from './tabs/settings-tab'
 import { ArchiveView } from './tabs/archive-view'
-import { CreateExamFullScreen } from './create-exam-fullscreen'
+import { CreateExamFullScreen, type ClassDTO } from './create-exam-fullscreen'
 import { ExamWorkspace } from './exam-workspace'
 
 type SectionTab = 'overview' | 'exams' | 'reports' | 'settings'
@@ -52,13 +54,53 @@ const SECTION_TABS = [
   { value: 'settings', label: 'Settings' },
 ]
 
+/**
+ * Convert mock-resolved ExamLevelClass[] to the ClassDTO[] shape that
+ * CreateExamFullScreen expects (Spec §1 / §15 / §28).
+ *
+ * Each ExamLevelClass is already an exam-level entry (sections collapsed
+ * inside the ClassRecord), so we emit ONE ClassDTO per entry. `section` is
+ * set to null — Examination must NOT show sections (Spec §3 / §15).
+ *
+ * Mock subjects are hydrated with default fullMarks=100 / passMarks=33
+ * (matching the Examination service defaults). The Examination Settings
+ * tab can override these per subject later.
+ */
+function toClassDTOs(examClasses: ExamLevelClass[]): ClassDTO[] {
+  return examClasses.map((c) => ({
+    id: c.id,
+    name: c.name,
+    gradeLevel: String(c.gradeLevel),
+    section: null,
+    stream: c.stream,
+    studentCount: 0,
+    subjects: c.subjects.map((s) => ({
+      id: s.id,
+      name: s.name,
+      code: s.code,
+      fullMarks: 100,
+      passMarks: 33,
+      isCore: s.category === 'Core',
+      examinable: true,
+      displayOrder: 0,
+    })),
+  }))
+}
+
 export function ExamsModule() {
   const [section, setSection] = useState<SectionTab>('overview')
   const [view, setView] = useState<View>({ kind: 'list' })
   // Active session picker drives the Session Top Performers section in Overview.
   // Default to the current academic year from the API.
-  const { exams, classes, academicYear, loading, error, reload } = useExamsList()
+  const { exams, academicYear, loading, error, reload } = useExamsList()
   const [session, setSession] = useState<string>(academicYear || '2025-2026')
+
+  // Spec §1 / §15 / §28: classes + subjects for Create Exam come from the
+  // shared mock academic source (Students & Classes Zustand store), NOT
+  // from the DB-backed /api/exams route. Mutations in Students & Classes
+  // (add / archive / restore / rename subject) propagate here instantly.
+  const examLevelClasses = useAcademicClasses()
+  const classes = useMemo(() => toClassDTOs(examLevelClasses), [examLevelClasses])
 
   // Full-screen views take over the entire content area
   if (view.kind === 'exam') {

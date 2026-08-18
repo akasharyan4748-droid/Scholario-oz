@@ -1,29 +1,82 @@
 import type { House } from './types'
+import {
+  INITIAL_SUBJECTS,
+  ACADEMIC_CLASSES,
+  type SubjectDef,
+  type AcademicClassDef,
+} from '@/lib/mock/academic'
 
 // ============================================================
-// CLASS DEFINITIONS
+// SUBJECTS — canonical registry (Spec §5 / §6 / §22)
+// ------------------------------------------------------------
+// The Students & Classes Zustand store clones this list on init so
+// principal mutations (rename / add custom) don't mutate the seed.
+// Naming follows spec §22 exactly: Hindi, English, Science, Maths,
+// Social Science, Arts & Drawing, Physics, Chemistry, Biology.
 // ============================================================
 
-export const SUBJECTS_BY_LEVEL: Record<string, string[]> = {
-  'Pre-Primary': ['English', 'Mathematics', 'EVS', 'Hindi', 'Art & Craft', 'Music'],
-  Primary: ['English', 'Mathematics', 'EVS', 'Hindi', 'Computer Science', 'Art & Craft'],
-  Middle: ['English', 'Mathematics', 'Science', 'Social Studies', 'Hindi', 'Computer Science'],
-  Secondary: ['English', 'Mathematics', 'Science', 'Social Studies', 'Hindi', 'Computer Science'],
-  'Senior Secondary': ['English', 'Physics', 'Chemistry', 'Mathematics', 'Biology', 'Computer Science'],
-}
+/** Seed subject registry (cloned by the store on init). */
+export const SEED_SUBJECTS: SubjectDef[] = INITIAL_SUBJECTS.map((s) => ({ ...s }))
 
-export const CLASS_DEFS = [
-  { id: 'C01', name: 'Pre-Nursery', grade: -2, level: 'Pre-Primary' as const, sections: ['A', 'B'], capacity: 25, room: 'G-01', classTeacherId: 'T-002' },
-  { id: 'C03', name: 'KG', grade: 0, level: 'Pre-Primary' as const, sections: ['A', 'B'], capacity: 28, room: 'G-03', classTeacherId: 'T-008' },
-  { id: 'C05', name: 'Class 2', grade: 2, level: 'Primary' as const, sections: ['A', 'B', 'C'], capacity: 35, room: 'F1-05', classTeacherId: 'T-014' },
-  { id: 'C07', name: 'Class 4', grade: 4, level: 'Primary' as const, sections: ['A', 'B'], capacity: 38, room: 'F1-07', classTeacherId: 'T-020' },
-  { id: 'C09', name: 'Class 6', grade: 6, level: 'Middle' as const, sections: ['A', 'B'], capacity: 40, room: 'F2-09', classTeacherId: 'T-026' },
-  { id: 'C11', name: 'Class 8', grade: 8, level: 'Middle' as const, sections: ['A', 'B'], capacity: 42, room: 'F2-11', classTeacherId: 'T-032' },
-  { id: 'C12', name: 'Class 9', grade: 9, level: 'Secondary' as const, sections: ['A', 'B'], capacity: 45, room: 'F3-12', classTeacherId: 'T-035' },
-  { id: 'C13', name: 'Class 10', grade: 10, level: 'Secondary' as const, sections: ['A', 'B'], capacity: 45, room: 'F3-13', classTeacherId: 'T-038' },
-  { id: 'C14', name: 'Class 11', grade: 11, level: 'Senior Secondary' as const, sections: ['Sci-A', 'Com-A'], capacity: 45, room: 'F3-14', classTeacherId: 'T-041' },
-  { id: 'C15', name: 'Class 12', grade: 12, level: 'Senior Secondary' as const, sections: ['Sci-A', 'Com-A'], capacity: 45, room: 'F3-15', classTeacherId: 'T-044' },
-]
+// ============================================================
+// CLASSES — academic class catalog (Spec §2 / §3 / §4)
+// ------------------------------------------------------------
+// One entry per (grade + stream). Class 11/12 are split into
+// Science-PCM and Science-PCB offerings. Each entry's `subjectIds`
+// references canonical subject ids from SEED_SUBJECTS.
+// ============================================================
+
+/** Seed class catalog (consumed by the store to seed ClassRecords). */
+export const SEED_CLASSES: AcademicClassDef[] = ACADEMIC_CLASSES.map((c) => ({ ...c, sections: [...c.sections], subjectIds: [...c.subjectIds] }))
+
+// ============================================================
+// LEGACY COMPAT — `SUBJECTS_BY_LEVEL` + `CLASS_DEFS`
+// ------------------------------------------------------------
+// Older code (class-subjects.tsx, subject-card.tsx, seed-data.ts,
+// archived-subjects-panel.tsx) still imports these. We provide
+// derived aliases that pull from the new academic module so the
+// existing imports keep working until each file is migrated.
+//
+// NOTE: These are DEPRECATED. New code should import from
+// `@/lib/mock/academic` directly.
+// ============================================================
+
+/**
+ * @deprecated Use `SEED_SUBJECTS` or `@/lib/mock/academic` instead.
+ * Maps a class level to the display names of its default subjects.
+ */
+export const SUBJECTS_BY_LEVEL: Record<string, string[]> = (() => {
+  const byLevel: Record<string, string[]> = {}
+  for (const cls of ACADEMIC_CLASSES) {
+    if (!byLevel[cls.level]) {
+      byLevel[cls.level] = cls.subjectIds
+        .map((id) => INITIAL_SUBJECTS.find((s) => s.id === id)?.name)
+        .filter((n): n is string => Boolean(n))
+    }
+  }
+  return byLevel
+})()
+
+/**
+ * @deprecated Use `SEED_CLASSES` or `@/lib/mock/academic` instead.
+ * Flat class definitions used by legacy seed-data.ts.
+ */
+export const CLASS_DEFS = ACADEMIC_CLASSES.map((c) => ({
+  id: c.id,
+  name: c.name,
+  grade: c.grade,
+  level: c.level,
+  sections: [...c.sections],
+  capacity: c.capacity,
+  room: c.room,
+  classTeacherId: c.classTeacherId,
+  stream: c.stream,
+  subjectIds: [...c.subjectIds],
+}))
+
+// ============================================================
+// HOUSES — extra-curricular houses (unchanged)
+// ============================================================
 
 export const HOUSE_DEFS: House[] = [
   { id: 'H1', name: 'Aryabhata', color: 'oklch(0.6 0.18 250)', motto: 'Wisdom Through Knowledge', points: 1240, competitionWins: 12 },

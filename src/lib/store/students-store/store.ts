@@ -2,8 +2,24 @@
 
 import { create } from 'zustand'
 import type { StudentsState, StudentStatus } from './types'
-import { HOUSE_DEFS } from './constants'
+import { HOUSE_DEFS, SEED_SUBJECTS } from './constants'
 import { SS, SC } from './seed-data'
+import { idForCustomSubject, codeForName, type SubjectDef } from '@/lib/mock/academic'
+
+/**
+ * Helper — keep a ClassRecord's legacy `subjects: string[]` array in sync
+ * with its canonical `subjectIds: string[]` + the academic subject registry.
+ * Spec §28: id is the source of truth; name is a derived display field.
+ */
+function syncSubjectNames(
+  cls: import('./types').ClassRecord,
+  registry: SubjectDef[],
+): import('./types').ClassRecord {
+  const subjects = cls.subjectIds
+    .map((id) => registry.find((s) => s.id === id)?.name)
+    .filter((n): n is string => Boolean(n))
+  return { ...cls, subjects }
+}
 
 export const useStudentsStore = create<StudentsState>()((set, get) => ({
   students: SS,
@@ -11,6 +27,9 @@ export const useStudentsStore = create<StudentsState>()((set, get) => ({
   houses: HOUSE_DEFS,
   promotions: [],
   transfers: [],
+  // Canonical subject registry (Spec §28). Cloned from SEED_SUBJECTS so
+  // principal mutations (rename / add custom) don't mutate the seed.
+  academicSubjects: SEED_SUBJECTS.map((s) => ({ ...s })),
   archiveStudent: (id, reason, by) => {
     const s = get().students.find((x) => x.id === id)
     if (!s) return
@@ -99,68 +118,126 @@ export const useStudentsStore = create<StudentsState>()((set, get) => ({
       ),
     }))
   },
-  addClassSubject: (classId, subject) => {
+  addClassSubject: (classId, subjectId) => {
     set((state) => ({
       classes: state.classes.map((c) =>
-        c.id === classId && !c.subjects.includes(subject)
-          ? { ...c, subjects: [...c.subjects, subject] }
+        c.id === classId && !c.subjectIds.includes(subjectId)
+          ? syncSubjectNames(
+              { ...c, subjectIds: [...c.subjectIds, subjectId] },
+              state.academicSubjects,
+            )
           : c
       ),
     }))
   },
-  archiveClassSubject: (classId, subject) => {
+  archiveClassSubject: (classId, subjectId) => {
     set((state) => ({
       classes: state.classes.map((c) => {
         if (c.id !== classId) return c
-        if (!c.subjects.includes(subject)) return c
-        // Move to archivedSubjects (preserve timestamp). Avoid duplicate entries.
-        const already = c.archivedSubjects.some((a) => a.name === subject)
-        return {
-          ...c,
-          subjects: c.subjects.filter((s) => s !== subject),
-          archivedSubjects: already
-            ? c.archivedSubjects
-            : [{ name: subject, archivedAt: new Date().toISOString() }, ...c.archivedSubjects],
-        }
+        if (!c.subjectIds.includes(subjectId)) return c
+        // Snapshot the current display name at archive time (Spec §7).
+        const subj = state.academicSubjects.find((s) => s.id === subjectId)
+        const snapName = subj?.name ?? subjectId
+        const already = c.archivedSubjects.some((a) => a.id === subjectId)
+        return syncSubjectNames(
+          {
+            ...c,
+            subjectIds: c.subjectIds.filter((id) => id !== subjectId),
+            archivedSubjects: already
+              ? c.archivedSubjects
+              : [{ id: subjectId, name: snapName, archivedAt: new Date().toISOString() }, ...c.archivedSubjects],
+          },
+          state.academicSubjects,
+        )
       }),
     }))
   },
-  restoreClassSubject: (classId, subject) => {
+  restoreClassSubject: (classId, subjectId) => {
     set((state) => ({
       classes: state.classes.map((c) => {
         if (c.id !== classId) return c
-        if (!c.archivedSubjects.some((a) => a.name === subject)) return c
-        return {
-          ...c,
-          subjects: c.subjects.includes(subject) ? c.subjects : [...c.subjects, subject],
-          archivedSubjects: c.archivedSubjects.filter((a) => a.name !== subject),
-        }
+        if (!c.archivedSubjects.some((a) => a.id === subjectId)) return c
+        return syncSubjectNames(
+          {
+            ...c,
+            subjectIds: c.subjectIds.includes(subjectId)
+              ? c.subjectIds
+              : [...c.subjectIds, subjectId],
+            archivedSubjects: c.archivedSubjects.filter((a) => a.id !== subjectId),
+          },
+          state.academicSubjects,
+        )
       }),
     }))
   },
-  deleteArchivedSubject: (classId, subject) => {
+  deleteArchivedSubject: (classId, subjectId) => {
     set((state) => ({
       classes: state.classes.map((c) =>
         c.id === classId
-          ? { ...c, archivedSubjects: c.archivedSubjects.filter((a) => a.name !== subject) }
+          ? { ...c, archivedSubjects: c.archivedSubjects.filter((a) => a.id !== subjectId) }
           : c
       ),
     }))
   },
-  updateSubjectTeacher: (classId, subject, teacherId) => {
+  updateSubjectTeacher: (classId, subjectId, teacherId) => {
     set((state) => ({
       classes: state.classes.map((c) => {
         if (c.id !== classId) return c
         const next = { ...c.subjectTeachers }
         if (teacherId) {
-          next[subject] = teacherId
+          next[subjectId] = teacherId
         } else {
-          delete next[subject]
+          delete next[subjectId]
         }
         return { ...c, subjectTeachers: next }
       }),
     }))
   },
+  /** Spec §9 — rename a canonical subject. Updates only the registry; every
+   *  class's `subjects` display array is re-derived via syncSubjectNames. */
+  renameSubject: (subjectId, newName) => {
+    const trimmed = newName.trim()
+    if (!trimmed) return
+    set((state) => {
+      // Compute the NEW registry first, THEN re-derive class subject names
+      // from the new registry (not the old one — that was the bug).
+      const nextRegistry = state.academicSubjects.map((s) =>
+        s.id === subjectId ? { ...s, name: trimmed } : s
+      )
+      return {
+        academicSubjects: nextRegistry,
+        classes: state.classes.map((c) => syncSubjectNames(c, nextRegistry)),
+      }
+    })
+  },
+  /** Spec §8 — create a NEW custom subject (or reuse an existing same-name one)
+   *  and add it to a class. Returns the subject id. */
+  createCustomSubject: (classId, name) => {
+    const trimmed = name.trim()
+    if (!trimmed) return ''
+    const state = get()
+    // Reuse existing subject with same name (case-insensitive) if present.
+    const existing = state.academicSubjects.find(
+      (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
+    )
+    const subjectId = existing?.id ?? idForCustomSubject(trimmed)
+    if (!existing) {
+      const newSubject: SubjectDef = {
+        id: subjectId,
+        name: trimmed,
+        code: codeForName(trimmed),
+        category: 'Additional',
+        status: 'Active',
+      }
+      set((s) => ({ academicSubjects: [...s.academicSubjects, newSubject] }))
+    }
+    // Add to class if not already present.
+    if (!state.classes.find((c) => c.id === classId)?.subjectIds.includes(subjectId)) {
+      get().addClassSubject(classId, subjectId)
+    }
+    return subjectId
+  },
+  getSubjectById: (subjectId) => get().academicSubjects.find((s) => s.id === subjectId && s.status === 'Active'),
   getStudentById: (id) => get().students.find((s) => s.id === id),
   getClassById: (id) => get().classes.find((c) => c.id === id),
   getClassStudents: (classId) => get().students.filter((s) => s.classId === classId && s.status === 'Active'),
