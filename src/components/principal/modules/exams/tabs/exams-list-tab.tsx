@@ -44,7 +44,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { EXAM_TYPES, type ExamDTO } from '@/lib/exams/types'
 import { InlineLoading } from '../inline-loading'
-import { useUpdateExam, useDeleteExam } from '@/lib/exams/use-exams'
+import { useUpdateExam } from '@/lib/exams/use-exams'
+import { useDeleteExamMock as useDeleteExam } from '@/lib/exams/use-exams-mock'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 

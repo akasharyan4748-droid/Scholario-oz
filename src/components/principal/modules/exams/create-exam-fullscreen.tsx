@@ -38,7 +38,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
 
-import { useCreateExam } from '@/lib/exams/use-exams'
+import { useCreateExamMock } from '@/lib/exams/use-exams-mock'
 import { TemplateSelection } from './tabs/template-selection'
 import { type ExamTemplate } from './tabs/exam-templates'
 import {
@@ -167,7 +167,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [examTime, setExamTime] = useState('09:00')
-  const { create, loading } = useCreateExam()
+  const { create, loading } = useCreateExamMock()
 
   // Normalize raw DB classes into examination-level classes
   const examClasses = useMemo(() => normalizeToExamClasses(classes), [classes])

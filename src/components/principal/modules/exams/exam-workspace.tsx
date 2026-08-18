@@ -21,8 +21,8 @@ import { SegmentedTabs } from '../shared/segmented-tabs'
 import { InlineLoading } from './inline-loading'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useExamMock as useExam } from '@/lib/exams/use-exams-mock'
 import {
-  useExam,
   useUpdateExam,
   useAddScheduleItem,
   useDeleteScheduleItem,
