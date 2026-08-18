@@ -100,7 +100,7 @@ async function main() {
     console.log(`  Subjects: ${cls11PCM.subjects.map(s => s.name).join(', ')}`)
     const hasPhysics = cls11PCM.subjects.some(s => s.name === 'Physics')
     const hasChemistry = cls11PCM.subjects.some(s => s.name === 'Chemistry')
-    const hasMath = cls11PCM.subjects.some(s => s.name === 'Mathematics')
+    const hasMath = cls11PCM.subjects.some(s => s.name === "Maths")
     const hasBiology = cls11PCM.subjects.some(s => s.name === 'Biology')
     console.log(`  ✓ Has Physics/Chemistry/Math: ${hasPhysics && hasChemistry && hasMath}`)
     console.log(`  ✓ Does NOT have Biology (PCM, not PCB): ${!hasBiology}`)
@@ -114,13 +114,13 @@ async function main() {
     const hasPhysics = cls11PCB.subjects.some(s => s.name === 'Physics')
     const hasChemistry = cls11PCB.subjects.some(s => s.name === 'Chemistry')
     const hasBiology = cls11PCB.subjects.some(s => s.name === 'Biology')
-    const hasMath = cls11PCB.subjects.some(s => s.name === 'Mathematics')
+    const hasMath = cls11PCB.subjects.some(s => s.name === "Maths")
     console.log(`  ✓ Has Physics/Chemistry/Biology: ${hasPhysics && hasChemistry && hasBiology}`)
-    console.log(`  ✓ Does NOT have Mathematics (PCB, not PCM): ${!hasMath}`)
+    console.log(`  ✓ Does NOT have Maths (PCB, not PCM): ${!hasMath}`)
   }
 
-  // SCENARIO H: Stream alternative — both PCM + PCB selected → Mathematics/Biology share one slot
-  console.log('\n--- SCENARIO H: Stream alternative Mathematics/Biology (PCM+PCB) ---')
+  // SCENARIO H: Stream alternative — both PCM + PCB selected → Maths/Biology share one slot
+  console.log('\n--- SCENARIO H: Stream alternative Maths/Biology (PCM+PCB) ---')
   if (cls11PCM && cls11PCB) {
     // Verify the template-engine collapses Mathematics + Biology into one schedule slot
     const { countScheduleSlots, getStreamAlternative } = await import('../src/lib/exams/template-engine.ts').catch(() => ({ countScheduleSlots: null, getStreamAlternative: null }))
@@ -129,8 +129,8 @@ async function main() {
       const rawCount = combinedSubjects.length
       const slotCount = countScheduleSlots(combinedSubjects)
       console.log(`  Combined subjects (${rawCount}): ${combinedSubjects.sort().join(', ')}`)
-      console.log(`  Slot count: ${slotCount} (expected ${rawCount - 1} — Mathematics/Biology collapse)`)
-      console.log(`  ✓ Mathematics alternative is Biology: ${getStreamAlternative('Mathematics') === 'Biology'}`)
+      console.log(`  Slot count: ${slotCount} (expected ${rawCount - 1} — Maths/Biology collapse)`)
+      console.log(`  ✓ Mathematics alternative is Biology: ${getStreamAlternative("Maths") === 'Biology'}`)
       console.log(`  ✓ Slot count is raw - 1: ${slotCount === rawCount - 1}`)
     } else {
       console.log('  (template-engine not directly importable in mjs — verified via TS check)')

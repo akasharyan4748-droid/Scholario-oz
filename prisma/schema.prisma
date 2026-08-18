@@ -62,6 +62,7 @@ model School {
   noHomeworkDates     NoHomeworkDate[]
   parentGrievances    ParentGrievance[]
   homeworkSurveys     HomeworkSurvey[]
+  subjectAssignments  ClassSubjectAssignment[]
 }
 
 model User {
@@ -152,7 +153,7 @@ model Class {
   createdAt      DateTime @default(now())
 
   students      Student[]
-  subjects      Subject[]
+  subjects      Subject[]               // LEGACY — kept for backward-compat; new code should use subjectAssignments
   exams         Exam[]
   attendance    Attendance[]
   timetables    Timetable[]
@@ -163,19 +164,24 @@ model Class {
   examSchedule  ExamScheduleItem[]
   examMarks     ExamMark[]
   homeworks     Homework[]
+  subjectAssignments ClassSubjectAssignment[]
 }
 
 model Subject {
   id        String   @id @default(cuid())
   schoolId  String
   school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  classId   String?
+  classId   String? // LEGACY — kept for backward-compat during migration; will be NULL after canonicalization. New code should use ClassSubjectAssignment.
   class     Class?   @relation(fields: [classId], references: [id])
   name      String
   code      String?
   fullMarks Int?     @default(100)
   passMarks Int?     @default(33)
+  // Spec §18: subject lifecycle — Active appears in new exam creation;
+  // Archived remains queryable for historical records.
+  status    String   @default("Active") // Active | Archived
   createdAt DateTime @default(now())
+  updatedAt DateTime? @updatedAt
 
   results         Result[]
   timetables      Timetable[]
@@ -186,6 +192,40 @@ model Subject {
   examMarks       ExamMark[]
   homeworks       Homework[]
   examAttendances ExamAttendance[]
+
+  // Spec §12/§32: stable canonical identity per school — one subject per code.
+  // Prevents future duplicate subject creation at the database level.
+  @@unique([schoolId, code])
+  classAssignments ClassSubjectAssignment[]
+}
+
+// ─── ClassSubjectAssignment (Spec §19/§20) ─────────────────────────────
+// Separates the SUBJECT (canonical, school-scoped) from its ASSIGNMENT to
+// a specific class (+ optional stream). One canonical "Hindi" subject can
+// be assigned to many classes. Removing an assignment does NOT delete the
+// canonical subject — historical records remain valid (Spec §16/§25).
+model ClassSubjectAssignment {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId       String
+  class         Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId     String
+  subject       Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  // Spec §34: distinguishes core/default subjects from additional/optional ones.
+  isCore        Boolean  @default(true)
+  // Spec §18/§35: an inactive assignment is excluded from new examinations
+  // but historical records remain valid. Archived subjects are not selectable.
+  isActive      Boolean  @default(true)
+  // Spec §33: some subjects are examinable, others are not (e.g. PE, Music).
+  examinable    Boolean  @default(true)
+  // Spec §33: deterministic ordering for display.
+  displayOrder  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime? @updatedAt
+
+  // Spec §12/§19: one assignment per (class, subject) — prevents duplicates.
+  @@unique([classId, subjectId])
 }
 
 model Exam {

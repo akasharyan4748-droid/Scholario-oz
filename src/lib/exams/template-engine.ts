@@ -88,12 +88,12 @@ export function getTemplateMeta(templateId: string): TemplateMeta {
 // ─── Stream alternative pairs (Spec §13, §41) ──────────────────────────
 // When PCM and PCB classes are both selected in the same exam, these
 // subject pairs share ONE date+time slot in the timetable.
-//   • Mathematics  (PCM)  ←→  Biology  (PCB)
+//   • Maths  (PCM)  ←→  Biology  (PCB)
 // The deduplication layer in the UI already produces one entry per
 // canonical subject name; this map identifies which two distinct names
 // should be scheduled together when both appear.
 export const STREAM_ALTERNATIVE_PAIRS: Array<[string, string]> = [
-  ['Mathematics', 'Biology'],
+  ['Maths', 'Biology'],
 ]
 
 /**

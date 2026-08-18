@@ -61,7 +61,16 @@ export interface ClassDTO {
   section: string | null
   stream: string | null
   studentCount: number
-  subjects: Array<{ id: string; name: string; code: string | null; fullMarks: number; passMarks: number }>
+  subjects: Array<{
+    id: string
+    name: string
+    code: string | null
+    fullMarks: number
+    passMarks: number
+    isCore?: boolean
+    examinable?: boolean
+    displayOrder?: number
+  }>
 }
 
 /** Examination-level class — sections collapsed into one selectable unit. */

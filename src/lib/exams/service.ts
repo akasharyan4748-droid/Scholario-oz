@@ -191,10 +191,30 @@ export async function getExam(examId: string, schoolId: string): Promise<ExamDTO
 }
 
 export async function getClasses(schoolId: string) {
+  // Spec §26/§42: Students & Classes is the source of truth for subjects.
+  // We read from ClassSubjectAssignment (the canonical class→subject mapping),
+  // JOINed to Subject (the canonical identity). This replaces the legacy
+  // direct Class.subjects relation, which was class-scoped and led to
+  // duplicate subject identities.
   const classes = await db.class.findMany({
     where: { schoolId },
     include: {
-      subjects: { orderBy: { name: 'asc' } },
+      subjectAssignments: {
+        where: { isActive: true },
+        include: {
+          subject: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              fullMarks: true,
+              passMarks: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: { displayOrder: 'asc' },
+      },
       _count: { select: { students: true } },
     },
   })
@@ -212,13 +232,21 @@ export async function getClasses(schoolId: string) {
     section: c.section,
     stream: c.stream,
     studentCount: c._count.students,
-    subjects: c.subjects.map((s) => ({
-      id: s.id,
-      name: s.name,
-      code: s.code,
-      fullMarks: s.fullMarks ?? 100,
-      passMarks: s.passMarks ?? 33,
-    })),
+    // Spec §18: only Active subjects appear in new exam creation.
+    // Archived subjects remain queryable for historical records but are
+    // excluded here.
+    subjects: c.subjectAssignments
+      .filter((a) => a.subject.status === 'Active')
+      .map((a) => ({
+        id: a.subject.id,
+        name: a.subject.name,
+        code: a.subject.code,
+        fullMarks: a.subject.fullMarks ?? 100,
+        passMarks: a.subject.passMarks ?? 33,
+        isCore: a.isCore,
+        examinable: a.examinable,
+        displayOrder: a.displayOrder,
+      })),
   }))
 }
 
@@ -324,16 +352,22 @@ export async function createExam(
     throw new Error('One or more classes not found in this school')
   }
 
-  // Validate subjects exist
+  // Validate subjects exist + are assigned to the class via ClassSubjectAssignment.
+  // Spec §19/§26: subjects are canonical; class membership is through assignments.
+  // The legacy Subject.classId column is no longer authoritative.
   for (const classId of input.classIds) {
     const subjects = input.subjectsByClass[classId] ?? []
     if (subjects.length === 0) throw new Error(`No subjects selected for class ${validClasses.find((c) => c.id === classId)?.name}`)
-    const validSubjects = await db.subject.findMany({
-      where: { id: { in: subjects.map((s) => s.subjectId) }, classId },
-      select: { id: true },
+    const subjectIds = subjects.map((s) => s.subjectId)
+    // Check that each subjectId is assigned to this class via ClassSubjectAssignment.
+    const assignments = await db.classSubjectAssignment.findMany({
+      where: { classId, subjectId: { in: subjectIds }, isActive: true },
+      select: { subjectId: true },
     })
-    if (validSubjects.length !== subjects.length) {
-      throw new Error('One or more subjects not found for the selected class')
+    const assignedIds = new Set(assignments.map((a) => a.subjectId))
+    const missing = subjectIds.filter((id) => !assignedIds.has(id))
+    if (missing.length > 0) {
+      throw new Error(`One or more subjects not found for the selected class (ClassSubjectAssignment check failed for: ${missing.join(', ')})`)
     }
   }
 
