@@ -30,9 +30,9 @@
  * rest of the Principal panel. Only a compact bottom action bar remains.
  */
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Check, AlertTriangle, Calendar, Clock, Pencil, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Check, AlertTriangle, Pencil, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -49,8 +49,10 @@ import {
   FIXED_PASS_PERCENTAGE,
   type ClassInfo,
   type SubjectInfo,
-  type GeneratedScheduleItem,
 } from '@/lib/exams/template-engine'
+import { useScheduleState } from '@/lib/exams/schedule/use-schedule-state'
+import type { ScheduleClass, ScheduleOptions } from '@/lib/exams/schedule/schedule-types'
+import { ScheduleTable } from './schedule/schedule-table'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -190,12 +192,26 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
     [classes, selectedClassIds],
   )
 
-  // Today's date in YYYY-MM-DD (blocks past dates)
-  const today = useMemo(() => {
+  // Spec §1 — earliest selectable examination date is TOMORROW (today disabled).
+  // Uses local-date helpers (no UTC shift) to avoid the "18 Aug" off-by-one bug.
+  const minStartDate = useMemo(() => {
     const d = new Date()
+    d.setDate(d.getDate() + 1) // tomorrow
     d.setHours(0, 0, 0, 0)
-    return d.toISOString().split('T')[0]
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
   }, [])
+
+  // Spec §2 — if startDate moves forward past the existing endDate, clear
+  // endDate so the user picks a fresh valid end (rather than leaving an
+  // impossible range like Start=20 Aug, End=19 Aug).
+  useEffect(() => {
+    if (endDate && startDate && endDate < startDate) {
+      setEndDate('')
+    }
+  }, [startDate, endDate])
 
   // ─── Template selection → auto-fill name + assessment ────────────────
   const handleTemplateSelect = useCallback((t: ExamTemplate) => {
@@ -294,30 +310,31 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
     )
   }, [selectedTemplate, startDate, endDate, effectiveSubjects])
 
-  // ─── Generated schedule preview ──────────────────────────────────────
-  const generatedSchedule = useMemo<GeneratedScheduleItem[]>(() => {
-    if (!selectedTemplate || !startDate || effectiveSubjects.length === 0 || (dateValidation && !dateValidation.isValid)) {
-      return []
-    }
-    const classInfos: ClassInfo[] = selectedClasses.map((c) => ({
-      id: c.id,
-      name: c.name,
-      gradeLevel: c.gradeLevel,
-      stream: c.stream,
-      studentCount: c.studentCount,
-      subjects: c.subjects.map((s) => ({ id: s.id, name: s.name, code: s.code })),
+  // ─── Per-class timetable (Spec §4 / §10 / §11 — no cross-contamination) ──
+  // Build ScheduleClass[] from the SELECTED exam classes (each with its OWN
+  // subjects) + ScheduleOptions from the template + date window.
+  const scheduleClasses: ScheduleClass[] = useMemo(() => {
+    return selectedExamClasses.map((ec) => ({
+      id: ec.key,
+      label: ec.label,
+      subjects: ec.subjects.map((s) => ({ id: s.id, name: s.name, code: s.code ?? '' })),
     }))
-    const config = generateExamConfig(
-      selectedTemplate.id,
-      name.trim() || selectedTemplate.label,
+  }, [selectedExamClasses])
+
+  const scheduleOptions: ScheduleOptions | null = useMemo(() => {
+    if (!selectedTemplate || !startDate) return null
+    const meta = getTemplateMeta(selectedTemplate.id)
+    return {
       startDate,
-      endDate || startDate,
-      classInfos,
-      effectiveSubjects,
-      examTime,
-    )
-    return config.schedule
-  }, [selectedTemplate, startDate, endDate, selectedClasses, effectiveSubjects, name, examTime, dateValidation])
+      endDate: endDate || startDate,
+      papersPerDay: meta.papersPerDay,
+      startTime: examTime,
+      paperDurationMin: meta.paperDurationMin,
+      gapMin: meta.gapMin,
+    }
+  }, [selectedTemplate, startDate, endDate, examTime])
+
+  const scheduleState = useScheduleState({ classes: scheduleClasses, options: scheduleOptions })
 
   // ─── Can create? ─────────────────────────────────────────────────────
   const canCreate =
@@ -326,7 +343,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
     selectedExamClassKeys.length > 0 &&
     effectiveSubjects.length > 0 &&
     startDate.length > 0 &&
-    startDate >= today &&
+    startDate >= minStartDate &&
     (!endDate || endDate >= startDate) &&
     (!dateValidation || dateValidation.isValid)
 
@@ -381,25 +398,24 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
           })
       }
 
-      // Build schedule — per-class filtering by name
-      const fullSchedule = selectedClassIds.flatMap((classId) => {
-        const cls = classes.find((c) => c.id === classId)
-        if (!cls) return []
-        const classSubjectNames = new Set(cls.subjects.map((s) => s.name))
-        return generated.schedule
-          .filter((s) => classSubjectNames.has(s.subjectName))
-          .map((s) => {
-            const classSubj = cls.subjects.find((cs) => cs.name === s.subjectName)!
-            return {
-              classId,
-              subjectId: classSubj.id,
-              date: s.date,
-              startTime: s.startTime,
-              endTime: s.endTime,
-              room: s.room || undefined,
-              invigilatorName: s.invigilatorName || undefined,
-            }
-          })
+      // Build schedule — use the per-class timetable from scheduleState.
+      // The timetable already respects each class's own subjects (no cross-
+      // contamination, Spec §11) and reflects any manual drag reorders.
+      // Map exam-class keys back to the underlying section class IDs so the
+      // storage layer can route per-section.
+      const fullSchedule = scheduleState.flattened.map((item) => {
+        // Resolve the exam-class key to the first section classId for storage.
+        const examCls = selectedExamClasses.find((ec) => ec.key === item.classId)
+        const classId = examCls?.sectionIds[0] ?? item.classId
+        return {
+          classId,
+          subjectId: item.subjectId,
+          date: item.date,
+          startTime: item.startTime,
+          endTime: item.endTime,
+          room: item.room || undefined,
+          invigilatorName: item.invigilatorName || undefined,
+        }
       })
 
       const exam = await create({
@@ -630,7 +646,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                         value={startDate}
                         onChange={setStartDate}
                         placeholder="Start date"
-                        minDate={today}
+                        minDate={minStartDate}
                       />
                     </Field>
                     <Field label="End Date">
@@ -638,7 +654,7 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                         value={endDate}
                         onChange={setEndDate}
                         placeholder="End date"
-                        minDate={startDate || today}
+                        minDate={startDate || minStartDate}
                       />
                     </Field>
                   </div>
@@ -682,48 +698,18 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                 </Section>
               )}
 
-              {/* ─── 7. Generated Schedule Preview ──────────────────── */}
-              {generatedSchedule.length > 0 && (
+              {/* ─── 7. Generated Schedule Preview (class-column timetable) ─── */}
+              {scheduleState.timetable && scheduleState.timetable.rows.length > 0 && (
                 <Section
                   label="Generated Schedule"
-                  hint={`${generatedSchedule.length} papers · Sundays skipped`}
+                  hint={`${scheduleState.timetable.rows.length} slot${scheduleState.timetable.rows.length === 1 ? '' : 's'} · ${scheduleState.timetable.classes.length} class${scheduleState.timetable.classes.length === 1 ? '' : 'es'}`}
                 >
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <div className="max-h-72 overflow-y-auto">
-                      {groupScheduleByDate(generatedSchedule).map((day, di) => (
-                        <div key={day.date} className={cn(di > 0 && 'border-t border-border/40')}>
-                          <div className="px-3 py-1.5 bg-muted/30 flex items-center gap-2">
-                            <Calendar className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-[11px] font-semibold">
-                              {formatDateLong(day.date)}
-                            </span>
-                            <span className="text-[9px] text-muted-foreground ml-auto">
-                              {day.items.length} paper{day.items.length === 1 ? '' : 's'}
-                            </span>
-                          </div>
-                          {day.items.map((item, ii) => (
-                            <div
-                              key={`${item.subjectId}-${ii}`}
-                              className="px-3 py-2 flex items-center gap-3 text-xs border-t border-border/20 first:border-t-0"
-                            >
-                              <div className="flex items-center gap-1 text-muted-foreground tabular-nums shrink-0 w-28">
-                                <Clock className="h-3 w-3" />
-                                <span>{item.startTime}</span>
-                                <span className="text-muted-foreground/60">→</span>
-                                <span>{item.endTime}</span>
-                              </div>
-                              <span className="font-medium truncate flex-1">{item.subjectName}</span>
-                              <span className="text-[9px] text-muted-foreground shrink-0">
-                                {item.classIds.length} class{item.classIds.length === 1 ? '' : 'es'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <ScheduleTable
+                    timetable={scheduleState.timetable}
+                    onMoveSubject={scheduleState.moveSubjectCell}
+                  />
                   <p className="text-[10px] text-muted-foreground mt-2">
-                    Schedule can be edited after creation from the Examination workspace.
+                    Drag a subject vertically within its class column to reorder. Schedule can also be edited after creation.
                   </p>
                 </Section>
               )}
@@ -792,50 +778,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 // Groups schedule items by date. Within a date, items sharing the SAME
 // start+end time (e.g. Mathematics and Biology on the same slot per
 // Spec §13/§41) are merged into a single row labelled "A / B".
+//
+// NOTE: The legacy `groupScheduleByDate` + `formatDateLong` helpers that
+// rendered the old vertical schedule list have been removed — the new
+// `<ScheduleTable>` component (in ./schedule/schedule-table.tsx) handles
+// the timetable rendering, and date formatting lives in
+// `@/lib/exams/format-helpers`.
 
-function groupScheduleByDate(items: GeneratedScheduleItem[]): Array<{ date: string; items: GeneratedScheduleItem[] }> {
-  // First group by date
-  const byDate = new Map<string, GeneratedScheduleItem[]>()
-  for (const it of items) {
-    if (!byDate.has(it.date)) byDate.set(it.date, [])
-    byDate.get(it.date)!.push(it)
-  }
-
-  return Array.from(byDate.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, dayItems]) => {
-      // Merge items that share the same startTime+endTime into one row.
-      // Use a stable order by startTime, then by subjectName.
-      const bySlot = new Map<string, GeneratedScheduleItem[]>()
-      for (const it of dayItems) {
-        const key = `${it.startTime}|${it.endTime}`
-        if (!bySlot.has(key)) bySlot.set(key, [])
-        bySlot.get(key)!.push(it)
-      }
-      const merged: GeneratedScheduleItem[] = []
-      for (const [, group] of bySlot) {
-        if (group.length === 1) {
-          merged.push(group[0])
-        } else {
-          // Combine — sort by subjectName for stable display, dedupe names.
-          const names = Array.from(new Set(group.map((g) => g.subjectName.split(' / ')[0])))
-          const classIds = Array.from(new Set(group.flatMap((g) => g.classIds)))
-          // Use the subjectName of the first item but rewrite as "A / B / ..."
-          const combined = group[0]
-          merged.push({
-            ...combined,
-            subjectName: names.join(' / '),
-            classIds,
-          })
-        }
-      }
-      merged.sort((a, b) => a.startTime.localeCompare(b.startTime))
-      return { date, items: merged }
-    })
-}
-
-function formatDateLong(dateStr: string): string {
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return dateStr
-  return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-}
