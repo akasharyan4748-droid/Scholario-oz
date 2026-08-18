@@ -84,6 +84,8 @@ export interface ClassDTO {
 interface ExamClass {
   key: string           // unique key: `${gradeLevel}-${stream ?? 'general'}`
   label: string         // "Class 9" or "Class 11 — Science PCM"
+  /** Base class name WITHOUT stream suffix (e.g. "Class 11", "Pre-Nursery"). */
+  baseName: string
   gradeLevel: string
   stream: string | null
   sectionIds: string[]  // all section class IDs that belong to this exam class
@@ -133,6 +135,7 @@ function normalizeToExamClasses(classes: ClassDTO[]): ExamClass[] {
       byKey.set(key, {
         key,
         label,
+        baseName,
         gradeLevel: grade,
         stream,
         sectionIds: [cls.id],
@@ -349,10 +352,12 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   // ─── Consolidated timetable (Spec §1 / §3 / §14) ──────────────────────
   // Merge same-grade stream columns into one (e.g. Class 11 PCM + PCB → "Class 11").
   // The grade mapping is built from the selected exam classes.
+  // Spec §4 — use the canonical baseName (e.g. "Pre-Nursery", "Class 11"), NOT
+  // a reconstructed "Class ${grade}" (which would produce "Class -2", "Class 0").
   const gradeMap: GradeMapping = useMemo(() => {
     const map: GradeMapping = {}
     for (const ec of selectedExamClasses) {
-      map[ec.key] = { gradeLevel: ec.gradeLevel, label: ec.name }
+      map[ec.key] = { gradeLevel: ec.gradeLevel, label: ec.baseName }
     }
     return map
   }, [selectedExamClasses])
