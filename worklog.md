@@ -1697,3 +1697,57 @@ Stage Summary:
 Unresolved:
 - Push to GitHub requires a fresh PAT (previous one revoked).
 - Drag-and-drop was verified via code logic (swapCells invariants), not via a live drag interaction (agent-browser doesn't simulate HTML5 DnD mouse events well). The swap semantics in schedule-reorder.ts mathematically guarantee no duplicates and no cross-class movement.
+
+---
+Task ID: phase-4-consolidation-3step-1
+Agent: main (Super Z)
+Task: Phase 4 — Consolidate same-grade streams into one timetable column + convert Create Examination into a 3-step flow (Setup → Preview → Confirm). No changes to Students & Classes, date validation, or schedule generation.
+
+Work Log:
+
+### Phase 1: Built the consolidation module
+- NEW `src/lib/exams/schedule/consolidate.ts` (205 LOC): `consolidateByGrade()` — generic algorithm that groups stream columns by `gradeLevel`, dedupes common subjects (by id), and combines group-specific subjects with " / " (e.g. "Maths / Biology"). No hardcoded PCM/PCB/Maths/Biology. Also exports `flattenConsolidatedTimetable()` which expands combined cells back to per-stream entries for storage (each subject routes to its owning stream class).
+
+### Phase 2: Built the 3-step UI components
+- NEW `src/components/principal/modules/exams/schedule/step-indicator.tsx` (67 LOC): 3-step progress indicator with checkmarks for completed steps.
+- NEW `src/components/principal/modules/exams/schedule/official-timetable.tsx` (191 LOC): Step 2 official preview — formal document styling with school name hierarchy (Demo School of Scholario → examination name → academic session → "EXAMINATION TIMETABLE" heading). Read-only, consolidated columns, row-span on date cells, subject codes + time ranges.
+- NEW `src/components/principal/modules/exams/schedule/confirmation-summary.tsx` (120 LOC): Step 3 summary — concise grid of exam metadata + compact timetable.
+
+### Phase 3: Wired the 3-step flow into create-exam-fullscreen.tsx
+- Added `step` state (1 | 2 | 3) + `<StepIndicator>` at the top.
+- Added `consolidatedTimetable` (consolidateByGrade on scheduleState.timetable).
+- Split the render into 3 branches:
+  - Step 1: existing setup form + editable ScheduleTable (per-stream columns)
+  - Step 2: OfficialTimetable (consolidated, read-only)
+  - Step 3: ConfirmationSummary + "Create Examination" button
+- Action row buttons change per step. DB creation happens ONLY on Step 3.
+- State preserved across back-navigation (Spec §10/§11).
+
+### Phase 4: Verification (agent-browser, all 13 spec tests)
+- TEST A: Class 11 PCM + PCB → ONE "CLASS 11" column in Step 2. ✓
+- TEST B: Class 12 PCM + PCB → ONE "CLASS 12" column. ✓
+- TEST C: Class 11 group-specific subject shows "Biology / Maths". ✓
+- TEST D: Common subjects (Hindi/English/Physics/Chemistry) NOT duplicated. ✓
+- TEST E: Students & Classes still shows PCM/PCB separately. ✓
+- TEST F: Step 1 → Next → Step 2 official preview. ✓
+- TEST G: Step 2 → Back → all Step 1 data preserved (classes checked, dates set). ✓
+- TEST H: Step 2 → Step 3 confirmation screen. ✓
+- TEST I: Step 3 → Back → preview preserved. ✓
+- TEST J: Drag/reorder in Step 1 → Step 2 preview reflects new order. ✓
+- TEST K: No DB creation before Step 3 "Create Examination" (3 seed exams only). ✓
+- TEST L: lint passes. ✓
+- TEST M: zero console errors. ✓
+
+### Phase 5: Git checkpoint
+- Committed locally: `fc2d2eb feat(exams): consolidate stream columns + 3-step create flow with official preview` (5 files, +716/−20).
+- Push to `phase-1-mock-sync` branch: FAILED — token still revoked. Commit saved locally.
+
+Stage Summary:
+- Stream consolidation: Class 11 PCM + PCB → ONE "Class 11" column with "Maths / Biology" combined cells. Generic algorithm (no hardcoded stream names).
+- 3-step flow: Setup → Preview → Confirm. DB creation only on Step 3.
+- State preservation: full form state maintained across back-navigation.
+- Students & Classes: untouched (PCM/PCB still separate there).
+- All new files < 300 LOC. Lint clean. Zero console errors.
+
+Unresolved:
+- Push to GitHub requires a fresh PAT (previous one revoked).
