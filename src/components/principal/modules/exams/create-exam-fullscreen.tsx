@@ -51,8 +51,13 @@ import {
   type SubjectInfo,
 } from '@/lib/exams/template-engine'
 import { useScheduleState } from '@/lib/exams/schedule/use-schedule-state'
+import { consolidateByGrade, flattenConsolidatedTimetable, type GradeMapping } from '@/lib/exams/schedule/consolidate'
 import type { ScheduleClass, ScheduleOptions } from '@/lib/exams/schedule/schedule-types'
+import { formatDateLong } from '@/lib/exams/format-helpers'
 import { ScheduleTable } from './schedule/schedule-table'
+import { OfficialTimetable } from './schedule/official-timetable'
+import { ConfirmationSummary } from './schedule/confirmation-summary'
+import { StepIndicator } from './schedule/step-indicator'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -336,6 +341,35 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
 
   const scheduleState = useScheduleState({ classes: scheduleClasses, options: scheduleOptions })
 
+  // ─── 3-step flow state (Spec §9) ─────────────────────────────────────
+  // Step 1 = Setup + editable schedule. Step 2 = official preview. Step 3 = confirmation.
+  // DB creation happens ONLY on Step 3 "Create Examination" (Spec §9 STEP 3).
+  const [step, setStep] = useState<1 | 2 | 3>(1)
+
+  // ─── Consolidated timetable (Spec §1 / §3 / §14) ──────────────────────
+  // Merge same-grade stream columns into one (e.g. Class 11 PCM + PCB → "Class 11").
+  // The grade mapping is built from the selected exam classes.
+  const gradeMap: GradeMapping = useMemo(() => {
+    const map: GradeMapping = {}
+    for (const ec of selectedExamClasses) {
+      map[ec.key] = { gradeLevel: ec.gradeLevel, label: ec.name }
+    }
+    return map
+  }, [selectedExamClasses])
+
+  const consolidatedTimetable = useMemo(() => {
+    if (!scheduleState.timetable) return null
+    return consolidateByGrade(scheduleState.timetable, gradeMap)
+  }, [scheduleState.timetable, gradeMap])
+
+  // Date range label for display (e.g. "19 Aug – 22 Aug 2026").
+  const dateRangeLabel = useMemo(() => {
+    if (!startDate) return ''
+    const startLbl = formatDateLong(startDate)
+    if (!endDate || endDate === startDate) return startLbl
+    return `${startLbl} – ${formatDateLong(endDate)}`
+  }, [startDate, endDate])
+
   // ─── Can create? ─────────────────────────────────────────────────────
   const canCreate =
     name.trim().length > 0 &&
@@ -440,14 +474,20 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   }
 
   // ─── Render ──────────────────────────────────────────────────────────
-  // NO top header container. Page breathes naturally. Only bottom action bar.
+  // 3-step flow (Spec §9): Step 1 = Setup, Step 2 = Preview, Step 3 = Confirm.
   return (
     <div className="flex flex-col h-full">
-      {/* Scrollable form area — starts directly with content */}
+      {/* Step indicator */}
+      <div className="px-4 sm:px-6 pt-4 pb-2 shrink-0 border-b border-border/40">
+        <StepIndicator current={step} />
+      </div>
+
+      {/* Scrollable area — content depends on step */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-8">
-        <div className="max-w-3xl mx-auto space-y-8">
-          {/* ─── 1. Examination Type ─────────────────────────────────── */}
-          <Section label="Examination Type" required>
+        {step === 1 && (
+          <div className="max-w-3xl mx-auto space-y-8">
+            {/* ─── 1. Examination Type ─────────────────────────────────── */}
+            <Section label="Examination Type" required>
             <TemplateSelection selectedTemplateId={selectedTemplate?.id ?? null} onSelect={handleTemplateSelect} />
           </Section>
 
@@ -715,23 +755,96 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
               )}
             </motion.div>
           )}
-        </div>
+          </div>
+        )}
+
+        {/* ─── STEP 2 — Official Timetable Preview (Spec §9 STEP 2) ─────── */}
+        {step === 2 && consolidatedTimetable && (
+          <div className="max-w-5xl mx-auto">
+            {consolidatedTimetable.rows.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="text-sm text-muted-foreground">No schedule to preview. Go back and adjust the examination window.</p>
+              </div>
+            ) : (
+              <OfficialTimetable
+                timetable={consolidatedTimetable}
+                schoolName="Demo School of Scholario"
+                examName={name.trim() || selectedTemplate?.label || 'Examination'}
+                examType={selectedTemplate?.label ?? ''}
+                academicSession={academicYear}
+                dateRangeLabel={dateRangeLabel}
+                startTime={examTime}
+                papersPerDay={selectedTemplate ? getTemplateMeta(selectedTemplate.id).papersPerDay : 1}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ─── STEP 3 — Final Confirmation (Spec §9 STEP 3) ────────────── */}
+        {step === 3 && consolidatedTimetable && (
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-5">
+              <h2 className="text-lg font-bold tracking-tight text-foreground">Confirm Examination</h2>
+              <p className="text-xs text-muted-foreground mt-1">Review the final configuration and create the examination.</p>
+            </div>
+            <ConfirmationSummary
+              examName={name.trim() || selectedTemplate?.label || 'Examination'}
+              examType={selectedTemplate?.label ?? ''}
+              academicSession={academicYear}
+              classCount={selectedExamClasses.length}
+              subjectCount={effectiveSubjects.length}
+              dateRangeLabel={dateRangeLabel}
+              papersPerDay={selectedTemplate ? getTemplateMeta(selectedTemplate.id).papersPerDay : 1}
+              startTime={examTime}
+              timetable={consolidatedTimetable}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Lightweight action row — no card/slab */}
-      <div className="px-4 sm:px-6 pb-4 pt-2 shrink-0">
-        <div className="max-w-3xl mx-auto flex justify-between items-center">
-          <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1" onClick={onBack}>
-            <ArrowLeft className="h-3 w-3" /> Cancel
-          </Button>
-          <Button
-            size="sm"
-            className="h-7 text-[11px] gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-            onClick={handleCreate}
-            disabled={loading || !canCreate}
-          >
-            {loading ? 'Creating…' : (<><Check className="h-3 w-3" /> Create Examination</>)}
-          </Button>
+      {/* ─── Action row — changes per step (Spec §9 / §10 / §11) ─────────── */}
+      <div className="px-4 sm:px-6 pb-4 pt-2 shrink-0 border-t border-border/40">
+        <div className="max-w-3xl mx-auto flex justify-between items-center gap-2">
+          {step === 1 ? (
+            <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={onBack}>
+              <ArrowLeft className="h-3.5 w-3.5" /> Cancel
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={() => setStep(step === 3 ? 2 : 1)}>
+              <ArrowLeft className="h-3.5 w-3.5" /> {step === 3 ? 'Back to Preview' : 'Back to Edit Schedule'}
+            </Button>
+          )}
+
+          {step === 1 && (
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setStep(2)}
+              disabled={!canCreate || !consolidatedTimetable}
+            >
+              Next → Preview Timetable
+            </Button>
+          )}
+          {step === 2 && (
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setStep(3)}
+              disabled={!consolidatedTimetable}
+            >
+              Next → Finalize Examination
+            </Button>
+          )}
+          {step === 3 && (
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleCreate}
+              disabled={loading || !canCreate}
+            >
+              {loading ? 'Creating…' : (<><Check className="h-3.5 w-3.5" /> Create Examination</>)}
+            </Button>
+          )}
         </div>
       </div>
     </div>
