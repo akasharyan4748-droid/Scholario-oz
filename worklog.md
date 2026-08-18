@@ -1751,3 +1751,45 @@ Stage Summary:
 
 Unresolved:
 - Push to GitHub requires a fresh PAT (previous one revoked).
+
+---
+Task ID: phase-5-visual-polish-1
+Agent: main (Super Z)
+Task: Final visual polish pass for the official timetable preview + GitHub checkpoint. Center the header, compact the table, fix the Pre-Nursery/KG label bug. No functional changes.
+
+Work Log:
+
+### Phase 1: Fixed the canonical class label bug (Spec §4)
+- Root cause: `gradeMap` in create-exam-fullscreen.tsx used `ec.name` which doesn't exist on the `ExamClass` interface (it only has `label`). So the label was `undefined`, and `consolidate.ts` fell back to `` `Class ${grade}` `` — producing "Class -2" and "Class 0" for Pre-Nursery (grade -2) and KG (grade 0).
+- Fix: Added a `baseName` field to `ExamClass` (the class name WITHOUT stream suffix, e.g. "Pre-Nursery", "Class 11"). Set it during `normalizeToExamClasses()`. Changed `gradeMap` to use `ec.baseName` instead of `ec.name`.
+- Verified in the preview: PRE-NURSERY, KG, CLASS 6, CLASS 11 all render with canonical names.
+
+### Phase 2: Centered the header (Spec §1)
+- Rewrote the document header in official-timetable.tsx to use `text-center` on the header container. All elements (school name, exam name, session, date/time, "EXAMINATION TIMETABLE" heading) are now centered.
+- Reduced icon sizes (h-5 → h-4) and font sizes slightly (text-lg → text-base for school name, text-base → text-sm for exam name) for better proportions.
+- The header hierarchy now reads as a balanced official document.
+
+### Phase 3: Compacted the table (Spec §2)
+- Reduced cell padding: px-3 py-2.5 → px-2 py-1.5 (body), py-2.5 → py-1.5 (header).
+- Reduced typography: subject text text-sm → text-[11px], secondary metadata text-[9px] → text-[8px], header labels text-[10px] → text-[9px].
+- Narrowed min-width: date col 100px → 80px, class cols 120px → 100px.
+- More rows + columns visible at once without clipping. Still readable.
+
+### Phase 4: Verification (agent-browser)
+- Header centered: school name → exam name → session → date/time → heading all centered. ✓
+- Table compact: more rows visible, readable text. ✓
+- Pre-Nursery / KG labels: "PRE-NURSERY", "KG" (not "Class -2" / "Class 0"). ✓
+- PCM/PCB consolidation: "Biology / Maths" combined cell still appears. ✓
+- 3-step flow: Step 1 → Step 2 → Step 3 all work. ✓
+- Zero console errors. ✓
+
+### Phase 5: Git checkpoint + push
+- Committed locally: `61b95aa feat(examinations): polish official timetable preview` (2 files, +49/−49).
+- Pushed to `phase-1-mock-sync` branch on GitHub: SUCCESS (fast-forward `8b18283..61b95aa`).
+- Token scrubbed from remote URL after push.
+- Verified remote `phase-1-mock-sync` is at `61b95aa`.
+
+Stage Summary:
+- Header centered + compact table + Pre-Nursery/KG labels fixed.
+- PCM/PCB consolidation + 3-step flow + all functionality preserved.
+- Pushed to GitHub successfully.
