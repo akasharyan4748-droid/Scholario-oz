@@ -1,66 +1,43 @@
 /**
- * Seating generator — random allocation with class-band eligibility.
+ * Seating generator — allocates real students to seats with class mixing.
  *
- * Spec rules:
- *   - Only students from the selected class band are eligible.
- *   - Distribute across all rooms.
- *   - Avoid same-class adjacency where practical.
- *   - No duplicate student assignments.
- *   - No capacity overflow.
- *   - Report unassigned if capacity is insufficient.
+ * Rules:
+ *   - Only students from eligible classes for each room are assigned.
+ *   - Students are interleaved by class to avoid same-class adjacency.
+ *   - No student appears more than once across the entire plan.
+ *   - No room exceeds capacity.
+ *   - Unassigned students are reported if capacity is insufficient.
  */
 
-import type { ExamRoom, Seat, SeatingPlan, SeatingStudent, SeatingType } from './types'
+import type { ExamRoom, Seat, SeatingPlan, SeatingStudent } from './types'
+import { computeCapacity } from './types'
 
-/** Compute capacity from rows/cols/type. */
-export function computeCapacity(rows: number, cols: number, type: SeatingType): number {
-  return rows * cols * (type === 'double' ? 2 : 1)
-}
-
-/** Generate seat IDs + labels for a room. */
+/** Generate seat labels: Row A → A01, A02, ... Row B → B07, B08, ... */
 export function generateSeatsForRoom(room: ExamRoom): Seat[] {
   const seats: Seat[] = []
   let seatNum = 1
   for (let r = 0; r < room.rows; r++) {
-    const rowLabel = String.fromCharCode(65 + r) // A, B, C, ...
+    const rowLabel = String.fromCharCode(65 + r)
     for (let c = 0; c < room.cols; c++) {
       if (room.seatingType === 'double') {
         seats.push({
-          id: `${room.id}-${rowLabel}${c + 1}A`,
-          roomId: room.id,
-          seatNumber: `${rowLabel}${String(seatNum).padStart(2, '0')}A`,
-          rowIdx: r,
-          colIdx: c,
-          position: 'A',
-          studentId: null,
-          studentName: null,
-          studentRollNo: null,
-          className: null,
+          id: `${room.id}-${rowLabel}${seatNum}L`, roomId: room.id,
+          seatNumber: `${rowLabel}${String(seatNum).padStart(2, '0')}L`,
+          rowIdx: r, colIdx: c, position: 'L',
+          studentId: null, studentName: null, studentRollNo: null, className: null,
         })
         seats.push({
-          id: `${room.id}-${rowLabel}${c + 1}B`,
-          roomId: room.id,
-          seatNumber: `${rowLabel}${String(seatNum).padStart(2, '0')}B`,
-          rowIdx: r,
-          colIdx: c,
-          position: 'B',
-          studentId: null,
-          studentName: null,
-          studentRollNo: null,
-          className: null,
+          id: `${room.id}-${rowLabel}${seatNum}R`, roomId: room.id,
+          seatNumber: `${rowLabel}${String(seatNum).padStart(2, '0')}R`,
+          rowIdx: r, colIdx: c, position: 'R',
+          studentId: null, studentName: null, studentRollNo: null, className: null,
         })
       } else {
         seats.push({
-          id: `${room.id}-${rowLabel}${seatNum}`,
-          roomId: room.id,
+          id: `${room.id}-${rowLabel}${seatNum}`, roomId: room.id,
           seatNumber: `${rowLabel}${String(seatNum).padStart(2, '0')}`,
-          rowIdx: r,
-          colIdx: c,
-          position: null,
-          studentId: null,
-          studentName: null,
-          studentRollNo: null,
-          className: null,
+          rowIdx: r, colIdx: c, position: null,
+          studentId: null, studentName: null, studentRollNo: null, className: null,
         })
       }
       seatNum++
@@ -69,67 +46,91 @@ export function generateSeatsForRoom(room: ExamRoom): Seat[] {
   return seats
 }
 
-/**
- * Generate a seating plan. Students are shuffled and distributed across
- * rooms. Attempts to avoid same-class adjacency by interleaving.
- */
-export function generateSeatingPlan(
-  examId: string,
-  rooms: ExamRoom[],
-  students: SeatingStudent[],
-  classBand: string,
-): SeatingPlan {
-  const allSeats: Seat[] = rooms.flatMap(generateSeatsForRoom)
-  const totalCapacity = allSeats.length
-
-  // Shuffle students (Fisher-Yates) for randomization.
-  const shuffled = [...students]
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-  }
-
-  // Interleave by class to avoid same-class adjacency: sort by className
-  // in round-robin order so adjacent students tend to be from different classes.
+/** Interleave students by class to avoid same-class adjacency. */
+function interleaveByClass(students: SeatingStudent[]): SeatingStudent[] {
   const byClass = new Map<string, SeatingStudent[]>()
-  for (const s of shuffled) {
+  for (const s of students) {
     if (!byClass.has(s.className)) byClass.set(s.className, [])
     byClass.get(s.className)!.push(s)
   }
   const classLists = Array.from(byClass.values())
-  const interleaved: SeatingStudent[] = []
+  const result: SeatingStudent[] = []
   const maxLen = Math.max(0, ...classLists.map((l) => l.length))
   for (let i = 0; i < maxLen; i++) {
     for (const list of classLists) {
-      if (i < list.length) interleaved.push(list[i])
+      if (i < list.length) result.push(list[i])
     }
   }
+  return result
+}
 
-  // Assign students to seats.
-  let assigned = 0
-  for (let i = 0; i < Math.min(interleaved.length, allSeats.length); i++) {
-    const student = interleaved[i]
-    const seat = allSeats[i]
-    seat.studentId = student.id
-    seat.studentName = student.name
-    seat.studentRollNo = student.rollNo
-    seat.className = student.className
-    assigned++
+/**
+ * Generate a complete seating plan across all rooms.
+ * Each room gets students from its eligible classes only.
+ * No student is assigned to more than one seat.
+ */
+export function generateSeatingPlan(
+  examId: string,
+  rooms: ExamRoom[],
+  studentsByClass: Map<string, SeatingStudent[]>,
+): SeatingPlan {
+  const allSeats: Seat[] = []
+  const assignedStudentIds = new Set<string>()
+
+  for (const room of rooms) {
+    const roomSeats = generateSeatsForRoom(room)
+    // Gather eligible students for this room (not already assigned elsewhere).
+    const eligible: SeatingStudent[] = []
+    for (const classId of room.eligibleClassIds) {
+      const classStudents = studentsByClass.get(classId) ?? []
+      for (const s of classStudents) {
+        if (!assignedStudentIds.has(s.id)) eligible.push(s)
+      }
+    }
+
+    // Shuffle + interleave for class mixing.
+    const shuffled = [...eligible].sort(() => Math.random() - 0.5)
+    const interleaved = interleaveByClass(shuffled)
+
+    // Assign to seats.
+    for (let i = 0; i < Math.min(interleaved.length, roomSeats.length); i++) {
+      const student = interleaved[i]
+      const seat = roomSeats[i]
+      seat.studentId = student.id
+      seat.studentName = student.name
+      seat.studentRollNo = student.rollNo
+      seat.className = student.className
+      assignedStudentIds.add(student.id)
+    }
+
+    allSeats.push(...roomSeats)
   }
+
+  const totalCapacity = allSeats.length
+  const totalAssigned = allSeats.filter((s) => s.studentId !== null).length
+  // Count total eligible students across all rooms (deduplicated).
+  const allEligibleIds = new Set<string>()
+  for (const room of rooms) {
+    for (const classId of room.eligibleClassIds) {
+      const classStudents = studentsByClass.get(classId) ?? []
+      for (const s of classStudents) allEligibleIds.add(s.id)
+    }
+  }
+  const totalEligible = allEligibleIds.size
+  const totalUnassigned = Math.max(0, totalEligible - totalAssigned)
 
   return {
     examId,
     rooms,
     seats: allSeats,
-    classBand,
     totalCapacity,
-    totalAssigned: assigned,
-    totalUnassigned: Math.max(0, interleaved.length - totalCapacity),
-    fits: interleaved.length <= totalCapacity,
+    totalAssigned,
+    totalUnassigned,
+    fits: totalEligible <= totalCapacity,
   }
 }
 
-/** Get seats for a specific room from the plan. */
+/** Get seats for a specific room. */
 export function seatsForRoom(plan: SeatingPlan, roomId: string): Seat[] {
   return plan.seats.filter((s) => s.roomId === roomId)
 }

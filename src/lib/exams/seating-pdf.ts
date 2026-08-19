@@ -1,51 +1,108 @@
 /**
- * Seating plan PDF — landscape printable room-wise seating.
+ * Seating plan PDF — landscape, room-by-room visual seating layout.
+ *
+ * Shows the physical seating map with row/column labels, seat numbers,
+ * student names, roll numbers, and class — NOT a flat table.
  */
 
 import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import type { ExamDTO } from '@/lib/exams/types'
-import type { SeatingPlan } from '@/lib/exams/seating/types'
+import type { SeatingPlan, Seat, ExamRoom } from '@/lib/exams/seating/types'
+import { seatsForRoom, roomOccupancy } from '@/lib/exams/seating/generator'
 import { formatDateLong } from '@/lib/exams/format-helpers'
 
 export function generateSeatingPlanPDF(exam: ExamDTO, plan: SeatingPlan): void {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
 
-  // Header
+  // Global header
   doc.setFontSize(14); doc.setFont('helvetica', 'bold')
   doc.text('Demo School of Scholario', pageW / 2, 14, { align: 'center' })
   doc.setFontSize(11)
   doc.text(exam.name, pageW / 2, 20, { align: 'center' })
   doc.setFontSize(9); doc.setFont('helvetica', 'normal')
-  doc.text(`Academic Session ${exam.session}`, pageW / 2, 25, { align: 'center' })
+  doc.text(`Academic Session ${exam.session ?? ''}`, pageW / 2, 25, { align: 'center' })
   doc.setFontSize(8); doc.setFont('helvetica', 'bold')
   doc.text('SEATING PLAN', pageW / 2, 30, { align: 'center' })
 
-  // Table rows
-  const rows: string[][] = []
+  let y = 38
   for (const room of plan.rooms) {
-    const roomSeats = plan.seats.filter((s) => s.roomId === room.id)
-    for (const seat of roomSeats) {
-      if (seat.studentId) {
-        rows.push([
-          room.name + ' (' + room.roomNo + ')',
-          seat.seatNumber,
-          seat.studentName ?? '—',
-          seat.studentRollNo ?? '—',
-          seat.className ?? '—',
-        ])
+    const { occupied, capacity } = roomOccupancy(plan, room.id)
+    const seats = seatsForRoom(plan, room.id)
+
+    // Room header
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+    doc.text(`${room.name} — ${room.roomNo}`, 14, y)
+    doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+    doc.text(`${room.rows} rows × ${room.cols} cols · ${room.seatingType} · ${occupied}/${capacity} occupied`, 14, y + 4)
+
+    // Invigilator desk marker
+    doc.setFontSize(6); doc.setFont('helvetica', 'bold')
+    doc.text('INVIGILATOR DESK', pageW / 2, y + 2, { align: 'center' })
+    y += 8
+
+    // Column numbers
+    const seatW = Math.min(22, (pageW - 40) / (room.cols * (room.seatingType === 'double' ? 2 : 1)))
+    const gridStartX = (pageW - room.cols * seatW * (room.seatingType === 'double' ? 2 : 1)) / 2
+
+    doc.setFontSize(5); doc.setFont('helvetica', 'normal')
+    for (let c = 0; c < room.cols; c++) {
+      const cx = gridStartX + c * seatW * (room.seatingType === 'double' ? 2 : 1)
+      doc.text(String(c + 1), cx + seatW / 2, y, { align: 'center' })
+    }
+    y += 3
+
+    // Rows
+    for (let r = 0; r < room.rows; r++) {
+      const ry = y + r * 10
+      // Row label
+      doc.setFontSize(5); doc.setFont('helvetica', 'bold')
+      doc.text(String.fromCharCode(65 + r), gridStartX - 4, ry + 5)
+
+      for (let c = 0; c < room.cols; c++) {
+        const cellSeats = seats.filter((s) => s.rowIdx === r && s.colIdx === c)
+          .sort((a, b) => (a.position ?? '').localeCompare(b.position ?? ''))
+
+        for (let si = 0; si < cellSeats.length; si++) {
+          const seat = cellSeats[si]
+          const cx = gridStartX + c * seatW * (room.seatingType === 'double' ? 2 : 1) + si * seatW
+
+          // Seat box
+          doc.setDrawColor(200)
+          doc.setFillColor(seat.studentId ? 240 : 250, seat.studentId ? 250 : 250, seat.studentId ? 245 : 250)
+          doc.rect(cx, ry, seatW - 1, 8, 'FD')
+
+          // Seat number
+          doc.setFontSize(4); doc.setFont('helvetica', 'bold')
+          doc.setTextColor(seat.studentId ? 15 : 150, seat.studentId ? 100 : 150, seat.studentId ? 80 : 150)
+          doc.text(seat.seatNumber, cx + 1, ry + 2.5)
+
+          // Student info
+          if (seat.studentId) {
+            doc.setFontSize(4.5); doc.setFont('helvetica', 'normal')
+            doc.setTextColor(40, 40, 40)
+            const name = seat.studentName ?? ''
+            doc.text(name.length > 12 ? name.substring(0, 12) : name, cx + 1, ry + 4.5)
+            doc.setFontSize(4)
+            doc.setTextColor(100, 100, 100)
+            doc.text(`Roll: ${seat.studentRollNo ?? ''}`, cx + 1, ry + 6)
+            doc.text(seat.className ?? '', cx + 1, ry + 7.5)
+          } else {
+            doc.setFontSize(4); doc.setTextColor(180, 180, 180)
+            doc.text('Empty', cx + 1, ry + 5)
+          }
+          doc.setTextColor(0, 0, 0)
+        }
       }
     }
+    y += room.rows * 10 + 8
+    if (y > pageH - 20) { doc.addPage(); y = 14 }
   }
 
-  autoTable(doc, {
-    head: [['Room', 'Seat #', 'Student', 'Roll No', 'Class']],
-    body: rows,
-    startY: 35,
-    styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: [15, 118, 110] },
-  })
+  // Footer
+  doc.setFontSize(6); doc.setFont('helvetica', 'normal')
+  doc.text('Official seating plan — generated by Scholario-OS', pageW / 2, pageH - 4, { align: 'center' })
 
   doc.save(`${exam.name.replace(/\s+/g, '-')}-seating-plan.pdf`)
 }
