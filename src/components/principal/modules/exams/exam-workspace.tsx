@@ -66,7 +66,7 @@ interface Props {
   onMutated: () => void
 }
 
-type Tab = 'overview' | 'schedule' | 'marks' | 'import' | 'results' | 'outcomes' | 'seating' | 'attendance' | 'grace' | 'audit'
+type Tab = 'overview' | 'schedule' | 'marks' | 'results' | 'outcomes' | 'seating' | 'attendance' | 'grace' | 'audit'
 
 // Tabs grouped into 3 phases for easier scanning.
 // Each group is rendered with a small separator dot before it.
@@ -83,7 +83,6 @@ const TAB_GROUPS: Array<{ label: string; items: Array<{ value: Tab; label: strin
     label: 'Execution',
     items: [
       { value: 'marks', label: 'Marks' },
-      { value: 'import', label: 'Import' },
       { value: 'attendance', label: 'Attendance' },
     ],
   },
@@ -186,7 +185,6 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
               {tab === 'overview' && <OverviewSection exam={exam} onReload={handleReload} onNavigate={setTab} />}
               {tab === 'schedule' && <ScheduleSection exam={exam} onReload={handleReload} />}
               {tab === 'marks' && <MarksSection exam={exam} onReload={handleReload} />}
-              {tab === 'import' && <CsvImportSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'results' && <MarksSection exam={exam} onReload={handleReload} />}
               {tab === 'outcomes' && <OutcomesSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'seating' && <SeatingSection exam={exam} />}
@@ -651,6 +649,9 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
       {showResults && (
         <ResultsInline exam={exam} classId={classId} onClose={() => setShowResults(false)} />
       )}
+
+      {/* Subject analytics */}
+      <SubjectAnalytics exam={exam} allMarks={allMarks} />
     </div>
   )
 }
@@ -665,6 +666,86 @@ function Stat({ label, value, pct }: { label: string; value: string; pct?: numbe
           <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
         </div>
       )}
+    </div>
+  )
+}
+
+function SubjectAnalytics({ exam, allMarks }: { exam: ExamDTO; allMarks: any[] }) {
+  const [filterClass, setFilterClass] = useState('all')
+  const analytics = useMemo(() => {
+    const rows: Array<{ className: string; subjectName: string; entered: number; total: number; avg: number; highest: number; lowest: number; passCount: number; failCount: number; absentCount: number; pendingCount: number; pct: number }> = []
+    for (const c of exam.classes) {
+      if (filterClass !== 'all' && c.classId !== filterClass) continue
+      for (const subj of exam.subjects.filter((s: any) => s.classId === c.classId)) {
+        const marks = allMarks.filter((m) => m.classId === c.classId && m.subjectId === subj.subjectId)
+        const entered = marks.filter((m) => m.marksObtained !== null)
+        const total = marks.length
+        const values = entered.map((m) => m.marksObtained!)
+        const avg = values.length > 0 ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : 0
+        const highest = values.length > 0 ? Math.max(...values) : 0
+        const lowest = values.length > 0 ? Math.min(...values) : 0
+        const passCount = values.filter((v) => v >= subj.maxMarks * 0.33).length
+        const failCount = values.filter((v) => v < subj.maxMarks * 0.33).length
+        const absentCount = marks.filter((m) => m.status === 'ABSENT').length
+        const pendingCount = total - entered.length
+        const pct = total > 0 ? Math.round((entered.length / total) * 100) : 0
+        rows.push({ className: c.className, subjectName: subj.subjectName, entered: entered.length, total, avg, highest, lowest, passCount, failCount, absentCount, pendingCount, pct })
+      }
+    }
+    return rows
+  }, [exam, allMarks, filterClass])
+
+  return (
+    <div className="rounded-lg border border-border/60 overflow-hidden">
+      <div className="px-2 py-1.5 border-b border-border/40 bg-muted/30 flex items-center justify-between gap-2">
+        <p className="text-[9px] uppercase font-semibold text-muted-foreground">Subject Analytics</p>
+        <select value={filterClass} onChange={(e) => setFilterClass(e.target.value)} className="h-5 text-[9px] rounded bg-transparent border border-border/40 px-1">
+          <option value="all">All Classes</option>
+          {exam.classes.map((c: any) => <option key={c.classId} value={c.classId}>{c.className}</option>)}
+        </select>
+      </div>
+      <div className="overflow-x-auto max-h-[16rem]">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-muted/30">
+            <tr>
+              <th className="text-left px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">Class</th>
+              <th className="text-left px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">Subject</th>
+              <th className="text-center px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">Entered</th>
+              <th className="text-center px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">Avg</th>
+              <th className="text-center px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">High</th>
+              <th className="text-center px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">Low</th>
+              <th className="text-center px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">Pass</th>
+              <th className="text-center px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">Fail</th>
+              <th className="text-center px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">Absent</th>
+              <th className="text-center px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {analytics.map((r, i) => (
+              <tr key={i} className="border-t border-border/30 hover:bg-muted/20">
+                <td className="px-2 py-1 text-muted-foreground">{r.className}</td>
+                <td className="px-2 py-1 font-medium">{r.subjectName}</td>
+                <td className="px-2 py-1 text-center tabular-nums">{r.entered}/{r.total}</td>
+                <td className="px-2 py-1 text-center tabular-nums">{r.avg}</td>
+                <td className="px-2 py-1 text-center tabular-nums text-emerald-600">{r.highest}</td>
+                <td className="px-2 py-1 text-center tabular-nums text-rose-600">{r.lowest}</td>
+                <td className="px-2 py-1 text-center tabular-nums text-emerald-600">{r.passCount}</td>
+                <td className="px-2 py-1 text-center tabular-nums text-rose-600">{r.failCount}</td>
+                <td className="px-2 py-1 text-center tabular-nums text-amber-600">{r.absentCount}</td>
+                <td className="px-2 py-1 text-center">
+                  <div className="flex items-center gap-1 justify-center">
+                    <div className="w-8 h-1 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${r.pct}%` }} />
+                    </div>
+                    <span className="text-[8px] tabular-nums">{r.pct}%</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {analytics.length === 0 && <tr><td colSpan={10} className="py-4 text-center text-muted-foreground">No data available.</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
