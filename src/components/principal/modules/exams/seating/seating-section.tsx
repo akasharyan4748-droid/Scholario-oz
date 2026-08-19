@@ -8,7 +8,7 @@
  * Invigilators are slot-specific (date + shift + room, max 3).
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Plus, Trash2, RefreshCw, Download, Users, Layers, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -69,6 +69,38 @@ export function SeatingSection({ exam }: Props) {
     for (const room of rooms) for (const cid of room.eligibleClassIds) set.add(cid)
     return set
   }, [rooms])
+
+  // Auto-seed: for Completed/Ongoing exams, distribute classes across rooms and generate the plan.
+  // This fixes the data-integrity issue where a Completed exam showed "Not Generated".
+  const isCompletedOrOngoing = exam.status === 'Completed' || exam.status === 'Ongoing'
+  const [autoSeeded, setAutoSeeded] = useState(false)
+  useEffect(() => {
+    if (!isCompletedOrOngoing || autoSeeded || totalEligibleStudents === 0 || rooms.length === 0) return
+    // Distribute exam classes across available rooms (round-robin by student count).
+    const classIds = Array.from(studentsByClass.keys())
+    if (classIds.length === 0) { setAutoSeeded(true); return }
+    setRooms((prevRooms) => {
+      const updated = prevRooms.map((r) => ({ ...r, eligibleClassIds: [] as string[] }))
+      classIds.forEach((cid, i) => {
+        updated[i % updated.length].eligibleClassIds.push(cid)
+      })
+      return updated
+    })
+    setAutoSeeded(true)
+  }, [isCompletedOrOngoing, autoSeeded, totalEligibleStudents, studentsByClass, rooms.length])
+
+  // After auto-seeding rooms, generate the plan once.
+  const [planGenerated, setPlanGenerated] = useState(false)
+  useEffect(() => {
+    if (!autoSeeded || planGenerated || plan) return
+    if (rooms.some((r) => r.eligibleClassIds.length === 0)) return
+    const result = generateSeatingPlan(exam.id, rooms, studentsByClass)
+    setPlan(result)
+    setPlanGenerated(true)
+  }, [autoSeeded, planGenerated, plan, rooms, studentsByClass, exam.id])
+
+  // Status: reflect the exam lifecycle.
+  const seatingStatus = plan ? (plan.fits ? 'Generated' : 'Partial') : (isCompletedOrOngoing ? 'Auto-generating…' : 'Not Generated')
 
   const handleAddRoom = () => {
     const idx = rooms.length + 1
@@ -132,11 +164,16 @@ export function SeatingSection({ exam }: Props) {
         <Stat icon={<Layers className="h-3 w-3" />} label="Rooms" value={String(rooms.length)} />
         <Stat icon={<Users className="h-3 w-3" />} label="Capacity" value={String(totalCapacity)} />
         <Stat icon={<Users className="h-3 w-3" />} label="Students" value={String(totalEligibleStudents)} />
-        <Stat icon={<RefreshCw className="h-3 w-3" />} label="Status" value={plan ? (plan.fits ? 'Ready' : 'Partial') : 'Not Generated'} />
+        <Stat
+          icon={<RefreshCw className="h-3 w-3" />}
+          label="Status"
+          value={seatingStatus}
+          valueClassName={plan ? (plan.fits ? 'text-emerald-600' : 'text-amber-600') : 'text-muted-foreground'}
+        />
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Examination Rooms</p>
         <div className="flex items-center gap-1.5">
           <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={handleGenerate}>
@@ -155,89 +192,96 @@ export function SeatingSection({ exam }: Props) {
       {rooms.map((room) => {
         const roomStudents = room.eligibleClassIds.flatMap((cId) => studentsByClass.get(cId) ?? [])
         return (
-          <div key={room.id} className="rounded-lg border border-border/60 p-3 space-y-3">
+          <div key={room.id} className="rounded-lg border border-border/60 overflow-hidden">
             {/* Room header */}
-            <div className="flex items-start justify-between gap-2">
-              <div>
+            <div className="flex items-start justify-between gap-2 px-3 py-2.5 border-b border-border/40 bg-muted/20">
+              <div className="min-w-0">
                 <p className="text-sm font-semibold">{room.name}</p>
                 <p className="text-[10px] text-muted-foreground">{room.roomNo}</p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">{room.rows}×{room.cols} {room.seatingType} · {room.capacity} seats</span>
-                <button onClick={() => handleRemoveRoom(room.id)} className="text-muted-foreground hover:text-rose-500">
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap">{room.rows}×{room.cols} {room.seatingType} · {room.capacity} seats</span>
+                <button onClick={() => handleRemoveRoom(room.id)} className="text-muted-foreground hover:text-rose-500 transition-colors">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Config */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <Input value={room.name} onChange={(e) => handleUpdateRoom(room.id, 'name', e.target.value)} placeholder="Name" className="h-7 text-xs flex-1 min-w-[80px]" />
-              <Input value={room.roomNo} onChange={(e) => handleUpdateRoom(room.id, 'roomNo', e.target.value)} placeholder="Room #" className="h-7 text-xs w-20" />
-              <Input type="number" value={room.rows} onChange={(e) => handleUpdateRoom(room.id, 'rows', Number(e.target.value))} className="h-7 text-xs w-12" min={1} max={20} />
-              <span className="text-[10px] text-muted-foreground">×</span>
-              <Input type="number" value={room.cols} onChange={(e) => handleUpdateRoom(room.id, 'cols', Number(e.target.value))} className="h-7 text-xs w-12" min={1} max={20} />
-              <Select value={room.seatingType} onValueChange={(v) => handleUpdateRoom(room.id, 'seatingType', v as SeatingType)}>
-                <SelectTrigger size="sm" className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="single">Single</SelectItem>
-                  <SelectItem value="double">Double</SelectItem>
-                  <SelectItem value="triple">Triple</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Eligible classes — mutually exclusive across rooms */}
-            <div className="flex flex-wrap gap-1.5">
-              <span className="text-[9px] uppercase font-semibold text-muted-foreground mr-1">Classes:</span>
-              {exam.classes.map((c: any) => {
-                const isSelected = room.eligibleClassIds.includes(c.classId)
-                const isAssignedElsewhere = !isSelected && allAssignedClassIds.has(c.classId)
-                const ownerRoom = isAssignedElsewhere ? rooms.find((rm) => rm.eligibleClassIds.includes(c.classId)) : null
-                const count = (studentsByClass.get(c.classId) ?? []).length
-                return (
-                  <button
-                    key={c.classId}
-                    onClick={() => toggleEligibleClass(room.id, c.classId)}
-                    disabled={isAssignedElsewhere}
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-medium transition-colors',
-                      isSelected ? 'border-primary/40 bg-primary/10 text-primary' : '',
-                      isAssignedElsewhere ? 'border-border/40 bg-muted/20 text-muted-foreground/40 cursor-not-allowed' : '',
-                      !isSelected && !isAssignedElsewhere ? 'border-border text-muted-foreground hover:bg-muted/30' : '',
-                    )}
-                    title={isAssignedElsewhere ? `Already assigned to ${ownerRoom?.name}` : undefined}
-                  >
-                    {c.className} ({count})
-                    {isAssignedElsewhere && <span className="text-[7px] opacity-60">→ {ownerRoom?.name}</span>}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Seating map */}
-            {plan && (() => {
-              const { occupied, capacity: cap } = roomOccupancy(plan, room.id)
-              return (
-                <div className="space-y-3 pt-2 border-t border-border/40">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={cn('text-[10px] font-semibold', occupied === cap ? 'text-emerald-600' : 'text-muted-foreground')}>
-                      {occupied} / {cap} occupied · {cap - occupied} empty
-                    </span>
-                  </div>
-                  <SeatingMap room={room} plan={plan} />
-                  {/* Slot-specific invigilators */}
-                  <InvigilatorPanel
-                    roomId={room.id}
-                    roomName={room.name}
-                    examSlots={examSlots}
-                    invigilators={invigilators}
-                    setInvigilators={setInvigilators}
-                    teachers={allTeachers}
-                  />
+            <div className="p-3 space-y-3">
+              {/* Config — grouped */}
+              <div className="rounded-md border border-border/40 bg-card/40 p-2">
+                <p className="text-[8px] uppercase font-semibold text-muted-foreground mb-1.5">Room Configuration</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Input value={room.name} onChange={(e) => handleUpdateRoom(room.id, 'name', e.target.value)} placeholder="Name" className="h-7 text-xs flex-1 min-w-[80px]" />
+                  <Input value={room.roomNo} onChange={(e) => handleUpdateRoom(room.id, 'roomNo', e.target.value)} placeholder="Room #" className="h-7 text-xs w-20" />
+                  <Input type="number" value={room.rows} onChange={(e) => handleUpdateRoom(room.id, 'rows', Number(e.target.value))} className="h-7 text-xs w-12" min={1} max={20} />
+                  <span className="text-[10px] text-muted-foreground">×</span>
+                  <Input type="number" value={room.cols} onChange={(e) => handleUpdateRoom(room.id, 'cols', Number(e.target.value))} className="h-7 text-xs w-12" min={1} max={20} />
+                  <Select value={room.seatingType} onValueChange={(v) => handleUpdateRoom(room.id, 'seatingType', v as SeatingType)}>
+                    <SelectTrigger size="sm" className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single">Single</SelectItem>
+                      <SelectItem value="double">Double</SelectItem>
+                      <SelectItem value="triple">Triple</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )
-            })()}
+              </div>
+
+              {/* Eligible classes — mutually exclusive across rooms */}
+              <div className="rounded-md border border-border/40 bg-card/40 p-2">
+                <p className="text-[8px] uppercase font-semibold text-muted-foreground mb-1.5">Eligible Classes</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {exam.classes.map((c: any) => {
+                    const isSelected = room.eligibleClassIds.includes(c.classId)
+                    const isAssignedElsewhere = !isSelected && allAssignedClassIds.has(c.classId)
+                    const ownerRoom = isAssignedElsewhere ? rooms.find((rm) => rm.eligibleClassIds.includes(c.classId)) : null
+                    const count = (studentsByClass.get(c.classId) ?? []).length
+                    return (
+                      <button
+                        key={c.classId}
+                        onClick={() => toggleEligibleClass(room.id, c.classId)}
+                        disabled={isAssignedElsewhere}
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-medium transition-colors',
+                          isSelected ? 'border-primary/40 bg-primary/10 text-primary' : '',
+                          isAssignedElsewhere ? 'border-border/40 bg-muted/20 text-muted-foreground/40 cursor-not-allowed' : '',
+                          !isSelected && !isAssignedElsewhere ? 'border-border text-muted-foreground hover:bg-muted/30' : '',
+                        )}
+                        title={isAssignedElsewhere ? `Already assigned to ${ownerRoom?.name}` : undefined}
+                      >
+                        {c.className} ({count})
+                        {isAssignedElsewhere && <span className="text-[7px] opacity-60">→ {ownerRoom?.name}</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Seating map */}
+              {plan && (() => {
+                const { occupied, capacity: cap } = roomOccupancy(plan, room.id)
+                return (
+                  <div className="space-y-3 pt-2 border-t border-border/40">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={cn('text-[10px] font-semibold', occupied === cap ? 'text-emerald-600' : 'text-muted-foreground')}>
+                        {occupied} / {cap} occupied · {cap - occupied} empty
+                      </span>
+                    </div>
+                    <SeatingMap room={room} plan={plan} />
+                    {/* Slot-specific invigilators */}
+                    <InvigilatorPanel
+                      roomId={room.id}
+                      roomName={room.name}
+                      examSlots={examSlots}
+                      invigilators={invigilators}
+                      setInvigilators={setInvigilators}
+                      teachers={allTeachers}
+                    />
+                  </div>
+                )
+              })()}
+            </div>
           </div>
         )
       })}
@@ -257,13 +301,13 @@ export function SeatingSection({ exam }: Props) {
   )
 }
 
-function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function Stat({ icon, label, value, valueClassName }: { icon: React.ReactNode; label: string; value: string; valueClassName?: string }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-md bg-muted/30 px-2.5 py-1.5">
+    <div className="flex items-center gap-1.5 rounded-md bg-muted/30 px-2.5 py-1.5 border border-border/40">
       <span className="text-muted-foreground">{icon}</span>
       <div className="min-w-0">
         <p className="text-[8px] uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="text-[11px] font-semibold text-foreground truncate">{value}</p>
+        <p className={cn('text-[11px] font-semibold truncate', valueClassName ?? 'text-foreground')}>{value}</p>
       </div>
     </div>
   )

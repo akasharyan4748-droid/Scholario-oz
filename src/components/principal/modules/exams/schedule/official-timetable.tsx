@@ -136,10 +136,10 @@ export function OfficialTimetable({
             <tbody>
               {dateGroups.map((group) => (
                 group.rows.map((row, slotWithinGroup) => (
-                  <tr key={`${row.date}-${row.slotIndex}`} className="hover:bg-muted/20 transition-colors">
+                  <tr key={`${row.date}-${row.slotIndex}`} className="hover:bg-primary/5 transition-colors even:bg-muted/10">
                     {/* Day/Date cell — row-spans across all shifts for this date */}
                     {slotWithinGroup === 0 && (
-                      <td rowSpan={group.rows.length} className="sticky left-0 z-[1] bg-card px-2 py-2 align-top border-b border-r border-border">
+                      <td rowSpan={group.rows.length} className="sticky left-0 z-[1] bg-card px-2.5 py-2 align-top border-b border-r border-border">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[9px] font-medium uppercase text-muted-foreground">{row.dayLabel}</span>
                           <span className="text-[11px] font-semibold text-foreground tabular-nums">{formatDateLong(row.date)}</span>
@@ -152,20 +152,20 @@ export function OfficialTimetable({
                         <span className="text-[9px] font-medium text-muted-foreground">{row.slotIndex === 0 ? '1st' : '2nd'}</span>
                       </td>
                     )}
-                    {/* Subject cells — subject name only, no time */}
+                    {/* Subject cells — subject name only; code shown as tiny badge on hover */}
                     {row.cells.map((cell, colIdx) => (
-                      <td key={`${row.date}-${row.slotIndex}-${colIdx}`} className="border-b border-r border-border/60 last:border-r-0 px-2 py-1.5 align-middle">
+                      <td key={`${row.date}-${row.slotIndex}-${colIdx}`} className="border-b border-r border-border/60 last:border-r-0 px-2 py-1.5 align-middle min-w-[100px]">
                         {cell ? (
-                          <div className="flex flex-col items-center gap-0.5">
+                          <div className="flex flex-col items-center gap-1">
                             <span className="text-[11px] font-medium text-foreground text-center leading-tight">{cell.label}</span>
                             {cell.subjects.length > 0 && (
-                              <span className="text-[8px] text-muted-foreground/70 font-mono">
+                              <span className="inline-flex items-center px-1 py-0.5 rounded text-[7px] font-mono font-semibold bg-muted/60 text-muted-foreground/80 leading-none">
                                 {cell.subjects.map((s) => s.code).join(' / ')}
                               </span>
                             )}
                           </div>
                         ) : (
-                          <div className="text-center text-[9px] text-muted-foreground/30">—</div>
+                          <div className="text-center text-[9px] text-muted-foreground/25">—</div>
                         )}
                       </td>
                     ))}

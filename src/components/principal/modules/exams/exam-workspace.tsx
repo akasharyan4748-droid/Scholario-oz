@@ -11,7 +11,7 @@
 
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Pencil, Save, Download, Lock, Unlock, Clock, Award, Megaphone, CheckCircle2, FileText, User, Filter, RotateCcw, Send } from 'lucide-react'
+import { ArrowLeft, Pencil, Save, Download, Lock, Unlock, Clock, Award, Megaphone, CheckCircle2, FileText, User, Filter, RotateCcw, Send, Users, BookOpen, CalendarDays, PieChart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -49,7 +49,7 @@ import { useMockAuditStore, AUDIT_ACTION_LABELS, type AuditAction } from '@/lib/
 import { getGradeForPercentage, DEFAULT_GRADE_BOUNDARIES } from '@/lib/exams/types'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { useRoleGate } from '@/lib/exams/use-role-gate'
-import { generateClassResultPDF, generateStudentResultPDF } from '@/lib/exams/result-pdf'
+import { generateClassResultPDF, generateStudentResultPDF, generateGradeAnalysisPDF } from '@/lib/exams/result-pdf'
 import {
   GraceSection,
   OutcomesSection,
@@ -263,10 +263,10 @@ function OverviewSection({ exam, onReload, onNavigate }: { exam: ExamDTO; onRelo
     <div className="space-y-4">
       {/* KPI grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Kpi label="Classes" value={exam.classes.length} sub={`${exam.classes.reduce((s: number, c: any) => s + c.studentCount, 0)} students`} />
-        <Kpi label="Subjects" value={exam.subjects.length} sub={`${exam.schedule.length} scheduled`} />
-        <Kpi label="Marks Entry" value={`${entered}/${total}`} sub={`${pct}% entered`} progress={pct} />
-        <Kpi label="Schedule" value={exam.schedule.length} sub={`${exam.schedule.length} sessions`} />
+        <Kpi label="Classes" value={exam.classes.length} sub={`${exam.classes.reduce((s: number, c: any) => s + c.studentCount, 0)} students`} icon={<Users className="h-4 w-4" />} accent="sky" />
+        <Kpi label="Subjects" value={exam.subjects.length} sub={`${exam.schedule.length} scheduled`} icon={<BookOpen className="h-4 w-4" />} accent="violet" />
+        <Kpi label="Marks Entry" value={`${entered}/${total}`} sub={`${pct}% entered`} progress={pct} icon={<CheckCircle2 className="h-4 w-4" />} accent="emerald" />
+        <Kpi label="Schedule" value={exam.schedule.length} sub={`${exam.schedule.length} sessions`} icon={<CalendarDays className="h-4 w-4" />} accent="amber" />
       </div>
 
       {/* Exam readiness */}
@@ -352,15 +352,30 @@ function OverviewSection({ exam, onReload, onNavigate }: { exam: ExamDTO; onRelo
   )
 }
 
-function Kpi({ label, value, sub, progress }: { label: string; value: any; sub?: string; progress?: number }) {
+function Kpi({ label, value, sub, progress, icon, accent = 'default' }: { label: string; value: any; sub?: string; progress?: number; icon?: React.ReactNode; accent?: 'default' | 'sky' | 'violet' | 'emerald' | 'amber' }) {
+  const accentMap = {
+    default: { bg: 'bg-muted/40', text: 'text-muted-foreground', bar: 'bg-primary' },
+    sky: { bg: 'bg-sky-500/10', text: 'text-sky-600 dark:text-sky-400', bar: 'bg-sky-500' },
+    violet: { bg: 'bg-violet-500/10', text: 'text-violet-600 dark:text-violet-400', bar: 'bg-violet-500' },
+    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', bar: 'bg-emerald-500' },
+    amber: { bg: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', bar: 'bg-amber-500' },
+  }
+  const a = accentMap[accent]
   return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <p className="text-[10px] uppercase font-semibold text-muted-foreground">{label}</p>
-      <p className="font-display text-2xl font-bold tabular-nums">{value}</p>
+    <div className="rounded-xl border border-border bg-card p-3 hover:shadow-sm transition-shadow">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[10px] uppercase font-semibold text-muted-foreground">{label}</p>
+        {icon && (
+          <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg shrink-0', a.bg, a.text)}>
+            {icon}
+          </span>
+        )}
+      </div>
+      <p className="font-display text-2xl font-bold tabular-nums mt-1">{value}</p>
       {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
       {progress !== undefined && (
-        <div className="mt-2 h-1 rounded-full bg-muted/60 overflow-hidden">
-          <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
+        <div className="mt-2 h-1.5 rounded-full bg-muted/60 overflow-hidden">
+          <div className={cn('h-full rounded-full transition-all', a.bar)} style={{ width: `${progress}%` }} />
         </div>
       )}
     </div>
@@ -1021,6 +1036,94 @@ function PaperTimelineInline({ exam, classId, subjectId, onClose }: {
   )
 }
 
+// ─── Grade Donut Chart (pure SVG) ─────────────────────────────────────
+
+function GradeDonut({ distribution, gradeScale, totalStudents }: {
+  distribution: Record<string, number>
+  gradeScale: readonly { grade: string; minPct: number; color: string }[]
+  totalStudents: number
+}) {
+  const colorHex: Record<string, string> = {
+    A1: '#10b981', A2: '#34d399', B1: '#0ea5e9', B2: '#f59e0b',
+    C1: '#f97316', C2: '#f43f5e', E: '#e11d48',
+  }
+  const size = 180
+  const stroke = 28
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const cx = size / 2
+  const cy = size / 2
+
+  // Build segments without mutation — use reduce to accumulate offsets.
+  const { segments } = gradeScale.reduce<{ segments: Array<{ grade: string; count: number; fraction: number; dash: number; offset: number; color: string }>; cumulative: number }>(
+    (acc, g) => {
+      const count = distribution[g.grade] ?? 0
+      const fraction = totalStudents > 0 ? count / totalStudents : 0
+      const dash = fraction * circumference
+      acc.segments.push({
+        grade: g.grade,
+        count,
+        fraction,
+        dash,
+        offset: -acc.cumulative * circumference,
+        color: colorHex[g.grade] ?? '#94a3b8',
+      })
+      acc.cumulative += fraction
+      return acc
+    },
+    { segments: [], cumulative: 0 },
+  )
+
+  return (
+    <div className="flex items-center gap-4">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
+        {/* Background ring */}
+        <circle cx={cx} cy={cy} r={radius} fill="none" stroke="hsl(var(--muted))" strokeWidth={stroke} opacity={0.3} />
+        {/* Segments */}
+        {segments.map((s) => s.count > 0 && (
+          <circle
+            key={s.grade}
+            cx={cx}
+            cy={cy}
+            r={radius}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={stroke}
+            strokeDasharray={`${s.dash} ${circumference - s.dash}`}
+            strokeDashoffset={s.offset}
+            transform={`rotate(-90 ${cx} ${cy})`}
+            strokeLinecap="butt"
+            className="transition-all duration-500"
+          >
+            <title>{s.grade}: {s.count} ({Math.round(s.fraction * 100)}%)</title>
+          </circle>
+        ))}
+        {/* Center text */}
+        <text x={cx} y={cy - 8} textAnchor="middle" className="fill-foreground font-bold" style={{ fontSize: 28, fontWeight: 700 }}>
+          {totalStudents}
+        </text>
+        <text x={cx} y={cy + 12} textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: 10, fontWeight: 600 }}>
+          Students
+        </text>
+      </svg>
+      {/* Legend */}
+      <div className="space-y-1">
+        {segments.filter((s) => s.count > 0).map((s) => (
+          <div key={s.grade} className="flex items-center gap-2 text-[10px]">
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: s.color }} />
+            <span className="font-semibold w-6">{s.grade}</span>
+            <span className="text-muted-foreground tabular-nums">{s.count}</span>
+            <span className="text-muted-foreground/60 tabular-nums">({Math.round(s.fraction * 100)}%)</span>
+          </div>
+        ))}
+        {segments.every((s) => s.count === 0) && (
+          <p className="text-[10px] text-muted-foreground">No data</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Grade Section — grading policy + distribution + subject comparison ─
 
 function GradeSection({ exam }: { exam: ExamDTO }) {
@@ -1139,6 +1242,32 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
           <option value="all">All Subjects</option>
           {exam.subjects.map((s: any, i: number) => <option key={`${s.subjectId}-${i}`} value={s.subjectId}>{s.subjectName}</option>)}
         </select>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 text-[10px] gap-1 ml-auto"
+          onClick={() => {
+            try {
+              generateGradeAnalysisPDF(exam, {
+                totalStudents: gradeData.totalStudents,
+                passedCount: gradeData.passedCount,
+                failedCount: gradeData.failedCount,
+                absentCount: gradeData.absentCount,
+                avgPct: gradeData.avgPct,
+                highestPct: gradeData.highestPct,
+                lowestPct: gradeData.lowestPct,
+                distribution: gradeData.distribution,
+                gradeScale: gradeScale.map((g) => ({ grade: g.grade, minPct: g.minPct })),
+                subjectComparison,
+              })
+              toast.success('Grade analysis PDF downloaded')
+            } catch (e: any) {
+              toast.error('Export failed', { description: e.message })
+            }
+          }}
+        >
+          <Download className="h-3 w-3" /> Export PDF
+        </Button>
       </div>
 
       {/* Grade policy view */}
@@ -1166,42 +1295,49 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
         </div>
       </CollapsibleSection>
 
-      {/* Grade distribution */}
-      <CollapsibleSection title="Grade Distribution" subtitle={`${gradeData.totalStudents} students`} accent="emerald">
-        <div className="p-3 space-y-2">
-          {gradeScale.map((g) => {
-            const count = gradeData.distribution[g.grade] ?? 0
-            const pct = gradeData.totalStudents > 0 ? Math.round((count / gradeData.totalStudents) * 1000) / 10 : 0
-            const barWidth = Math.round((count / maxDist) * 100)
-            const barColorMap: Record<string, string> = {
-              A1: 'from-emerald-500 to-emerald-400',
-              A2: 'from-emerald-500 to-emerald-400',
-              B1: 'from-sky-500 to-sky-400',
-              B2: 'from-amber-500 to-amber-400',
-              C1: 'from-orange-500 to-orange-400',
-              C2: 'from-rose-500 to-rose-400',
-              E: 'from-rose-600 to-rose-500',
-            }
-            const isEmpty = count === 0
-            return (
-              <div key={g.grade} className="flex items-center gap-3">
-                <span className="w-7 text-[11px] font-bold tabular-nums text-center">{g.grade}</span>
-                <div className="flex-1 h-5 rounded-md bg-muted/30 overflow-hidden relative">
-                  <div
-                    className={cn('h-full rounded-md transition-all duration-500 bg-gradient-to-r', barColorMap[g.grade] ?? 'from-primary to-primary/80')}
-                    style={{ width: `${barWidth}%`, minWidth: barWidth > 0 ? '4px' : '0' }}
-                  />
-                  {isEmpty && (
-                    <span className="absolute inset-0 flex items-center justify-center text-[9px] text-muted-foreground/50">—</span>
-                  )}
+      {/* Grade distribution — donut chart + bars side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <CollapsibleSection title="Grade Distribution Chart" subtitle={`${gradeData.totalStudents} students`} accent="emerald">
+          <div className="p-4 flex items-center justify-center">
+            <GradeDonut distribution={gradeData.distribution} gradeScale={gradeScale} totalStudents={gradeData.totalStudents} />
+          </div>
+        </CollapsibleSection>
+        <CollapsibleSection title="Grade Distribution" subtitle="counts" accent="emerald">
+          <div className="p-3 space-y-2">
+            {gradeScale.map((g) => {
+              const count = gradeData.distribution[g.grade] ?? 0
+              const pct = gradeData.totalStudents > 0 ? Math.round((count / gradeData.totalStudents) * 1000) / 10 : 0
+              const barWidth = Math.round((count / maxDist) * 100)
+              const barColorMap: Record<string, string> = {
+                A1: 'from-emerald-500 to-emerald-400',
+                A2: 'from-emerald-500 to-emerald-400',
+                B1: 'from-sky-500 to-sky-400',
+                B2: 'from-amber-500 to-amber-400',
+                C1: 'from-orange-500 to-orange-400',
+                C2: 'from-rose-500 to-rose-400',
+                E: 'from-rose-600 to-rose-500',
+              }
+              const isEmpty = count === 0
+              return (
+                <div key={g.grade} className="flex items-center gap-3">
+                  <span className="w-7 text-[11px] font-bold tabular-nums text-center">{g.grade}</span>
+                  <div className="flex-1 h-5 rounded-md bg-muted/30 overflow-hidden relative">
+                    <div
+                      className={cn('h-full rounded-md transition-all duration-500 bg-gradient-to-r', barColorMap[g.grade] ?? 'from-primary to-primary/80')}
+                      style={{ width: `${barWidth}%`, minWidth: barWidth > 0 ? '4px' : '0' }}
+                    />
+                    {isEmpty && (
+                      <span className="absolute inset-0 flex items-center justify-center text-[9px] text-muted-foreground/50">—</span>
+                    )}
+                  </div>
+                  <span className={cn('w-7 text-[11px] tabular-nums text-right font-medium', isEmpty && 'text-muted-foreground/50')}>{isEmpty ? '—' : count}</span>
+                  <span className={cn('w-12 text-[10px] tabular-nums text-right', isEmpty ? 'text-muted-foreground/50' : 'text-muted-foreground')}>{pct}%</span>
                 </div>
-                <span className={cn('w-7 text-[11px] tabular-nums text-right font-medium', isEmpty && 'text-muted-foreground/50')}>{isEmpty ? '—' : count}</span>
-                <span className={cn('w-12 text-[10px] tabular-nums text-right', isEmpty ? 'text-muted-foreground/50' : 'text-muted-foreground')}>{pct}%</span>
-              </div>
-            )
-          })}
-        </div>
-      </CollapsibleSection>
+              )
+            })}
+          </div>
+        </CollapsibleSection>
+      </div>
 
       {/* Subject comparison */}
       <CollapsibleSection title="Subject Comparison" subtitle={`${subjectComparison.length} papers`} accent="sky" defaultOpen={false}>

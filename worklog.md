@@ -1979,3 +1979,33 @@ Stage Summary:
 - Status pills: better contrast + shadow.
 - All functional flows verified working (unlock, marks workflow).
 - Next opportunities: (1) add a grade-distribution donut chart, (2) add keyboard shortcuts for tab switching, (3) add export-to-PDF on Grade tab, (4) add search/filter on Subject Progress table.
+
+---
+Task ID: cron-round-2-qa-and-features
+Agent: main (Super Z)
+Task: QA-driven bug fixes + new features (seating auto-seed, schedule overlap fix, KPI icons, grade donut chart, grade PDF export)
+
+Work Log:
+- Reviewed worklog: previous round added visual polish to Grade/Marks/Audit tabs (8-9/10 ratings).
+- QA testing via agent-browser + VLM screenshots across ALL 8 tabs identified 3 bugs + 4 improvement opportunities:
+  • BUG: Seating tab showed "Not Generated" on Completed exam (data-integrity issue).
+  • BUG: Schedule tab had text overlap (subject name "Hindi" overlapping with code "HIN").
+  • IMPROVEMENT: Overview KPI cards were flat, lacked icons.
+  • FEATURE: Grade tab needed a donut chart visualization.
+  • FEATURE: Grade tab needed export-to-PDF.
+- Fixed Seating tab data-integrity: added auto-seed logic — for Completed/Ongoing exams, classes are auto-distributed across rooms (round-robin) and the seating plan auto-generates on mount. Status now correctly shows "Generated" (green) instead of "Not Generated". Verified: 16/30 occupied, seating map renders with real students (Kiara Reddy, Nisha Iyer, etc.).
+- Improved Seating tab visual: room cards now have proper header (bg-muted/20 border-b), "Room Configuration" and "Eligible Classes" sections are grouped in labeled sub-cards (bg-card/40 border), status Stat supports valueClassName for color coding (emerald=Generated, amber=Partial).
+- Fixed Schedule tab text overlap: subject code now rendered as a tiny badge (inline-flex px-1 py-0.5 rounded text-[7px] font-mono bg-muted/60) instead of overlapping text. Added zebra striping (even:bg-muted/10), min-width on cells (min-w-[100px]), hover highlight (hover:bg-primary/5).
+- Improved Overview KPI cards: added colored icon badges (sky=Classes/Users, violet=Subjects/BookOpen, emerald=Marks Entry/CheckCircle2, amber=Schedule/CalendarDays). Each badge has accent-colored bg (bg-sky-500/10 etc.) and text. Progress bar now uses accent color. Added hover:shadow-sm. VLM rated 9/10.
+- Added Grade Donut Chart: pure SVG donut (180px, stroke 28px) with color-coded segments matching grade scale (emerald A1/A2, sky B1, amber B2, orange C1, rose C2/E). Center shows total student count. Legend on the right with color swatches + counts + percentages. Used reduce() to avoid mutation (lint-safe). Grade Distribution section split into 2-column layout: donut chart (left) + bar chart (right).
+- Added Grade PDF Export: new generateGradeAnalysisPDF() function in result-pdf.ts. A4 portrait with: header (exam name + "Grade Analysis Report"), summary table (8 metrics), grade distribution table (grade/min%/students/%), subject comparison table (class/subject/total + per-grade columns). Color-coded headers (blue summary, emerald distribution, sky comparison). "Export PDF" button added to Grade tab filters row. Verified: 91KB PDF downloaded successfully.
+- Lint passes clean on all modified files. Dev server compiles successfully.
+- VLM verification: Overview 9/10, Seating 8.5/10, Schedule 8/10 (overlap fixed), Grade 8/10 (donut + export visible).
+- No browser errors. Table header overlap still fixed on all tabs.
+
+Stage Summary:
+- 3 bugs fixed: Seating data-integrity (auto-seed), Schedule text overlap (badge), Overview KPI flatness (icons).
+- 2 new features: Grade Donut Chart (pure SVG), Grade PDF Export (jsPDF + autoTable).
+- Visual polish: Seating room cards grouped, Schedule zebra striping + hover, KPI accent colors.
+- All 8 tabs verified via browser + VLM. Ratings: Overview 9/10, Marks 9/10, Grade 8/10, Audit 8/10, Seating 8.5/10, Schedule 8/10.
+- Next opportunities: (1) add search/filter to Subject Progress table, (2) add keyboard shortcuts for tab switching (1-9), (3) add exam-comparison view across exams, (4) add student-wise performance trend chart.
