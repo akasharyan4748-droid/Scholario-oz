@@ -1,49 +1,98 @@
 /**
- * Mock marks store — mirrors the real API contract for the mock-data phase.
+ * Mock marks store — paper-level workflow with demo data for Classes 9-12.
  *
- * All marks mutations go through here so the workspace works without a
- * real DB. The store tracks per-student marks records with the full
- * workflow lifecycle (DRAFT → SUBMITTED → VERIFIED → LOCKED).
+ * Each (exam × class × subject) paper tracks its own lifecycle independently:
+ * DRAFT → SUBMITTED → VERIFIED → LOCKED.
+ * Classes can be locked/declared independently of each other.
  */
 
 import { create } from 'zustand'
-import type { ExamMarkDTO } from '@/lib/exams/types'
-import type { ExamDTO } from '@/lib/exams/types'
+import type { ExamMarkDTO, ExamDTO, MarkStatus, WorkflowStatus } from '@/lib/exams/types'
 
 type MockMark = ExamMarkDTO
 
+/** Paper-level status: the aggregate status of all marks for one class+subject. */
+export type PaperStatus = 'DRAFT' | 'IN_PROGRESS' | 'SUBMITTED' | 'VERIFIED' | 'LOCKED'
+
 interface MockMarksState {
   marks: MockMark[]
-  /** Initialize marks for an exam based on its classes + subjects + students. */
+  /** Per-class declaration state: Set of classIds that have been declared. */
+  declaredClassIds: string[]
+  /** Per-class publish state: Set of classIds that have been published. */
+  publishedClassIds: string[]
+  /** Initialize marks for an exam. Seeds demo data for Classes 9-12. */
   initMarks: (exam: ExamDTO, students: Array<{ id: string; name: string; rollNo: string | null; classId: string; className: string }>) => void
   /** Upsert a single mark. */
   setMark: (examId: string, input: { classId: string; subjectId: string; studentId: string; marksObtained: number | null; status: MarkStatus; remarks?: string }) => MockMark | null
   /** Get marks for a specific class+subject. */
   getMarks: (examId: string, classId: string, subjectId: string) => MockMark[]
-  /** Submit marks for a class+subject (DRAFT → SUBMITTED). */
+  /** Submit marks for a class+subject paper (DRAFT → SUBMITTED). */
   submitMarks: (examId: string, classId: string, subjectId: string) => number
-  /** Verify marks (SUBMITTED → VERIFIED). */
+  /** Verify marks for a class+subject paper (SUBMITTED → VERIFIED). */
   verifyMarks: (examId: string, classId: string, subjectId: string) => number
-  /** Lock marks (any → LOCKED). */
+  /** Lock marks for a class+subject paper (VERIFIED → LOCKED). */
   lockMarks: (examId: string, classId: string, subjectId: string) => number
-  /** Compute mark summary for an exam. */
-  computeSummary: (exam: ExamDTO) => { total: number; entered: number; submitted: number; verified: number; locked: number; pct: number }
-  /** Check if all marks are locked (for result readiness). */
-  allLocked: (exam: ExamDTO) => boolean
+  /** Declare results for a class. */
+  declareClass: (examId: string, classId: string) => boolean
+  /** Publish results for a class. */
+  publishClass: (examId: string, classId: string) => number
+  /** Compute paper-level status for a class+subject. */
+  getPaperStatus: (examId: string, classId: string, subjectId: string) => PaperStatus
+  /** Check if a class has all papers locked (result ready). */
+  isClassReady: (examId: string, classId: string) => boolean
+  /** Check if all marks for the exam are locked. */
+  allLocked: (examId: string) => boolean
+}
+
+/** Generate random marks for demo seeding. */
+function randomMark(max: number): number {
+  return Math.round((Math.random() * 0.4 + 0.5) * max) // 50%-90% range
 }
 
 export const useMockMarksStore = create<MockMarksState>()((set, get) => ({
   marks: [],
+  declaredClassIds: [],
+  publishedClassIds: [],
 
   initMarks: (exam, students) => {
     const existing = get().marks.filter((m) => m.examId === exam.id)
-    if (existing.length > 0) return // already initialized
+    if (existing.length > 0) return
 
     const newMarks: MockMark[] = []
+    // Demo states for Classes 9-12: some locked, some verified, some submitted, some in-progress.
+    // Map classId → grade level to determine which demo state to use.
+    const demoStates = new Map<string, { subjectStates: Record<string, WorkflowStatus> }>()
+
+    // For each exam class, determine if it's a Class 9-12 (grade 9-12).
+    for (const examClass of exam.classes) {
+      const grade = parseInt(examClass.gradeLevel ?? '0', 10)
+      if (grade >= 9 && grade <= 12) {
+        // Seed demo states: first 2 subjects locked, next 1 verified, next 1 submitted, last 1 in-progress.
+        const classSubjects = exam.subjects.filter((s) => s.classId === examClass.classId)
+        const states: Record<string, WorkflowStatus> = {}
+        classSubjects.forEach((subj, i) => {
+          if (i === 0) states[subj.subjectId] = 'LOCKED'
+          else if (i === 1) states[subj.subjectId] = 'LOCKED'
+          else if (i === 2) states[subj.subjectId] = 'VERIFIED'
+          else if (i === 3) states[subj.subjectId] = 'SUBMITTED'
+          else states[subj.subjectId] = 'DRAFT'
+        })
+        demoStates.set(examClass.classId, { subjectStates: states })
+      }
+    }
+
     for (const examClass of exam.classes) {
       const classStudents = students.filter((s) => s.classId === examClass.classId)
+      const demoState = demoStates.get(examClass.classId)
       for (const subject of exam.subjects.filter((s) => s.classId === examClass.classId)) {
+        const targetStatus = demoState?.subjectStates[subject.subjectId] ?? 'DRAFT'
         for (const student of classStudents) {
+          // For demo states that are SUBMITTED or higher, fill marks. For DRAFT, fill some.
+          const shouldFill = targetStatus !== 'DRAFT' || Math.random() > 0.5
+          const marks = shouldFill ? randomMark(subject.maxMarks) : null
+          const wfStatus: WorkflowStatus = targetStatus === 'DRAFT' && marks !== null
+            ? 'DRAFT' // In-progress: marks entered but not submitted
+            : targetStatus
           newMarks.push({
             id: `mark-${exam.id}-${subject.subjectId}-${student.id}`,
             examId: exam.id,
@@ -52,18 +101,18 @@ export const useMockMarksStore = create<MockMarksState>()((set, get) => ({
             studentId: student.id,
             studentName: student.name,
             studentRollNo: student.rollNo,
-            marksObtained: null,
+            marksObtained: marks,
             status: 'PRESENT' as MarkStatus,
-            workflowStatus: 'DRAFT' as WorkflowStatus,
-            originalMarks: null,
+            workflowStatus: wfStatus,
+            originalMarks: marks,
             graceMarks: 0,
             graceReason: null,
             remarks: null,
-            enteredBy: null,
-            enteredAt: null,
-            verifiedBy: null,
-            verifiedAt: null,
-            lockedBy: null,
+            enteredBy: targetStatus !== 'DRAFT' ? 'demo-teacher' : null,
+            enteredAt: targetStatus !== 'DRAFT' ? new Date().toISOString() : null,
+            verifiedBy: (targetStatus === 'VERIFIED' || targetStatus === 'LOCKED') ? 'principal' : null,
+            verifiedAt: (targetStatus === 'VERIFIED' || targetStatus === 'LOCKED') ? new Date().toISOString() : null,
+            lockedBy: targetStatus === 'LOCKED' ? 'principal' : null,
           })
         }
       }
@@ -76,7 +125,7 @@ export const useMockMarksStore = create<MockMarksState>()((set, get) => ({
       (m) => m.examId === examId && m.classId === input.classId &&
       m.subjectId === input.subjectId && m.studentId === input.studentId
     )
-    if (existing?.workflowStatus === 'LOCKED') return null // can't edit locked
+    if (existing?.workflowStatus === 'LOCKED') return null
 
     const updated: MockMark = {
       ...(existing ?? {
@@ -92,11 +141,8 @@ export const useMockMarksStore = create<MockMarksState>()((set, get) => ({
       enteredBy: 'current-user',
       enteredAt: new Date().toISOString(),
     }
-
     set((state) => ({
-      marks: existing
-        ? state.marks.map((m) => m.id === existing.id ? updated : m)
-        : [...state.marks, updated],
+      marks: existing ? state.marks.map((m) => m.id === existing.id ? updated : m) : [...state.marks, updated],
     }))
     return updated
   },
@@ -147,19 +193,45 @@ export const useMockMarksStore = create<MockMarksState>()((set, get) => ({
     return count
   },
 
-  computeSummary: (exam) => {
-    const examMarks = get().marks.filter((m) => m.examId === exam.id)
-    const total = examMarks.length
-    const entered = examMarks.filter((m) => m.marksObtained !== null).length
-    const submitted = examMarks.filter((m) => ['SUBMITTED', 'VERIFIED', 'LOCKED'].includes(m.workflowStatus)).length
-    const verified = examMarks.filter((m) => ['VERIFIED', 'LOCKED'].includes(m.workflowStatus)).length
-    const locked = examMarks.filter((m) => m.workflowStatus === 'LOCKED').length
-    const pct = total > 0 ? Math.round((entered / total) * 100) : 0
-    return { total, entered, submitted, verified, locked, pct }
+  declareClass: (examId, classId) => {
+    if (!get().isClassReady(examId, classId)) return false
+    set((state) => ({
+      declaredClassIds: [...state.declaredClassIds, `${examId}:${classId}`],
+    }))
+    return true
   },
 
-  allLocked: (exam) => {
-    const examMarks = get().marks.filter((m) => m.examId === exam.id)
+  publishClass: (examId, classId) => {
+    const key = `${examId}:${classId}`
+    if (!get().declaredClassIds.includes(key)) return 0
+    if (get().publishedClassIds.includes(key)) return 0 // idempotent
+    set((state) => ({
+      publishedClassIds: [...state.publishedClassIds, key],
+    }))
+    // Count students in this class for notification count.
+    const classMarks = get().marks.filter((m) => m.examId === examId && m.classId === classId)
+    const studentIds = new Set(classMarks.map((m) => m.studentId))
+    return studentIds.size
+  },
+
+  getPaperStatus: (examId, classId, subjectId) => {
+    const marks = get().marks.filter((m) => m.examId === examId && m.classId === classId && m.subjectId === subjectId)
+    if (marks.length === 0) return 'DRAFT'
+    if (marks.every((m) => m.workflowStatus === 'LOCKED')) return 'LOCKED'
+    if (marks.every((m) => ['VERIFIED', 'LOCKED'].includes(m.workflowStatus))) return 'VERIFIED'
+    if (marks.every((m) => ['SUBMITTED', 'VERIFIED', 'LOCKED'].includes(m.workflowStatus))) return 'SUBMITTED'
+    if (marks.some((m) => m.marksObtained !== null)) return 'IN_PROGRESS'
+    return 'DRAFT'
+  },
+
+  isClassReady: (examId, classId) => {
+    const classMarks = get().marks.filter((m) => m.examId === examId && m.classId === classId)
+    if (classMarks.length === 0) return false
+    return classMarks.every((m) => m.workflowStatus === 'LOCKED')
+  },
+
+  allLocked: (examId) => {
+    const examMarks = get().marks.filter((m) => m.examId === examId)
     if (examMarks.length === 0) return false
     return examMarks.every((m) => m.workflowStatus === 'LOCKED')
   },
