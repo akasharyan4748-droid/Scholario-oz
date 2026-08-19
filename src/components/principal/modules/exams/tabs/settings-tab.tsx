@@ -227,6 +227,23 @@ function ExamTypesSection({ readOnly }: { readOnly: boolean }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <SectionHeader title="Examination Types" desc="Manage examination types used across the school." />
+
+      {/* Type count preview */}
+      {types.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {types.filter((t) => t.enabled).slice(0, 8).map((t) => (
+            <span key={t.id} className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-primary/10 text-primary">
+              {t.name}
+            </span>
+          ))}
+          {types.filter((t) => t.enabled).length > 8 && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-muted/40 text-muted-foreground">
+              +{types.filter((t) => t.enabled).length - 8} more
+            </span>
+          )}
+        </div>
+      )}
+
       {readOnly && <ReadOnlyNotice />}
       {!readOnly && (
         <div className="flex gap-2 mb-3">
@@ -235,17 +252,22 @@ function ExamTypesSection({ readOnly }: { readOnly: boolean }) {
         </div>
       )}
       <div className="space-y-1">
+        {types.length === 0 && (
+          <div className="py-8 text-center text-xs text-muted-foreground">
+            No exam types configured. Click "Add" to create examination types.
+          </div>
+        )}
         {types.map((t) => (
-          <div key={t.id} className="flex items-center gap-2 p-2 rounded-lg border border-border/60">
+          <div key={t.id} className="flex items-center gap-2 p-2 rounded-lg border border-border/60 even:bg-muted/10 hover:bg-muted/20 transition-colors">
             <Checkbox
               checked={t.enabled}
               onCheckedChange={(v) => !readOnly && update(t.id, { enabled: v === true })}
               disabled={readOnly}
             />
-            <span className="text-xs font-medium flex-1">{t.name}</span>
-            <span className="text-[10px] text-muted-foreground font-mono">{t.code}</span>
+            <span className={cn('text-xs font-medium flex-1', !t.enabled && 'text-muted-foreground line-through')}>{t.name}</span>
+            <span className="text-[10px] text-muted-foreground font-mono bg-muted/40 px-1.5 py-0.5 rounded">{t.code}</span>
             {!readOnly && (
-              <button onClick={() => remove(t.id)} className="text-muted-foreground hover:text-rose-500">
+              <button onClick={() => remove(t.id)} className="text-muted-foreground hover:text-rose-500 transition-colors">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             )}
