@@ -366,7 +366,21 @@ function ActionItemsWidget({ exam, onNavigate }: { exam: ExamDTO; onNavigate: (t
   }
 
   if (items.length === 0) {
-    return null
+    return (
+      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 shrink-0">
+            <CheckCircle2 className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">All caught up!</p>
+            <p className="text-[10px] text-emerald-700/70 dark:text-emerald-300/70 mt-0.5">
+              No pending actions for this examination. All tasks are complete.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const priorityStyles = {
@@ -1360,10 +1374,12 @@ function PaperTimelineInline({ exam, classId, subjectId, onClose }: {
 
 // ─── Grade Donut Chart (pure SVG) ─────────────────────────────────────
 
-function GradeDonut({ distribution, gradeScale, totalStudents }: {
+function GradeDonut({ distribution, gradeScale, totalStudents, selectedGrade, onSelectGrade }: {
   distribution: Record<string, number>
   gradeScale: readonly { grade: string; minPct: number; color: string }[]
   totalStudents: number
+  selectedGrade: string | null
+  onSelectGrade: (grade: string | null) => void
 }) {
   const colorHex: Record<string, string> = {
     A1: '#10b981', A2: '#34d399', B1: '#0ea5e9', B2: '#f59e0b',
@@ -1401,7 +1417,7 @@ function GradeDonut({ distribution, gradeScale, totalStudents }: {
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
         {/* Background ring */}
         <circle cx={cx} cy={cy} r={radius} fill="none" stroke="hsl(var(--muted))" strokeWidth={stroke} opacity={0.3} />
-        {/* Segments */}
+        {/* Segments — clickable */}
         {segments.map((s) => s.count > 0 && (
           <circle
             key={s.grade}
@@ -1410,36 +1426,53 @@ function GradeDonut({ distribution, gradeScale, totalStudents }: {
             r={radius}
             fill="none"
             stroke={s.color}
-            strokeWidth={stroke}
+            strokeWidth={selectedGrade === s.grade ? stroke + 6 : stroke}
             strokeDasharray={`${s.dash} ${circumference - s.dash}`}
             strokeDashoffset={s.offset}
             transform={`rotate(-90 ${cx} ${cy})`}
             strokeLinecap="butt"
-            className="transition-all duration-500"
+            className="transition-all duration-300 cursor-pointer hover:opacity-80"
+            opacity={selectedGrade === null || selectedGrade === s.grade ? 1 : 0.3}
+            onClick={() => onSelectGrade(selectedGrade === s.grade ? null : s.grade)}
           >
-            <title>{s.grade}: {s.count} ({Math.round(s.fraction * 100)}%)</title>
+            <title>{s.grade}: {s.count} students ({Math.round(s.fraction * 100)}%) — click to filter</title>
           </circle>
         ))}
         {/* Center text */}
-        <text x={cx} y={cy - 8} textAnchor="middle" className="fill-foreground font-bold" style={{ fontSize: 28, fontWeight: 700 }}>
-          {totalStudents}
+        <text x={cx} y={cy - 8} textAnchor="middle" className="fill-foreground font-bold pointer-events-none" style={{ fontSize: 28, fontWeight: 700 }}>
+          {selectedGrade ? (distribution[selectedGrade] ?? 0) : totalStudents}
         </text>
-        <text x={cx} y={cy + 12} textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: 10, fontWeight: 600 }}>
-          Students
+        <text x={cx} y={cy + 12} textAnchor="middle" className="fill-muted-foreground pointer-events-none" style={{ fontSize: 10, fontWeight: 600 }}>
+          {selectedGrade ? `Grade ${selectedGrade}` : 'Students'}
         </text>
       </svg>
-      {/* Legend */}
+      {/* Legend — clickable */}
       <div className="space-y-1">
         {segments.filter((s) => s.count > 0).map((s) => (
-          <div key={s.grade} className="flex items-center gap-2 text-[10px]">
+          <button
+            key={s.grade}
+            onClick={() => onSelectGrade(selectedGrade === s.grade ? null : s.grade)}
+            className={cn(
+              'flex items-center gap-2 text-[10px] rounded-md px-1.5 py-0.5 transition-colors w-full text-left',
+              selectedGrade === s.grade ? 'bg-primary/10 ring-1 ring-primary/30' : 'hover:bg-muted/40',
+            )}
+          >
             <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: s.color }} />
             <span className="font-semibold w-6">{s.grade}</span>
             <span className="text-muted-foreground tabular-nums">{s.count}</span>
             <span className="text-muted-foreground/60 tabular-nums">({Math.round(s.fraction * 100)}%)</span>
-          </div>
+          </button>
         ))}
         {segments.every((s) => s.count === 0) && (
           <p className="text-[10px] text-muted-foreground">No data</p>
+        )}
+        {selectedGrade && (
+          <button
+            onClick={() => onSelectGrade(null)}
+            className="flex items-center gap-1 text-[9px] text-primary hover:underline mt-1"
+          >
+            <RotateCcw className="h-2.5 w-2.5" /> Clear filter
+          </button>
         )}
       </div>
     </div>
@@ -1689,6 +1722,7 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
   const [filterClass, setFilterClass] = useState('all')
   const [filterSubject, setFilterSubject] = useState('all')
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null)
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null)
   const storeMarks = useMockMarksStore((s) => s.marks)
   const allMarks = useMemo(() => storeMarks.filter((m) => m.examId === exam.id), [storeMarks, exam.id])
 
@@ -1824,6 +1858,12 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
     return rows.sort((a, b) => b.percentage - a.percentage).map((r, i) => ({ ...r, rank: i + 1 }))
   }, [allMarks, exam, filterClass, filterSubject])
 
+  // Filter student performance by selected grade (donut drill-down).
+  const filteredStudentPerformance = useMemo(() => {
+    if (!selectedGrade) return studentPerformance
+    return studentPerformance.filter((s) => s.grade === selectedGrade)
+  }, [studentPerformance, selectedGrade])
+
   return (
     <div className="space-y-4">
       {/* Summary */}
@@ -1873,6 +1913,34 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
         >
           <Download className="h-3 w-3" /> Export PDF
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 text-[10px] gap-1"
+          onClick={() => {
+            try {
+              const className = filterClass === 'all' ? 'All Classes' : (exam.classes.find((c: any) => c.classId === filterClass)?.className ?? 'All Classes')
+              generateClassResultPDF(exam, className, studentPerformance.map((s) => ({
+                studentId: s.studentId,
+                name: s.studentName,
+                rollNo: s.rollNo,
+                className: s.className,
+                subjects: [],
+                totalObtained: s.totalObtained,
+                totalMax: s.totalMax,
+                percentage: s.percentage,
+                grade: s.grade,
+                passed: s.passed,
+                rank: s.rank,
+              })) as any)
+              toast.success(`Report cards PDF generated for ${studentPerformance.length} students`)
+            } catch (e: any) {
+              toast.error('Export failed', { description: e.message })
+            }
+          }}
+        >
+          <FileText className="h-3 w-3" /> Report Cards
+        </Button>
       </div>
 
       {/* Grade policy view */}
@@ -1904,7 +1972,7 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <CollapsibleSection title="Grade Distribution Chart" subtitle={`${gradeData.totalStudents} students`} accent="emerald">
           <div className="p-4 flex items-center justify-center">
-            <GradeDonut distribution={gradeData.distribution} gradeScale={gradeScale} totalStudents={gradeData.totalStudents} />
+            <GradeDonut distribution={gradeData.distribution} gradeScale={gradeScale} totalStudents={gradeData.totalStudents} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} />
           </div>
         </CollapsibleSection>
         <CollapsibleSection title="Grade Distribution" subtitle="counts" accent="emerald">
@@ -1980,7 +2048,20 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
       </CollapsibleSection>
 
       {/* Student Performance / Toppers */}
-      <CollapsibleSection title="Student Performance" subtitle={`${studentPerformance.length} students · ranked`} accent="amber" defaultOpen={false}>
+      <CollapsibleSection
+        title="Student Performance"
+        subtitle={selectedGrade ? `${filteredStudentPerformance.length} of ${studentPerformance.length} · Grade ${selectedGrade}` : `${studentPerformance.length} students · ranked`}
+        accent="amber"
+        defaultOpen={false}
+        actions={selectedGrade ? (
+          <button
+            onClick={() => setSelectedGrade(null)}
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-primary hover:bg-primary/10 transition-colors"
+          >
+            <RotateCcw className="h-2.5 w-2.5" /> Clear grade filter
+          </button>
+        ) : undefined}
+      >
         <div className="overflow-x-auto max-h-[20rem]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
@@ -1996,7 +2077,7 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
               </tr>
             </thead>
             <tbody>
-              {studentPerformance.map((s) => (
+              {filteredStudentPerformance.map((s) => (
                 <tr
                   key={s.studentId}
                   onClick={() => setSelectedStudentId(s.studentId)}
@@ -2034,8 +2115,8 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
                   </td>
                 </tr>
               ))}
-              {studentPerformance.length === 0 && (
-                <tr><td colSpan={8} className="py-4 text-center text-muted-foreground">No student data available.</td></tr>
+              {filteredStudentPerformance.length === 0 && (
+                <tr><td colSpan={8} className="py-4 text-center text-muted-foreground">{selectedGrade ? `No students with grade ${selectedGrade}.` : 'No student data available.'}</td></tr>
               )}
             </tbody>
           </table>

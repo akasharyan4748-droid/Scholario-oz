@@ -2162,3 +2162,46 @@ Stage Summary:
 - All features browser-verified via agent-browser + VLM.
 - Canonical data flow maintained: student results derived from marks, admit cards from seating plan.
 - Next opportunities: (1) add exam archive with historical comparison, (2) add printable report cards from Grade tab, (3) add subject-wise drill-down from Grade Distribution donut, (4) add parent portal result view.
+
+---
+Task ID: cron-round-6-interactive-features
+Agent: main (Super Z)
+Task: Interactive donut drill-down, report cards PDF, Action Items empty state
+
+Work Log:
+- Reviewed worklog: previous rounds added student drill-down modal, admit cards, seating improvements.
+- QA testing via agent-browser + VLM identified 3 feature opportunities:
+  • FEATURE: Donut chart not interactive — clicking a grade segment should filter students.
+  • FEATURE: No printable report cards from Grade tab (class set PDF).
+  • FEATURE: Action Items widget returned null when empty — should show "All caught up!" state.
+- Added Interactive Donut Chart Drill-Down:
+  • GradeDonut now accepts `selectedGrade` and `onSelectGrade` props.
+  • Clicking a donut segment (SVG circle) → filters Student Performance table to that grade.
+  • Clicking a legend item → same filter effect (buttons, not divs).
+  • Selected segment gets strokeWidth +6 (visual emphasis).
+  • Non-selected segments dim to opacity 0.3.
+  • Center text changes: shows count for selected grade + "Grade X" label (vs total + "Students").
+  • "Clear filter" button appears in legend when a grade is selected.
+  • Student Performance subtitle updates: "2 of 16 · Grade B1".
+  • "Clear grade filter" button in CollapsibleSection actions.
+  • Empty state: "No students with grade X."
+  • Verified: clicked B1 legend → "2 of 16 · Grade B1" in Student Performance, Clear filter button appeared.
+- Added "Report Cards" button to Grade tab:
+  • New button next to "Export PDF" in filters row.
+  • Uses existing generateClassResultPDF() from result-pdf.ts.
+  • Generates class result PDF for all students in the current filter scope.
+  • Maps studentPerformance → StudentResult[] shape (with rank, grade, %, total).
+  • Class name label: "All Classes" or specific class.
+  • Verified: clicked → 26KB PDF downloaded (Mid-Term-Examination-All-Classes-result.pdf).
+- Added "All caught up!" empty state for Action Items widget:
+  • When items.length === 0, shows emerald-tinted card with CheckCircle2 icon.
+  • "All caught up!" title + "No pending actions for this examination. All tasks are complete."
+  • Positive reinforcement instead of hiding the widget entirely.
+- Lint passes clean on all modified files. Dev server compiles successfully.
+- No browser errors. All 8 tabs functional.
+
+Stage Summary:
+- 3 new features: Interactive donut drill-down (verified), Report Cards PDF (26KB download), Action Items empty state.
+- All features browser-verified via agent-browser.
+- Canonical data flow maintained: grade filter derived from marks, report cards from student performance.
+- Next opportunities: (1) add exam archive with historical comparison, (2) add parent portal result view, (3) add subject-wise drill-down from Subject Comparison table, (4) add exam settings page with grading config editor.
