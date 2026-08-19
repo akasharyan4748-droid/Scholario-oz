@@ -47,6 +47,9 @@ import {
   useAssignInvigilator,
   usePublishResults,
 } from '@/lib/exams/use-exams-extended'
+import { useMockMarksStore } from '@/lib/exams/mock-marks-data'
+import { useSubmitMarksMock, useVerifyMarksMock, useLockMarksMock, useDeclareResultsMock, usePublishResultsMock, useInitMockMarks } from '@/lib/exams/use-marks-mock'
+import { useStudentsStore } from '@/lib/store/students-store'
 import { useRoleGate } from '@/lib/exams/use-role-gate'
 import {
   AttendanceSection,
@@ -100,6 +103,8 @@ const TABS = TAB_GROUPS.flatMap((g) => g.items)
 export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
   const [tab, setTab] = useState<Tab>('overview')
   const { exam, loading, error, reload } = useExam(examId)
+  // Initialize mock marks when the exam loads.
+  useInitMockMarks(exam)
 
   const handleReload = () => {
     reload()
@@ -181,7 +186,7 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
               {tab === 'schedule' && <ScheduleSection exam={exam} onReload={handleReload} />}
               {tab === 'marks' && <MarksSection exam={exam} onReload={handleReload} />}
               {tab === 'import' && <CsvImportSection examId={exam.id} exam={exam} onReload={handleReload} />}
-              {tab === 'results' && <ResultsSection exam={exam} onReload={handleReload} />}
+              {tab === 'results' && <MarksSection exam={exam} onReload={handleReload} />}
               {tab === 'outcomes' && <OutcomesSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'seating' && <SeatingSection exam={exam} />}
               {tab === 'attendance' && <AttendanceSection examId={exam.id} exam={exam} onReload={handleReload} />}
@@ -458,167 +463,243 @@ function ScheduleSection({ exam }: { exam: ExamDTO }) {
   )
 }
 
-// ─── Marks Section (workflow controls) ────────────────────────────────
 
-function MarksSection({ exam, onReload }: { exam: ExamDTO; onReload: () => void }) {
-  const { submit } = useSubmitMarks()
-  const { verify } = useVerifyMarks()
-  const { lock } = useLockMarks()
-  const { declare } = useDeclareResults()
-  const { publish } = usePublishResults()
+// ─── Marks Section — marks control center ─────────────────────────────
+
+function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
+  const { submit } = useSubmitMarksMock()
+  const { verify } = useVerifyMarksMock()
+  const { lock } = useLockMarksMock()
+  const { declare } = useDeclareResultsMock()
+  const { publish } = usePublishResultsMock()
   const gate = useRoleGate()
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
   const [subjectId, setSubjectId] = useState('')
+  const marksState = useMockMarksStore()
+  const allMarks = useMemo(() => marksState.marks.filter((m) => m.examId === exam.id), [marksState.marks, exam.id])
+  const summary = useMemo(() => {
+    const total = allMarks.length
+    const entered = allMarks.filter((m) => m.marksObtained !== null).length
+    const submitted = allMarks.filter((m) => ['SUBMITTED', 'VERIFIED', 'LOCKED'].includes(m.workflowStatus)).length
+    const verified = allMarks.filter((m) => ['VERIFIED', 'LOCKED'].includes(m.workflowStatus)).length
+    const locked = allMarks.filter((m) => m.workflowStatus === 'LOCKED').length
+    const pct = total > 0 ? Math.round((entered / total) * 100) : 0
+    return { total, entered, submitted, verified, locked, pct }
+  }, [allMarks])
+  const allLocked = allMarks.length > 0 && allMarks.every((m) => m.workflowStatus === 'LOCKED')
+  const [showResults, setShowResults] = useState(false)
 
-  const subjectsForClass = exam.subjects.filter((s: any) => s.classId === classId)
+  // Subject-wise progress rows
+  const subjectRows = useMemo(() => {
+    const store = useMockMarksStore.getState()
+    const rows: Array<{ classId: string; className: string; subjectId: string; subjectName: string; teacher: string; total: number; entered: number; submitted: boolean; verified: boolean; locked: boolean }> = []
+    for (const c of exam.classes) {
+      for (const subj of exam.subjects.filter((s) => s.classId === c.classId)) {
+        const marks = store.getMarks(exam.id, c.classId, subj.subjectId)
+        const entered = marks.filter((m) => m.marksObtained !== null).length
+        const statuses = new Set(marks.map((m) => m.workflowStatus))
+        rows.push({
+          classId: c.classId, className: c.className,
+          subjectId: subj.subjectId, subjectName: subj.subjectName,
+          teacher: '—', total: marks.length, entered,
+          submitted: marks.length > 0 && [...statuses].every((s) => ['SUBMITTED', 'VERIFIED', 'LOCKED'].includes(s)),
+          verified: marks.length > 0 && [...statuses].every((s) => ['VERIFIED', 'LOCKED'].includes(s)),
+          locked: marks.length > 0 && [...statuses].every((s) => s === 'LOCKED'),
+        })
+      }
+    }
+    return rows
+  }, [exam, allMarks])
+
+  const isDeclared = exam.resultStatus === 'Result Declared'
+  const isReady = allLocked && !isDeclared
+  const canPublish = isDeclared
 
   const handleAction = async (action: 'submit' | 'verify' | 'lock' | 'declare' | 'publish') => {
     try {
-      const filter = { classId, ...(subjectId ? { subjectId } : {}) }
-      if (action === 'submit') {
-        const r = await submit(exam.id, filter)
-        toast.success(`Submitted ${r.submitted} marks`)
-      } else if (action === 'verify') {
-        const r = await verify(exam.id, filter)
-        toast.success(`Verified ${r.verified} marks`)
-      } else if (action === 'lock') {
-        const r = await lock(exam.id, filter)
-        toast.success(`Locked ${r.locked} marks`)
-      } else if (action === 'declare') {
-        await declare(exam.id)
-        toast.success('Results declared')
-      } else if (action === 'publish') {
-        const r = await publish(exam.id, { notifyStudents: true, notifyParents: true })
-        toast.success(`Results published`, { description: `${r.notificationsSent} notifications sent.` })
-      }
+      const filter = classId ? { classId, ...(subjectId ? { subjectId } : {}) } : {}
+      if (action === 'submit') { const r = await submit(exam.id, filter); toast.success(`Submitted ${r.submitted} marks`) }
+      else if (action === 'verify') { const r = await verify(exam.id, filter); toast.success(`Verified ${r.verified} marks`) }
+      else if (action === 'lock') { const r = await lock(exam.id, filter); toast.success(`Locked ${r.locked} marks`) }
+      else if (action === 'declare') { await declare(exam.id); toast.success('Results declared') }
+      else if (action === 'publish') { const r = await publish(exam.id); toast.success(`Published · ${r.notificationsSent} notifications sent`) }
       onReload()
-    } catch (e: any) {
-      toast.error(`Failed to ${action}`, { description: e.message })
-    }
+    } catch (e: any) { toast.error('Action failed', { description: e.message }) }
   }
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-xl border border-border bg-card p-3">
-        <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Workflow Controls</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <Select value={classId} onValueChange={(v) => { setClassId(v); setSubjectId('') }}>
-            <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Class" /></SelectTrigger>
-            <SelectContent>
-              {exam.classes.map((c: any) => <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={subjectId || 'all'} onValueChange={(v) => setSubjectId(v === 'all' ? '' : v)}>
-            <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="All Subjects" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Subjects in Class</SelectItem>
-              {subjectsForClass.map((s: any) => <SelectItem key={s.subjectId} value={s.subjectId}>{s.subjectName}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-wrap gap-2 mt-3">
-          {gate.canSubmitMarks && (
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('submit')} disabled={exam.resultStatus === 'Result Declared'}>
-              Submit
-            </Button>
-          )}
-          {gate.canVerifyMarks && (
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('verify')} disabled={exam.resultStatus === 'Result Declared'}>
-              Verify
-            </Button>
-          )}
-          {gate.canLockMarks && (
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('lock')} disabled={exam.resultStatus === 'Result Declared'}>
-              Lock
-            </Button>
-          )}
-          {gate.canDeclareResults && (
-            <Button size="sm" variant="default" className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleAction('declare')} disabled={exam.resultStatus !== 'Result Ready'}>
-              Declare
-            </Button>
-          )}
-          {gate.canPublishResults && (
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => handleAction('publish')} disabled={exam.resultStatus !== 'Result Declared'}>
-              Publish & Notify
-            </Button>
-          )}
+    <div className="space-y-4">
+      {/* Progress summary */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        <Stat label="Students" value={String(summary.total)} />
+        <Stat label="Entered" value={`${summary.entered}/${summary.total}`} pct={summary.pct} />
+        <Stat label="Submitted" value={String(summary.submitted)} />
+        <Stat label="Verified" value={String(summary.verified)} />
+        <Stat label="Locked" value={String(summary.locked)} />
+        <Stat label="Result" value={isDeclared ? 'Declared' : isReady ? 'Ready' : 'Pending'} />
+      </div>
+
+      {/* Workflow buttons */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleAction('submit')} disabled={isDeclared || summary.entered === 0}>Submit</Button>
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleAction('verify')} disabled={isDeclared || summary.submitted === 0}>Verify</Button>
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleAction('lock')} disabled={isDeclared || summary.verified === 0}>Lock</Button>
+        <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleAction('declare')} disabled={!isReady}>Declare Results</Button>
+        {isDeclared && <Button size="sm" className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleAction('publish')}>Publish & Notify</Button>}
+      </div>
+
+      {/* Subject-wise progress table */}
+      <div className="rounded-lg border border-border/60 overflow-hidden">
+        <div className="overflow-x-auto max-h-[20rem]">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-muted/30">
+              <tr>
+                <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Class</th>
+                <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Subject</th>
+                <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Teacher</th>
+                <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Entered</th>
+                <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subjectRows.map((r, i) => (
+                <tr key={i} className="border-t border-border/40 hover:bg-muted/20">
+                  <td className="px-2 py-1.5 text-muted-foreground">{r.className}</td>
+                  <td className="px-2 py-1.5 font-medium">{r.subjectName}</td>
+                  <td className="px-2 py-1.5 text-muted-foreground">{r.teacher}</td>
+                  <td className="px-2 py-1.5 text-center tabular-nums">{r.entered}/{r.total}</td>
+                  <td className="px-2 py-1.5 text-center">
+                    {r.locked ? <span className="text-[9px] font-medium text-emerald-600">🔒 Locked</span>
+                      : r.verified ? <span className="text-[9px] font-medium text-blue-600">✓ Verified</span>
+                      : r.submitted ? <span className="text-[9px] font-medium text-amber-600">Submitted</span>
+                      : r.entered > 0 ? <span className="text-[9px] font-medium text-amber-500">In Progress</span>
+                      : <span className="text-[9px] text-muted-foreground/40">Not Started</span>}
+                  </td>
+                </tr>
+              ))}
+              {subjectRows.length === 0 && (
+                <tr><td colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No subjects configured for this examination.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-3">
-        <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">Progress Summary</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Stat label="Total Mark Rows" value={exam.markSummary.total} />
-          <Stat label="Entered" value={exam.markSummary.entered} />
-          <Stat label="Submitted" value={exam.markSummary.submitted} />
-          <Stat label="Verified" value={exam.markSummary.verified} />
-        </div>
+      {/* Result readiness checklist */}
+      <div className="rounded-lg border border-border/60 p-3 space-y-1.5">
+        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Result Readiness</p>
+        <ReadinessItem done={summary.total > 0} label="Students identified" />
+        <ReadinessItem done={subjectRows.length > 0} label="Subjects configured" />
+        <ReadinessItem done={summary.entered === summary.total && summary.total > 0} label="All marks entered" />
+        <ReadinessItem done={summary.submitted === summary.total && summary.total > 0} label="All marks submitted" />
+        <ReadinessItem done={summary.verified === summary.total && summary.total > 0} label="All marks verified" />
+        <ReadinessItem done={summary.locked === summary.total && summary.total > 0} label="All marks locked" />
+        <ReadinessItem done={isDeclared} label="Results declared" />
       </div>
-      <p className="text-[10px] text-muted-foreground px-1">
-        Tip: Use the Marks tab in the main Examinations navigation for spreadsheet entry.
-      </p>
+
+      {/* Results view toggle */}
+      {isDeclared && (
+        <div>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowResults(!showResults)}>
+            {showResults ? 'Hide Results' : 'View Results'}
+          </Button>
+        </div>
+      )}
+      {showResults && isDeclared && <ResultsInline exam={exam} />}
     </div>
   )
 }
 
-function Stat({ label, value }: { label: string; value: number | string }) {
+function Stat({ label, value, pct }: { label: string; value: string; pct?: number }) {
   return (
-    <div className="rounded-lg bg-muted/30 p-2">
-      <p className="text-[9px] text-muted-foreground">{label}</p>
-      <p className="font-display text-lg font-bold">{value}</p>
+    <div className="rounded-md bg-muted/30 px-2.5 py-1.5">
+      <p className="text-[8px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-[11px] font-semibold text-foreground truncate">{value}</p>
+      {pct !== undefined && (
+        <div className="h-0.5 rounded-full bg-muted mt-1 overflow-hidden">
+          <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+        </div>
+      )}
     </div>
   )
 }
 
-// ─── Results Section ─────────────────────────────────────────────────
+function ReadinessItem({ done, label }: { done: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-[10px]">
+      <span className={cn('w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px]', done ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground')}>
+        {done ? '✓' : ''}
+      </span>
+      <span className={done ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
+    </div>
+  )
+}
 
-function ResultsSection({ exam, onReload }: { exam: ExamDTO; onReload: () => void }) {
-  void onReload
+function ResultsInline({ exam }: { exam: ExamDTO }) {
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
+  const allExamMarks = useMockMarksStore()
+  const marks = useMemo(() => allExamMarks.marks.filter((m) => m.examId === exam.id && m.classId === classId), [allExamMarks.marks, exam.id, classId])
+  const students = useStudentsStore((s) => s.students.filter((st) => st.classId === classId && st.status === 'Active'))
+  const subjects = exam.subjects.filter((s) => s.classId === classId)
+
+  // Compute per-student results
+  const results = useMemo(() => {
+    return students.map((st) => {
+      let totalObtained = 0
+      let totalMax = 0
+      for (const subj of subjects) {
+        const mark = marks.find((m) => m.studentId === st.id && m.subjectId === subj.subjectId)
+        if (mark?.marksObtained != null) totalObtained += mark.marksObtained
+        totalMax += subj.maxMarks
+      }
+      const pct = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100 * 100) / 100 : 0
+      const grade = pct >= 90 ? 'A1' : pct >= 80 ? 'A2' : pct >= 70 ? 'B1' : pct >= 60 ? 'B2' : pct >= 50 ? 'C1' : pct >= 33 ? 'C2' : 'E'
+      const passed = pct >= 33
+      return { studentId: st.id, name: st.name, rollNo: st.rollNo, totalObtained, totalMax, pct, grade, passed }
+    }).sort((a, b) => b.pct - a.pct)
+  }, [marks, students, subjects])
+
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-border bg-card p-3">
-        <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-2">View Results by Class</p>
+      <div className="flex items-center gap-2">
         <Select value={classId} onValueChange={setClassId}>
-          <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select class" /></SelectTrigger>
+          <SelectTrigger size="sm" className="text-xs h-7 w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
             {exam.classes.map((c: any) => <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
-      {classId && <ClassResultsInline examId={exam.id} classId={classId} />}
-    </div>
-  )
-}
-
-function ClassResultsInline({ examId, classId }: { examId: string; classId: string }) {
-  const { data, loading, error } = useClassResults(examId, classId)
-  if (loading) return <InlineLoading label="Computing results…" />
-  if (error) return <div className="text-xs text-rose-700">{error}</div>
-  if (!data || data.analytics.totalStudents === 0) return <div className="rounded-xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">No results yet.</div>
-  const a = data.analytics
-  return (
-    <div className="rounded-xl border border-border bg-card p-3 space-y-2">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <Stat label="Total Students" value={a.totalStudents} />
-        <Stat label="Passed" value={a.passed} />
-        <Stat label="Failed" value={a.failed} />
-        <Stat label="Pass %" value={`${a.passRate}%`} />
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <Stat label="Class Average" value={`${a.averagePercentage}%`} />
-        <Stat label="Highest" value={`${a.highestPercentage}%`} />
-        <Stat label="Lowest" value={`${a.lowestPercentage}%`} />
-      </div>
-      <div>
-        <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Class Toppers</p>
-        <div className="space-y-1">
-          {a.toppers.map((t: any, i: number) => (
-            <div key={t.studentId} className="flex items-center justify-between text-xs p-1.5 rounded border border-border/40">
-              <span className="font-medium">#{t.rank} · {t.name} ({t.rollNo ?? '—'})</span>
-              <span className="font-bold tabular-nums">{t.percentage}% · {t.grade}</span>
-            </div>
-          ))}
+      <div className="rounded-lg border border-border/60 overflow-hidden">
+        <div className="overflow-x-auto max-h-[24rem]">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-muted/30">
+              <tr>
+                <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Roll</th>
+                <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Student</th>
+                <th className="text-right px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Total</th>
+                <th className="text-right px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">%</th>
+                <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Grade</th>
+                <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((r, i) => (
+                <tr key={r.studentId} className="border-t border-border/40 hover:bg-muted/20">
+                  <td className="px-2 py-1.5 text-muted-foreground tabular-nums">{r.rollNo}</td>
+                  <td className="px-2 py-1.5 font-medium">{r.name} {i < 3 && <span className="text-[8px] text-amber-600 ml-1">#{i + 1}</span>}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{r.totalObtained}/{r.totalMax}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums font-semibold">{r.pct}%</td>
+                  <td className="px-2 py-1.5 text-center font-semibold">{r.grade}</td>
+                  <td className="px-2 py-1.5 text-center">
+                    <span className={cn('text-[9px] font-medium', r.passed ? 'text-emerald-600' : 'text-rose-600')}>
+                      {r.passed ? 'PASS' : 'FAIL'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {results.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">No results available.</td></tr>}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
