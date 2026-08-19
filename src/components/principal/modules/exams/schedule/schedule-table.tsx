@@ -213,11 +213,7 @@ function ScheduleCellView({
         <GripVertical className="h-3 w-3 text-muted-foreground/40 shrink-0 mt-0.5 group-hover/cell:text-muted-foreground/70" />
         <div className="flex-1 min-w-0">
           <p className="text-[11px] font-medium text-foreground truncate">{cell.subjectName}</p>
-          <div className="flex items-center gap-1 mt-0.5">
-            <span className="text-[8px] font-mono text-muted-foreground/70">{cell.subjectCode}</span>
-            <span className="text-[8px] text-muted-foreground/50">·</span>
-            <span className="text-[8px] text-muted-foreground/70 tabular-nums">{time}</span>
-          </div>
+          <span className="text-[8px] font-mono text-muted-foreground/70">{cell.subjectCode}</span>
         </div>
       </div>
       <span className="sr-only">{slotLabel}</span>
