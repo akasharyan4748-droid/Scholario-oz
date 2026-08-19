@@ -282,6 +282,26 @@ function GradingSection({ readOnly }: { readOnly: boolean }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <SectionHeader title="Grading Scales" desc="Grade boundaries used in result calculation. Minimum percentage is inclusive." />
+
+      {/* Grade scale preview chips */}
+      {scales.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {scales.map((s) => (
+            <span
+              key={s.id}
+              className={cn(
+                'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border',
+                gradeColorClass(s.color),
+              )}
+              style={{ opacity: 0.9 }}
+            >
+              <span className="bg-card/80 px-1 rounded">{s.grade}</span>
+              <span className="text-[8px] font-normal opacity-80">{s.minPct}–{s.maxPct}%</span>
+            </span>
+          ))}
+        </div>
+      )}
+
       {readOnly && <ReadOnlyNotice />}
       {!readOnly && (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
@@ -303,9 +323,21 @@ function GradingSection({ readOnly }: { readOnly: boolean }) {
             </TableRow>
           </TableHeader>
           <TableBody>
+            {scales.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={!readOnly ? 5 : 4} className="py-8 text-center text-xs text-muted-foreground">
+                  No grading scales configured. Click "Add" to create grade boundaries.
+                </TableCell>
+              </TableRow>
+            )}
             {scales.map((s) => (
-              <TableRow key={s.id}>
-                <TableCell className="text-xs font-bold">{s.grade}</TableCell>
+              <TableRow key={s.id} className="even:bg-muted/10">
+                <TableCell className="text-xs font-bold">
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn('inline-block h-2.5 w-2.5 rounded-full', gradeColorClass(s.color))} />
+                    {s.grade}
+                  </div>
+                </TableCell>
                 <TableCell className="text-xs text-center tabular-nums">
                   <input
                     type="number"
@@ -325,7 +357,24 @@ function GradingSection({ readOnly }: { readOnly: boolean }) {
                   />
                 </TableCell>
                 <TableCell className="text-center">
-                  <span className={cn('inline-block h-3 w-3 rounded-full', gradeColorClass(s.color))} />
+                  {readOnly ? (
+                    <span className={cn('inline-block h-3 w-3 rounded-full', gradeColorClass(s.color))} />
+                  ) : (
+                    <div className="flex items-center justify-center gap-0.5">
+                      {['emerald', 'sky', 'amber', 'orange', 'rose', 'violet'].map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => update(s.id, { color: c })}
+                          className={cn(
+                            'h-3 w-3 rounded-full transition-transform hover:scale-125',
+                            gradeColorClass(c),
+                            s.color === c ? 'ring-2 ring-offset-1 ring-foreground/40' : '',
+                          )}
+                          title={c}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </TableCell>
                 {!readOnly && (
                   <TableCell>

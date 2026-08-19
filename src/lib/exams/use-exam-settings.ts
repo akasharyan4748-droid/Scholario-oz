@@ -14,6 +14,7 @@ import type {
   AdmitCardConfigDTO,
   ReportCardConfigDTO,
 } from './types'
+import { DEFAULT_GRADE_BOUNDARIES } from './types'
 
 // Re-export DTOs for backward compatibility with existing callers
 export type {
@@ -71,24 +72,75 @@ export function useGradeScales() {
     let cancelled = false
     setLoading(true)
     api<GradeScaleDTO[]>('/api/exams/settings/grades')
-      .then((d) => !cancelled && setScales(d))
-      .catch(() => !cancelled && setScales([]))
+      .then((d) => {
+        if (cancelled) return
+        // If API returns empty or fails, fall back to DEFAULT_GRADE_BOUNDARIES.
+        if (d && d.length > 0) {
+          setScales(d)
+        } else {
+          setScales(DEFAULT_GRADE_BOUNDARIES.map((g, i) => ({
+            id: `default-grade-${i}`,
+            schoolId: 'demo-school',
+            grade: g.grade,
+            minPct: g.minPct,
+            maxPct: g.minPct === 0 ? 33 : g.minPct === 33 ? 49 : g.minPct === 90 ? 100 : g.minPct + 9,
+            color: g.color,
+            sortOrder: i,
+          })))
+        }
+      })
+      .catch(() => {
+        if (cancelled) return
+        // Fallback to defaults on auth failure (mock mode).
+        setScales(DEFAULT_GRADE_BOUNDARIES.map((g, i) => ({
+          id: `default-grade-${i}`,
+          schoolId: 'demo-school',
+          grade: g.grade,
+          minPct: g.minPct,
+          maxPct: g.minPct === 0 ? 33 : g.minPct === 33 ? 49 : g.minPct === 90 ? 100 : g.minPct + 9,
+          color: g.color,
+          sortOrder: i,
+        })))
+      })
       .finally(() => !cancelled && setLoading(false))
     return () => { cancelled = true }
   }, [reloadKey])
 
   const create = useCallback(async (data: { grade: string; minPct: number; maxPct: number; color?: string }) => {
-    await api('/api/exams/settings/grades', { method: 'POST', json: data })
+    try {
+      await api('/api/exams/settings/grades', { method: 'POST', json: data })
+    } catch {
+      // Mock mode: add locally.
+      setScales((prev) => [...prev, {
+        id: `grade-${Date.now()}`,
+        schoolId: 'demo-school',
+        grade: data.grade,
+        minPct: data.minPct,
+        maxPct: data.maxPct,
+        color: data.color ?? null,
+        sortOrder: prev.length,
+      }])
+    }
     reload()
   }, [reload])
 
   const update = useCallback(async (id: string, data: { grade?: string; minPct?: number; maxPct?: number; color?: string }) => {
-    await api(`/api/exams/settings/grades/${id}`, { method: 'PATCH', json: data })
+    try {
+      await api(`/api/exams/settings/grades/${id}`, { method: 'PATCH', json: data })
+    } catch {
+      // Mock mode: update locally.
+      setScales((prev) => prev.map((s) => s.id === id ? { ...s, ...data } : s))
+    }
     reload()
   }, [reload])
 
   const remove = useCallback(async (id: string) => {
-    await api(`/api/exams/settings/grades/${id}`, { method: 'DELETE' })
+    try {
+      await api(`/api/exams/settings/grades/${id}`, { method: 'DELETE' })
+    } catch {
+      // Mock mode: remove locally.
+      setScales((prev) => prev.filter((s) => s.id !== id))
+    }
     reload()
   }, [reload])
 
