@@ -7,7 +7,7 @@
  */
 
 import { useState, useMemo, useEffect } from 'react'
-import { Plus, Trash2, MapPin, RefreshCw, Sparkles, Send, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, MapPin, RefreshCw, Sparkles, Send, AlertTriangle, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -222,6 +222,7 @@ export function GraceSection({ examId, exam }: SectionProps) {
   const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null)
   const [graceMarks, setGraceMarks] = useState(0)
   const [reason, setReason] = useState('')
+  const [studentSearch, setStudentSearch] = useState('')
   const { apply, loading } = useApplyGraceMock()
   const gate = useRoleGate()
 
@@ -230,6 +231,16 @@ export function GraceSection({ examId, exam }: SectionProps) {
     const m = marks.find((mk) => mk.studentId === s.id)
     return { student: s, mark: m }
   }).filter((r) => r.mark)
+
+  // Filter mark rows by student search.
+  const filteredMarkRows = useMemo(() => {
+    const q = studentSearch.trim().toLowerCase()
+    if (!q) return markRows
+    return markRows.filter((r) =>
+      r.student.name.toLowerCase().includes(q) ||
+      (r.student.rollNo ?? '').toLowerCase().includes(q),
+    )
+  }, [markRows, studentSearch])
 
   const handleApply = async () => {
     if (!selectedMarkId) { toast.error('Select a student'); return }
@@ -248,12 +259,15 @@ export function GraceSection({ examId, exam }: SectionProps) {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 flex items-start gap-2">
-        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-        <div>
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 flex items-start gap-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/15">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+        </div>
+        <div className="flex-1">
           <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Grace / Moderation</p>
-          <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80 mt-0.5">
-            Original marks are preserved. All grace applications are recorded in the audit log with the reason and authorizing user. After results are declared, only Principal can apply grace.
+          <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80 mt-1 leading-relaxed">
+            Original marks are preserved in the audit log. All grace applications require a reason and are
+            recorded with the authorizing user. After results are declared, only the Principal can apply grace.
           </p>
         </div>
       </div>
@@ -275,11 +289,38 @@ export function GraceSection({ examId, exam }: SectionProps) {
         </div>
 
         {!subjectId ? (
-          <p className="text-xs text-muted-foreground py-4 text-center">Select a subject to view marks.</p>
+          <div className="py-10 text-center">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted/40 mb-2">
+              <Sparkles className="h-5 w-5 text-muted-foreground/50" />
+            </div>
+            <p className="text-xs font-medium text-muted-foreground">Select a class and subject to view marks</p>
+            <p className="text-[10px] text-muted-foreground/60 mt-1">Grace marks can be applied to individual student records</p>
+          </div>
         ) : markRows.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-4 text-center">No marks entered for this subject yet.</p>
+          <div className="py-10 text-center">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted/40 mb-2">
+              <AlertTriangle className="h-5 w-5 text-muted-foreground/50" />
+            </div>
+            <p className="text-xs font-medium text-muted-foreground">No marks entered for this subject yet</p>
+            <p className="text-[10px] text-muted-foreground/60 mt-1">Marks must be entered before grace can be applied</p>
+          </div>
         ) : (
-          <Table>
+          <>
+            {/* Student search */}
+            <div className="flex items-center gap-2 mb-2">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                  placeholder="Search student by name or roll no…"
+                  className="h-7 text-[11px] pl-6 pr-2 rounded-md bg-transparent border border-border/40 focus:border-primary/40 focus:outline-none w-full"
+                />
+              </div>
+              <span className="text-[9px] text-muted-foreground ml-auto">{filteredMarkRows.length} of {markRows.length} students</span>
+            </div>
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground">Select</TableHead>
@@ -290,21 +331,35 @@ export function GraceSection({ examId, exam }: SectionProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {markRows.map(({ student, mark }) => (
-                <TableRow key={student.id} className={cn(selectedMarkId === mark?.id && 'bg-amber-500/5')}>
+              {filteredMarkRows.map(({ student, mark }) => (
+                <TableRow key={student.id} className={cn('hover:bg-muted/30', selectedMarkId === mark?.id && 'bg-amber-500/5')}>
                   <TableCell>
                     {gate.canApplyGrace && (
-                      <input type="radio" checked={selectedMarkId === mark?.id} onChange={() => { setSelectedMarkId(mark?.id ?? null); setGraceMarks(0); setReason('') }} />
+                      <input type="radio" checked={selectedMarkId === mark?.id} onChange={() => { setSelectedMarkId(mark?.id ?? null); setGraceMarks(0); setReason('') }} className="cursor-pointer" />
                     )}
                   </TableCell>
                   <TableCell className="text-xs font-mono">{student.rollNo ?? '—'}</TableCell>
-                  <TableCell className="text-xs">{student.name}</TableCell>
+                  <TableCell className="text-xs font-medium">{student.name}</TableCell>
                   <TableCell className="text-xs tabular-nums">{mark?.status === 'PRESENT' ? (mark?.marksObtained ?? '—') : mark?.status}</TableCell>
-                  <TableCell className="text-xs tabular-nums text-amber-600">+{mark?.graceMarks ?? 0}</TableCell>
+                  <TableCell className="text-xs tabular-nums">
+                    {(mark?.graceMarks ?? 0) !== 0 ? (
+                      <span className="text-amber-600 font-medium">+{mark?.graceMarks}</span>
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
+              {filteredMarkRows.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
+                    No students match "{studentSearch}"
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
+          </>
         )}
 
         {selectedMarkId && gate.canApplyGrace && (

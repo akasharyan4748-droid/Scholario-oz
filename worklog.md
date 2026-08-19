@@ -2064,3 +2064,56 @@ Stage Summary:
 - Canonical data flow: outcomes derived from marks store (not independently mocked).
 - All features browser-verified via agent-browser + VLM.
 - Next opportunities: (1) add bulk actions to Marks (Select All + Verify All), (2) add exam-comparison view across multiple exams, (3) add student-wise subject breakdown drill-down, (4) add printable admit cards from Seating tab.
+
+---
+Task ID: cron-round-4-actionable-features
+Agent: main (Super Z)
+Task: Action Items widget, bulk actions, Grace tab improvements, exam comparison + bug fix
+
+Work Log:
+- Reviewed worklog: previous rounds added Outcomes auto-compute, Marks search/filter, keyboard shortcuts, Student Performance ranking.
+- QA testing via agent-browser + VLM identified 1 bug + 4 feature opportunities:
+  • BUG: MarksSection destructured `{ exam }` but not `onReload` → ReferenceError when bulk actions called onReload.
+  • FEATURE: Overview tab lacked actionable "next steps" widget (VLM: "read-only dashboard").
+  • FEATURE: No bulk actions for Marks (Verify All / Lock All).
+  • FEATURE: Grace tab had basic empty state, no student search.
+  • FEATURE: No cross-exam comparison view.
+- Fixed critical bug: MarksSection now destructures `{ exam, onReload }` — bulk actions work without ReferenceError.
+- Added Action Items widget to Overview tab:
+  • New ActionItemsWidget component that computes smart next-steps based on exam state.
+  • Detects: schedule not published, marks entry not started, pending submissions, pending verification, pending locks, ready to declare, ready to publish, completed → suggest analytics.
+  • Priority levels: High (rose), Medium (amber), Low (sky) with color-coded cards.
+  • Each item has icon, label, description, priority badge, and action button that navigates to the relevant tab.
+  • Count badge in header showing total action items.
+  • VLM rated 8.5/10 — "well-designed widget", "excellent context-specific CTAs".
+- Added bulk actions to Marks Subject Progress:
+  • "Verify All" button with count badge (sky-colored, shows submitted paper count).
+  • "Lock All" button with count badge (emerald-colored, shows verified paper count).
+  • "Applies to N filtered paper(s)" label — respects search/filter.
+  • Disabled state when no papers qualify.
+  • Bulk verify: iterates filtered SUBMITTED papers, calls verify() on each, toasts total.
+  • Bulk lock: iterates filtered VERIFIED papers, calls lock() on each, toasts total.
+  • VLM rated 9/10 — "clean, informative, functional", "excellent for user confidence".
+- Improved Grace tab:
+  • Warning banner: icon now in a rounded badge container, better spacing, clearer text.
+  • Empty state: icon in circular container, two-line description ("Select a class and subject" / "Grace marks can be applied to individual student records").
+  • Student search: Search icon + input filtering by name or roll no, "X of Y students" count.
+  • Grace column: shows "—" for zero grace (muted), amber "+N" for applied grace.
+  • Zebra striping on table rows.
+- Added Exam Comparison widget to Examinations Overview:
+  • New ExamComparison component (tabs/exam-comparison.tsx).
+  • Side-by-side comparison table: Exam | Classes | Students | Subjects | Marks Entry (progress bar) | Locked (progress bar) | Status.
+  • Highlights: "Best Progress" (emerald) and "Needs Attention" (amber) cards.
+  • Clickable rows → opens exam workspace.
+  • CollapsibleSection (default collapsed, violet accent).
+  • VLM rated 8/10 — "table structure clear, progress bars highly visible".
+  • Verified: 3 exams compared — Mid-Term (100% locked, Declared), Final (0%, Scheduled), Unit Test 2 (0%, Scheduled).
+- Lint passes clean on all modified files. Dev server compiles successfully.
+- No browser errors after bug fix. All 8 tabs functional.
+
+Stage Summary:
+- 1 critical bug fixed: MarksSection onReload destructuring (bulk actions now work).
+- 4 new features: Action Items widget (8.5/10), bulk actions (9/10), Grace tab improvements, exam comparison (8/10).
+- All features browser-verified via agent-browser + VLM.
+- Canonical data flow maintained: all metrics derived from real exam/marks data.
+- Next opportunities: (1) add student-wise subject breakdown drill-down from Grade tab, (2) add printable admit cards from Seating tab, (3) add teacher dashboard view, (4) add exam archive with historical comparison.

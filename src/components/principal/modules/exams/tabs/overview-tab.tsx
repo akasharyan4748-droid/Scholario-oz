@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils'
 import type { ExamDTO } from '@/lib/exams/types'
 import { ExaminationContext } from './examination-context'
 import { SessionTopPerformers } from './session-top-performers'
+import { ExamComparison } from './exam-comparison'
 
 interface Props {
   exams: ExamDTO[]
@@ -84,6 +85,9 @@ export function ExamsOverviewTab({ exams, classes, loading, error, session, onSe
 
       {/* Context-aware Examination Status (LIVE / UPCOMING / PERFORMANCE) */}
       <ExaminationContext exams={exams} onSelectExam={onSelectExam} onNavigate={onNavigate} />
+
+      {/* Cross-exam comparison analytics */}
+      <ExamComparison exams={exams} onSelectExam={onSelectExam} />
 
       {/* Session Top Performers — replaces old PerformanceSection empty state */}
       <SessionTopPerformers session={session} />
