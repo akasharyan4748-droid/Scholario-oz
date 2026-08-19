@@ -115,17 +115,17 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Top header — full width */}
-      <div className="border-b border-border bg-card/80 backdrop-blur sticky top-0 z-20">
-        <div className="px-4 sm:px-6 py-3">
+      <div className="border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
+        <div className="px-4 sm:px-6 py-3.5">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
-              <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1" onClick={onBack}>
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1 shrink-0" onClick={onBack}>
                 <ArrowLeft className="h-3.5 w-3.5" /> Examinations
               </Button>
-              <div className="h-5 w-px bg-border" />
+              <div className="h-6 w-px bg-border shrink-0" />
               <div className="min-w-0">
-                <h1 className="text-base font-semibold truncate">{exam?.name ?? 'Loading…'}</h1>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
+                <h1 className="text-lg font-bold tracking-tight truncate">{exam?.name ?? 'Loading…'}</h1>
+                <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">
                   {exam ? `${exam.type} · ${exam.session} · ${exam.classes.length} classes · ${exam.subjects.length} subjects` : ''}
                 </p>
               </div>
@@ -203,23 +203,23 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
 function StatusPill({ status }: { status: string }) {
   const cls: Record<string, string> = {
     Draft: 'bg-muted text-muted-foreground border-border',
-    Scheduled: 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20',
-    Ongoing: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
-    Completed: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
-    Cancelled: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20',
+    Scheduled: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30',
+    Ongoing: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
+    Completed: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
+    Cancelled: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30',
   }
-  return <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold', cls[status] ?? 'bg-muted text-muted-foreground border-border')}>{status}</span>
+  return <span className={cn('inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold shadow-sm', cls[status] ?? 'bg-muted text-muted-foreground border-border')}>{status}</span>
 }
 
 function ResultStatusPill({ status }: { status: string }) {
   const cls: Record<string, string> = {
     'Not Started': 'bg-muted/60 text-muted-foreground border-border',
-    'Marks Entry': 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
-    'Under Verification': 'bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/20',
-    'Result Ready': 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-500/20',
-    'Result Declared': 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
+    'Marks Entry': 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
+    'Under Verification': 'bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30',
+    'Result Ready': 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30',
+    'Result Declared': 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
   }
-  return <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold', cls[status] ?? 'bg-muted text-muted-foreground border-border')}>{status}</span>
+  return <span className={cn('inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold shadow-sm', cls[status] ?? 'bg-muted text-muted-foreground border-border')}>{status}</span>
 }
 
 // ─── Overview Section with Exam Readiness ─────────────────────────────
@@ -596,34 +596,68 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {subjectRows.map((r, i) => (
-                <tr key={i} className="border-t border-border/40 hover:bg-muted/20">
-                  <td className="px-2 py-1.5 text-muted-foreground">{r.className}</td>
-                  <td className="px-2 py-1.5 font-medium">{r.subjectName}</td>
-                  <td className="px-2 py-1.5 text-muted-foreground">{r.teacher}</td>
-                  <td className="px-2 py-1.5 text-center tabular-nums">{r.entered}/{r.total}</td>
-                  <td className="px-2 py-1.5 text-center">
-                    {r.status === 'LOCKED' ? <span className="text-[9px] font-medium text-emerald-600 flex items-center justify-center gap-0.5"><Lock className="h-2.5 w-2.5" /> Locked</span>
-                      : r.status === 'VERIFIED' ? <span className="text-[9px] font-medium text-blue-600">✓ Verified</span>
-                      : r.status === 'SUBMITTED' ? <span className="text-[9px] font-medium text-amber-600">Submitted</span>
-                      : r.status === 'IN_PROGRESS' ? <span className="text-[9px] font-medium text-amber-500">In Progress</span>
-                      : <span className="text-[9px] text-muted-foreground/40">Not Started</span>}
+              {subjectRows.map((r, i) => {
+                const enteredPct = r.total > 0 ? Math.round((r.entered / r.total) * 100) : 0
+                return (
+                <tr key={i} className="border-t border-border/40 hover:bg-muted/40 even:bg-muted/15 transition-colors">
+                  <td className="px-2 py-2 text-muted-foreground text-[11px]">{r.className}</td>
+                  <td className="px-2 py-2 font-medium text-[11px]">{r.subjectName}</td>
+                  <td className="px-2 py-2 text-muted-foreground text-[11px]">{r.teacher}</td>
+                  <td className="px-2 py-2">
+                    <div className="flex items-center gap-1.5 justify-center">
+                      <span className="text-[11px] tabular-nums font-medium">{r.entered}/{r.total}</span>
+                      <div className="w-10 h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn('h-full rounded-full transition-all', enteredPct === 100 ? 'bg-emerald-500' : enteredPct > 0 ? 'bg-amber-500' : 'bg-muted-foreground/30')}
+                          style={{ width: `${enteredPct}%` }}
+                        />
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <div className="flex items-center justify-center gap-1.5">
+                  <td className="px-2 py-2 text-center">
+                    {r.status === 'LOCKED' ? (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
+                        <Lock className="h-2.5 w-2.5" /> Locked
+                      </span>
+                    ) : r.status === 'VERIFIED' ? (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/20">
+                        <CheckCircle2 className="h-2.5 w-2.5" /> Verified
+                      </span>
+                    ) : r.status === 'SUBMITTED' ? (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+                        <Send className="h-2.5 w-2.5" /> Submitted
+                      </span>
+                    ) : r.status === 'IN_PROGRESS' ? (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-500/5 text-amber-600 border border-amber-500/15">
+                        <Clock className="h-2.5 w-2.5" /> In Progress
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-muted/40 text-muted-foreground border border-border/40">
+                        Not Started
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    <div className="flex items-center justify-center gap-1">
                       {r.status === 'IN_PROGRESS' && (
-                        <button onClick={() => handleAction('submit', r.classId, r.subjectId)} className="text-[9px] text-primary hover:underline">Submit</button>
+                        <button onClick={() => handleAction('submit', r.classId, r.subjectId)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-primary hover:bg-primary/10 transition-colors">
+                          <Send className="h-2.5 w-2.5" /> Submit
+                        </button>
                       )}
                       {r.status === 'SUBMITTED' && (
-                        <button onClick={() => handleAction('verify', r.classId, r.subjectId)} className="text-[9px] text-primary hover:underline">Verify</button>
+                        <button onClick={() => handleAction('verify', r.classId, r.subjectId)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-sky-600 hover:bg-sky-500/10 transition-colors">
+                          <CheckCircle2 className="h-2.5 w-2.5" /> Verify
+                        </button>
                       )}
                       {r.status === 'VERIFIED' && (
-                        <button onClick={() => handleAction('lock', r.classId, r.subjectId)} className="text-[9px] text-primary hover:underline">Lock</button>
+                        <button onClick={() => handleAction('lock', r.classId, r.subjectId)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-emerald-600 hover:bg-emerald-500/10 transition-colors">
+                          <Lock className="h-2.5 w-2.5" /> Lock
+                        </button>
                       )}
                       {r.status === 'LOCKED' && (
                         <button
                           onClick={() => handleAction('unlock', r.classId, r.subjectId)}
-                          className="text-[9px] text-amber-600 hover:underline flex items-center gap-0.5"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-amber-600 hover:bg-amber-500/10 transition-colors"
                           title="Unlock for editing (Principal only)"
                         >
                           <Unlock className="h-2.5 w-2.5" /> Unlock
@@ -631,15 +665,16 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
                       )}
                       <button
                         onClick={() => setSelectedPaper({ classId: r.classId, subjectId: r.subjectId })}
-                        className="text-[9px] text-muted-foreground hover:text-foreground hover:underline flex items-center gap-0.5"
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                         title="View timeline"
                       >
-                        <Clock className="h-2.5 w-2.5" /> Timeline
+                        <Clock className="h-2.5 w-2.5" />
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
               {subjectRows.length === 0 && (
                 <tr><td colSpan={6} className="py-6 text-center text-xs text-muted-foreground">No subjects configured.</td></tr>
               )}
@@ -1109,33 +1144,59 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
       {/* Grade policy view */}
       <CollapsibleSection title="Grade Scale (Active Policy)" subtitle={`${gradeScale.length} grades`} accent="violet" defaultOpen={true}>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 p-2">
-          {gradeScale.map((g) => (
-            <div key={g.grade} className="rounded-md border border-border/60 bg-muted/20 p-2 text-center">
-              <p className="text-base font-bold text-foreground">{g.grade}</p>
-              <p className="text-[9px] text-muted-foreground">{g.minPct}{g.minPct === 0 ? '–33' : g.minPct === 33 ? '+ to 49' : `+`}</p>
-            </div>
-          ))}
+          {gradeScale.map((g) => {
+            const colorMap: Record<string, string> = {
+              A1: 'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300',
+              A2: 'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300',
+              B1: 'border-sky-500/30 bg-sky-500/5 text-sky-700 dark:text-sky-300',
+              B2: 'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300',
+              C1: 'border-orange-500/30 bg-orange-500/5 text-orange-700 dark:text-orange-300',
+              C2: 'border-rose-500/30 bg-rose-500/5 text-rose-700 dark:text-rose-300',
+              E: 'border-rose-600/40 bg-rose-600/10 text-rose-800 dark:text-rose-400',
+            }
+            return (
+              <div key={g.grade} className={cn('rounded-lg border p-2.5 text-center transition-colors', colorMap[g.grade] ?? 'border-border/60 bg-muted/20')}>
+                <p className="text-lg font-bold tabular-nums">{g.grade}</p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">
+                  {g.minPct === 0 ? 'Below 33' : g.minPct === 33 ? '33 – 49' : `${g.minPct}+`}
+                </p>
+              </div>
+            )
+          })}
         </div>
       </CollapsibleSection>
 
       {/* Grade distribution */}
       <CollapsibleSection title="Grade Distribution" subtitle={`${gradeData.totalStudents} students`} accent="emerald">
-        <div className="p-2 space-y-1.5">
+        <div className="p-3 space-y-2">
           {gradeScale.map((g) => {
             const count = gradeData.distribution[g.grade] ?? 0
             const pct = gradeData.totalStudents > 0 ? Math.round((count / gradeData.totalStudents) * 1000) / 10 : 0
             const barWidth = Math.round((count / maxDist) * 100)
+            const barColorMap: Record<string, string> = {
+              A1: 'from-emerald-500 to-emerald-400',
+              A2: 'from-emerald-500 to-emerald-400',
+              B1: 'from-sky-500 to-sky-400',
+              B2: 'from-amber-500 to-amber-400',
+              C1: 'from-orange-500 to-orange-400',
+              C2: 'from-rose-500 to-rose-400',
+              E: 'from-rose-600 to-rose-500',
+            }
+            const isEmpty = count === 0
             return (
-              <div key={g.grade} className="flex items-center gap-2">
-                <span className="w-8 text-[10px] font-semibold tabular-nums">{g.grade}</span>
-                <div className="flex-1 h-4 rounded bg-muted/40 overflow-hidden">
+              <div key={g.grade} className="flex items-center gap-3">
+                <span className="w-7 text-[11px] font-bold tabular-nums text-center">{g.grade}</span>
+                <div className="flex-1 h-5 rounded-md bg-muted/30 overflow-hidden relative">
                   <div
-                    className="h-full bg-primary/60 rounded transition-all"
-                    style={{ width: `${barWidth}%` }}
+                    className={cn('h-full rounded-md transition-all duration-500 bg-gradient-to-r', barColorMap[g.grade] ?? 'from-primary to-primary/80')}
+                    style={{ width: `${barWidth}%`, minWidth: barWidth > 0 ? '4px' : '0' }}
                   />
+                  {isEmpty && (
+                    <span className="absolute inset-0 flex items-center justify-center text-[9px] text-muted-foreground/50">—</span>
+                  )}
                 </div>
-                <span className="w-8 text-[10px] tabular-nums text-right">{count}</span>
-                <span className="w-12 text-[9px] text-muted-foreground tabular-nums text-right">{pct}%</span>
+                <span className={cn('w-7 text-[11px] tabular-nums text-right font-medium', isEmpty && 'text-muted-foreground/50')}>{isEmpty ? '—' : count}</span>
+                <span className={cn('w-12 text-[10px] tabular-nums text-right', isEmpty ? 'text-muted-foreground/50' : 'text-muted-foreground')}>{pct}%</span>
               </div>
             )
           })}
@@ -1237,14 +1298,14 @@ function AuditSection({ examId }: { examId: string }) {
   }
 
   const actionColor: Record<string, string> = {
-    MARKS_LOCKED: 'text-emerald-600 bg-emerald-500/10',
-    MARKS_UNLOCKED: 'text-rose-600 bg-rose-500/10',
-    MARKS_VERIFIED: 'text-blue-600 bg-blue-500/10',
-    MARKS_SUBMITTED: 'text-amber-600 bg-amber-500/10',
-    ATTENDANCE_SUBMITTED: 'text-emerald-600 bg-emerald-500/10',
-    GRACE_APPLIED: 'text-violet-600 bg-violet-500/10',
-    RESULT_DECLARED: 'text-emerald-600 bg-emerald-500/10',
-    RESULT_PUBLISHED: 'text-emerald-600 bg-emerald-500/10',
+    MARKS_LOCKED: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+    MARKS_UNLOCKED: 'text-rose-700 dark:text-rose-300 bg-rose-500/15 border-rose-500/30',
+    MARKS_VERIFIED: 'text-sky-700 dark:text-sky-300 bg-sky-500/15 border-sky-500/30',
+    MARKS_SUBMITTED: 'text-amber-700 dark:text-amber-300 bg-amber-500/15 border-amber-500/30',
+    ATTENDANCE_SUBMITTED: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+    GRACE_APPLIED: 'text-violet-700 dark:text-violet-300 bg-violet-500/15 border-violet-500/30',
+    RESULT_DECLARED: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+    RESULT_PUBLISHED: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
   }
 
   if (filtered.length === 0) {
@@ -1289,31 +1350,38 @@ function AuditSection({ examId }: { examId: string }) {
 
       {/* Timeline */}
       <CollapsibleSection title="Audit Trail" subtitle={`${filtered.length} events`} accent="emerald">
-        <div className="relative pl-6 py-2 space-y-2 max-h-[500px] overflow-y-auto">
-          {/* Vertical line */}
-          <div className="absolute left-[11px] top-3 bottom-3 w-px bg-border/60" />
+        <div className="relative pl-8 py-3 space-y-3 max-h-[500px] overflow-y-auto">
+          {/* Vertical line — stronger */}
+          <div className="absolute left-[15px] top-4 bottom-4 w-0.5 bg-gradient-to-b from-border via-border/60 to-transparent" />
           {filtered.map((e) => {
             const label = AUDIT_ACTION_LABELS[e.action as AuditAction] ?? e.action
             const icon = actionIcon[e.action] ?? <Clock className="h-3 w-3" />
-            const color = actionColor[e.action] ?? 'text-muted-foreground bg-muted'
+            const color = actionColor[e.action] ?? 'text-muted-foreground bg-muted border-border'
             return (
-              <div key={e.id} className="relative">
-                <span className={cn('absolute -left-[18px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-card border border-border', color)}>
+              <div key={e.id} className="relative group">
+                <span className={cn('absolute -left-[20px] top-1 flex h-6 w-6 items-center justify-center rounded-full border-2 bg-card shadow-sm transition-transform group-hover:scale-110', color)}>
                   {icon}
                 </span>
-                <div className="rounded-md border border-border/40 bg-card/40 px-2.5 py-1.5 hover:bg-muted/30 transition-colors">
+                <div className="rounded-lg border border-border/50 bg-card px-3 py-2 hover:bg-muted/30 hover:border-border transition-colors shadow-sm">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-medium">{label}</p>
-                      <p className="text-[9px] text-muted-foreground">{e.summary}</p>
-                      <p className="text-[9px] text-muted-foreground/80 mt-0.5">
-                        by <span className="font-medium">{e.userName ?? 'System'}</span> · {e.userRole}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold text-foreground">{label}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{e.summary}</p>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-medium bg-muted/60 text-muted-foreground">
+                          <User className="h-2 w-2" /> {e.userName ?? 'System'}
+                        </span>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-medium bg-primary/10 text-primary">
+                          {e.userRole}
+                        </span>
                         {e.metadata && Object.keys(e.metadata).length > 0 && (
-                          <span className="ml-1">· {Object.entries(e.metadata).map(([k, v]) => `${k}: ${v}`).join(', ')}</span>
+                          <span className="text-[9px] text-muted-foreground/70">
+                            {Object.entries(e.metadata).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                          </span>
                         )}
-                      </p>
+                      </div>
                     </div>
-                    <span className="text-[9px] text-muted-foreground/70 shrink-0 tabular-nums whitespace-nowrap">
+                    <span className="text-[9px] text-muted-foreground/70 shrink-0 tabular-nums whitespace-nowrap font-mono">
                       {new Date(e.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>

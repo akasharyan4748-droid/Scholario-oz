@@ -1942,3 +1942,40 @@ Stage Summary:
 - Notifications: exam-duty notifications in existing bell.
 - Performance: stable Zustand selectors (no filter() inside selectors), no infinite loops.
 - Cron job scheduled for autonomous continued development every 15 minutes.
+
+---
+Task ID: cron-round-1-visual-polish
+Agent: main (Super Z)
+Task: QA + visual polish of Examination module (Grade/Marks/Audit tabs) via VLM-guided improvements
+
+Work Log:
+- Reviewed worklog: Examination module was refined in the previous round (table header overlap fixed, CollapsibleSection, real attendance workflow, grade tab, audit timeline).
+- QA testing via agent-browser: logged in as Principal, navigated to Mid-Term exam workspace. Verified all 8 tabs render, no browser errors, table header overlap still fixed (DOM measurement confirmed: headerBottom === firstRowTop on all tables).
+- Tested unlock flow: clicked Unlock on Class 9 English → status changed from Locked to Verified, LOCKED count dropped 32→28, Lock button appeared. Functional bug: none.
+- VLM analysis (3 screenshots: Grade/Marks/Audit tabs) identified visual polish opportunities:
+  • Grade tab: progress bars too basic, empty states (0) look stark, Grade Scale cards lack color coding, status badges too pale.
+  • Marks tab: status uses colored text (not pills), no progress bars in rows, no zebra striping, Actions column cluttered.
+  • Audit tab: vertical timeline line too faint, icons too small, metadata dense, typography hierarchy flat.
+- Implemented improvements:
+  • Grade Scale cards: added color-coded borders/backgrounds (emerald for A1/A2, sky for B1, amber for B2, orange for C1, rose for C2/E). Larger font (text-lg), better padding (p-2.5), clearer range labels ("Below 33", "33 – 49", "90+").
+  • Grade Distribution: gradient progress bars (from-emerald-500 to-emerald-400 etc.), rounded-md caps, empty states show "—" with muted styling, count shows "—" when 0, height increased to h-5, minWidth 4px when non-zero.
+  • Marks Subject Progress: status pills with bg/border/icon (Locked=emerald, Verified=sky, Submitted=amber, In Progress=amber-light, Not Started=muted). Progress bar in Entered column (w-10, color-coded: green=100%, amber=partial). Zebra striping (even:bg-muted/15). Action buttons now have hover backgrounds (hover:bg-primary/10 etc.). Timeline button is icon-only.
+  • Audit timeline: stronger vertical line (w-0.5, gradient from-border to-transparent). Larger icon circles (h-6 w-6, border-2, shadow-sm, group-hover:scale-110). User/role badges (bg-muted/60 + bg-primary/10). Metadata limited to 3 entries. Monospace timestamp. More padding (space-y-3, py-3). Cards have shadow-sm + hover:border-border.
+  • Workspace header: stronger title (text-lg font-bold tracking-tight), shadow-sm on header, bg-card/95 (more opaque), taller divider (h-6).
+  • Status pills: increased opacity (/15 instead of /10), shadow-sm, px-2.5.
+- Lint passes clean. Dev server compiles successfully (✓ Compiled in 5ms).
+- VLM verification after improvements:
+  • Grade tab: 8.5/10 — color coding "highly effective", empty states "clean", "polished enterprise-grade SaaS product".
+  • Marks tab: 8/10 → then 9/10 after zebra striping fix — "alternating row backgrounds clearly visible", "clean layout, consistent typography, effective color-coded status indicators".
+  • Audit tab: 8/10 — "timeline line distinct", "icons clearly larger with solid colored backgrounds", "floating card aesthetic".
+- No browser errors. No table header overlap. All 8 tabs functional.
+
+Stage Summary:
+- VLM-guided visual polish complete across Grade, Marks, and Audit tabs.
+- Grade tab: color-coded scale cards + gradient distribution bars + clean empty states (8.5/10).
+- Marks tab: status pills + row progress bars + zebra striping + hover-background action buttons (9/10).
+- Audit tab: stronger timeline + larger icon circles + user/role badges + shadow cards (8/10).
+- Workspace header: stronger title hierarchy + shadow + more opaque bg.
+- Status pills: better contrast + shadow.
+- All functional flows verified working (unlock, marks workflow).
+- Next opportunities: (1) add a grade-distribution donut chart, (2) add keyboard shortcuts for tab switching, (3) add export-to-PDF on Grade tab, (4) add search/filter on Subject Progress table.
