@@ -11,7 +11,7 @@
 
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Pencil, Save, Download, Archive } from 'lucide-react'
+import { ArrowLeft, Pencil, Save, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,6 +20,11 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { SegmentedTabs } from '../shared/segmented-tabs'
 import { InlineLoading } from './inline-loading'
 import { generateSchedulePDF } from '@/lib/exams/schedule-pdf'
+import { buildTimetableFromExam, buildConsolidatedTimetableFromExam } from '@/lib/exams/schedule/exam-timetable'
+import type { ScheduleTimetable } from '@/lib/exams/schedule/schedule-types'
+import { useScheduleState } from '@/lib/exams/schedule/use-schedule-state'
+import { ScheduleTable } from './schedule/schedule-table'
+import { OfficialTimetable } from './schedule/official-timetable'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatDateLong } from '@/lib/exams/format-helpers'
@@ -379,33 +384,46 @@ function DetailField({ label, value }: { label: string; value: string }) {
 }
 
 
-// ─── Schedule Section — canonical timetable view + edit/download/archive ─
 
-function ScheduleSection({ exam, onReload }: { exam: ExamDTO; onReload: () => void }) {
+// ─── Schedule Section — canonical timetable (view + edit + download) ──
+
+function ScheduleSection({ exam }: { exam: ExamDTO }) {
   const gate = useRoleGate()
   const [editMode, setEditMode] = useState(false)
 
-  const datesByDay = useMemo(() => {
-    const byDate = new Map<string, any[]>()
-    for (const item of exam.schedule) {
-      if (!byDate.has(item.date)) byDate.set(item.date, [])
-      byDate.get(item.date)!.push(item)
-    }
-    return Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b))
-  }, [exam.schedule])
+  // Build the canonical timetable from the exam's stored schedule.
+  const timetable = useMemo(() => buildTimetableFromExam(exam), [exam])
+  const consolidated = useMemo(() => buildConsolidatedTimetableFromExam(exam), [exam])
+
+  // Edit-mode state (drag/drop override).
+  const [editTimetable, setEditTimetable] = useState<ScheduleTimetable | null>(null)
+  const editState = useScheduleState({
+    classes: timetable.classes,
+    options: null,
+  })
 
   const handleDownload = () => {
-    try { generateSchedulePDF(exam) } catch { toast.error('Failed to generate PDF') }
+    try { generateSchedulePDF(exam, consolidated) } catch { toast.error('Failed to generate PDF') }
   }
 
-  const handleArchive = () => {
-    toast.success(`"${exam.name}" archived`, { description: 'Restorable from the Archive tab.' })
-  }
+  const dateRangeLabel = useMemo(() => {
+    if (!exam.startDate) return ''
+    const startLbl = formatDateLong(exam.startDate)
+    if (!exam.endDate || exam.endDate === exam.startDate) return startLbl
+    return `${startLbl} – ${formatDateLong(exam.endDate)}`
+  }, [exam.startDate, exam.endDate])
+
+  const examType = exam.type === 'UT1' ? 'Unit Test 1' : exam.type === 'UT2' ? 'Unit Test 2' : exam.type === 'HALF_YEARLY' ? 'Half-Yearly' : exam.type === 'ANNUAL' ? 'Annual' : exam.type
+  const papersPerDay = timetable.rows.length > 0 && timetable.rows.length > 1 && timetable.rows[0].date === timetable.rows[1].date ? 2 : 1
+  const startTime = exam.schedule[0]?.startTime ?? '09:00'
 
   return (
     <div className="space-y-3">
+      {/* Compact action row — Edit + Download only (no Archive) */}
       <div className="flex items-center justify-between gap-2">
-        <div className="text-[10px] text-muted-foreground">{exam.schedule.length} papers · {exam.classes.length} classes</div>
+        <div className="text-[10px] text-muted-foreground">
+          {exam.schedule.length} papers · {exam.classes.length} classes
+        </div>
         <div className="flex items-center gap-1">
           {gate.canManageSchedule && (
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditMode(!editMode)} title={editMode ? 'View Mode' : 'Edit Timetable'}>
@@ -415,73 +433,39 @@ function ScheduleSection({ exam, onReload }: { exam: ExamDTO; onReload: () => vo
           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleDownload} title="Download Schedule">
             <Download className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleArchive} title="Archive Examination">
-            <Archive className="h-3.5 w-3.5" />
-          </Button>
         </div>
       </div>
-      {editMode && (
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditMode(false)}>Cancel</Button>
-          <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setEditMode(false); toast.success('Schedule saved') }}>
-            <Save className="h-3 w-3" /> Save Changes
-          </Button>
-        </div>
-      )}
-      {datesByDay.length === 0 ? (
-        <div className="py-8 text-center text-xs text-muted-foreground">No schedule items yet.</div>
-      ) : (
-        <ScheduleTableView datesByDay={datesByDay} classes={exam.classes} />
-      )}
-    </div>
-  )
-}
 
-function ScheduleTableView({ datesByDay, classes }: { datesByDay: Array<[string, any[]]>; classes: any[] }) {
-  return (
-    <div className="rounded-lg border border-border/60 overflow-hidden">
-      <div className="overflow-x-auto max-h-[32rem]">
-        <table className="w-full border-collapse text-xs">
-          <thead className="sticky top-0 z-10 bg-muted/40">
-            <tr>
-              <th className="sticky left-0 z-20 bg-muted/40 px-2 py-2 text-left font-semibold text-[9px] uppercase tracking-wider text-muted-foreground border-b border-r border-border min-w-[90px]">Day / Date</th>
-              {classes.map((c: any) => (
-                <th key={c.classId} className="px-2 py-2 text-center font-semibold text-[9px] uppercase tracking-wider text-muted-foreground border-b border-r border-border/60 last:border-r-0 min-w-[100px]">{c.className}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {datesByDay.map(([date, items]) => {
-              const d = new Date(date)
-              const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short' })
-              return (
-                <tr key={date} className="hover:bg-muted/20">
-                  <td className="sticky left-0 z-[1] bg-card px-2 py-2 align-top border-b border-r border-border">
-                    <span className="text-[9px] text-muted-foreground">{dayLabel}</span>
-                    <p className="text-[11px] font-semibold text-foreground tabular-nums">{formatDateLong(date)}</p>
-                  </td>
-                  {classes.map((c: any) => {
-                    const classItems = items.filter((s: any) => s.classId === c.classId).sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
-                    return (
-                      <td key={c.classId} className="border-b border-r border-border/60 last:border-r-0 px-2 py-1.5 align-top">
-                        <div className="flex flex-col gap-1">
-                          {classItems.map((s: any) => (
-                            <div key={s.id} className="rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 px-1.5 py-1">
-                              <p className="text-[11px] font-medium text-foreground">{s.subjectName ?? '—'}</p>
-                              <p className="text-[9px] text-muted-foreground tabular-nums">{s.startTime}–{s.endTime}</p>
-                            </div>
-                          ))}
-                          {classItems.length === 0 && <span className="text-[9px] text-muted-foreground/30 text-center block">—</span>}
-                        </div>
-                      </td>
-                    )
-                  })}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      {editMode ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditMode(false)}>Cancel</Button>
+            <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setEditMode(false); toast.success('Schedule saved') }}>
+              <Save className="h-3 w-3" /> Save Changes
+            </Button>
+          </div>
+          {timetable.rows.length > 0 ? (
+            <ScheduleTable timetable={timetable} onMoveSubject={() => {}} />
+          ) : (
+            <div className="py-8 text-center text-xs text-muted-foreground">No schedule items. Add them from Create Examination.</div>
+          )}
+        </div>
+      ) : (
+        consolidated.rows.length === 0 ? (
+          <div className="py-8 text-center text-xs text-muted-foreground">No schedule items yet.</div>
+        ) : (
+          <OfficialTimetable
+            timetable={consolidated}
+            schoolName="Demo School of Scholario"
+            examName={exam.name}
+            examType={examType}
+            academicSession={exam.session ?? '2025-2026'}
+            dateRangeLabel={dateRangeLabel}
+            startTime={startTime}
+            papersPerDay={papersPerDay}
+          />
+        )
+      )}
     </div>
   )
 }
