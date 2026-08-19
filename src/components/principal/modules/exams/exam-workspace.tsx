@@ -53,12 +53,12 @@ import { useStudentsStore } from '@/lib/store/students-store'
 import { useRoleGate } from '@/lib/exams/use-role-gate'
 import { generateClassResultPDF, generateStudentResultPDF } from '@/lib/exams/result-pdf'
 import {
-  AttendanceSection,
   GraceSection,
   OutcomesSection,
   CsvImportSection,
 } from './workspace-sections-extended'
 import { SeatingSection } from './seating/seating-section'
+import { ExamAttendanceSection } from './exam-attendance-section'
 
 interface Props {
   examId: string
@@ -188,7 +188,7 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
               {tab === 'results' && <MarksSection exam={exam} onReload={handleReload} />}
               {tab === 'outcomes' && <OutcomesSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'seating' && <SeatingSection exam={exam} />}
-              {tab === 'attendance' && <AttendanceSection examId={exam.id} exam={exam} onReload={handleReload} />}
+              {tab === 'attendance' && <ExamAttendanceSection exam={exam} />}
               {tab === 'grace' && <GraceSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'audit' && <AuditSection examId={exam.id} />}
             </motion.div>
