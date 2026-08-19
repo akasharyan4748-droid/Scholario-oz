@@ -38,9 +38,5 @@ export const EXAM_TEMPLATES: ExamTemplate[] = [
   { id: 'custom', name: 'Custom Examination', label: 'Custom', shortLabel: 'Custom', description: 'Build your own examination', icon: <Settings className="h-3.5 w-3.5" />, accent: 'slate', isCustom: true },
 ]
 
-export function getTemplateById(id: string): ExamTemplate | undefined {
-  return EXAM_TEMPLATES.find((t) => t.id === id)
-}
-
 export const STANDARD_TEMPLATES = EXAM_TEMPLATES.filter((t) => !t.isCustom)
 export const CUSTOM_TEMPLATE = EXAM_TEMPLATES.find((t) => t.isCustom)!

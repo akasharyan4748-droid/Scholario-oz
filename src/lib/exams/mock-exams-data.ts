@@ -32,8 +32,8 @@ const SEED_EXAMS: ExamDTO[] = [
     type: 'UT2',
     session: '2025-2026',
     term: 'Term 1',
-    status: 'SCHEDULED',
-    resultStatus: 'NOT_DECLARED',
+    status: 'Scheduled',
+    resultStatus: 'Not Started',
     passPercentage: 33,
     startDate: '2025-10-10',
     endDate: '2025-10-10',
@@ -54,8 +54,8 @@ const SEED_EXAMS: ExamDTO[] = [
     type: 'ANNUAL',
     session: '2025-2026',
     term: 'Term 2',
-    status: 'SCHEDULED',
-    resultStatus: 'NOT_DECLARED',
+    status: 'Scheduled',
+    resultStatus: 'Not Started',
     passPercentage: 33,
     startDate: '2026-02-10',
     endDate: '2026-02-20',
@@ -76,8 +76,8 @@ const SEED_EXAMS: ExamDTO[] = [
     type: 'HALF_YEARLY',
     session: '2025-2026',
     term: 'Term 1',
-    status: 'COMPLETED',
-    resultStatus: 'DECLARED',
+    status: 'Completed',
+    resultStatus: 'Result Declared',
     passPercentage: 33,
     startDate: '2025-09-15',
     endDate: '2025-09-25',
@@ -107,30 +107,33 @@ export const useMockExamsStore = create<MockExamsState>()((set, get) => ({
   createExam: (input) => {
     const id = `exam-mock-${Date.now()}`
     const now = new Date().toISOString()
-    // Build minimal ExamClassDTO[] + ExamSubjectConfigDTO[] from the input.
-    // Academic class names + subject names are resolved by the caller via
-    // the shared academic resolver; here we just store the IDs.
-    const classes: ExamClassDTO[] = input.classIds.map((classId, i) => ({
-      id: `ec-${id}-${i}`,
-      examId: id,
-      classId,
-      className: classId, // resolved downstream by the UI when needed
-      gradeLevel: null,
-      section: null,
-      stream: null,
-      studentCount: 0,
-    }))
+    const classMeta = input.classMeta ?? {}
+    const subjectMeta = input.subjectMeta ?? {}
+    const classes: ExamClassDTO[] = input.classIds.map((classId, i) => {
+      const meta = classMeta[classId]
+      return {
+        id: `ec-${id}-${i}`,
+        examId: id,
+        classId,
+        className: meta?.className ?? classId,
+        gradeLevel: meta?.gradeLevel ?? null,
+        section: null,
+        stream: meta?.stream ?? null,
+        studentCount: meta?.studentCount ?? 0,
+      }
+    })
     const subjects: ExamSubjectConfigDTO[] = []
     let sortOrder = 0
     for (const [classId, subs] of Object.entries(input.subjectsByClass)) {
       for (const s of subs) {
+        const sMeta = subjectMeta[s.subjectId]
         subjects.push({
           id: `sc-${classId}-${s.subjectId}`,
           examId: id,
           classId,
           subjectId: s.subjectId,
-          subjectName: s.subjectId, // resolved downstream
-          subjectCode: null,
+          subjectName: sMeta?.subjectName ?? s.subjectId,
+          subjectCode: sMeta?.subjectCode ?? null,
           maxMarks: s.maxMarks ?? 100,
           passMarks: s.passMarks ?? 33,
           theoryMarks: s.theoryMarks ?? 100,
@@ -139,17 +142,24 @@ export const useMockExamsStore = create<MockExamsState>()((set, get) => ({
         })
       }
     }
-    const schedule: ScheduleItemDTO[] = (input.schedule ?? []).map((s, i) => ({
-      id: `sch-${id}-${i}`,
-      examId: id,
-      classId: s.classId,
-      subjectId: s.subjectId,
-      date: s.date,
-      startTime: s.startTime,
-      endTime: s.endTime,
-      room: s.room ?? null,
-      invigilatorName: s.invigilatorName ?? null,
-    }))
+    const schedule: ScheduleItemDTO[] = (input.schedule ?? []).map((s, i) => {
+      const sMeta = subjectMeta[s.subjectId]
+      const cMeta = classMeta[s.classId]
+      return {
+        id: `sch-${id}-${i}`,
+        examId: id,
+        classId: s.classId,
+        className: cMeta?.className ?? s.classId,
+        subjectId: s.subjectId,
+        subjectName: sMeta?.subjectName ?? s.subjectId,
+        date: s.date,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        room: s.room ?? null,
+        invigilatorId: null,
+        invigilatorName: s.invigilatorName ?? null,
+      }
+    })
     const exam: ExamDTO = {
       id,
       schoolId: 'demo-school',
@@ -157,8 +167,8 @@ export const useMockExamsStore = create<MockExamsState>()((set, get) => ({
       type: input.type,
       session: input.session ?? '2025-2026',
       term: null,
-      status: 'DRAFT',
-      resultStatus: 'NOT_DECLARED',
+      status: 'Draft',
+      resultStatus: 'Not Started',
       passPercentage: input.passPercentage ?? 33,
       startDate: input.startDate ?? null,
       endDate: input.endDate ?? null,

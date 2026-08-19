@@ -66,36 +66,6 @@ export function moveSubject(
 }
 
 /**
- * Verify timetable integrity — no subject appears twice in the same column.
- * Returns the list of duplicate subject ids per class (empty if clean).
- */
-export function findDuplicates(timetable: ScheduleTimetable): Record<string, string[]> {
-  const dupes: Record<string, string[]> = {}
-  timetable.classes.forEach((cls, classIdx) => {
-    const seen = new Set<string>()
-    const dups = new Set<string>()
-    timetable.rows.forEach((row) => {
-      const cell: ScheduleCell | null = row.cells[classIdx]
-      if (!cell) return
-      if (seen.has(cell.subjectId)) dups.add(cell.subjectId)
-      seen.add(cell.subjectId)
-    })
-    if (dups.size > 0) dupes[cls.id] = Array.from(dups)
-  })
-  return dupes
-}
-
-/** Count how many subjects are filled in a class column (non-null cells). */
-export function countFilled(timetable: ScheduleTimetable, classIdx: number): number {
-  return timetable.rows.reduce((n, row) => n + (row.cells[classIdx] ? 1 : 0), 0)
-}
-
-/** Returns true if every class column has all its subjects allocated. */
-export function isComplete(timetable: ScheduleTimetable): boolean {
-  return timetable.classes.every((cls, idx) => countFilled(timetable, idx) >= cls.subjects.length)
-}
-
-/**
  * Flatten the timetable back to the legacy `GeneratedScheduleItem[]` shape
  * for storage in the mock exams store / future API submission.
  *

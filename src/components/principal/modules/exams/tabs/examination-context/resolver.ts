@@ -97,7 +97,7 @@ export function resolveExamContext(exams: ExamDTO[]): ExamContext {
   }
 
   const upcomingExams = exams
-    .filter((e) => ['SCHEDULED', 'ONGOING', 'Draft'].includes(e.status))
+    .filter((e) => ['Scheduled', 'Ongoing', 'Draft'].includes(e.status))
     .filter((e) => e.startDate)
     .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
 

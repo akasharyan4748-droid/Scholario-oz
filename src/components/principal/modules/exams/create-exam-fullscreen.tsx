@@ -457,6 +457,19 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
         }
       })
 
+      // Build display-name metadata so the mock store populates real className
+      // + subjectName on the ExamDTO (not raw IDs).
+      const classMeta: Record<string, { className: string; gradeLevel: string | null; stream: string | null; studentCount: number }> = {}
+      const subjectMeta: Record<string, { subjectName: string; subjectCode: string | null }> = {}
+      for (const classId of selectedClassIds) {
+        const cls = classes.find((c) => c.id === classId)
+        if (!cls) continue
+        classMeta[classId] = { className: cls.name, gradeLevel: cls.gradeLevel, stream: cls.stream, studentCount: 0 }
+        for (const subj of cls.subjects) {
+          if (!subjectMeta[subj.id]) subjectMeta[subj.id] = { subjectName: subj.name, subjectCode: subj.code }
+        }
+      }
+
       const exam = await create({
         name: name.trim(),
         type: selectedTemplate.name,
@@ -467,6 +480,8 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
         classIds: selectedClassIds,
         subjectsByClass,
         schedule: fullSchedule,
+        classMeta,
+        subjectMeta,
       })
 
       toast.success('Examination created as Draft', {

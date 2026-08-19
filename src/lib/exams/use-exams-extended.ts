@@ -157,30 +157,6 @@ export function useExamAttendance(examId: string | null, classId: string | null)
   return { attendance, loading, reload }
 }
 
-export function useMarkExamAttendance() {
-  const [loading, setLoading] = useState(false)
-  const mark = useCallback(async (
-    examId: string,
-    input: {
-      scheduleItemId?: string
-      classId: string
-      studentId: string
-      subjectId: string
-      date: string
-      status: MarkStatus
-      remarks?: string
-    }
-  ): Promise<void> => {
-    setLoading(true)
-    try {
-      await api(`/api/exams/${examId}/attendance`, { method: 'POST', body: JSON.stringify(input) })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-  return { mark, loading }
-}
-
 export function useAutoMarkAttendance() {
   const [loading, setLoading] = useState(false)
   const autoMark = useCallback(async (examId: string, classId: string): Promise<{ marked: number }> => {

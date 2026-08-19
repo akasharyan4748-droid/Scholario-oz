@@ -34,26 +34,3 @@ export function useSchoolContext() {
 
   return { data, loading, error }
 }
-
-// Sensible defaults used as fallback when config hasn't loaded yet.
-// PDF generators fall back to these when school hasn't customized its settings.
-export const DEFAULT_ADMIT_CARD_CONFIG = {
-  showPhoto: true,
-  showRollNumber: true,
-  showRoom: true,
-  showSeatNumber: true,
-  showTimetable: true,
-  showInstructions: true,
-  showQrCode: false,
-} as const
-
-export const DEFAULT_REPORT_CARD_CONFIG = {
-  showAttendance: true,
-  showRank: true,
-  showPercentage: true,
-  showGrade: true,
-  showCoScholastic: false,
-  showRemarks: true,
-  showClassTeacherSign: true,
-  showPrincipalSign: true,
-} as const

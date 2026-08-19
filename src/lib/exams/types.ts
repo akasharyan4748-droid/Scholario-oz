@@ -75,8 +75,6 @@ export interface GradeScaleRow {
   sortOrder: number
 }
 
-export const PASSING_PERCENTAGE_DEFAULT = 33
-
 export function getGradeForPercentage(pct: number, scale: GradeScaleRow[] = []): { grade: string; color: string } {
   const rows = scale.length > 0 ? scale : DEFAULT_GRADE_BOUNDARIES
   // Normalize: sort by minPct desc, find first match
@@ -218,6 +216,13 @@ export interface CreateExamInput {
     room?: string
     invigilatorName?: string
   }>
+  classMeta?: Record<string, {
+    className: string
+    gradeLevel: string | null
+    stream: string | null
+    studentCount: number
+  }>
+  subjectMeta?: Record<string, { subjectName: string; subjectCode: string | null }>
 }
 
 export interface SetMarkInput {

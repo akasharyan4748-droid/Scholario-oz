@@ -179,25 +179,6 @@ export function useSetMark() {
   return { set, loading }
 }
 
-export function useSetMarksBatch() {
-  const [loading, setLoading] = useState(false)
-  const setBatch = useCallback(async (
-    examId: string,
-    marks: SetMarkInput[]
-  ): Promise<{ updated: number }> => {
-    setLoading(true)
-    try {
-      return await api<{ updated: number }>(`/api/exams/${examId}/marks/batch`, {
-        method: 'POST',
-        body: JSON.stringify({ marks }),
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-  return { setBatch, loading }
-}
-
 interface WorkflowResult { submitted?: number; verified?: number; locked?: number; declared?: boolean }
 
 export function useSubmitMarks() {
@@ -296,23 +277,6 @@ export function useAddScheduleItem() {
     }
   }, [])
   return { add, loading }
-}
-
-export function useUpdateScheduleItem() {
-  const [loading, setLoading] = useState(false)
-  const update = useCallback(async (
-    examId: string,
-    itemId: string,
-    updates: Partial<ScheduleItemInput>
-  ): Promise<void> => {
-    setLoading(true)
-    try {
-      await api(`/api/exams/${examId}/schedule/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(updates) })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-  return { update, loading }
 }
 
 export function useDeleteScheduleItem() {
