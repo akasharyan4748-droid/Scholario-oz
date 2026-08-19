@@ -1716,6 +1716,161 @@ function studentPerformance_rank(exam: ExamDTO, allMarks: any[], studentId: stri
   return idx + 1
 }
 
+// ─── Subject Drill-Down Modal — student-wise marks for one subject ─────
+
+function SubjectDrillDownModal({ exam, classId, subjectId, subjectName, className, allMarks, onClose }: {
+  exam: ExamDTO
+  classId: string
+  subjectId: string
+  subjectName: string
+  className: string
+  allMarks: any[]
+  onClose: () => void
+}) {
+  const subjectConfig = exam.subjects.find((s: any) => s.classId === classId && s.subjectId === subjectId)
+  const maxMarks = subjectConfig?.maxMarks ?? 100
+  const passMarks = subjectConfig?.passMarks ?? 33
+
+  const studentMarks = useMemo(() => {
+    return allMarks
+      .filter((m) => m.classId === classId && m.subjectId === subjectId)
+      .sort((a, b) => (b.marksObtained ?? -1) - (a.marksObtained ?? -1))
+  }, [allMarks, classId, subjectId])
+
+  const stats = useMemo(() => {
+    const entered = studentMarks.filter((m) => m.marksObtained !== null && m.status !== 'ABSENT')
+    const values = entered.map((m) => m.marksObtained!)
+    const total = studentMarks.length
+    const present = entered.length
+    const absent = studentMarks.filter((m) => m.status === 'ABSENT').length
+    const avg = values.length > 0 ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : 0
+    const highest = values.length > 0 ? Math.max(...values) : 0
+    const lowest = values.length > 0 ? Math.min(...values) : 0
+    const passed = values.filter((v) => v >= passMarks).length
+    const failed = values.filter((v) => v < passMarks).length
+    const passRate = present > 0 ? Math.round((passed / present) * 100) : 0
+    return { total, present, absent, avg, highest, lowest, passed, failed, passRate }
+  }, [studentMarks, passMarks])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="bg-card border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border bg-gradient-to-r from-sky-500/5 to-transparent">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
+              <BookOpen className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold truncate">{subjectName}</h3>
+              <p className="text-[10px] text-muted-foreground">
+                {className} · Max {maxMarks} · Pass {passMarks}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="text-right">
+              <p className="text-lg font-bold tabular-nums">{stats.avg}</p>
+              <p className="text-[9px] text-muted-foreground">Average</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Summary chips */}
+        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-border/60 bg-muted/20 flex-wrap">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-muted/60 text-muted-foreground">
+            <Users className="h-2.5 w-2.5" /> {stats.total} students
+          </span>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+            {stats.present} present
+          </span>
+          {stats.absent > 0 && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-rose-500/10 text-rose-700 dark:text-rose-300">
+              {stats.absent} absent
+            </span>
+          )}
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-sky-500/10 text-sky-700 dark:text-sky-300">
+            Highest: {stats.highest}
+          </span>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-amber-500/10 text-amber-700 dark:text-amber-300">
+            Lowest: {stats.lowest}
+          </span>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-primary/10 text-primary ml-auto">
+            Pass: {stats.passRate}%
+          </span>
+        </div>
+
+        {/* Student-wise marks table */}
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
+              <tr>
+                <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Rank</th>
+                <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Roll</th>
+                <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Student</th>
+                <th className="text-right px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Marks</th>
+                <th className="text-right px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">%</th>
+                <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Grade</th>
+                <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {studentMarks.map((m, i) => {
+                const obtained = m.marksObtained
+                const isAbsent = m.status === 'ABSENT'
+                const pct = obtained !== null && maxMarks > 0 ? Math.round((obtained / maxMarks) * 100 * 100) / 100 : 0
+                const { grade } = getGradeForPercentage(pct, [])
+                const passed = obtained !== null && pct >= 33
+                return (
+                  <tr key={m.id} className="border-t border-border/30 hover:bg-muted/20 transition-colors">
+                    <td className="px-3 py-2 text-center text-[9px] text-muted-foreground tabular-nums">{i + 1}</td>
+                    <td className="px-3 py-2 font-mono text-[10px]">{m.studentRollNo ?? '—'}</td>
+                    <td className="px-3 py-2 font-medium">{m.studentName}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium">
+                      {isAbsent ? (
+                        <span className="text-rose-600 font-semibold">ABSENT</span>
+                      ) : obtained !== null ? (
+                        obtained
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {isAbsent || obtained === null ? '—' : `${pct}%`}
+                    </td>
+                    <td className="px-3 py-2 text-center font-bold">{isAbsent || obtained === null ? '—' : grade}</td>
+                    <td className="px-3 py-2 text-center">
+                      {isAbsent || obtained === null ? (
+                        <span className="text-[9px] text-muted-foreground">—</span>
+                      ) : passed ? (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">PASS</span>
+                      ) : (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20">FAIL</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+              {studentMarks.length === 0 && (
+                <tr><td colSpan={7} className="py-6 text-center text-muted-foreground">No marks entered for this subject.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Grade Section — grading policy + distribution + subject comparison ─
 
 function GradeSection({ exam }: { exam: ExamDTO }) {
@@ -1723,6 +1878,7 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
   const [filterSubject, setFilterSubject] = useState('all')
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null)
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null)
+  const [selectedSubjectPaper, setSelectedSubjectPaper] = useState<{ classId: string; subjectId: string; subjectName: string; className: string } | null>(null)
   const storeMarks = useMockMarksStore((s) => s.marks)
   const allMarks = useMemo(() => storeMarks.filter((m) => m.examId === exam.id), [storeMarks, exam.id])
 
@@ -1789,7 +1945,7 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
 
   // Subject comparison: per-subject grade distribution.
   const subjectComparison = useMemo(() => {
-    const rows: Array<{ subjectName: string; className: string; distribution: Record<string, number>; total: number }> = []
+    const rows: Array<{ subjectName: string; className: string; classId: string; subjectId: string; distribution: Record<string, number>; total: number }> = []
     for (const c of exam.classes) {
       if (filterClass !== 'all' && c.classId !== filterClass) continue
       for (const subj of exam.subjects.filter((s: any) => s.classId === c.classId)) {
@@ -1805,7 +1961,7 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
           dist[grade] = (dist[grade] ?? 0) + 1
           total++
         }
-        rows.push({ subjectName: subj.subjectName, className: c.className, distribution: dist, total })
+        rows.push({ subjectName: subj.subjectName, className: c.className, classId: c.classId, subjectId: subj.subjectId, distribution: dist, total })
       }
     }
     return rows
@@ -2027,18 +2183,42 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
               </tr>
             </thead>
             <tbody>
-              {subjectComparison.map((r, i) => (
-                <tr key={i} className="border-t border-border/30 hover:bg-muted/20">
+              {subjectComparison.map((r, i) => {
+                const maxCount = Math.max(1, ...gradeScale.map((g) => r.distribution[g.grade] ?? 0))
+                return (
+                <tr
+                  key={i}
+                  onClick={() => setSelectedSubjectPaper({ classId: r.classId ?? '', subjectId: r.subjectId ?? '', subjectName: r.subjectName, className: r.className })}
+                  className="border-t border-border/30 hover:bg-primary/5 even:bg-muted/10 transition-colors cursor-pointer"
+                >
                   <td className="px-2 py-1 text-muted-foreground">{r.className}</td>
-                  <td className="px-2 py-1 font-medium">{r.subjectName}</td>
+                  <td className="px-2 py-1 font-medium flex items-center gap-1">
+                    {r.subjectName}
+                    <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/40" />
+                  </td>
                   <td className="px-2 py-1 text-center tabular-nums">{r.total}</td>
-                  {gradeScale.map((g) => (
-                    <td key={g.grade} className="px-1 py-1 text-center tabular-nums text-[9px]">
-                      {r.distribution[g.grade] ?? 0}
-                    </td>
-                  ))}
+                  {gradeScale.map((g) => {
+                    const count = r.distribution[g.grade] ?? 0
+                    const intensity = count / maxCount
+                    return (
+                      <td key={g.grade} className="px-1 py-1 text-center tabular-nums text-[9px] relative">
+                        <span
+                          className={cn(
+                            'inline-flex items-center justify-center w-6 h-5 rounded text-[9px] font-medium',
+                            count === 0 ? 'text-muted-foreground/40' : 'text-foreground',
+                          )}
+                          style={count > 0 ? {
+                            backgroundColor: `hsl(var(--primary) / ${0.08 + intensity * 0.25})`,
+                          } : undefined}
+                        >
+                          {count === 0 ? '—' : count}
+                        </span>
+                      </td>
+                    )
+                  })}
                 </tr>
-              ))}
+                )
+              })}
               {subjectComparison.length === 0 && (
                 <tr><td colSpan={2 + gradeScale.length} className="py-4 text-center text-muted-foreground">No data available.</td></tr>
               )}
@@ -2130,6 +2310,19 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
           studentId={selectedStudentId}
           allMarks={allMarks}
           onClose={() => setSelectedStudentId(null)}
+        />
+      )}
+
+      {/* Subject drill-down modal */}
+      {selectedSubjectPaper && (
+        <SubjectDrillDownModal
+          exam={exam}
+          classId={selectedSubjectPaper.classId}
+          subjectId={selectedSubjectPaper.subjectId}
+          subjectName={selectedSubjectPaper.subjectName}
+          className={selectedSubjectPaper.className}
+          allMarks={allMarks}
+          onClose={() => setSelectedSubjectPaper(null)}
         />
       )}
 

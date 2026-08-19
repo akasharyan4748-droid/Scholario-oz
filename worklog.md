@@ -2205,3 +2205,38 @@ Stage Summary:
 - All features browser-verified via agent-browser.
 - Canonical data flow maintained: grade filter derived from marks, report cards from student performance.
 - Next opportunities: (1) add exam archive with historical comparison, (2) add parent portal result view, (3) add subject-wise drill-down from Subject Comparison table, (4) add exam settings page with grading config editor.
+
+---
+Task ID: cron-round-7-subject-drilldown-heatmap
+Agent: main (Super Z)
+Task: Subject Comparison drill-down modal, heatmap conditional formatting, visual polish
+
+Work Log:
+- Reviewed worklog: previous rounds added interactive donut drill-down, report cards PDF, Action Items empty state.
+- QA testing via agent-browser + VLM identified 2 high-impact opportunities:
+  • FEATURE: Subject Comparison table not clickable — should drill down to student-wise marks.
+  • FEATURE: No conditional formatting (heatmap) on grade count cells.
+- Added Subject Comparison Drill-Down Modal:
+  • New SubjectDrillDownModal component — click any subject row → modal opens.
+  • Header: BookOpen icon, subject name, class, max marks, pass marks, average.
+  • Summary chips: student count, present count, absent count, highest, lowest, pass rate.
+  • Student-wise table sorted by marks descending: Rank | Roll | Student | Marks | % | Grade | Result.
+  • ABSENT shown in rose, PASS/FAIL pills, grade computed via getGradeForPercentage.
+  • VLM rated 9/10 — "clean, modern UI; clear hierarchy; useful summary statistics".
+  • Verified: clicked Class 9 Hindi → modal shows 4 students (Sai Joshi 79 B1, Aarav Mehta 79 B1, Karan Patel 77 B1, Rohan Kumar 69 B2), Average 76, Pass 100%.
+- Added Heatmap Conditional Formatting to Subject Comparison table:
+  • Grade count cells now have intensity-based background color (hsl(var(--primary) / opacity)).
+  • Higher counts → darker background (0.08 to 0.33 opacity based on relative intensity).
+  • Zero counts show "—" with muted styling (no background).
+  • 58 heatmap cells rendered across 32 subject rows.
+  • Rows are now clickable (cursor-pointer, hover:bg-primary/5, ChevronRight icon).
+  • Zebra striping (even:bg-muted/10).
+- Added classId and subjectId to subjectComparison data (needed for drill-down).
+- Lint passes clean. Dev server compiles successfully.
+- No browser errors. All 8 tabs functional.
+
+Stage Summary:
+- 2 new features: Subject Comparison drill-down modal (9/10), heatmap conditional formatting (58 cells).
+- All features browser-verified via agent-browser + VLM.
+- Canonical data flow maintained: subject marks derived from marks store, grades from getGradeForPercentage.
+- Next opportunities: (1) add exam settings page with grading config editor, (2) add parent portal result view, (3) add exam archive with historical comparison, (4) add subject-wise performance trend charts.
