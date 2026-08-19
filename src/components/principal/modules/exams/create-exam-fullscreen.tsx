@@ -717,7 +717,6 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
               dateRangeLabel={dateRangeLabel}
               papersPerDay={selectedTemplate ? getTemplateMeta(selectedTemplate.id).papersPerDay : 1}
               startTime={examTime}
-              timetable={consolidatedTimetable}
             />
             {consolidatedTimetable.rows.length > 0 && (
               <OfficialTimetable
