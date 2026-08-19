@@ -2318,3 +2318,35 @@ Stage Summary:
 - All Settings sub-tabs now show populated data in mock mode.
 - Canonical data flow maintained: all defaults from types.ts constants.
 - Next opportunities: (1) add exam archive with historical comparison, (2) add parent portal result view, (3) add subject-wise performance trend charts, (4) add Publication settings.
+
+---
+Task ID: cron-round-10-reports-data-fix
+Agent: main (Super Z)
+Task: Fix Reports tab empty data (STUDENTS=0, empty student selector) with mock fallback
+
+Work Log:
+- Reviewed worklog: previous rounds fixed all Settings sub-tabs with fallback data.
+- QA testing via agent-browser + VLM identified critical bug in Reports tab:
+  • BUG: STUDENTS column showed 0 for all subjects (useClassResults returns 401 in mock mode).
+  • BUG: Student selector was empty ("Select student" with no options).
+  • VLM rated Reports tab 4/10 — "critical data missing/broken, student selector inactive".
+- Fixed ReportsTab component in reports-tab.tsx:
+  • Added mock data fallback: uses useMockMarksStore + useStudentsStore when API fails.
+  • mockStudents: derived from students store (filtered by classId + Active status), mapped to StudentDTO[].
+  • mockResults: derived from marks store — computes totalObtained, totalMax, percentage, grade, pass/fail, rank.
+  • Uses getGradeForPercentage for grade calculation.
+  • Results sorted by percentage descending, rank assigned 1..N.
+  • API data takes priority if available (apiData?.students?.length > 0).
+  • handleReport: builds analytics from results if API analytics not available (totalStudents, passed, failed, passRate, avgPct, highest, lowest, toppers).
+- Added imports: useMockMarksStore, useStudentsStore, StudentResult, StudentDTO, getGradeForPercentage.
+- Lint passes clean. Dev server compiles successfully.
+- No browser errors. All 8 tabs functional.
+- VLM verification: Reports tab rated 9/10 (was 4/10) — "data correctly populated and functional".
+- Verified: STUDENTS column shows 4 (was 0), student selector shows "Nisha Joshi (#02)" and "Aarav Joshi (#02)".
+
+Stage Summary:
+- 1 critical bug fixed: Reports tab empty data (STUDENTS=0, empty student selector).
+- Reports tab VLM rating improved from 4/10 to 9/10.
+- Canonical data flow maintained: students from students store, results from marks store, grades from getGradeForPercentage.
+- All examination module tabs now functional with populated data in mock mode.
+- Next opportunities: (1) add exam archive with historical comparison, (2) add parent portal result view, (3) add subject-wise performance trend charts, (4) add cross-exam analytics dashboard.

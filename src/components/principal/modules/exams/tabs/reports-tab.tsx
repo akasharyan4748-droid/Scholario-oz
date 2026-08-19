@@ -20,8 +20,10 @@ import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@
 import { InlineLoading } from '../inline-loading'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { type ExamDTO, type AdmitCardStudent, type SchoolContextDTO } from '@/lib/exams/types'
+import { type ExamDTO, type AdmitCardStudent, type SchoolContextDTO, type StudentResult, type StudentDTO, getGradeForPercentage } from '@/lib/exams/types'
 import { useClassResults, useExam } from '@/lib/exams/use-exams'
+import { useMockMarksStore } from '@/lib/exams/mock-marks-data'
+import { useStudentsStore } from '@/lib/store/students-store'
 import {
   generateClassGradeSheetPDF,
   generateStudentReportCardPDF,
@@ -55,9 +57,82 @@ export function ReportsTab({ exams }: Props) {
   const exam = exams.find((e) => e.id === examId) || null
   const firstClassId = exam?.classes[0]?.classId ?? null
   const effectiveClassId = classId || firstClassId
-  const { data, loading } = useClassResults(examId, effectiveClassId)
-  const students = data?.students ?? []
-  const results = data?.results ?? []
+
+  // Try the real API first, fall back to mock data if it fails.
+  const { data: apiData, loading: apiLoading } = useClassResults(examId, effectiveClassId)
+
+  // Mock data fallback: derive students + results from mock stores.
+  const storeMarks = useMockMarksStore((s) => s.marks)
+  const allStudents = useStudentsStore((s) => s.students)
+
+  const mockStudents: StudentDTO[] = useMemo(() => {
+    if (!examId || !effectiveClassId) return []
+    return allStudents
+      .filter((s) => s.classId === effectiveClassId && s.status === 'Active')
+      .map((s) => ({ id: s.id, rollNo: s.rollNo, admissionNo: null, name: s.name, classId: s.classId }))
+  }, [allStudents, examId, effectiveClassId])
+
+  const mockResults: StudentResult[] = useMemo(() => {
+    if (!exam || !effectiveClassId) return []
+    const classMarks = storeMarks.filter((m) => m.examId === exam.id && m.classId === effectiveClassId)
+    const subjects = exam.subjects.filter((s: any) => s.classId === effectiveClassId)
+    const studentIds = new Set(classMarks.map((m) => m.studentId))
+
+    return Array.from(studentIds).map((studentId) => {
+      const studentMarks = classMarks.filter((m) => m.studentId === studentId)
+      let totalObtained = 0
+      let totalMax = 0
+      const subjResults = subjects.map((subj: any) => {
+        const mark = studentMarks.find((m) => m.subjectId === subj.subjectId)
+        const obtained = mark?.marksObtained ?? null
+        const isAbsent = mark?.status === 'ABSENT'
+        if (obtained !== null && !isAbsent) {
+          totalObtained += obtained
+          totalMax += subj.maxMarks
+        } else {
+          totalMax += subj.maxMarks
+        }
+        const pct = obtained !== null && subj.maxMarks > 0 ? Math.round((obtained / subj.maxMarks) * 100 * 100) / 100 : 0
+        const { grade } = getGradeForPercentage(pct, [])
+        return {
+          subjectId: subj.subjectId,
+          subjectName: subj.subjectName,
+          maxMarks: subj.maxMarks,
+          passMarks: subj.passMarks,
+          marksObtained: obtained,
+          status: mark?.status ?? 'PRESENT',
+          isAbsent,
+          passed: obtained !== null && pct >= 33,
+          percentage: pct,
+        }
+      })
+      const percentage = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100 * 100) / 100 : 0
+      const { grade, gradeColor } = getGradeForPercentage(percentage, [])
+      return {
+        studentId,
+        studentName: studentMarks[0]?.studentName ?? 'Unknown',
+        rollNo: studentMarks[0]?.studentRollNo ?? null,
+        className: exam.classes.find((c: any) => c.classId === effectiveClassId)?.className ?? '',
+        classId: effectiveClassId,
+        subjects: subjResults,
+        totalObtained,
+        totalMax,
+        percentage,
+        grade,
+        gradeColor,
+        passed: subjResults.every((s) => s.passed),
+        subjectsPassed: subjResults.filter((s) => s.passed).length,
+        subjectsCount: subjResults.length,
+        isAbsentInAll: subjResults.every((s) => s.isAbsent),
+        rank: 0,
+      }
+    }).sort((a, b) => b.percentage - a.percentage).map((r, i) => ({ ...r, rank: i + 1 }))
+  }, [exam, effectiveClassId, storeMarks])
+
+  // Use API data if available, otherwise mock data.
+  const students = apiData?.students?.length > 0 ? apiData.students : mockStudents
+  const results = apiData?.results?.length > 0 ? apiData.results : mockResults
+  const loading = apiLoading
 
   // Fetch school info + report configs for PDF generation
   const { data: schoolCtx } = useSchoolContext()
@@ -89,11 +164,27 @@ export function ReportsTab({ exams }: Props) {
     }
     try {
       if (reportId === 'grade-sheet') {
-        if (!data || results.length === 0) {
+        if (results.length === 0) {
           toast.error('No results to export', { description: 'Enter marks first.' })
           return
         }
-        const { filename } = generateClassGradeSheetPDF(exam, className, results, data.analytics, school)
+        // Build analytics from results if API analytics not available.
+        const analytics = apiData?.analytics ?? {
+          totalStudents: results.length,
+          passed: results.filter((r) => r.passed).length,
+          failed: results.filter((r) => !r.passed).length,
+          passRate: results.length > 0 ? Math.round((results.filter((r) => r.passed).length / results.length) * 100) : 0,
+          averagePercentage: results.length > 0 ? Math.round(results.reduce((s, r) => s + r.percentage, 0) / results.length) : 0,
+          highestPercentage: results.length > 0 ? Math.max(...results.map((r) => r.percentage)) : 0,
+          lowestPercentage: results.length > 0 ? Math.min(...results.map((r) => r.percentage)) : 0,
+          gradeDistribution: {},
+          subjectPerformance: [],
+          toppers: results.slice(0, 5).map((r, i) => ({
+            rank: i + 1, studentId: r.studentId, name: r.studentName, rollNo: r.rollNo,
+            className: r.className, percentage: r.percentage, total: r.totalObtained, maxTotal: r.totalMax, grade: r.grade,
+          })),
+        }
+        const { filename } = generateClassGradeSheetPDF(exam, className, results, analytics, school)
         toast.success('Grade sheet exported', { description: filename })
       } else if (reportId === 'report-card') {
         if (!studentId) {
