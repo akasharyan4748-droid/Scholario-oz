@@ -1,17 +1,19 @@
 /**
- * Seating plan PDF — landscape, room-by-room visual seating layout.
- *
- * Shows the physical seating map with row/column labels, seat numbers,
- * student names, roll numbers, and class — NOT a flat table.
+ * Seating plan PDF — landscape, room-by-room with bench layout + invigilators.
  */
 
 import { jsPDF } from 'jspdf'
 import type { ExamDTO } from '@/lib/exams/types'
-import type { SeatingPlan, Seat, ExamRoom } from '@/lib/exams/seating/types'
+import type { SeatingPlan, ExamSlot, InvigilationAssignment } from '@/lib/exams/seating/types'
 import { seatsForRoom, roomOccupancy } from '@/lib/exams/seating/generator'
 import { formatDateLong } from '@/lib/exams/format-helpers'
 
-export function generateSeatingPlanPDF(exam: ExamDTO, plan: SeatingPlan): void {
+export function generateSeatingPlanPDF(
+  exam: ExamDTO,
+  plan: SeatingPlan,
+  examSlots: ExamSlot[] = [],
+  invigilators: InvigilationAssignment[] = [],
+): void {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -30,73 +32,93 @@ export function generateSeatingPlanPDF(exam: ExamDTO, plan: SeatingPlan): void {
   for (const room of plan.rooms) {
     const { occupied, capacity } = roomOccupancy(plan, room.id)
     const seats = seatsForRoom(plan, room.id)
+    const posCount = room.seatingType === 'triple' ? 3 : room.seatingType === 'double' ? 2 : 1
 
     // Room header
     doc.setFontSize(10); doc.setFont('helvetica', 'bold')
     doc.text(`${room.name} — ${room.roomNo}`, 14, y)
     doc.setFontSize(7); doc.setFont('helvetica', 'normal')
-    doc.text(`${room.rows} rows × ${room.cols} cols · ${room.seatingType} · ${occupied}/${capacity} occupied`, 14, y + 4)
+    doc.text(`${room.rows}×${room.cols} · ${room.seatingType} · ${occupied}/${capacity} occupied`, 14, y + 4)
+
+    // Invigilator info for first slot (if available)
+    const firstSlot = examSlots[0]
+    if (firstSlot) {
+      const roomInvs = invigilators.filter((a) => a.roomId === room.id && a.examSlotId === firstSlot.id)
+      if (roomInvs.length > 0) {
+        doc.text(`Invigilators (${firstSlot.shiftLabel}): ${roomInvs.map((i) => i.teacherName).join(', ')}`, 14, y + 7)
+      }
+    }
 
     // Invigilator desk marker
     doc.setFontSize(6); doc.setFont('helvetica', 'bold')
     doc.text('INVIGILATOR DESK', pageW / 2, y + 2, { align: 'center' })
-    y += 8
+    y += 10
 
     // Column numbers
-    const seatW = Math.min(22, (pageW - 40) / (room.cols * (room.seatingType === 'double' ? 2 : 1)))
-    const gridStartX = (pageW - room.cols * seatW * (room.seatingType === 'double' ? 2 : 1)) / 2
-
+    const benchW = Math.min(30, (pageW - 40) / room.cols)
+    const gridStartX = (pageW - room.cols * benchW) / 2
     doc.setFontSize(5); doc.setFont('helvetica', 'normal')
     for (let c = 0; c < room.cols; c++) {
-      const cx = gridStartX + c * seatW * (room.seatingType === 'double' ? 2 : 1)
-      doc.text(String(c + 1), cx + seatW / 2, y, { align: 'center' })
+      doc.text(String(c + 1), gridStartX + c * benchW + benchW / 2, y, { align: 'center' })
     }
     y += 3
 
-    // Rows
+    // Rows with benches
+    const seatH = posCount > 1 ? 12 : 8
     for (let r = 0; r < room.rows; r++) {
-      const ry = y + r * 10
+      const ry = y + r * (seatH + 3)
+
       // Row label
       doc.setFontSize(5); doc.setFont('helvetica', 'bold')
-      doc.text(String.fromCharCode(65 + r), gridStartX - 4, ry + 5)
+      doc.text(String.fromCharCode(65 + r), gridStartX - 4, ry + seatH / 2)
 
       for (let c = 0; c < room.cols; c++) {
         const cellSeats = seats.filter((s) => s.rowIdx === r && s.colIdx === c)
           .sort((a, b) => (a.position ?? '').localeCompare(b.position ?? ''))
+        const cx = gridStartX + c * benchW
 
+        if (cellSeats.length === 0) continue
+
+        // Draw bench border
+        doc.setDrawColor(180)
+        doc.setFillColor(250, 250, 250)
+        doc.rect(cx, ry, benchW - 1, seatH, 'FD')
+
+        // Draw position dividers + student info
+        const posW = (benchW - 1) / cellSeats.length
         for (let si = 0; si < cellSeats.length; si++) {
           const seat = cellSeats[si]
-          const cx = gridStartX + c * seatW * (room.seatingType === 'double' ? 2 : 1) + si * seatW
+          const px = cx + si * posW
 
-          // Seat box
-          doc.setDrawColor(200)
-          doc.setFillColor(seat.studentId ? 240 : 250, seat.studentId ? 250 : 250, seat.studentId ? 245 : 250)
-          doc.rect(cx, ry, seatW - 1, 8, 'FD')
+          if (si > 0) {
+            doc.setDrawColor(200)
+            doc.line(px, ry, px, ry + seatH)
+          }
 
-          // Seat number
-          doc.setFontSize(4); doc.setFont('helvetica', 'bold')
-          doc.setTextColor(seat.studentId ? 15 : 150, seat.studentId ? 100 : 150, seat.studentId ? 80 : 150)
-          doc.text(seat.seatNumber, cx + 1, ry + 2.5)
-
-          // Student info
           if (seat.studentId) {
-            doc.setFontSize(4.5); doc.setFont('helvetica', 'normal')
-            doc.setTextColor(40, 40, 40)
+            doc.setFillColor(240, 250, 245)
+            doc.rect(px + 0.5, ry + 0.5, posW - 1, seatH - 1, 'F')
+
+            doc.setFontSize(5); doc.setFont('helvetica', 'bold')
+            doc.setTextColor(30, 30, 30)
             const name = seat.studentName ?? ''
-            doc.text(name.length > 12 ? name.substring(0, 12) : name, cx + 1, ry + 4.5)
-            doc.setFontSize(4)
-            doc.setTextColor(100, 100, 100)
-            doc.text(`Roll: ${seat.studentRollNo ?? ''}`, cx + 1, ry + 6)
-            doc.text(seat.className ?? '', cx + 1, ry + 7.5)
+            doc.text(name.length > 10 ? name.substring(0, 10) : name, px + 1, ry + 4)
+
+            doc.setFontSize(4); doc.setFont('helvetica', 'normal')
+            doc.setTextColor(80, 80, 80)
+            doc.text(`Roll ${seat.studentRollNo ?? ''}`, px + 1, ry + 6.5)
+
+            doc.setTextColor(15, 100, 80)
+            doc.text(seat.className ?? '', px + 1, ry + 8.5)
           } else {
             doc.setFontSize(4); doc.setTextColor(180, 180, 180)
-            doc.text('Empty', cx + 1, ry + 5)
+            doc.text('Empty', px + 1, ry + seatH / 2)
           }
           doc.setTextColor(0, 0, 0)
         }
       }
     }
-    y += room.rows * 10 + 8
+    y += room.rows * (seatH + 3) + 8
     if (y > pageH - 20) { doc.addPage(); y = 14 }
   }
 

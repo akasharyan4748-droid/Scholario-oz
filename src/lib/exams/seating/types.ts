@@ -2,7 +2,7 @@
  * Seating types — Spec: Schedule = WHEN, Seating = WHERE.
  */
 
-export type SeatingType = 'single' | 'double'
+export type SeatingType = 'single' | 'double' | 'triple'
 
 export interface ExamRoom {
   id: string
@@ -12,7 +12,6 @@ export interface ExamRoom {
   cols: number
   seatingType: SeatingType
   capacity: number
-  /** Class IDs eligible for this room (from the exam's selected classes). */
   eligibleClassIds: string[]
 }
 
@@ -22,7 +21,6 @@ export interface Seat {
   seatNumber: string
   rowIdx: number
   colIdx: number
-  /** 'L' or 'R' for double-seat. Null for single. */
   position: string | null
   studentId: string | null
   studentName: string | null
@@ -40,13 +38,25 @@ export interface SeatingPlan {
   fits: boolean
 }
 
-export interface InvigilatorAssignment {
+/** Exam slot (date + shift) — derived from the exam's schedule. */
+export interface ExamSlot {
+  id: string
+  date: string
+  startTime: string
+  endTime: string
+  shiftLabel: string
+}
+
+/** Invigilator assignment per slot + room (max 3 per slot+room). */
+export interface InvigilationAssignment {
+  id: string
+  examSlotId: string
   roomId: string
   teacherId: string
   teacherName: string
 }
 
-/** A student record for seating (sourced from the Students & Classes store). */
+/** A student for seating (sourced from Students & Classes store). */
 export interface SeatingStudent {
   id: string
   name: string
@@ -57,5 +67,6 @@ export interface SeatingStudent {
 
 /** Compute capacity from rows/cols/type. */
 export function computeCapacity(rows: number, cols: number, type: SeatingType): number {
-  return rows * cols * (type === 'double' ? 2 : 1)
+  const multiplier = type === 'triple' ? 3 : type === 'double' ? 2 : 1
+  return rows * cols * multiplier
 }

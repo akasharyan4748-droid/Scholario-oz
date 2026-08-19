@@ -126,18 +126,6 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
             </div>
             {exam && (
               <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => {
-                    try { generateSchedulePDF(exam) } catch { toast.error('Failed to generate PDF') }
-                  }}
-                  title="Download Schedule"
-                  aria-label="Download Schedule"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                </Button>
                 <StatusPill status={exam.status} />
                 <ResultStatusPill status={exam.resultStatus} />
               </div>
