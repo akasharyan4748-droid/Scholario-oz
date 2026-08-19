@@ -2009,3 +2009,58 @@ Stage Summary:
 - Visual polish: Seating room cards grouped, Schedule zebra striping + hover, KPI accent colors.
 - All 8 tabs verified via browser + VLM. Ratings: Overview 9/10, Marks 9/10, Grade 8/10, Audit 8/10, Seating 8.5/10, Schedule 8/10.
 - Next opportunities: (1) add search/filter to Subject Progress table, (2) add keyboard shortcuts for tab switching (1-9), (3) add exam-comparison view across exams, (4) add student-wise performance trend chart.
+
+---
+Task ID: cron-round-3-features
+Agent: main (Super Z)
+Task: Outcomes auto-compute, Marks search/filter, keyboard shortcuts, student performance ranking
+
+Work Log:
+- Reviewed worklog: previous rounds added visual polish (Grade/Marks/Audit 8-9/10), Seating auto-seed, Schedule overlap fix, KPI icons, Grade donut chart, Grade PDF export.
+- QA testing via agent-browser + VLM identified 1 critical bug + 3 feature opportunities:
+  • BUG (critical): Outcomes tab showed "No outcomes computed yet" on a Completed/Result Declared exam — data-integrity contradiction.
+  • FEATURE: Marks Subject Progress table (32 papers) had no search/filter → VLM rated 6/10.
+  • FEATURE: No keyboard shortcuts for tab switching.
+  • FEATURE: No student-wise performance/ranking view.
+- Fixed Outcomes tab data-integrity:
+  • Created new mock-outcomes-data.ts store with StudentOutcome type, initOutcomes(), computeForClass(), overrideOutcome(), getOutcomes().
+  • Outcomes derived from canonical marks store using standard rules: 0 fails → PROMOTED, 1 fail → COMPARTMENT, 2 fails → RETEST, 3+ → NOT_PROMOTED, absent-in-all → NOT_PROMOTED.
+  • Auto-init on mount for all exams (not just completed) — outcomes appear immediately.
+  • Added "Class" column to outcomes table, zebra striping, "All Classes" option.
+  • Renamed button to "Re-compute Outcomes" (since outcomes now auto-compute).
+  • Override + compute both record audit events (OUTCOME_OVERRIDDEN).
+  • VLM rated 9/10 — "data integrity fixed", "excellent table clarity", "color-coded status badges".
+- Added search/filter to Marks Subject Progress table:
+  • Search input with Search icon (placeholder: "Search subject, class, teacher…").
+  • Status filter dropdown (All/Locked/Verified/Submitted/In Progress/Not Started).
+  • Clear-filters button (RotateCcw icon) shown only when filters active.
+  • Subtitle updates dynamically: "X of Y papers".
+  • Empty state: "No papers match your filters." when filtered to 0.
+  • Filters by subject name, class name, and teacher name (case-insensitive).
+  • VLM rated 9/10 — "search box clearly visible and functional", "X of Y count highly helpful".
+  • Verified: searching "physics" → 4 of 32 papers (Class 11/12 Physics, Dr. Lakshmi Iyer). Searching "maths" → 4 papers. Clear → 32 of 32.
+- Added keyboard shortcuts (1-9) for tab switching:
+  • useEffect listener on window keydown.
+  • Press 1-9 → switches to corresponding tab (Overview=1, Schedule=2, ... Audit=9).
+  • Press Escape → goes back to exams list (if not in dialog/input).
+  • Smart: ignores keypresses when typing in INPUT/SELECT/TEXTAREA or with modifier keys (Ctrl/Cmd/Alt).
+  • Visual: each tab button now shows a small <kbd> number badge (hidden on mobile, shown on sm+).
+  • Tooltip: "Switch to {label} (Press {n})".
+  • Verified: pressed "6" while on Marks tab → instantly switched to Grade tab.
+- Added Student Performance ranked table to Grade tab:
+  • Computes each student's total obtained, total max, percentage, grade, subjects failed, pass/fail.
+  • Sorts by percentage descending → assigns rank 1-N.
+  • Top 3 ranks get special badge styling: #1=gold (amber), #2=silver (slate), #3=bronze (orange).
+  • Columns: Rank | Student | Class | Total | % | Grade | Failed | Result (PASS/FAIL pill).
+  • CollapsibleSection (default collapsed, amber accent).
+  • Respects class/subject filters.
+  • Verified: 16 students ranked. Rank 1 = Rohan Kumar (73%, B1, PASS). Rank 6 = Pari Singh (66.67%, B2, 1 fail, FAIL).
+- Lint passes clean on all modified files. Dev server compiles successfully (✓ Compiled in 3ms).
+- No browser errors. All 8 tabs functional.
+
+Stage Summary:
+- 1 critical bug fixed: Outcomes tab data-integrity (auto-compute from marks, 9/10).
+- 3 new features: Marks search/filter (9/10), keyboard shortcuts 1-9 (verified), Student Performance ranking (16 students, top-3 badges).
+- Canonical data flow: outcomes derived from marks store (not independently mocked).
+- All features browser-verified via agent-browser + VLM.
+- Next opportunities: (1) add bulk actions to Marks (Select All + Verify All), (2) add exam-comparison view across multiple exams, (3) add student-wise subject breakdown drill-down, (4) add printable admit cards from Seating tab.

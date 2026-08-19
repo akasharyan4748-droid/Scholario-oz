@@ -9,9 +9,9 @@
  * 10-section navigation bar.
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Pencil, Save, Download, Lock, Unlock, Clock, Award, Megaphone, CheckCircle2, FileText, User, Filter, RotateCcw, Send, Users, BookOpen, CalendarDays, PieChart } from 'lucide-react'
+import { ArrowLeft, Pencil, Save, Download, Lock, Unlock, Clock, Award, Megaphone, CheckCircle2, FileText, User, Filter, RotateCcw, Send, Users, BookOpen, CalendarDays, PieChart, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -107,6 +107,32 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
   // Initialize mock marks when the exam loads.
   useInitMockMarks(exam)
 
+  // Keyboard shortcuts: 1-9 switches tabs, Esc goes back.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't intercept when typing in inputs/selects/textareas.
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key >= '1' && e.key <= '9') {
+        const idx = Number(e.key) - 1
+        if (idx < TABS.length) {
+          e.preventDefault()
+          setTab(TABS[idx].value)
+        }
+      } else if (e.key === 'Escape') {
+        // Only go back if not in a dialog/input.
+        const inDialog = (e.target as HTMLElement)?.closest('[role="dialog"], [role="region"]')
+        if (!inDialog) {
+          e.preventDefault()
+          onBack()
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onBack])
+
   const handleReload = () => {
     reload()
     onMutated()
@@ -145,20 +171,28 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
               <div key={group.label} className="flex items-center gap-2">
                 {gi > 0 && <span className="text-muted-foreground/40 text-xs select-none" aria-hidden>•</span>}
                 <div className="flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5">
-                  {group.items.map((t) => (
-                    <button
-                      key={t.value}
-                      onClick={() => setTab(t.value)}
-                      className={cn(
-                        'px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap',
-                        tab === t.value
-                          ? 'bg-card text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
+                  {group.items.map((t) => {
+                    const tabIdx = TABS.indexOf(t)
+                    return (
+                      <button
+                        key={t.value}
+                        onClick={() => setTab(t.value)}
+                        title={`Switch to ${t.label} (Press ${tabIdx + 1})`}
+                        className={cn(
+                          'px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5',
+                          tab === t.value
+                            ? 'bg-card text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {t.label}
+                        <kbd className={cn(
+                          'hidden sm:inline-flex items-center justify-center h-3.5 px-0.5 rounded text-[8px] font-mono leading-none',
+                          tab === t.value ? 'bg-muted/60 text-muted-foreground' : 'bg-muted/30 text-muted-foreground/50',
+                        )}>{tabIdx + 1}</kbd>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             ))}
@@ -506,6 +540,8 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
   const [showResults, setShowResults] = useState(false)
   const [selectedPaper, setSelectedPaper] = useState<{ classId: string; subjectId: string } | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterStatus, setFilterStatus] = useState('all')
   const storeMarks = useMockMarksStore((s) => s.marks)
   const declaredClassIds = useMockMarksStore((s) => s.declaredClassIds)
   const publishedClassIds = useMockMarksStore((s) => s.publishedClassIds)
@@ -567,6 +603,22 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
     return rows
   }, [exam, allMarks])
 
+  // Filtered subject rows (search + status filter).
+  const filteredSubjectRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return subjectRows.filter((r) => {
+      if (filterStatus !== 'all' && r.status !== filterStatus) return false
+      if (q) {
+        return r.subjectName.toLowerCase().includes(q) ||
+               r.className.toLowerCase().includes(q) ||
+               r.teacher.toLowerCase().includes(q)
+      }
+      return true
+    })
+  }, [subjectRows, searchQuery, filterStatus])
+
+  const hasFilters = searchQuery.trim() !== '' || filterStatus !== 'all'
+
   const handleAction = async (action: 'submit' | 'verify' | 'lock' | 'unlock' | 'declare' | 'publish', cid?: string, sid?: string) => {
     try {
       const filter = cid ? { classId: cid, ...(sid ? { subjectId: sid } : {}) } : {}
@@ -595,8 +647,43 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
       {/* Subject-wise progress — paper-level actions with teacher ownership */}
       <CollapsibleSection
         title="Subject Progress (per paper)"
-        subtitle={`${subjectRows.length} papers`}
+        subtitle={`${filteredSubjectRows.length} of ${subjectRows.length} papers`}
         accent="violet"
+        actions={
+          <div className="flex items-center gap-1.5">
+            <div className="relative">
+              <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search subject, class, teacher…"
+                className="h-6 text-[10px] pl-5 pr-2 rounded bg-transparent border border-border/40 focus:border-primary/40 focus:outline-none w-44"
+              />
+            </div>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="h-6 text-[10px] rounded bg-transparent border border-border/40 px-1"
+            >
+              <option value="all">All Status</option>
+              <option value="LOCKED">Locked</option>
+              <option value="VERIFIED">Verified</option>
+              <option value="SUBMITTED">Submitted</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="DRAFT">Not Started</option>
+            </select>
+            {hasFilters && (
+              <button
+                onClick={() => { setSearchQuery(''); setFilterStatus('all') }}
+                className="text-[9px] text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+                title="Clear filters"
+              >
+                <RotateCcw className="h-2.5 w-2.5" />
+              </button>
+            )}
+          </div>
+        }
       >
         <div className="overflow-x-auto max-h-[20rem]">
           <table className="w-full text-xs">
@@ -611,7 +698,7 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {subjectRows.map((r, i) => {
+              {filteredSubjectRows.map((r, i) => {
                 const enteredPct = r.total > 0 ? Math.round((r.entered / r.total) * 100) : 0
                 return (
                 <tr key={i} className="border-t border-border/40 hover:bg-muted/40 even:bg-muted/15 transition-colors">
@@ -690,8 +777,8 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
                 </tr>
                 )
               })}
-              {subjectRows.length === 0 && (
-                <tr><td colSpan={6} className="py-6 text-center text-xs text-muted-foreground">No subjects configured.</td></tr>
+              {filteredSubjectRows.length === 0 && (
+                <tr><td colSpan={6} className="py-6 text-center text-xs text-muted-foreground">{hasFilters ? `No papers match your filters.` : 'No subjects configured.'}</td></tr>
               )}
             </tbody>
           </table>
@@ -1219,6 +1306,51 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
 
   const maxDist = Math.max(1, ...Object.values(gradeData.distribution))
 
+  // Student-wise performance: compute each student's total %, grade, rank, pass/fail.
+  const studentPerformance = useMemo(() => {
+    const rows: Array<{ studentId: string; studentName: string; rollNo: string | null; className: string; totalObtained: number; totalMax: number; percentage: number; grade: string; passed: boolean; subjectsFailed: number; rank: number }> = []
+    const studentIds = new Set(allMarks.map((m) => m.studentId))
+    for (const studentId of studentIds) {
+      const studentMarks = allMarks.filter((m) => m.studentId === studentId)
+      if (filterClass !== 'all') {
+        const studentClassId = studentMarks[0]?.classId
+        if (studentClassId !== filterClass) continue
+      }
+      let totalObtained = 0
+      let totalMax = 0
+      let subjectsFailed = 0
+      let subjectsCount = 0
+      for (const subj of exam.subjects.filter((s: any) => s.classId === studentMarks[0]?.classId)) {
+        if (filterSubject !== 'all' && subj.subjectId !== filterSubject) continue
+        const mark = studentMarks.find((m) => m.subjectId === subj.subjectId)
+        if (!mark) continue
+        subjectsCount++
+        if (mark.status === 'ABSENT' || mark.marksObtained === null) {
+          subjectsFailed++
+          totalMax += subj.maxMarks
+          continue
+        }
+        totalObtained += mark.marksObtained
+        totalMax += subj.maxMarks
+        const pct = subj.maxMarks > 0 ? (mark.marksObtained / subj.maxMarks) * 100 : 0
+        if (pct < 33) subjectsFailed++
+      }
+      if (subjectsCount === 0) continue
+      const percentage = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100 * 100) / 100 : 0
+      const { grade } = getGradeForPercentage(percentage, [])
+      rows.push({
+        studentId,
+        studentName: studentMarks[0]?.studentName ?? 'Unknown',
+        rollNo: studentMarks[0]?.studentRollNo ?? null,
+        className: exam.classes.find((c: any) => c.classId === studentMarks[0]?.classId)?.className ?? '',
+        totalObtained, totalMax, percentage, grade,
+        passed: subjectsFailed === 0, subjectsFailed,
+      })
+    }
+    // Sort by percentage desc → assign rank.
+    return rows.sort((a, b) => b.percentage - a.percentage).map((r, i) => ({ ...r, rank: i + 1 }))
+  }, [allMarks, exam, filterClass, filterSubject])
+
   return (
     <div className="space-y-4">
       {/* Summary */}
@@ -1368,6 +1500,62 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
               ))}
               {subjectComparison.length === 0 && (
                 <tr><td colSpan={2 + gradeScale.length} className="py-4 text-center text-muted-foreground">No data available.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </CollapsibleSection>
+
+      {/* Student Performance / Toppers */}
+      <CollapsibleSection title="Student Performance" subtitle={`${studentPerformance.length} students · ranked`} accent="amber" defaultOpen={false}>
+        <div className="overflow-x-auto max-h-[20rem]">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
+              <tr>
+                <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Rank</th>
+                <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Student</th>
+                <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Class</th>
+                <th className="text-right px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Total</th>
+                <th className="text-right px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">%</th>
+                <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Grade</th>
+                <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Failed</th>
+                <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {studentPerformance.map((s) => (
+                <tr key={s.studentId} className="border-t border-border/30 hover:bg-muted/30 even:bg-muted/10 transition-colors">
+                  <td className="px-2 py-1.5 text-center">
+                    {s.rank <= 3 ? (
+                      <span className={cn(
+                        'inline-flex items-center justify-center h-5 w-5 rounded-full text-[9px] font-bold',
+                        s.rank === 1 ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300' :
+                        s.rank === 2 ? 'bg-slate-400/20 text-slate-600 dark:text-slate-300' :
+                        'bg-orange-600/20 text-orange-700 dark:text-orange-400',
+                      )}>
+                        {s.rank}
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-muted-foreground tabular-nums">{s.rank}</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 font-medium">{s.studentName}</td>
+                  <td className="px-2 py-1.5 text-muted-foreground">{s.className}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{s.totalObtained}/{s.totalMax}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums font-semibold">{s.percentage}%</td>
+                  <td className="px-2 py-1.5 text-center font-bold">{s.grade}</td>
+                  <td className="px-2 py-1.5 text-center tabular-nums">{s.subjectsFailed}</td>
+                  <td className="px-2 py-1.5 text-center">
+                    {s.passed ? (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">PASS</span>
+                    ) : (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20">FAIL</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {studentPerformance.length === 0 && (
+                <tr><td colSpan={8} className="py-4 text-center text-muted-foreground">No student data available.</td></tr>
               )}
             </tbody>
           </table>

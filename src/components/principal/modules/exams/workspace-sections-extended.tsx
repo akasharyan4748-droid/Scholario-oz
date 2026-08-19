@@ -6,7 +6,7 @@
  * These are loaded inside ExamWorkspaceDialog alongside the existing tabs.
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Plus, Trash2, MapPin, RefreshCw, Sparkles, Send, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,18 +21,15 @@ import { MARK_STATUSES, type MarkStatus } from '@/lib/exams/types'
 import {
   useSeatingPlan,
   useGenerateSeating,
-  useExamAttendance,
   useTeachers,
   useAssignInvigilator,
-  useOutcomes,
-  useComputeOutcomes,
-  useOverrideOutcome,
   useImportMarksCsv,
   downloadCsvTemplate,
   type CsvImportRow,
 } from '@/lib/exams/use-exams-extended'
 import { useApplyGraceMock } from '@/lib/exams/use-marks-mock'
 import { useMockMarksStore } from '@/lib/exams/mock-marks-data'
+import { useMockOutcomesStore, type Outcome } from '@/lib/exams/mock-outcomes-data'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { useRoleGate } from '@/lib/exams/use-role-gate'
 import { generateSeatingPlanPDF, generateBatchAdmitCardPDF } from '@/lib/exams/pdf'
@@ -337,31 +334,33 @@ export function GraceSection({ examId, exam }: SectionProps) {
 
 export function OutcomesSection({ examId, exam }: SectionProps) {
   const [classId, setClassId] = useState(exam?.classes[0]?.classId ?? '')
-  const { outcomes, loading, reload } = useOutcomes(examId, classId)
-  const { compute, loading: computing } = useComputeOutcomes()
-  const { override, loading: overriding } = useOverrideOutcome()
+  const outcomesStore = useMockOutcomesStore()
+  const outcomes = useMemo(
+    () => outcomesStore.outcomes.filter((o) => o.examId === examId && (classId === '' || o.classId === classId)),
+    [outcomesStore.outcomes, examId, classId],
+  )
   const gate = useRoleGate()
-  void overriding
 
-  const handleCompute = async () => {
+  // Auto-init outcomes for completed/ongoing exams.
+  const [initialized, setInitialized] = useState(false)
+  useEffect(() => {
+    if (!exam || initialized) return
+    outcomesStore.initOutcomes(exam)
+    setInitialized(true)
+  }, [exam, initialized, outcomesStore])
+
+  const handleCompute = () => {
     if (!classId) return
-    try {
-      const r = await compute(examId, classId)
-      toast.success(`Outcomes computed for ${r.autoCount} students`, { description: 'PROMOTED if passed, COMPARTMENT if 1 fail, RETEST if 2 fails, NOT_PROMOTED otherwise.' })
-      reload()
-    } catch (e: any) {
-      toast.error('Failed to compute outcomes', { description: e.message })
-    }
+    const count = outcomesStore.computeForClass(examId, classId)
+    toast.success(`Outcomes computed for ${count} students`, {
+      description: 'PROMOTED if passed, COMPARTMENT if 1 fail, RETEST if 2 fails, NOT_PROMOTED otherwise.',
+    })
   }
 
-  const handleOverride = async (studentId: string, outcome: 'PROMOTED' | 'COMPARTMENT' | 'RETEST' | 'NOT_PROMOTED') => {
-    try {
-      await override(examId, studentId, outcome, 'Manual override by Principal')
-      toast.success(`Outcome overridden to ${outcome}`)
-      reload()
-    } catch (e: any) {
-      toast.error('Failed to override', { description: e.message })
-    }
+  const handleOverride = (studentId: string, outcome: Outcome) => {
+    const ok = outcomesStore.overrideOutcome(examId, studentId, outcome, 'Manual override by Principal')
+    if (ok) toast.success(`Outcome overridden to ${outcome}`)
+    else toast.error('Failed to override outcome')
   }
 
   const summary = {
@@ -378,12 +377,13 @@ export function OutcomesSection({ examId, exam }: SectionProps) {
         <Select value={classId} onValueChange={setClassId}>
           <SelectTrigger size="sm" className="text-xs w-[180px]"><SelectValue placeholder="Select class" /></SelectTrigger>
           <SelectContent>
+            <SelectItem value="">All Classes</SelectItem>
             {exam?.classes.map((c: any) => <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>)}
           </SelectContent>
         </Select>
         {gate.canOverrideOutcome && (
-          <Button size="sm" variant="default" className="h-7 text-xs gap-1.5" onClick={handleCompute} disabled={computing || !classId}>
-            <Sparkles className="h-3 w-3" /> {computing ? 'Computing…' : 'Compute Auto Outcomes'}
+          <Button size="sm" variant="default" className="h-7 text-xs gap-1.5" onClick={handleCompute} disabled={!classId}>
+            <Sparkles className="h-3 w-3" /> Re-compute Outcomes
           </Button>
         )}
         {outcomes.length > 0 && (
@@ -396,9 +396,9 @@ export function OutcomesSection({ examId, exam }: SectionProps) {
         )}
       </div>
 
-      {loading ? <InlineLoading label="Loading outcomes…" /> : outcomes.length === 0 ? (
+      {outcomes.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">
-          No outcomes computed yet. Click "Compute Auto Outcomes" to derive from marks.
+          No outcomes computed yet. Select a class and click "Re-compute Outcomes" to derive from marks.
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -407,6 +407,7 @@ export function OutcomesSection({ examId, exam }: SectionProps) {
               <TableRow>
                 <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground">Roll No</TableHead>
                 <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground">Student</TableHead>
+                <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground">Class</TableHead>
                 <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground text-center">%</TableHead>
                 <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground text-center">Grade</TableHead>
                 <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground text-center">Failed</TableHead>
@@ -416,16 +417,17 @@ export function OutcomesSection({ examId, exam }: SectionProps) {
             </TableHeader>
             <TableBody>
               {outcomes.map((o) => (
-                <TableRow key={o.id}>
+                <TableRow key={o.id} className="even:bg-muted/10">
                   <TableCell className="text-xs font-mono">{o.studentRollNo ?? '—'}</TableCell>
-                  <TableCell className="text-xs">{o.studentName}</TableCell>
+                  <TableCell className="text-xs font-medium">{o.studentName}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{o.className}</TableCell>
                   <TableCell className="text-xs tabular-nums text-center">{o.percentage}%</TableCell>
                   <TableCell className="text-xs font-bold text-center">{o.grade}</TableCell>
-                  <TableCell className="text-xs text-center tabular-nums">{o.subjectsFailed}</TableCell>
+                  <TableCell className="text-xs text-center tabular-nums">{o.subjectsFailed}/{o.subjectsCount}</TableCell>
                   <TableCell><OutcomePill outcome={o.outcome} /></TableCell>
                   <TableCell>
                     {gate.canOverrideOutcome ? (
-                      <Select value={o.outcome} onValueChange={(v) => handleOverride(o.studentId, v as any)}>
+                      <Select value={o.outcome} onValueChange={(v) => handleOverride(o.studentId, v as Outcome)}>
                         <SelectTrigger size="sm" className="h-6 text-[10px] w-[140px]"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="PROMOTED">Promoted</SelectItem>
