@@ -139,4 +139,8 @@ export const notifications = [
   { id: 'N04', title: 'Library book overdue', description: '4 books overdue in primary section', time: '2 hrs ago', type: 'library', unread: false },
   { id: 'N05', title: 'Salary processed', description: 'November payroll disbursed to 96 employees', time: '3 hrs ago', type: 'salary', unread: false },
   { id: 'N06', title: 'PTM reminder', description: 'Primary PTM on 7th December', time: '5 hrs ago', type: 'event', unread: false },
+  { id: 'N07', title: 'Exam duty assigned', description: 'Mr. Rajesh Kumar — Mathematics · Class 10 · Room B · 21 Aug, 09:00 AM. Attendance opens 08:30 AM.', time: '12 min ago', type: 'exam', unread: true },
+  { id: 'N08', title: 'Exam duty assigned', description: 'Ms. Priya Nair — English · Class 9 · Room A · 22 Aug, 09:00 AM. Attendance opens 08:30 AM.', time: '15 min ago', type: 'exam', unread: true },
+  { id: 'N09', title: 'Attendance submitted', description: 'Mr. Rajesh Kumar submitted Class 10 Mathematics attendance — 42 Present, 0 Absent.', time: '45 min ago', type: 'exam', unread: false },
+  { id: 'N10', title: 'Marks submitted', description: 'Mr. Anil Sharma submitted Class 10 Mathematics marks — 42 students.', time: '1 hr ago', type: 'exam', unread: false },
 ]

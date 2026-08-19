@@ -62,6 +62,31 @@ export function useLockMarksMock() {
   return { lock: lockFn, loading }
 }
 
+export function useUnlockMarksMock() {
+  const unlock = useMockMarksStore((s) => s.unlockMarks)
+  const [loading, setLoading] = useState(false)
+  const unlockFn = useCallback(async (examId: string, filter: { classId?: string; subjectId?: string }, reason: string): Promise<{ unlocked: number }> => {
+    setLoading(true)
+    try { return { unlocked: unlock(examId, filter.classId ?? '', filter.subjectId ?? '', reason) } }
+    finally { setLoading(false) }
+  }, [unlock])
+  return { unlock: unlockFn, loading }
+}
+
+export function useApplyGraceMock() {
+  const applyGrace = useMockMarksStore((s) => s.applyGrace)
+  const [loading, setLoading] = useState(false)
+  const apply = useCallback(async (examId: string, markId: string, graceMarks: number, reason: string): Promise<{ ok: boolean }> => {
+    setLoading(true)
+    try {
+      const ok = applyGrace(examId, markId, graceMarks, reason)
+      if (!ok) throw new Error('Could not apply grace (mark not found or locked)')
+      return { ok }
+    } finally { setLoading(false) }
+  }, [applyGrace])
+  return { apply, loading }
+}
+
 export function useDeclareResultsMock() {
   const declareClass = useMockMarksStore((s) => s.declareClass)
   const [loading, setLoading] = useState(false)

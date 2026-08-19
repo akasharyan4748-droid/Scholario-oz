@@ -38,7 +38,7 @@ export function PayrollRun({ onRowClick }: { onRowClick: (r: SalaryRecord) => vo
       </div>
       <div className="overflow-x-auto -mx-2 max-h-[30rem] overflow-y-auto custom-scroll">
         <Table>
-          <TableHeader className="sticky top-0 bg-background/95 backdrop-blur z-10">
+          <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--border))]">
             <TableRow>
               <TableHead>Employee</TableHead>
               <TableHead className="hidden md:table-cell">Designation</TableHead>

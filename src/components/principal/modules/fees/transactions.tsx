@@ -95,7 +95,7 @@ export function TransactionsTable({
 
         <div className="overflow-x-auto -mx-2 max-h-[28rem] overflow-y-auto rounded-lg">
           <Table>
-            <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+            <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground">Receipt</TableHead>
                 <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground">Student</TableHead>

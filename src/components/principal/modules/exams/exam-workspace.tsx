@@ -11,7 +11,7 @@
 
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Pencil, Save, Download } from 'lucide-react'
+import { ArrowLeft, Pencil, Save, Download, Lock, Unlock, Clock, Award, Megaphone, CheckCircle2, FileText, User, Filter, RotateCcw, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -33,30 +33,28 @@ import {
   useUpdateExam,
   useAddScheduleItem,
   useDeleteScheduleItem,
-  useSubmitMarks,
-  useVerifyMarks,
-  useLockMarks,
-  useDeclareResults,
-  useAuditLogs,
-  useClassResults,
 } from '@/lib/exams/use-exams'
 import type { ExamDTO } from '@/lib/exams/types'
 import {
   useUpdateScheduleItemV2,
   useTeachers,
   useAssignInvigilator,
-  usePublishResults,
 } from '@/lib/exams/use-exams-extended'
-import { useMockMarksStore } from '@/lib/exams/mock-marks-data'
-import { useSubmitMarksMock, useVerifyMarksMock, useLockMarksMock, useDeclareResultsMock, usePublishResultsMock, useInitMockMarks } from '@/lib/exams/use-marks-mock'
+import {
+  useMockMarksStore,
+  type PaperTimelineEvent,
+} from '@/lib/exams/mock-marks-data'
+import { useSubmitMarksMock, useVerifyMarksMock, useLockMarksMock, useUnlockMarksMock, useDeclareResultsMock, usePublishResultsMock, useInitMockMarks } from '@/lib/exams/use-marks-mock'
+import { useMockAuditStore, AUDIT_ACTION_LABELS, type AuditAction } from '@/lib/exams/mock-audit-data'
+import { getGradeForPercentage, DEFAULT_GRADE_BOUNDARIES } from '@/lib/exams/types'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { useRoleGate } from '@/lib/exams/use-role-gate'
 import { generateClassResultPDF, generateStudentResultPDF } from '@/lib/exams/result-pdf'
 import {
   GraceSection,
   OutcomesSection,
-  CsvImportSection,
 } from './workspace-sections-extended'
+import { CollapsibleSection } from './collapsible-section'
 import { SeatingSection } from './seating/seating-section'
 import { ExamAttendanceSection } from './exam-attendance-section'
 
@@ -66,10 +64,13 @@ interface Props {
   onMutated: () => void
 }
 
-type Tab = 'overview' | 'schedule' | 'marks' | 'results' | 'outcomes' | 'seating' | 'attendance' | 'grace' | 'audit'
+type Tab = 'overview' | 'schedule' | 'marks' | 'attendance' | 'outcomes' | 'seating' | 'grace' | 'grade' | 'audit'
 
 // Tabs grouped into 3 phases for easier scanning.
 // Each group is rendered with a small separator dot before it.
+// NOTE: The old "results" tab has been merged into "marks" to remove the
+// duplication the spec called out. Marks now contains the full assessment
+// experience (entry → submit → verify → lock → declare → publish → view).
 const TAB_GROUPS: Array<{ label: string; items: Array<{ value: Tab; label: string }> }> = [
   {
     label: 'Setup',
@@ -89,7 +90,7 @@ const TAB_GROUPS: Array<{ label: string; items: Array<{ value: Tab; label: strin
   {
     label: 'Post-Exam',
     items: [
-      { value: 'results', label: 'Results' },
+      { value: 'grade', label: 'Grade' },
       { value: 'outcomes', label: 'Outcomes' },
       { value: 'grace', label: 'Grace' },
       { value: 'audit', label: 'Audit' },
@@ -185,10 +186,10 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
               {tab === 'overview' && <OverviewSection exam={exam} onReload={handleReload} onNavigate={setTab} />}
               {tab === 'schedule' && <ScheduleSection exam={exam} onReload={handleReload} />}
               {tab === 'marks' && <MarksSection exam={exam} onReload={handleReload} />}
-              {tab === 'results' && <MarksSection exam={exam} onReload={handleReload} />}
               {tab === 'outcomes' && <OutcomesSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'seating' && <SeatingSection exam={exam} />}
               {tab === 'attendance' && <ExamAttendanceSection exam={exam} />}
+              {tab === 'grade' && <GradeSection exam={exam} />}
               {tab === 'grace' && <GraceSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'audit' && <AuditSection examId={exam.id} />}
             </motion.div>
@@ -251,7 +252,7 @@ function OverviewSection({ exam, onReload, onNavigate }: { exam: ExamDTO; onRelo
     { label: 'Marks entry started', done: exam.markSummary.entered > 0, navigate: 'marks' as Tab },
     { label: 'Marks verified', done: exam.markSummary.verified > 0, navigate: 'marks' as Tab },
     { label: 'Marks locked', done: exam.markSummary.locked > 0, navigate: 'marks' as Tab },
-    { label: 'Results declared', done: exam.resultStatus === 'Result Declared', navigate: 'results' as Tab },
+    { label: 'Results declared', done: exam.resultStatus === 'Result Declared', navigate: 'marks' as Tab },
   ]
 
   const entered = exam.markSummary.entered
@@ -466,15 +467,30 @@ function ScheduleSection({ exam }: { exam: ExamDTO }) {
 
 // ─── Marks Section — paper-level workflow control center ──────────────
 
+/** Map a subject name to a teacher for display (demo only). */
+function teacherForSubject(subjectName: string): string {
+  const s = subjectName.toLowerCase()
+  if (s.includes('math')) return 'Mr. Anil Sharma'
+  if (s.includes('english')) return 'Ms. Priya Nair'
+  if (s.includes('physics')) return 'Dr. Lakshmi Iyer'
+  if (s.includes('chemistry')) return 'Mr. Venkat Naidu'
+  if (s.includes('biology')) return 'Mrs. Anjali Desai'
+  if (s.includes('social')) return 'Mr. Karthik Reddy'
+  if (s.includes('hindi')) return 'Mrs. Meera Joshi'
+  if (s.includes('commerce') || s.includes('account')) return 'Mr. Sandeep Gupta'
+  return 'Mr. Rajesh Kumar'
+}
+
 function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
   const { submit } = useSubmitMarksMock()
   const { verify } = useVerifyMarksMock()
   const { lock } = useLockMarksMock()
+  const { unlock } = useUnlockMarksMock()
   const { declare } = useDeclareResultsMock()
   const { publish } = usePublishResultsMock()
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
-  const [subjectId, setSubjectId] = useState('')
   const [showResults, setShowResults] = useState(false)
+  const [selectedPaper, setSelectedPaper] = useState<{ classId: string; subjectId: string } | null>(null)
   const storeMarks = useMockMarksStore((s) => s.marks)
   const declaredClassIds = useMockMarksStore((s) => s.declaredClassIds)
   const publishedClassIds = useMockMarksStore((s) => s.publishedClassIds)
@@ -513,9 +529,9 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
     })
   }, [exam, allMarks, declaredClassIds, publishedClassIds])
 
-  // Subject-wise progress rows
+  // Subject-wise progress rows — with teacher ownership
   const subjectRows = useMemo(() => {
-    const rows: Array<{ classId: string; className: string; subjectId: string; subjectName: string; total: number; entered: number; status: string; locked: boolean }> = []
+    const rows: Array<{ classId: string; className: string; subjectId: string; subjectName: string; teacher: string; total: number; entered: number; status: string }> = []
     for (const c of exam.classes) {
       for (const subj of exam.subjects.filter((s: any) => s.classId === c.classId)) {
         const marks = allMarks.filter((m) => m.classId === c.classId && m.subjectId === subj.subjectId)
@@ -528,20 +544,22 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
         rows.push({
           classId: c.classId, className: c.className,
           subjectId: subj.subjectId, subjectName: subj.subjectName,
-          total: marks.length, entered, status, locked: status === 'LOCKED',
+          teacher: teacherForSubject(subj.subjectName),
+          total: marks.length, entered, status,
         })
       }
     }
     return rows
   }, [exam, allMarks])
 
-  const handleAction = async (action: 'submit' | 'verify' | 'lock' | 'declare' | 'publish', cid?: string, sid?: string) => {
+  const handleAction = async (action: 'submit' | 'verify' | 'lock' | 'unlock' | 'declare' | 'publish', cid?: string, sid?: string) => {
     try {
       const filter = cid ? { classId: cid, ...(sid ? { subjectId: sid } : {}) } : {}
       if (action === 'submit') { const r = await submit(exam.id, filter); toast.success(`Submitted ${r.submitted} marks`) }
       else if (action === 'verify') { const r = await verify(exam.id, filter); toast.success(`Verified ${r.verified} marks`) }
       else if (action === 'lock') { const r = await lock(exam.id, filter); toast.success(`Locked ${r.locked} marks`) }
-      else if (action === 'declare') { const r = await declare(exam.id, cid); toast.success(`${classReadiness.find((c) => c.classId === cid)?.className} results declared`) }
+      else if (action === 'unlock') { const r = await unlock(exam.id, filter, 'Principal review'); toast.success(`Unlocked ${r.unlocked} marks for review`) }
+      else if (action === 'declare') { await declare(exam.id, cid); toast.success(`${classReadiness.find((c) => c.classId === cid)?.className} results declared`) }
       else if (action === 'publish') { const r = await publish(exam.id, cid); toast.success(`Published · ${r.notificationsSent} students notified`) }
       onReload()
     } catch (e: any) { toast.error('Action failed', { description: e.message }) }
@@ -559,17 +577,19 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
         <Stat label="Papers" value={String(subjectRows.length)} />
       </div>
 
-      {/* Subject-wise progress — paper-level actions */}
-      <div className="rounded-lg border border-border/60 overflow-hidden">
-        <div className="px-2 py-1.5 border-b border-border/40 bg-muted/30">
-          <p className="text-[9px] uppercase font-semibold text-muted-foreground">Subject Progress (per paper)</p>
-        </div>
+      {/* Subject-wise progress — paper-level actions with teacher ownership */}
+      <CollapsibleSection
+        title="Subject Progress (per paper)"
+        subtitle={`${subjectRows.length} papers`}
+        accent="violet"
+      >
         <div className="overflow-x-auto max-h-[20rem]">
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-muted/30">
+            <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
               <tr>
                 <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Class</th>
                 <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Subject</th>
+                <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Teacher</th>
                 <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Entered</th>
                 <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
                 <th className="text-center px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Actions</th>
@@ -580,16 +600,17 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
                 <tr key={i} className="border-t border-border/40 hover:bg-muted/20">
                   <td className="px-2 py-1.5 text-muted-foreground">{r.className}</td>
                   <td className="px-2 py-1.5 font-medium">{r.subjectName}</td>
+                  <td className="px-2 py-1.5 text-muted-foreground">{r.teacher}</td>
                   <td className="px-2 py-1.5 text-center tabular-nums">{r.entered}/{r.total}</td>
                   <td className="px-2 py-1.5 text-center">
-                    {r.status === 'LOCKED' ? <span className="text-[9px] font-medium text-emerald-600">🔒 Locked</span>
+                    {r.status === 'LOCKED' ? <span className="text-[9px] font-medium text-emerald-600 flex items-center justify-center gap-0.5"><Lock className="h-2.5 w-2.5" /> Locked</span>
                       : r.status === 'VERIFIED' ? <span className="text-[9px] font-medium text-blue-600">✓ Verified</span>
                       : r.status === 'SUBMITTED' ? <span className="text-[9px] font-medium text-amber-600">Submitted</span>
                       : r.status === 'IN_PROGRESS' ? <span className="text-[9px] font-medium text-amber-500">In Progress</span>
                       : <span className="text-[9px] text-muted-foreground/40">Not Started</span>}
                   </td>
                   <td className="px-2 py-1.5 text-center">
-                    <div className="flex items-center justify-center gap-1">
+                    <div className="flex items-center justify-center gap-1.5">
                       {r.status === 'IN_PROGRESS' && (
                         <button onClick={() => handleAction('submit', r.classId, r.subjectId)} className="text-[9px] text-primary hover:underline">Submit</button>
                       )}
@@ -599,24 +620,36 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
                       {r.status === 'VERIFIED' && (
                         <button onClick={() => handleAction('lock', r.classId, r.subjectId)} className="text-[9px] text-primary hover:underline">Lock</button>
                       )}
-                      {r.status === 'LOCKED' && <span className="text-[9px] text-emerald-600">✓</span>}
+                      {r.status === 'LOCKED' && (
+                        <button
+                          onClick={() => handleAction('unlock', r.classId, r.subjectId)}
+                          className="text-[9px] text-amber-600 hover:underline flex items-center gap-0.5"
+                          title="Unlock for editing (Principal only)"
+                        >
+                          <Unlock className="h-2.5 w-2.5" /> Unlock
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setSelectedPaper({ classId: r.classId, subjectId: r.subjectId })}
+                        className="text-[9px] text-muted-foreground hover:text-foreground hover:underline flex items-center gap-0.5"
+                        title="View timeline"
+                      >
+                        <Clock className="h-2.5 w-2.5" /> Timeline
+                      </button>
                     </div>
                   </td>
                 </tr>
               ))}
               {subjectRows.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No subjects configured.</td></tr>
+                <tr><td colSpan={6} className="py-6 text-center text-xs text-muted-foreground">No subjects configured.</td></tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
+      </CollapsibleSection>
 
       {/* Class result control — per-class declaration + publish */}
-      <div className="rounded-lg border border-border/60 overflow-hidden">
-        <div className="px-2 py-1.5 border-b border-border/40 bg-muted/30">
-          <p className="text-[9px] uppercase font-semibold text-muted-foreground">Class Results</p>
-        </div>
+      <CollapsibleSection title="Class Results" subtitle={`${classReadiness.length} classes`} accent="emerald">
         <div className="divide-y divide-border/40">
           {classReadiness.map((c) => (
             <div key={c.classId} className="flex items-center justify-between gap-2 px-3 py-2">
@@ -629,11 +662,11 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {c.isPublished ? (
-                  <span className="text-[9px] font-medium text-emerald-600">Published</span>
+                  <span className="text-[9px] font-medium text-emerald-600 flex items-center gap-0.5"><CheckCircle2 className="h-2.5 w-2.5" /> Published</span>
                 ) : c.isDeclared ? (
-                  <button onClick={() => handleAction('publish', c.classId)} className="text-[9px] text-primary hover:underline">Publish</button>
+                  <button onClick={() => handleAction('publish', c.classId)} className="text-[9px] text-primary hover:underline flex items-center gap-0.5"><Megaphone className="h-2.5 w-2.5" /> Publish</button>
                 ) : c.isReady ? (
-                  <button onClick={() => handleAction('declare', c.classId)} className="text-[9px] text-primary hover:underline">Declare</button>
+                  <button onClick={() => handleAction('declare', c.classId)} className="text-[9px] text-primary hover:underline flex items-center gap-0.5"><Award className="h-2.5 w-2.5" /> Declare</button>
                 ) : (
                   <span className="text-[9px] text-amber-600">Pending</span>
                 )}
@@ -643,7 +676,17 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
           ))}
           {classReadiness.length === 0 && <div className="py-4 text-center text-xs text-muted-foreground">No classes configured.</div>}
         </div>
-      </div>
+      </CollapsibleSection>
+
+      {/* Paper timeline drawer */}
+      {selectedPaper && (
+        <PaperTimelineInline
+          exam={exam}
+          classId={selectedPaper.classId}
+          subjectId={selectedPaper.subjectId}
+          onClose={() => setSelectedPaper(null)}
+        />
+      )}
 
       {/* Results view */}
       {showResults && (
@@ -696,17 +739,20 @@ function SubjectAnalytics({ exam, allMarks }: { exam: ExamDTO; allMarks: any[] }
   }, [exam, allMarks, filterClass])
 
   return (
-    <div className="rounded-lg border border-border/60 overflow-hidden">
-      <div className="px-2 py-1.5 border-b border-border/40 bg-muted/30 flex items-center justify-between gap-2">
-        <p className="text-[9px] uppercase font-semibold text-muted-foreground">Subject Analytics</p>
+    <CollapsibleSection
+      title="Subject Analytics"
+      subtitle={`${analytics.length} rows`}
+      accent="sky"
+      actions={
         <select value={filterClass} onChange={(e) => setFilterClass(e.target.value)} className="h-5 text-[9px] rounded bg-transparent border border-border/40 px-1">
           <option value="all">All Classes</option>
           {exam.classes.map((c: any) => <option key={c.classId} value={c.classId}>{c.className}</option>)}
         </select>
-      </div>
+      }
+    >
       <div className="overflow-x-auto max-h-[16rem]">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-muted/30">
+          <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
             <tr>
               <th className="text-left px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">Class</th>
               <th className="text-left px-2 py-1 text-[8px] uppercase font-semibold text-muted-foreground">Subject</th>
@@ -746,7 +792,7 @@ function SubjectAnalytics({ exam, allMarks }: { exam: ExamDTO; allMarks: any[] }
           </tbody>
         </table>
       </div>
-    </div>
+    </CollapsibleSection>
   )
 }
 
@@ -792,7 +838,7 @@ function ResultsInline({ exam, classId, onClose }: { exam: ExamDTO; classId: str
       </div>
       <div className="overflow-x-auto max-h-[24rem]">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-muted/30">
+          <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
             <tr>
               <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Roll</th>
               <th className="text-left px-2 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground">Student</th>
@@ -871,48 +917,412 @@ function StudentResultDetail({ exam, result, onClose }: { exam: ExamDTO; result:
   )
 }
 
-// ─── Audit Section ───────────────────────────────────────────────────
+// ─── Paper Timeline (inline drawer) ──────────────────────────────────
+
+function PaperTimelineInline({ exam, classId, subjectId, onClose }: {
+  exam: ExamDTO
+  classId: string
+  subjectId: string
+  onClose: () => void
+}) {
+  // Select the raw timeline array (stable reference) and derive with useMemo.
+  const timeline = useMockMarksStore((s) => s.timeline)
+  const paperTimeline = useMemo(
+    () => timeline
+      .filter((e) => e.examId === exam.id && e.classId === classId && e.subjectId === subjectId)
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
+    [timeline, exam.id, classId, subjectId],
+  )
+  const className = exam.classes.find((c: any) => c.classId === classId)?.className ?? classId
+  const subjectName = exam.subjects.find((s: any) => s.classId === classId && s.subjectId === subjectId)?.subjectName ?? subjectId
+  const teacher = teacherForSubject(subjectName)
+
+  const actionConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+    OPENED: { label: 'Marks Entry Opened', icon: <FileText className="h-3 w-3" />, color: 'text-slate-500' },
+    ENTERED: { label: 'Marks Entered', icon: <Pencil className="h-3 w-3" />, color: 'text-amber-600' },
+    SUBMITTED: { label: 'Marks Submitted', icon: <Send className="h-3 w-3" />, color: 'text-amber-600' },
+    VERIFIED: { label: 'Marks Verified', icon: <CheckCircle2 className="h-3 w-3" />, color: 'text-blue-600' },
+    LOCKED: { label: 'Marks Locked', icon: <Lock className="h-3 w-3" />, color: 'text-emerald-600' },
+    UNLOCKED: { label: 'Marks Unlocked', icon: <Unlock className="h-3 w-3" />, color: 'text-rose-600' },
+  }
+
+  return (
+    <div className="rounded-lg border border-border/60 p-3 space-y-3 bg-card/40">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold">{className} · {subjectName}</p>
+          <p className="text-[9px] text-muted-foreground">Teacher: {teacher} · {paperTimeline.length} events</p>
+        </div>
+        <button onClick={onClose} className="text-[9px] text-muted-foreground hover:text-foreground">Close</button>
+      </div>
+      <div className="relative pl-5 space-y-2 max-h-64 overflow-y-auto">
+        {/* Vertical line */}
+        <div className="absolute left-[7px] top-1 bottom-1 w-px bg-border/60" />
+        {paperTimeline.length === 0 && (
+          <p className="text-[10px] text-muted-foreground py-2">No timeline events yet.</p>
+        )}
+        {paperTimeline.map((e: PaperTimelineEvent) => {
+          const cfg = actionConfig[e.action] ?? { label: e.action, icon: <Clock className="h-3 w-3" />, color: 'text-muted-foreground' }
+          return (
+            <div key={e.id} className="relative">
+              <span className={cn('absolute -left-[14px] top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-card border border-border', cfg.color)}>
+                {cfg.icon}
+              </span>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium">{cfg.label}</p>
+                  <p className="text-[9px] text-muted-foreground">by {e.byName} · {e.byRole}</p>
+                  {e.note && <p className="text-[9px] text-muted-foreground/80 mt-0.5">{e.note}</p>}
+                </div>
+                <span className="text-[9px] text-muted-foreground/70 shrink-0 tabular-nums">
+                  {new Date(e.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Grade Section — grading policy + distribution + subject comparison ─
+
+function GradeSection({ exam }: { exam: ExamDTO }) {
+  const [filterClass, setFilterClass] = useState('all')
+  const [filterSubject, setFilterSubject] = useState('all')
+  const storeMarks = useMockMarksStore((s) => s.marks)
+  const allMarks = useMemo(() => storeMarks.filter((m) => m.examId === exam.id), [storeMarks, exam.id])
+
+  // Use the central grading configuration (DEFAULT_GRADE_BOUNDARIES from types.ts).
+  // In production this would come from the school's GradeScale table.
+  const gradeScale = DEFAULT_GRADE_BOUNDARIES
+
+  // Compute per-student subject percentages → grades.
+  const gradeData = useMemo(() => {
+    const distribution: Record<string, number> = {}
+    for (const g of gradeScale) distribution[g.grade] = 0
+    let totalStudents = 0
+    let passedCount = 0
+    let failedCount = 0
+    let absentCount = 0
+    let highestPct = 0
+    let lowestPct = 100
+    let pctSum = 0
+    let pctCount = 0
+
+    // Group marks by student (within filter scope).
+    const studentIds = new Set(allMarks.map((m) => m.studentId))
+    for (const studentId of studentIds) {
+      const studentMarks = allMarks.filter((m) => m.studentId === studentId)
+      // Apply class filter.
+      if (filterClass !== 'all') {
+        const studentClassId = studentMarks[0]?.classId
+        if (studentClassId !== filterClass) continue
+      }
+      let totalObtained = 0
+      let totalMax = 0
+      let isAbsentInAll = true
+      for (const subj of exam.subjects.filter((s: any) => s.classId === studentMarks[0]?.classId)) {
+        // Apply subject filter for per-subject distribution.
+        if (filterSubject !== 'all' && subj.subjectId !== filterSubject) continue
+        const mark = studentMarks.find((m) => m.subjectId === subj.subjectId)
+        if (mark?.status === 'ABSENT' || mark?.marksObtained === null) {
+          // Absent or missing — don't add to totals.
+          continue
+        }
+        isAbsentInAll = false
+        totalObtained += mark!.marksObtained ?? 0
+        totalMax += subj.maxMarks
+      }
+      if (totalMax === 0) continue
+      totalStudents++
+      const pct = Math.round((totalObtained / totalMax) * 100 * 100) / 100
+      if (isAbsentInAll) {
+        absentCount++
+        continue
+      }
+      highestPct = Math.max(highestPct, pct)
+      lowestPct = Math.min(lowestPct, pct)
+      pctSum += pct
+      pctCount++
+      const { grade } = getGradeForPercentage(pct, [])
+      distribution[grade] = (distribution[grade] ?? 0) + 1
+      if (pct >= 33) passedCount++
+      else failedCount++
+    }
+    const avgPct = pctCount > 0 ? Math.round((pctSum / pctCount) * 10) / 10 : 0
+    return { distribution, totalStudents, passedCount, failedCount, absentCount, highestPct, lowestPct, avgPct }
+  }, [allMarks, exam, gradeScale, filterClass, filterSubject])
+
+  // Subject comparison: per-subject grade distribution.
+  const subjectComparison = useMemo(() => {
+    const rows: Array<{ subjectName: string; className: string; distribution: Record<string, number>; total: number }> = []
+    for (const c of exam.classes) {
+      if (filterClass !== 'all' && c.classId !== filterClass) continue
+      for (const subj of exam.subjects.filter((s: any) => s.classId === c.classId)) {
+        if (filterSubject !== 'all' && subj.subjectId !== filterSubject) continue
+        const marks = allMarks.filter((m) => m.classId === c.classId && m.subjectId === subj.subjectId)
+        const dist: Record<string, number> = {}
+        for (const g of gradeScale) dist[g.grade] = 0
+        let total = 0
+        for (const m of marks) {
+          if (m.status === 'ABSENT' || m.marksObtained === null) continue
+          const pct = subj.maxMarks > 0 ? (m.marksObtained / subj.maxMarks) * 100 : 0
+          const { grade } = getGradeForPercentage(pct, [])
+          dist[grade] = (dist[grade] ?? 0) + 1
+          total++
+        }
+        rows.push({ subjectName: subj.subjectName, className: c.className, distribution: dist, total })
+      }
+    }
+    return rows
+  }, [allMarks, exam, gradeScale, filterClass, filterSubject])
+
+  const maxDist = Math.max(1, ...Object.values(gradeData.distribution))
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        <Stat label="Students" value={String(gradeData.totalStudents)} />
+        <Stat label="Passed" value={String(gradeData.passedCount)} />
+        <Stat label="Failed" value={String(gradeData.failedCount)} />
+        <Stat label="Absent" value={String(gradeData.absentCount)} />
+        <Stat label="Average %" value={`${gradeData.avgPct}%`} />
+        <Stat label="Pass %" value={`${gradeData.totalStudents > 0 ? Math.round((gradeData.passedCount / gradeData.totalStudents) * 100) : 0}%`} />
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[9px] uppercase font-semibold text-muted-foreground flex items-center gap-1"><Filter className="h-2.5 w-2.5" /> Filters:</span>
+        <select value={filterClass} onChange={(e) => setFilterClass(e.target.value)} className="h-6 text-[10px] rounded bg-transparent border border-border/40 px-1">
+          <option value="all">All Classes</option>
+          {exam.classes.map((c: any) => <option key={c.classId} value={c.classId}>{c.className}</option>)}
+        </select>
+        <select value={filterSubject} onChange={(e) => setFilterSubject(e.target.value)} className="h-6 text-[10px] rounded bg-transparent border border-border/40 px-1">
+          <option value="all">All Subjects</option>
+          {exam.subjects.map((s: any, i: number) => <option key={`${s.subjectId}-${i}`} value={s.subjectId}>{s.subjectName}</option>)}
+        </select>
+      </div>
+
+      {/* Grade policy view */}
+      <CollapsibleSection title="Grade Scale (Active Policy)" subtitle={`${gradeScale.length} grades`} accent="violet" defaultOpen={true}>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 p-2">
+          {gradeScale.map((g) => (
+            <div key={g.grade} className="rounded-md border border-border/60 bg-muted/20 p-2 text-center">
+              <p className="text-base font-bold text-foreground">{g.grade}</p>
+              <p className="text-[9px] text-muted-foreground">{g.minPct}{g.minPct === 0 ? '–33' : g.minPct === 33 ? '+ to 49' : `+`}</p>
+            </div>
+          ))}
+        </div>
+      </CollapsibleSection>
+
+      {/* Grade distribution */}
+      <CollapsibleSection title="Grade Distribution" subtitle={`${gradeData.totalStudents} students`} accent="emerald">
+        <div className="p-2 space-y-1.5">
+          {gradeScale.map((g) => {
+            const count = gradeData.distribution[g.grade] ?? 0
+            const pct = gradeData.totalStudents > 0 ? Math.round((count / gradeData.totalStudents) * 1000) / 10 : 0
+            const barWidth = Math.round((count / maxDist) * 100)
+            return (
+              <div key={g.grade} className="flex items-center gap-2">
+                <span className="w-8 text-[10px] font-semibold tabular-nums">{g.grade}</span>
+                <div className="flex-1 h-4 rounded bg-muted/40 overflow-hidden">
+                  <div
+                    className="h-full bg-primary/60 rounded transition-all"
+                    style={{ width: `${barWidth}%` }}
+                  />
+                </div>
+                <span className="w-8 text-[10px] tabular-nums text-right">{count}</span>
+                <span className="w-12 text-[9px] text-muted-foreground tabular-nums text-right">{pct}%</span>
+              </div>
+            )
+          })}
+        </div>
+      </CollapsibleSection>
+
+      {/* Subject comparison */}
+      <CollapsibleSection title="Subject Comparison" subtitle={`${subjectComparison.length} papers`} accent="sky" defaultOpen={false}>
+        <div className="overflow-x-auto max-h-[18rem]">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
+              <tr>
+                <th className="text-left px-2 py-1 text-[9px] uppercase font-semibold text-muted-foreground">Class</th>
+                <th className="text-left px-2 py-1 text-[9px] uppercase font-semibold text-muted-foreground">Subject</th>
+                <th className="text-center px-2 py-1 text-[9px] uppercase font-semibold text-muted-foreground">Total</th>
+                {gradeScale.map((g) => (
+                  <th key={g.grade} className="text-center px-1 py-1 text-[8px] font-semibold text-muted-foreground">{g.grade}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {subjectComparison.map((r, i) => (
+                <tr key={i} className="border-t border-border/30 hover:bg-muted/20">
+                  <td className="px-2 py-1 text-muted-foreground">{r.className}</td>
+                  <td className="px-2 py-1 font-medium">{r.subjectName}</td>
+                  <td className="px-2 py-1 text-center tabular-nums">{r.total}</td>
+                  {gradeScale.map((g) => (
+                    <td key={g.grade} className="px-1 py-1 text-center tabular-nums text-[9px]">
+                      {r.distribution[g.grade] ?? 0}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {subjectComparison.length === 0 && (
+                <tr><td colSpan={2 + gradeScale.length} className="py-4 text-center text-muted-foreground">No data available.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </CollapsibleSection>
+
+      {/* Grade analysis highlights */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <Stat label="Highest %" value={`${gradeData.highestPct}%`} />
+        <Stat label="Lowest %" value={`${gradeData.lowestPct}%`} />
+        <Stat label="Average %" value={`${gradeData.avgPct}%`} />
+        <Stat label="Pass %" value={`${gradeData.totalStudents > 0 ? Math.round((gradeData.passedCount / gradeData.totalStudents) * 100) : 0}%`} />
+      </div>
+    </div>
+  )
+}
+
+// ─── Audit Section — timeline + filters + canonical store ──────────────
 
 function AuditSection({ examId }: { examId: string }) {
-  const { logs, loading } = useAuditLogs(examId)
-  if (loading) return <InlineLoading label="Loading audit log…" />
-  if (logs.length === 0) {
-    return <div className="rounded-xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">No audit entries yet.</div>
+  const events = useMockAuditStore((s) => s.events)
+  const [filterAction, setFilterAction] = useState('all')
+  const [filterRole, setFilterRole] = useState('all')
+  const [filterUser, setFilterUser] = useState('all')
+
+  const examEvents = useMemo(
+    () => events.filter((e) => e.examId === examId),
+    [events, examId],
+  )
+
+  const users = useMemo(() => {
+    const set = new Map<string, string>()
+    for (const e of examEvents) {
+      if (e.userName) set.set(e.userName, e.userName)
+    }
+    return Array.from(set.values())
+  }, [examEvents])
+
+  const filtered = useMemo(() => {
+    return examEvents
+      .filter((e) => filterAction === 'all' || e.action === filterAction)
+      .filter((e) => filterRole === 'all' || e.userRole === filterRole)
+      .filter((e) => filterUser === 'all' || e.userName === filterUser)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  }, [examEvents, filterAction, filterRole, filterUser])
+
+  const hasFilters = filterAction !== 'all' || filterRole !== 'all' || filterUser !== 'all'
+
+  const actionIcon: Record<string, React.ReactNode> = {
+    EXAM_CREATED: <FileText className="h-3 w-3" />,
+    SCHEDULE_UPDATED: <Clock className="h-3 w-3" />,
+    SEATING_GENERATED: <FileText className="h-3 w-3" />,
+    INVIGILATOR_ASSIGNED: <User className="h-3 w-3" />,
+    MARKS_ENTERED: <Pencil className="h-3 w-3" />,
+    MARKS_SUBMITTED: <Send className="h-3 w-3" />,
+    MARKS_VERIFIED: <CheckCircle2 className="h-3 w-3" />,
+    MARKS_LOCKED: <Lock className="h-3 w-3" />,
+    MARKS_UNLOCKED: <Unlock className="h-3 w-3" />,
+    ATTENDANCE_SUBMITTED: <CheckCircle2 className="h-3 w-3" />,
+    GRACE_APPLIED: <Award className="h-3 w-3" />,
+    RESULT_DECLARED: <Award className="h-3 w-3" />,
+    RESULT_PUBLISHED: <Megaphone className="h-3 w-3" />,
+    OUTCOME_OVERRIDDEN: <FileText className="h-3 w-3" />,
   }
+
+  const actionColor: Record<string, string> = {
+    MARKS_LOCKED: 'text-emerald-600 bg-emerald-500/10',
+    MARKS_UNLOCKED: 'text-rose-600 bg-rose-500/10',
+    MARKS_VERIFIED: 'text-blue-600 bg-blue-500/10',
+    MARKS_SUBMITTED: 'text-amber-600 bg-amber-500/10',
+    ATTENDANCE_SUBMITTED: 'text-emerald-600 bg-emerald-500/10',
+    GRACE_APPLIED: 'text-violet-600 bg-violet-500/10',
+    RESULT_DECLARED: 'text-emerald-600 bg-emerald-500/10',
+    RESULT_PUBLISHED: 'text-emerald-600 bg-emerald-500/10',
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">
+        {hasFilters ? 'No audit events match your filters.' : 'No audit entries yet. Actions on marks, attendance, grace, and results will appear here.'}
+      </div>
+    )
+  }
+
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="px-3 py-2 border-b border-border">
-        <p className="text-xs font-semibold">Audit Trail ({logs.length} entries)</p>
+    <div className="space-y-3">
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[9px] uppercase font-semibold text-muted-foreground flex items-center gap-1"><Filter className="h-2.5 w-2.5" /> Filters:</span>
+        <select value={filterAction} onChange={(e) => setFilterAction(e.target.value)} className="h-6 text-[10px] rounded bg-transparent border border-border/40 px-1">
+          <option value="all">All Actions</option>
+          {Object.keys(AUDIT_ACTION_LABELS).map((a) => (
+            <option key={a} value={a}>{AUDIT_ACTION_LABELS[a as AuditAction]}</option>
+          ))}
+        </select>
+        <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="h-6 text-[10px] rounded bg-transparent border border-border/40 px-1">
+          <option value="all">All Roles</option>
+          <option value="PRINCIPAL">Principal</option>
+          <option value="TEACHER">Teacher</option>
+          <option value="SYSTEM">System</option>
+        </select>
+        <select value={filterUser} onChange={(e) => setFilterUser(e.target.value)} className="h-6 text-[10px] rounded bg-transparent border border-border/40 px-1">
+          <option value="all">All Users</option>
+          {users.map((u) => <option key={u} value={u}>{u}</option>)}
+        </select>
+        {hasFilters && (
+          <button
+            onClick={() => { setFilterAction('all'); setFilterRole('all'); setFilterUser('all') }}
+            className="text-[9px] text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+          >
+            <RotateCcw className="h-2.5 w-2.5" /> Clear
+          </button>
+        )}
+        <span className="text-[9px] text-muted-foreground ml-auto">{filtered.length} events</span>
       </div>
-      <div className="max-h-[600px] overflow-y-auto">
-        <table className="w-full text-xs">
-          <thead className="bg-muted/40 sticky top-0">
-            <tr>
-              <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Timestamp</th>
-              <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Action</th>
-              <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">User</th>
-              <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Entity</th>
-              <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Change</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map((log) => (
-              <tr key={log.id} className="border-b border-border/40 last:border-0 hover:bg-muted/20">
-                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                  {new Date(log.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                </td>
-                <td className="px-3 py-2 font-mono text-[10px] font-semibold text-primary">{log.action}</td>
-                <td className="px-3 py-2">{log.userName ?? '—'}</td>
-                <td className="px-3 py-2 text-muted-foreground">{log.entity ?? '—'}</td>
-                <td className="px-3 py-2 text-[10px] text-muted-foreground max-w-[200px] truncate">
-                  {log.oldValue && <span className="text-rose-600">-{log.oldValue.slice(0, 50)}</span>}
-                  {log.newValue && <span className="text-emerald-600 ml-1">+{log.newValue.slice(0, 50)}</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+
+      {/* Timeline */}
+      <CollapsibleSection title="Audit Trail" subtitle={`${filtered.length} events`} accent="emerald">
+        <div className="relative pl-6 py-2 space-y-2 max-h-[500px] overflow-y-auto">
+          {/* Vertical line */}
+          <div className="absolute left-[11px] top-3 bottom-3 w-px bg-border/60" />
+          {filtered.map((e) => {
+            const label = AUDIT_ACTION_LABELS[e.action as AuditAction] ?? e.action
+            const icon = actionIcon[e.action] ?? <Clock className="h-3 w-3" />
+            const color = actionColor[e.action] ?? 'text-muted-foreground bg-muted'
+            return (
+              <div key={e.id} className="relative">
+                <span className={cn('absolute -left-[18px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-card border border-border', color)}>
+                  {icon}
+                </span>
+                <div className="rounded-md border border-border/40 bg-card/40 px-2.5 py-1.5 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium">{label}</p>
+                      <p className="text-[9px] text-muted-foreground">{e.summary}</p>
+                      <p className="text-[9px] text-muted-foreground/80 mt-0.5">
+                        by <span className="font-medium">{e.userName ?? 'System'}</span> · {e.userRole}
+                        {e.metadata && Object.keys(e.metadata).length > 0 && (
+                          <span className="ml-1">· {Object.entries(e.metadata).map(([k, v]) => `${k}: ${v}`).join(', ')}</span>
+                        )}
+                      </p>
+                    </div>
+                    <span className="text-[9px] text-muted-foreground/70 shrink-0 tabular-nums whitespace-nowrap">
+                      {new Date(e.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </CollapsibleSection>
     </div>
   )
 }

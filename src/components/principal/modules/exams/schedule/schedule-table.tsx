@@ -91,9 +91,9 @@ export function ScheduleTable({ timetable, onMoveSubject }: Props) {
           <div className="overflow-x-auto max-h-[28rem]">
             <table className="w-full border-collapse text-xs">
               {/* Header row — sticky */}
-              <thead className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
+              <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
                 <tr>
-                  <th className="sticky left-0 z-20 bg-muted/60 px-2.5 py-2 text-left font-semibold text-[10px] uppercase tracking-wider text-muted-foreground border-b border-r border-border/60 min-w-[88px]">
+                  <th className="sticky left-0 z-20 bg-muted px-2.5 py-2 text-left font-semibold text-[10px] uppercase tracking-wider text-muted-foreground border-b border-r border-border/60 min-w-[88px]">
                     Day / Date
                   </th>
                   {timetable.classes.map((cls) => (

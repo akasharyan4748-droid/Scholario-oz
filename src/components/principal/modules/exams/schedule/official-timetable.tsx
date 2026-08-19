@@ -119,8 +119,8 @@ export function OfficialTimetable({
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[11px]">
             <thead>
-              <tr className="bg-muted/30">
-                <th className="sticky left-0 z-10 bg-muted/30 px-2 py-1.5 text-left font-semibold text-[9px] uppercase tracking-wider text-muted-foreground border-b border-r border-border min-w-[80px]">
+              <tr className="bg-muted">
+                <th className="sticky left-0 z-10 bg-muted px-2 py-1.5 text-left font-semibold text-[9px] uppercase tracking-wider text-muted-foreground border-b border-r border-border min-w-[80px]">
                   Day / Date
                 </th>
                 {shiftTimes.length > 1 && (

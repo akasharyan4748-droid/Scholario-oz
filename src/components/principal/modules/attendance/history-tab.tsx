@@ -298,7 +298,7 @@ export function AttendanceHistoryTab({ initialDate, initialClassId }: Attendance
       {/* Brief PART 32: History table — VIEW records (separate from export) */}
       <div className="rounded-xl border border-border overflow-hidden bg-card">
         <Table>
-          <TableHeader className="sticky top-0 bg-muted/40 backdrop-blur-sm z-10">
+          <TableHeader className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
             <TableRow className="border-b border-border hover:bg-transparent">
               <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5">Date</TableHead>
               <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5">Class</TableHead>

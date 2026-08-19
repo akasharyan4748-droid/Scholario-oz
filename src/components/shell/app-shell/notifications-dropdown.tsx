@@ -96,7 +96,7 @@ export function NotificationsDropdown({
             </button>
           )}
           <div className="divide-y divide-border max-h-72 overflow-y-auto mt-1 space-y-1">
-            {notifList.slice(0, 6).map((n) => {
+            {notifList.slice(0, 8).map((n) => {
               const notifType = (n.type || '').toLowerCase()
               const titleStr = (n.title || '').toLowerCase()
 

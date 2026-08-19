@@ -6,7 +6,7 @@
  * These are loaded inside ExamWorkspaceDialog alongside the existing tabs.
  */
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Plus, Trash2, MapPin, RefreshCw, Sparkles, Send, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,10 +22,8 @@ import {
   useSeatingPlan,
   useGenerateSeating,
   useExamAttendance,
-  useAutoMarkAttendance,
   useTeachers,
   useAssignInvigilator,
-  useApplyGrace,
   useOutcomes,
   useComputeOutcomes,
   useOverrideOutcome,
@@ -33,7 +31,9 @@ import {
   downloadCsvTemplate,
   type CsvImportRow,
 } from '@/lib/exams/use-exams-extended'
-import { useMarks } from '@/lib/exams/use-exams'
+import { useApplyGraceMock } from '@/lib/exams/use-marks-mock'
+import { useMockMarksStore } from '@/lib/exams/mock-marks-data'
+import { useStudentsStore } from '@/lib/store/students-store'
 import { useRoleGate } from '@/lib/exams/use-role-gate'
 import { generateSeatingPlanPDF, generateBatchAdmitCardPDF } from '@/lib/exams/pdf'
 import { fetchAdmitCardsBatch } from '@/lib/exams/use-exams-extended'
@@ -206,110 +206,26 @@ export function SeatingSection({ examId, exam, onReload }: SectionProps) {
   )
 }
 
-// ─── Exam Attendance Section ─────────────────────────────────────────
-
-export function AttendanceSection({ examId, exam, onReload }: SectionProps) {
-  const [classId, setClassId] = useState(exam?.classes[0]?.classId ?? '')
-  const { attendance, loading, reload } = useExamAttendance(examId, classId)
-  const { autoMark, loading: autoLoading } = useAutoMarkAttendance()
-
-  const handleAutoMark = async () => {
-    if (!classId) return
-    try {
-      const r = await autoMark(examId, classId)
-      toast.success(`Auto-marked ${r.marked} attendance entries from marks`, { description: 'All ABSENT/MEDICAL/EXEMPTED statuses synced.' })
-      reload()
-    } catch (e: any) {
-      toast.error('Failed to auto-mark', { description: e.message })
-    }
-  }
-
-  // Group by date+subject
-  const grouped = attendance.reduce((acc, a) => {
-    const key = `${a.date}|${a.subjectName ?? a.subjectId ?? 'general'}`
-    if (!acc.has(key)) acc.set(key, { date: a.date, subject: a.subjectName, items: [] })
-    acc.get(key)!.items.push(a)
-    return acc
-  }, new Map<string, { date: string; subject: string | null; items: typeof attendance }>())
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-xl border border-border bg-card p-3 flex flex-wrap items-center gap-2">
-        <Select value={classId} onValueChange={setClassId}>
-          <SelectTrigger size="sm" className="text-xs w-[180px]"><SelectValue placeholder="Select class" /></SelectTrigger>
-          <SelectContent>
-            {exam?.classes.map((c: any) => <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleAutoMark} disabled={autoLoading || !classId}>
-          <Sparkles className="h-3 w-3" /> {autoLoading ? 'Marking…' : 'Auto-mark from Marks'}
-        </Button>
-        <span className="text-[10px] text-muted-foreground ml-auto">{attendance.length} entries</span>
-      </div>
-
-      {loading ? <InlineLoading label="Loading exam attendance…" /> : attendance.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">
-          No exam attendance records. Use "Auto-mark from Marks" to sync from existing marks, or attendance will be tracked as marks are entered.
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {Array.from(grouped.values()).map((group, idx) => (
-            <div key={idx} className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center gap-2">
-                <p className="text-xs font-semibold">{group.subject ?? 'General Session'}</p>
-                <span className="text-[10px] text-muted-foreground">{group.date}</span>
-                <span className="text-[10px] text-muted-foreground ml-auto">{group.items.length} students</span>
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground">Roll No</TableHead>
-                    <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground">Student</TableHead>
-                    <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground">Status</TableHead>
-                    <TableHead className="text-[9px] uppercase font-semibold text-muted-foreground">Remarks</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {group.items.map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell className="text-xs font-mono">{a.studentRollNo ?? '—'}</TableCell>
-                      <TableCell className="text-xs">{a.studentName}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={a.status} />
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{a.remarks ?? '—'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls = {
-    PRESENT: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
-    ABSENT: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20',
-    MEDICAL: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
-    EXEMPTED: 'bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/20',
-  }[status] || 'bg-muted text-muted-foreground border-border'
-  return <span className={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold', cls)}>{status}</span>
-}
-
 // ─── Grace / Moderation Section ──────────────────────────────────────
 
 export function GraceSection({ examId, exam }: SectionProps) {
   const [classId, setClassId] = useState(exam?.classes[0]?.classId ?? '')
   const [subjectId, setSubjectId] = useState('')
-  const { students, marks } = useMarks(examId, classId, subjectId)
+  // Read marks from the mock store (canonical source) + students from students store.
+  const storeMarks = useMockMarksStore((s) => s.marks)
+  const allStudents = useStudentsStore((s) => s.students)
+  const marks = useMemo(
+    () => storeMarks.filter((m) => m.examId === examId && m.classId === classId && m.subjectId === subjectId),
+    [storeMarks, examId, classId, subjectId],
+  )
+  const students = useMemo(
+    () => allStudents.filter((s) => s.classId === classId && s.status === 'Active'),
+    [allStudents, classId],
+  )
   const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null)
   const [graceMarks, setGraceMarks] = useState(0)
   const [reason, setReason] = useState('')
-  const { apply, loading } = useApplyGrace()
+  const { apply, loading } = useApplyGraceMock()
   const gate = useRoleGate()
 
   const subjectsForClass = exam?.subjects.filter((s: any) => !classId || s.classId === classId) ?? []
