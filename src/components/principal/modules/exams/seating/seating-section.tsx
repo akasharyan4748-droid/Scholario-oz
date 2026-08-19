@@ -9,21 +9,24 @@
  */
 
 import { useState, useMemo, useEffect } from 'react'
-import { Plus, Trash2, RefreshCw, Download, Users, Layers, X } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, Download, Users, Layers, X, Ticket } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import type { ExamDTO } from '@/lib/exams/types'
+import type { ExamDTO, AdmitCardStudent } from '@/lib/exams/types'
 import type { ExamRoom, SeatingPlan, SeatingStudent, SeatingType, InvigilationAssignment, ExamSlot } from '@/lib/exams/seating/types'
 import { computeCapacity } from '@/lib/exams/seating/types'
 import { generateSeatingPlan, seatsForRoom, roomOccupancy, buildExamSlots } from '@/lib/exams/seating/generator'
 import { SeatingMap } from './seating-map'
-import { generateSeatingPlanPDF } from '@/lib/exams/seating-pdf'
+import { generateSeatingPlanPDF, generateBatchAdmitCardPDF } from '@/lib/exams/pdf'
+import { fetchAdmitCardsBatch } from '@/lib/exams/use-exams-extended'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { useTeachersMockStore } from '@/lib/store/teachers-mock-store'
+import { useSchoolContext } from '@/lib/exams/use-pdf-context'
+import { useAdmitCardConfig } from '@/lib/exams/use-exam-settings'
 import { formatDateLong } from '@/lib/exams/format-helpers'
 
 interface Props {
@@ -157,6 +160,90 @@ export function SeatingSection({ exam }: Props) {
     } catch (e: any) { toast.error('Export failed', { description: e.message }) }
   }
 
+  // Print admit cards for all seated students.
+  const { data: schoolCtxData } = useSchoolContext()
+  const { config: admitConfigData } = useAdmitCardConfig()
+  const [admitLoading, setAdmitLoading] = useState(false)
+
+  const handlePrintAdmitCards = async () => {
+    if (!plan || plan.totalAssigned === 0) {
+      toast.error('No seated students to generate admit cards for')
+      return
+    }
+    setAdmitLoading(true)
+    try {
+      // Fallback school context if API is unavailable (mock mode).
+      const school = schoolCtxData ?? {
+        schoolId: 'demo-school',
+        schoolName: 'Demo School of Scholario',
+        schoolCode: 'DEMO',
+        address: '123 Education Street',
+        city: 'Demo City',
+        phone: '+91 124 4567 800',
+        email: 'office@demoschool.edu',
+        logoUrl: null,
+        academicYear: '2025-2026',
+        board: 'CBSE' as const,
+      }
+      const config = admitConfigData ?? {
+        showPhoto: false,
+        showRollNumber: true,
+        showRoom: true,
+        showSeatNumber: true,
+        showTimetable: true,
+        showInstructions: true,
+        showQrCode: false,
+      }
+      // Collect all seated students across all rooms.
+      const allSeatedStudents: AdmitCardStudent[] = []
+      for (const room of rooms) {
+        const roomStudents = room.eligibleClassIds.flatMap((cId) => studentsByClass.get(cId) ?? [])
+        for (const student of roomStudents) {
+          const seat = plan.seats.find((s) => s.studentId === student.id && s.roomId === room.id)
+          // Build schedule for this student's class.
+          const studentSchedule = exam.schedule
+            .filter((item: any) => item.classId === student.classId)
+            .map((item: any) => ({
+              subjectId: item.subjectId,
+              subjectName: item.subjectName,
+              date: item.date,
+              startTime: item.startTime,
+              endTime: item.endTime,
+              room: room.name,
+              seatNumber: seat ? seat.seatNumber : null,
+              invigilatorName: item.invigilatorName,
+            }))
+          allSeatedStudents.push({
+            id: student.id,
+            name: student.name,
+            rollNo: student.rollNo,
+            admissionNo: null,
+            className: exam.classes.find((c: any) => c.classId === student.classId)?.className ?? '',
+            section: null,
+            stream: null,
+            photo: null,
+            room: room.name,
+            seatNumber: seat ? seat.seatNumber : null,
+            schedule: studentSchedule,
+          })
+        }
+      }
+      if (allSeatedStudents.length === 0) {
+        toast.error('No students found in seating plan')
+        return
+      }
+      const classNameLabel = rooms.length === 1
+        ? rooms[0].name
+        : `${allSeatedStudents.length} students`
+      generateBatchAdmitCardPDF(exam, classNameLabel, allSeatedStudents, school, config)
+      toast.success(`Admit cards generated for ${allSeatedStudents.length} students`)
+    } catch (e: any) {
+      toast.error('Failed to generate admit cards', { description: e.message })
+    } finally {
+      setAdmitLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Summary */}
@@ -180,7 +267,10 @@ export function SeatingSection({ exam }: Props) {
             <RefreshCw className="h-3 w-3" /> {plan ? 'Regenerate' : 'Generate'}
           </Button>
           <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={handleDownload} disabled={!plan}>
-            <Download className="h-3 w-3" /> Download
+            <Download className="h-3 w-3" /> Seating PDF
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/5" onClick={handlePrintAdmitCards} disabled={!plan || admitLoading}>
+            <Ticket className="h-3 w-3" /> {admitLoading ? 'Generating…' : 'Admit Cards'}
           </Button>
           <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={handleAddRoom}>
             <Plus className="h-3 w-3" /> Add Room
@@ -195,12 +285,27 @@ export function SeatingSection({ exam }: Props) {
           <div key={room.id} className="rounded-lg border border-border/60 overflow-hidden">
             {/* Room header */}
             <div className="flex items-start justify-between gap-2 px-3 py-2.5 border-b border-border/40 bg-muted/20">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">{room.name}</p>
-                <p className="text-[10px] text-muted-foreground">{room.roomNo}</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold">{room.name}</p>
+                  {plan && (() => {
+                    const { occupied, capacity: cap } = roomOccupancy(plan, room.id)
+                    const pct = cap > 0 ? Math.round((occupied / cap) * 100) : 0
+                    return (
+                      <span className={cn(
+                        'inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-bold',
+                        pct === 100 ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' :
+                        pct > 0 ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' :
+                        'bg-muted text-muted-foreground',
+                      )}>
+                        {occupied}/{cap}
+                      </span>
+                    )
+                  })()}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{room.roomNo} · {room.rows}×{room.cols} {room.seatingType} · {room.capacity} seats</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap">{room.rows}×{room.cols} {room.seatingType} · {room.capacity} seats</span>
                 <button onClick={() => handleRemoveRoom(room.id)} className="text-muted-foreground hover:text-rose-500 transition-colors">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

@@ -11,7 +11,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Pencil, Save, Download, Lock, Unlock, Clock, Award, Megaphone, CheckCircle2, FileText, User, Filter, RotateCcw, Send, Users, BookOpen, CalendarDays, PieChart, Search } from 'lucide-react'
+import { ArrowLeft, Pencil, Save, Download, Lock, Unlock, Clock, Award, Megaphone, CheckCircle2, FileText, User, Filter, RotateCcw, Send, Users, BookOpen, CalendarDays, PieChart, Search, ChevronRight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -1446,11 +1446,249 @@ function GradeDonut({ distribution, gradeScale, totalStudents }: {
   )
 }
 
+// ─── Student Drill-Down Modal — subject-wise marks breakdown ─────────
+
+function StudentDrillDownModal({ exam, studentId, allMarks, onClose }: {
+  exam: ExamDTO
+  studentId: string
+  allMarks: any[]
+  onClose: () => void
+}) {
+  const studentMarks = useMemo(
+    () => allMarks.filter((m) => m.studentId === studentId),
+    [allMarks, studentId],
+  )
+  const firstMark = studentMarks[0]
+  const studentName = firstMark?.studentName ?? 'Unknown'
+  const studentRollNo = firstMark?.studentRollNo ?? null
+  const classId = firstMark?.classId ?? null
+  const className = exam.classes.find((c: any) => c.classId === classId)?.className ?? ''
+
+  const subjects = exam.subjects.filter((s: any) => s.classId === classId)
+  const subjectResults = useMemo(() => {
+    const initial = { results: [] as Array<any>, totalObtained: 0, totalMax: 0, subjectsFailed: 0 }
+    const acc = subjects.reduce((acc, subj: any) => {
+      const mark = studentMarks.find((m) => m.subjectId === subj.subjectId)
+      const obtained = mark?.marksObtained ?? null
+      const isAbsent = mark?.status === 'ABSENT'
+      const pct = obtained !== null && subj.maxMarks > 0 ? Math.round((obtained / subj.maxMarks) * 100 * 100) / 100 : 0
+      const passed = obtained !== null && pct >= 33
+      const { grade } = getGradeForPercentage(pct, [])
+      const newObtained = (obtained !== null && !isAbsent) ? acc.totalObtained + obtained : acc.totalObtained
+      const newMax = acc.totalMax + subj.maxMarks
+      const newFailed = !passed ? acc.subjectsFailed + 1 : acc.subjectsFailed
+      acc.results.push({
+        subjectId: subj.subjectId,
+        subjectName: subj.subjectName,
+        maxMarks: subj.maxMarks,
+        obtained,
+        isAbsent,
+        percentage: pct,
+        grade,
+        passed,
+        graceMarks: mark?.graceMarks ?? 0,
+        originalMarks: mark?.originalMarks ?? null,
+        workflowStatus: mark?.workflowStatus ?? 'DRAFT',
+      })
+      return { results: acc.results, totalObtained: newObtained, totalMax: newMax, subjectsFailed: newFailed }
+    }, initial)
+    const overallPct = acc.totalMax > 0 ? Math.round((acc.totalObtained / acc.totalMax) * 100 * 100) / 100 : 0
+    const { grade: overallGrade } = getGradeForPercentage(overallPct, [])
+    return { ...acc, overallPct, overallGrade }
+  }, [subjects, studentMarks])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="bg-card border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border bg-gradient-to-r from-primary/5 to-transparent">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm">
+              {studentName.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold truncate">{studentName}</h3>
+              <p className="text-[10px] text-muted-foreground">
+                Roll {studentRollNo ?? '—'} · {className} · Rank #{studentPerformance_rank(exam, allMarks, studentId)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="text-right">
+              <p className="text-lg font-bold tabular-nums">{subjectResults.overallPct}%</p>
+              <p className="text-[9px] text-muted-foreground">Grade {subjectResults.overallGrade}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Summary chips */}
+        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-border/60 bg-muted/20 flex-wrap">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-muted/60 text-muted-foreground">
+            <FileText className="h-2.5 w-2.5" /> {subjectResults.results.length} subjects
+          </span>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-primary/10 text-primary">
+            Total: {subjectResults.totalObtained}/{subjectResults.totalMax}
+          </span>
+          {subjectResults.subjectsFailed > 0 ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300">
+              {subjectResults.subjectsFailed} failed
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+              All passed
+            </span>
+          )}
+        </div>
+
+        {/* Subject-wise table */}
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
+              <tr>
+                <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Subject</th>
+                <th className="text-right px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Max</th>
+                <th className="text-right px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Obtained</th>
+                <th className="text-right px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">%</th>
+                <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Grade</th>
+                <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subjectResults.results.map((r, i) => (
+                <tr key={i} className="border-t border-border/30 hover:bg-muted/20 transition-colors">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium">{r.subjectName}</span>
+                      {r.graceMarks > 0 && (
+                        <span className="inline-flex items-center px-1 py-0 rounded text-[7px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                          +{r.graceMarks} grace
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{r.maxMarks}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">
+                    {r.isAbsent ? (
+                      <span className="text-rose-600 font-semibold">ABSENT</span>
+                    ) : r.obtained !== null ? (
+                      r.obtained
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {r.isAbsent || r.obtained === null ? '—' : `${r.percentage}%`}
+                  </td>
+                  <td className="px-3 py-2 text-center font-bold">{r.isAbsent || r.obtained === null ? '—' : r.grade}</td>
+                  <td className="px-3 py-2 text-center">
+                    {r.isAbsent || r.obtained === null ? (
+                      <span className="text-[9px] text-muted-foreground">—</span>
+                    ) : r.passed ? (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">PASS</span>
+                    ) : (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20">FAIL</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-border bg-muted/30 font-bold">
+                <td className="px-3 py-2">Total</td>
+                <td className="px-3 py-2 text-right tabular-nums">{subjectResults.totalMax}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{subjectResults.totalObtained}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{subjectResults.overallPct}%</td>
+                <td className="px-3 py-2 text-center">{subjectResults.overallGrade}</td>
+                <td className="px-3 py-2 text-center">
+                  {subjectResults.subjectsFailed === 0 ? (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">PASS</span>
+                  ) : (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20">FAIL</span>
+                  )}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* Footer with download */}
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-border bg-muted/20">
+          <p className="text-[9px] text-muted-foreground">Click a student row in the table to see subject-wise breakdown</p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[10px] gap-1"
+            onClick={() => {
+              const result = {
+                studentId,
+                name: studentName,
+                rollNo: studentRollNo,
+                className,
+                subjects: subjectResults.results,
+                totalObtained: subjectResults.totalObtained,
+                totalMax: subjectResults.totalMax,
+                percentage: subjectResults.overallPct,
+                grade: subjectResults.overallGrade,
+                passed: subjectResults.subjectsFailed === 0,
+                rank: studentPerformance_rank(exam, allMarks, studentId),
+              }
+              try {
+                generateStudentResultPDF(exam, result as any)
+                toast.success('Student result PDF downloaded')
+              } catch (e: any) {
+                toast.error('Export failed', { description: e.message })
+              }
+            }}
+          >
+            <Download className="h-3 w-3" /> Download PDF
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Compute a student's rank from the marks data. */
+function studentPerformance_rank(exam: ExamDTO, allMarks: any[], studentId: string): number {
+  const studentIds = new Set(allMarks.map((m) => m.studentId))
+  const pcts: Array<{ id: string; pct: number }> = []
+  for (const sid of studentIds) {
+    const marks = allMarks.filter((m) => m.studentId === sid)
+    let totalObtained = 0
+    let totalMax = 0
+    for (const subj of exam.subjects.filter((s: any) => s.classId === marks[0]?.classId)) {
+      const mark = marks.find((m) => m.subjectId === subj.subjectId)
+      if (!mark) continue
+      if (mark.status === 'ABSENT' || mark.marksObtained === null) {
+        totalMax += subj.maxMarks
+        continue
+      }
+      totalObtained += mark.marksObtained
+      totalMax += subj.maxMarks
+    }
+    const pct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0
+    pcts.push({ id: sid, pct })
+  }
+  pcts.sort((a, b) => b.pct - a.pct)
+  const idx = pcts.findIndex((p) => p.id === studentId)
+  return idx + 1
+}
+
 // ─── Grade Section — grading policy + distribution + subject comparison ─
 
 function GradeSection({ exam }: { exam: ExamDTO }) {
   const [filterClass, setFilterClass] = useState('all')
   const [filterSubject, setFilterSubject] = useState('all')
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null)
   const storeMarks = useMockMarksStore((s) => s.marks)
   const allMarks = useMemo(() => storeMarks.filter((m) => m.examId === exam.id), [storeMarks, exam.id])
 
@@ -1759,7 +1997,11 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
             </thead>
             <tbody>
               {studentPerformance.map((s) => (
-                <tr key={s.studentId} className="border-t border-border/30 hover:bg-muted/30 even:bg-muted/10 transition-colors">
+                <tr
+                  key={s.studentId}
+                  onClick={() => setSelectedStudentId(s.studentId)}
+                  className="border-t border-border/30 hover:bg-primary/5 even:bg-muted/10 transition-colors cursor-pointer"
+                >
                   <td className="px-2 py-1.5 text-center">
                     {s.rank <= 3 ? (
                       <span className={cn(
@@ -1774,7 +2016,10 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
                       <span className="text-[9px] text-muted-foreground tabular-nums">{s.rank}</span>
                     )}
                   </td>
-                  <td className="px-2 py-1.5 font-medium">{s.studentName}</td>
+                  <td className="px-2 py-1.5 font-medium flex items-center gap-1">
+                    {s.studentName}
+                    <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/40" />
+                  </td>
                   <td className="px-2 py-1.5 text-muted-foreground">{s.className}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{s.totalObtained}/{s.totalMax}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums font-semibold">{s.percentage}%</td>
@@ -1796,6 +2041,16 @@ function GradeSection({ exam }: { exam: ExamDTO }) {
           </table>
         </div>
       </CollapsibleSection>
+
+      {/* Student drill-down modal */}
+      {selectedStudentId && (
+        <StudentDrillDownModal
+          exam={exam}
+          studentId={selectedStudentId}
+          allMarks={allMarks}
+          onClose={() => setSelectedStudentId(null)}
+        />
+      )}
 
       {/* Grade analysis highlights */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

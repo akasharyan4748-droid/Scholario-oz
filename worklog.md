@@ -2117,3 +2117,48 @@ Stage Summary:
 - All features browser-verified via agent-browser + VLM.
 - Canonical data flow maintained: all metrics derived from real exam/marks data.
 - Next opportunities: (1) add student-wise subject breakdown drill-down from Grade tab, (2) add printable admit cards from Seating tab, (3) add teacher dashboard view, (4) add exam archive with historical comparison.
+
+---
+Task ID: cron-round-5-drilldown-admit-seating
+Agent: main (Super Z)
+Task: Student drill-down modal, admit cards PDF, seating improvements, teacher dashboard
+
+Work Log:
+- Reviewed worklog: previous rounds added Action Items widget, bulk actions, Grace tab improvements, exam comparison.
+- QA testing via agent-browser + VLM identified 4 feature opportunities:
+  • FEATURE: No student drill-down from Grade tab (click student → subject-wise marks).
+  • FEATURE: No "Print Admit Cards" button on Seating tab.
+  • FEATURE: Seating map not visible at top of room card (VLM: 4/10 for visibility).
+  • FEATURE: No teacher dashboard view for exam duties.
+- Added Student Drill-Down Modal to Grade tab:
+  • New StudentDrillDownModal component — click any student row in Student Performance table → modal opens.
+  • Modal shows: student avatar (initial), name, roll no, class, rank, overall %, grade.
+  • Summary chips: subject count, total marks, failed count / "All passed".
+  • Subject-wise table: Subject | Max | Obtained | % | Grade | Result (PASS/FAIL pill).
+  • Grace marks shown as amber badge next to subject name.
+  • ABSENT status shown in rose.
+  • Total row with bold styling and top border.
+  • "Download PDF" button → generates individual student result PDF.
+  • Uses reduce() for lint-safe computation.
+  • VLM rated 8/10 — "highly functional, readable, professional".
+  • Verified: clicked Rohan Kumar → modal shows 6 subjects (Hindi 75% B1, English 61% B2, Science 81% A2, Maths 55% C1, Social Science 51% C1, Arts & Drawing —), Total 323/600, 53.83%, C1, FAIL.
+- Added "Print Admit Cards" button to Seating tab:
+  • New handlePrintAdmitCards() function — collects all seated students across rooms.
+  • Builds AdmitCardStudent[] with: name, rollNo, className, room, seatNumber, schedule (subject/date/time/room/seat/invigilator).
+  • Uses generateBatchAdmitCardPDF() from lib/exams/pdf.ts.
+  • Fallback school context + admit card config if API returns 401 (mock mode).
+  • Button styled with Ticket icon, primary outline variant, loading state.
+  • Verified: clicked → 99KB PDF downloaded (Mid-Term_Examination_AdmitCards_Room A.pdf).
+- Improved Seating tab room card header:
+  • Occupancy badge (16/30) in emerald/amber color next to room name.
+  • Compact info line: "A-101 · 5×6 single · 30 seats" (was two separate lines).
+  • VLM rated 9/10 — "clean, information-dense, new elements integrate well".
+- Teacher dashboard: examined existing teacher/modules/exam-proctoring.tsx — already has a comprehensive proctoring module with KPIs, exam slots, seating, duties, hall tickets. No changes needed — the teacher view is already well-built.
+- Lint passes clean on all modified files. Dev server compiles successfully.
+- No browser errors. All 8 tabs functional.
+
+Stage Summary:
+- 3 new features: Student drill-down modal (8/10), Admit Cards PDF (verified 99KB download), Seating occupancy badge (9/10).
+- All features browser-verified via agent-browser + VLM.
+- Canonical data flow maintained: student results derived from marks, admit cards from seating plan.
+- Next opportunities: (1) add exam archive with historical comparison, (2) add printable report cards from Grade tab, (3) add subject-wise drill-down from Grade Distribution donut, (4) add parent portal result view.
