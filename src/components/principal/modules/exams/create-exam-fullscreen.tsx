@@ -822,8 +822,8 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
         )}
       </div>
 
-      {/* ─── Action row — changes per step (Spec §9 / §10 / §11) ─────────── */}
-      <div className="px-4 sm:px-6 pb-4 pt-2 shrink-0 border-t border-border/40">
+      {/* ─── Action row — compact, no heavy border ──────────────────────── */}
+      <div className="px-4 sm:px-6 pb-4 pt-2 shrink-0">
         <div className="max-w-3xl mx-auto flex justify-between items-center gap-2">
           {step === 1 ? (
             <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={onBack}>

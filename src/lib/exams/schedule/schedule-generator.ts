@@ -69,6 +69,11 @@ function buildWorkingDates(start: Date, end: Date, skipSundays: boolean): Date[]
 /**
  * Generate the timetable.
  *
+ * Only generates the dates ACTUALLY REQUIRED by the examination — no
+ * extra empty days at the end of the range (Spec: extra-date bug fix).
+ * The number of required days = ceil(maxSubjects / papersPerDay).
+ * Sundays are skipped when counting available days.
+ *
  * @param classes  One entry per selected academic class/group, each with its OWN subjects.
  * @param options  Date window + papers/day + timing.
  */
@@ -80,11 +85,16 @@ export function generateScheduleTimetable(
   const start = parseLocalDate(options.startDate)
   const end = parseLocalDate(options.endDate || options.startDate)
   const workingDates = buildWorkingDates(start, end, skipSundays)
-
-  // Build rows: one row per (date × slot). For papersPerDay=1, one slot per day.
-  const rows: ScheduleRow[] = []
   const slotsPerDay = options.papersPerDay >= 2 ? 2 : 1
-  for (const date of workingDates) {
+
+  // Required days = ceil(maxSubjects / slotsPerDay). Only generate that many.
+  const maxSubjects = Math.max(0, ...classes.map((c) => c.subjects.length))
+  const requiredDays = Math.ceil(maxSubjects / slotsPerDay)
+  const usedDates = workingDates.slice(0, requiredDays)
+
+  // Build rows: one row per (date × slot).
+  const rows: ScheduleRow[] = []
+  for (const date of usedDates) {
     const iso = toLocalISO(date)
     const dayLabel = DAY_LABELS[date.getDay()] ?? ''
     for (let slot = 0; slot < slotsPerDay; slot++) {
@@ -100,22 +110,18 @@ export function generateScheduleTimetable(
         slotLabel,
         startTime,
         endTime,
-        cells: classes.map(() => null), // filled below
+        cells: classes.map(() => null),
       })
     }
   }
 
-  // Allocate subjects per class — round-robin into the (date × slot) rows.
-  // Each class fills rows independently; empty cells stay null.
-  const maxSubjects = Math.max(0, ...classes.map((c) => c.subjects.length))
-  rows.forEach((row) => {
+  // Allocate subjects per class — round-robin into the rows.
+  rows.forEach((row, rowIdx) => {
     classes.forEach((cls, classIdx) => {
       const subjects = cls.subjects
       if (subjects.length === 0) return
-      // Linear index for this class into the rows: rowIdx * slotsPerDay + slotIndex.
-      const linearIdx = rows.indexOf(row)
-      if (linearIdx < subjects.length) {
-        const subj: ScheduleSubject = subjects[linearIdx]
+      if (rowIdx < subjects.length) {
+        const subj: ScheduleSubject = subjects[rowIdx]
         row.cells[classIdx] = {
           subjectId: subj.id,
           subjectName: subj.name,
@@ -125,10 +131,10 @@ export function generateScheduleTimetable(
     })
   })
 
-  // Fit check: does the window have enough rows for the class with the most subjects?
-  const totalSlots = rows.length
-  const fits = totalSlots >= maxSubjects
-  const additionalDaysNeeded = fits ? 0 : Math.ceil((maxSubjects - totalSlots) / slotsPerDay)
+  // Fit check: does the window have enough working days?
+  const availableDays = workingDates.length
+  const fits = availableDays >= requiredDays
+  const additionalDaysNeeded = fits ? 0 : requiredDays - availableDays
 
   return {
     classes,
@@ -185,4 +191,23 @@ export function todayISO(now: Date = new Date()): string {
   const d = new Date(now)
   d.setHours(0, 0, 0, 0)
   return toLocalISO(d)
+}
+
+/**
+ * Compute required vs available examination days (Spec: one canonical calc).
+ * Used by Create Exam, Schedule Preview, and the Exam Workspace.
+ */
+export function computeRequiredDays(
+  classes: ScheduleClass[],
+  papersPerDay: number,
+  startDate: string,
+  endDate: string,
+  skipSundays = true,
+): { requiredDays: number; availableDays: number; fits: boolean; slotsPerDay: number } {
+  const slotsPerDay = papersPerDay >= 2 ? 2 : 1
+  const maxSubjects = Math.max(0, ...classes.map((c) => c.subjects.length))
+  const requiredDays = Math.ceil(maxSubjects / slotsPerDay)
+  const workingDates = buildWorkingDates(parseLocalDate(startDate), parseLocalDate(endDate || startDate), skipSundays)
+  const availableDays = workingDates.length
+  return { requiredDays, availableDays, fits: availableDays >= requiredDays, slotsPerDay }
 }
