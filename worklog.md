@@ -1793,3 +1793,65 @@ Stage Summary:
 - Header centered + compact table + Pre-Nursery/KG labels fixed.
 - PCM/PCB consolidation + 3-step flow + all functionality preserved.
 - Pushed to GitHub successfully.
+
+---
+Task ID: audit-exam-domain-1
+Agent: Explore (read-only)
+Task: Audit the ENTIRE Examination domain for the repository cleanup task.
+
+Stage Summary:
+- Templates (template-engine.ts): correct — UT1-4, Half-Yearly, Annual, Custom with proper 50/2/1h and 100/70-30/1/3h15m rules. FIXED_PASS_PERCENTAGE=33 lives at template-engine.ts:17 but types.ts:78 ALSO exports PASSING_PERCENTAGE_DEFAULT=33 → duplicate constant.
+- Types (types.ts): single canonical DTO source, BUT service-extended.ts RE-DECLARES 4 interfaces (ExamAttendanceDTO, ResultOutcomeDTO, CsvImportRow, CsvImportResult) at lines 270, 492, 732, 740 — breaking the "no duplicate types" promise.
+- Services: service.ts (976 LOC) + service-extended.ts (911 LOC) split cleanly by feature; service-extended imports `audit`, `toMarkDTO`, `deleteScheduleItem` from service — no overlap.
+- Hooks mixed: UI uses mock for READ (useExamsListMock/useExamMock/useCreateExamMock/useDeleteExamMock) but real-API for MUTATIONS (useUpdateExam, useAddScheduleItem, useSubmitMarks…). CRITICAL BUG: real mutation hooks hit /api/exams/[id] for IDs like 'exam-mock-...' that don't exist in DB → 404.
+- 3 dead hooks never imported anywhere: useSetMarksBatch (use-exams.ts:182), useUpdateScheduleItem (use-exams.ts:301 — only V2 is used), useMarkExamAttendance (use-exams-extended.ts:160).
+- 3 DEAD TAB FILES (~923 LOC): tabs/schedule-tab.tsx (171), tabs/results-tab.tsx (349), tabs/marks-tab.tsx (403) — index.tsx renders Overview/Exams/Reports/Settings only; ExamWorkspace implements its own inline Sections.
+- Dead code in template-engine.ts (~170 LOC): generateExamConfig (122), generateSchedule (162), isAlternativeActive (116), GeneratedExamConfig/SubjectConfig/ScheduleItem interfaces — UI uses scheduleState.flattened (from schedule/schedule-generator.ts) instead.
+- Dead code in schedule/schedule-reorder.ts (~64 LOC): swapCells (33), findDuplicates (72), countFilled (89), isComplete (94) — only moveSubject + flattenTimetable are used.
+- Dead consts in use-pdf-context.ts (lines 40-58): DEFAULT_ADMIT_CARD_CONFIG, DEFAULT_REPORT_CARD_CONFIG — reports-tab.tsx:68-69 REDEFINES them locally.
+- Dead small funcs: getTemplateById (exam-templates.tsx:41), getArchivedSession (archive-data.ts:209).
+- TWO schedule-generation algorithms: template-engine.generateSchedule (DEAD) and schedule/generateScheduleTimetable (LIVE).
+- TWO parseLocalDate helpers: format-helpers.ts:9 and schedule-generator.ts:32 (identical).
+- MOCK STATUS ENUM CONFLICT: mock-exams-data.ts uses 'SCHEDULED'/'COMPLETED'/'DRAFT'/'NOT_DECLARED'/'DECLARED' (screaming snake) — but types.ts:37 EXAM_STATUSES is Title Case ('Draft','Scheduled','Ongoing','Completed','Cancelled') and prisma/schema.prisma:243 defaults to "Draft". prisma/seed.ts:173-175 ALSO uses screaming snake for seed exams. Result: StatusPill (exam-workspace.tsx:191-200) and ResultStatusPill (202-211) silently miss → all mock/seed exams show grey default pill. resolveExamContext (resolver.ts:100) uses mixed `['SCHEDULED','ONGOING','Draft']` so real 'Scheduled'/'Ongoing' exams are dropped from upcoming list.
+- Mock-exams-data.ts: subjects/classes correctly delegated to shared @/lib/mock/academic — no duplicate academic data. Realistic seed (3 exams). ✓
+- Result-engine.ts: pass/fail via stricter-of(passMarks, pctThreshold) — 33% rule NOT duplicated elsewhere; correctly enforced. ✓
+- PDF: single pdf.ts (354 LOC) with 4 generators, all used. ✓
+- 34 API routes — all wired to a hook or service function. No dead routes.
+- Total dead code identified: ~1260 LOC.
+
+Unresolved:
+- Mock/real mode bridge: UI mixes mock reads + real writes against IDs that don't exist in DB. Needs either a fully-mock mutation layer OR a fully-real read layer; current hybrid is broken.
+- Inconsistent exam status enum convention across schema/seed/mock/UI — needs a single canonical enum enforced everywhere.
+
+---
+Task ID: audit-mock-dups-1
+Agent: Explore (read-only)
+Task: Audit mock-data architecture + detect duplicates + find dead code across the entire repository.
+
+Stage Summary:
+- Mock data: 42 files under src/lib/mock/ (8,092 LOC total). Heavily-used: school.ts (51 importers), academics.ts (52), operations.ts (29), finance.ts (26), students.ts (39). Canonical academic module (src/lib/mock/academic/ — 7 files, 714 LOC) is well-structured: classes.ts, subjects.ts, streams.ts, resolver.ts, use-academic-classes.ts, index.ts barrel — imported by 65+ files including the Students store + Exam mock layer.
+- DUPLICATE MOCK DATA: src/lib/mock/school.ts:41-57 exports its own `classList` + `subjects` + `departments` arrays that overlap with the academic module. `classList` is imported by 4 files (ClassStep.tsx, FilterBar.tsx, insights.tsx, add-teacher-data.ts, /api/schools/public/route.ts). `subjects` is imported by /api/schools/public/route.ts. These should be migrated to consume academic module.
+- DUPLICATE TEACHER DATA: src/lib/mock/teachers.ts (19 teachers, 51 LOC) and src/lib/store/teachers-store/seed-data.ts (only 2 detailed TeacherRecord entries, 181 LOC) coexist. teachers-mock-store.ts wraps mock/teachers.ts; teachers-store/ is a separate richer store with only 2 seed entries.
+- DUPLICATE STUDENT DATA: src/lib/mock/students.ts (18 hardcoded students) and src/lib/store/students-store/seed-data.ts (procedurally generated) coexist — different shapes, different IDs.
+- Stores: 10 stores total under src/lib/store/. All used except none fully dead. Largest: staff-attendance-store.ts (297 LOC), students-store/store.ts (244 LOC), school-settings-store/types.ts (286 LOC), live-alerts-store.ts (224 LOC), admission-store/seed-data.ts (230 LOC).
+- DUPLICATE formatDate: 6 local implementations — canonical @ src/lib/format.ts:18; local copies at src/components/principal/modules/attendance/history-tab.tsx:395, exams/tabs/archive-view.tsx:446, exams/tabs/examination-context/index.tsx:398, exams/tabs/exams-list-tab.tsx:486, lib/exams/pdf.ts:26. formatDateShort duplicated between src/lib/exams/format-helpers.ts:24 and src/components/principal/modules/communication/shared.tsx:14.
+- DUPLICATE subject-code generator: canonical codeForName @ src/lib/mock/academic/subjects.ts:100; inlined at 4 other sites (subject-card.tsx:46, archived-subjects-panel.tsx:73, slot-editor-dialog.tsx:50, settings-service.ts:33/:48).
+- DEAD FILES: 41 dead files (~3,300 LOC). Entire dead directories: src/lib/kernel/ (11 files, 704 LOC), src/components/platform/ (12 files), src/components/workspace/school-workspace-views/ (18 files), src/components/principal/modules/{alumni,recruitment,hostel,compliance,event-management,health-wellness}/. Dead exam tabs: marks-tab.tsx (403 LOC), results-tab.tsx (349), schedule-tab.tsx (171). Dead students files: class-workspace.tsx (113), student-profile.tsx (131), archive/houses-tab.tsx (49). Dead shared: empty-state.tsx, error-state.tsx, topbar.tsx (270). Dead lib: supabase.ts, error/, flags/, permissions/, tokens/, validation/, types/index.ts, config/app-config.ts.
+- Unused vars (via tsc --noUnusedLocals): 226 TS6133 errors across the codebase. Worst offenders: src/components/superadmin/modules/dashboard.tsx (16), src/components/student/modules/study-planner/index.tsx (10), src/components/teacher/modules/exam-proctoring.tsx (6), src/components/principal/modules/finance-dashboard/reports.tsx (6), src/components/teacher/modules/{personal-attendance,classroom-resources}.tsx (5 each), src/components/superadmin/platform-landing.tsx (5), src/components/student/StudentSubscriptionActivation.tsx (5).
+- Oversized files (>300 LOC): 37 files. Top 5: src/lib/exams/service.ts (975), src/lib/exams/service-extended.ts (910), src/components/principal/modules/exams/create-exam-fullscreen.tsx (905), src/components/public-website/public-website.tsx (883), src/components/principal/modules/exams/exam-workspace.tsx (805). All are split candidates.
+- Commented-out code: zero blocks of 5+ consecutive commented-out code lines found (only legitimate docblock comments).
+- TODO/FIXME/HACK: zero markers in src/. The 3 case-insensitive "XXXX" matches are format-string literals, not markers.
+- console.log: zero occurrences in src/. 12 console.error/warn calls — all defensive (catch handlers).
+- Duplicate types: 23 interface names declared in 2+ files. Worst cluster: src/lib/homework/{use-oversight.ts, oversight-service.ts} re-declare 11 identical DTO interfaces (ComplianceMetricsDTO, LoadMatrixCell, SubjectDistributionDTO, TeacherActivityDTO, PolicyDTO, LowSubmissionAlertDTO, NoHomeworkDateDTO, TeacherComplianceRowDTO, ChronicNonSubmitterDTO, AssignmentRepositoryItemDTO, GrievanceDTO). src/lib/exams/{service-extended.ts, types.ts} re-declare 5 (SeatAssignmentDTO, ExamAttendanceDTO, CsvImportRow, CsvImportResult, ResultOutcomeDTO). Other duplicates: AuditLogEntry (3 files), School (2), SubjectResult (2), Submission (2), BookItem (src/lib/school-settings.ts:12 vs src/lib/store/school-settings-store/types.ts:16 — DIFFERENT shapes!), AnnouncementForm (2), SearchResultItem (2 — kernel/search-engine.ts vs search-service/types.ts), DocItem (2).
+- Stale API routes: 22 API routes with ZERO client-side callers — /api/{teachers, students, classes, subjects, results, attendance, fees, library, messages, notifications, notifications-feed, profile, questions, assignments, events, transport, timetable, export, contacts, ai/generate-questions, auth/me, auth/logout}. All have proper handlers but the front-end has migrated to Zustand stores with mock data. /api/exams/*, /api/homework/*, /api/schools, /api/dashboard, /api/superadmin/settings, /api/auth/login, /api/admissions/public, /api/schools/public ARE used.
+
+Next Actions:
+1. Delete 41 dead files (~3,300 LOC).
+2. Consolidate 226 unused vars (mostly stale imports post-refactor).
+3. Migrate src/lib/mock/school.ts classList/subjects/departments to consume @/lib/mock/academic — removes duplicate class/subject data.
+4. Deduplicate formatDate (5 local impls) and codeForName (4 inline impls) — route through @/lib/format.ts and @/lib/mock/academic/subjects.ts.
+5. Move all homework DTO interfaces from use-oversight.ts to a single src/lib/homework/types.ts — removes 11 duplicate definitions.
+6. Move exam DTOs (SeatAssignmentDTO, ExamAttendanceDTO, CsvImportRow, CsvImportResult, ResultOutcomeDTO) from service-extended.ts into types.ts — removes 5 duplicates.
+7. Resolve BookItem divergence: pick canonical shape (likely the richer store one), update src/lib/school-settings.ts.
+8. Decide fate of 22 stale API routes: either wire them up to replace mock stores, or delete them.
+9. Split oversized files (37 over 300 LOC) — especially the top 5 (exams service/service-extended/create-exam-fullscreen/public-website/exam-workspace).
