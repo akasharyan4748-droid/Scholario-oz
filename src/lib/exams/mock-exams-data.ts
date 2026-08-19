@@ -17,6 +17,7 @@
 
 import { create } from 'zustand'
 import type { ExamDTO, CreateExamInput, ExamClassDTO, ExamSubjectConfigDTO, ScheduleItemDTO } from './types'
+import { buildSeedClassesAndSubjects, buildSeedSchedule, SEED_CLASS_DEFS } from './seed-helpers'
 
 // ─── Sample exams (seed) ────────────────────────────────────────────────
 // These give the Examination list a non-empty default state so the UI
@@ -24,73 +25,49 @@ import type { ExamDTO, CreateExamInput, ExamClassDTO, ExamSubjectConfigDTO, Sche
 // from the shared academic module (e.g. 'C09' = Class 6, 'C14-PCM' = Class 11 PCM).
 
 const NOW = new Date().toISOString()
+
+// Build coherent seed data from the shared academic module.
+function buildSeedExam(examId: string, name: string, type: string, session: string, term: string, status: string, resultStatus: string, startDate: string, endDate: string, maxMarks: number = 50, papersPerDay: number = 2, markSummary?: any): ExamDTO {
+  const classDefs = SEED_CLASS_DEFS[examId] ?? []
+  const { classes, subjects } = buildSeedClassesAndSubjects(classDefs)
+  // Update examId on the generated DTOs.
+  classes.forEach((c) => { c.examId = examId })
+  subjects.forEach((s) => { s.examId = examId; s.maxMarks = maxMarks; s.passMarks = Math.round(maxMarks * 0.33); s.theoryMarks = maxMarks })
+  const schedule = buildSeedSchedule(examId, startDate, endDate, classes, subjects, papersPerDay)
+  const totalStudents = classes.reduce((sum, c) => sum + c.studentCount, 0)
+  return {
+    id: examId,
+    schoolId: 'demo-school',
+    name, type, session, term,
+    status, resultStatus,
+    passPercentage: 33,
+    startDate, endDate,
+    declaredAt: resultStatus === 'Result Declared' ? NOW : null,
+    declaredBy: resultStatus === 'Result Declared' ? 'principal' : null,
+    createdBy: 'principal',
+    createdAt: NOW, updatedAt: NOW,
+    classes, subjects, schedule,
+    markSummary: markSummary ?? { total: 0, entered: 0, locked: 0, submitted: 0, verified: 0, pct: 0 },
+  }
+}
+
 const SEED_EXAMS: ExamDTO[] = [
-  {
-    id: 'exam-seed-1',
-    schoolId: 'demo-school',
-    name: 'Unit Test 2',
-    type: 'UT2',
-    session: '2025-2026',
-    term: 'Term 1',
-    status: 'Scheduled',
-    resultStatus: 'Not Started',
-    passPercentage: 33,
-    startDate: '2025-10-10',
-    endDate: '2025-10-10',
-    declaredAt: null,
-    declaredBy: null,
-    createdBy: 'principal',
-    createdAt: NOW,
-    updatedAt: NOW,
-    classes: [{ id: 'ec-1', examId: 'exam-seed-1', classId: 'C09', className: 'Class 6', gradeLevel: '6', section: null, stream: null, studentCount: 4 }],
-    subjects: [],
-    schedule: [],
-    markSummary: { total: 0, entered: 0, locked: 0, submitted: 0, verified: 0, pct: 0 },
-  },
-  {
-    id: 'exam-seed-2',
-    schoolId: 'demo-school',
-    name: 'Final Examination',
-    type: 'ANNUAL',
-    session: '2025-2026',
-    term: 'Term 2',
-    status: 'Scheduled',
-    resultStatus: 'Not Started',
-    passPercentage: 33,
-    startDate: '2026-02-10',
-    endDate: '2026-02-20',
-    declaredAt: null,
-    declaredBy: null,
-    createdBy: 'principal',
-    createdAt: NOW,
-    updatedAt: NOW,
-    classes: [{ id: 'ec-2', examId: 'exam-seed-2', classId: 'C13', className: 'Class 10', gradeLevel: '10', section: null, stream: null, studentCount: 4 }],
-    subjects: [],
-    schedule: [],
-    markSummary: { total: 0, entered: 0, locked: 0, submitted: 0, verified: 0, pct: 0 },
-  },
-  {
-    id: 'exam-seed-3',
-    schoolId: 'demo-school',
-    name: 'Mid-Term Examination',
-    type: 'HALF_YEARLY',
-    session: '2025-2026',
-    term: 'Term 1',
-    status: 'Completed',
-    resultStatus: 'Result Declared',
-    passPercentage: 33,
-    startDate: '2025-09-15',
-    endDate: '2025-09-25',
-    declaredAt: '2025-09-26T10:00:00.000Z',
-    declaredBy: 'principal',
-    createdBy: 'principal',
-    createdAt: NOW,
-    updatedAt: NOW,
-    classes: [{ id: 'ec-3', examId: 'exam-seed-3', classId: 'C12', className: 'Class 9', gradeLevel: '9', section: null, stream: null, studentCount: 4 }],
-    subjects: [],
-    schedule: [],
-    markSummary: { total: 24, entered: 24, locked: 24, submitted: 24, verified: 24, pct: 100 },
-  },
+  buildSeedExam(
+    'exam-seed-1', 'Unit Test 2', 'UT2', '2025-2026', 'Term 1',
+    'Scheduled', 'Not Started', '2025-10-10', '2025-10-15',
+    50, 2,
+  ),
+  buildSeedExam(
+    'exam-seed-2', 'Final Examination', 'ANNUAL', '2025-2026', 'Term 2',
+    'Scheduled', 'Not Started', '2026-02-10', '2026-02-20',
+    100, 1,
+  ),
+  buildSeedExam(
+    'exam-seed-3', 'Mid-Term Examination', 'HALF_YEARLY', '2025-2026', 'Term 1',
+    'Completed', 'Result Declared', '2025-09-15', '2025-09-25',
+    100, 1,
+    { total: 24, entered: 24, locked: 24, submitted: 24, verified: 24, pct: 100 },
+  ),
 ]
 
 // ─── Mock exams store (in-memory, persists for the browser session) ─────
