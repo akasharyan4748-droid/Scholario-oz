@@ -78,6 +78,9 @@ export const TEMPLATE_METAS: Record<string, TemplateMeta> = {
   'unit-test-4': { maxMarks: 50, theoryMarks: 50, practicalMarks: 0, papersPerDay: 2, paperDurationMin: 60, gapMin: 15, hasPractical: false },
   'half-yearly': { maxMarks: 100, theoryMarks: 70, practicalMarks: 30, papersPerDay: 1, paperDurationMin: 195, gapMin: 0, hasPractical: true },
   'annual': { maxMarks: 100, theoryMarks: 70, practicalMarks: 30, papersPerDay: 1, paperDurationMin: 195, gapMin: 0, hasPractical: true },
+  'practical': { maxMarks: 100, theoryMarks: 0, practicalMarks: 100, papersPerDay: 1, paperDurationMin: 180, gapMin: 0, hasPractical: true },
+  'pre-board': { maxMarks: 100, theoryMarks: 80, practicalMarks: 20, papersPerDay: 1, paperDurationMin: 195, gapMin: 0, hasPractical: true },
+  'oral-viva': { maxMarks: 50, theoryMarks: 0, practicalMarks: 50, papersPerDay: 1, paperDurationMin: 30, gapMin: 0, hasPractical: true },
   'custom': { maxMarks: 100, theoryMarks: 100, practicalMarks: 0, papersPerDay: 1, paperDurationMin: 180, gapMin: 0, hasPractical: false },
 }
 

@@ -19,8 +19,8 @@ export interface StepIndicatorProps {
 
 const STEPS = [
   { num: 1, label: 'Examination Setup' },
-  { num: 2, label: 'Timetable Preview' },
-  { num: 3, label: 'Final Confirmation' },
+  { num: 2, label: 'Timetable Builder' },
+  { num: 3, label: 'Examination Preview' },
 ] as const
 
 export function StepIndicator({ current }: StepIndicatorProps) {

@@ -32,7 +32,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Check, AlertTriangle, Pencil, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Check, AlertTriangle, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -494,298 +494,232 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   }
 
   // ─── Render ──────────────────────────────────────────────────────────
-  // 3-step flow (Spec §9): Step 1 = Setup, Step 2 = Preview, Step 3 = Confirm.
+  // 3-step flow: Step 1 = Setup (no timetable), Step 2 = Timetable Builder,
+  // Step 3 = Complete read-only Examination Preview.
   return (
     <div className="flex flex-col h-full">
       {/* Step indicator */}
-      <div className="px-4 sm:px-6 pt-4 pb-2 shrink-0 border-b border-border/40">
+      <div className="px-4 sm:px-6 pt-4 pb-2 shrink-0">
         <StepIndicator current={step} />
       </div>
 
-      {/* Scrollable area — content depends on step */}
+      {/* Scrollable area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-8">
+        {/* ─── STEP 1 — Examination Setup (NO timetable) ─────────────── */}
         {step === 1 && (
-          <div className="max-w-3xl mx-auto space-y-8">
-            {/* ─── 1. Examination Type ─────────────────────────────────── */}
+          <div className="max-w-3xl mx-auto space-y-6">
             <Section label="Examination Type" required>
-            <TemplateSelection selectedTemplateId={selectedTemplate?.id ?? null} onSelect={handleTemplateSelect} />
-          </Section>
+              <TemplateSelection selectedTemplateId={selectedTemplate?.id ?? null} onSelect={handleTemplateSelect} />
+            </Section>
 
-          {selectedTemplate && (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25 }}
-              className="space-y-8"
-            >
-              {/* ─── 2. Examination Name ──────────────────────────────── */}
-              <Section label="Examination Name" required>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Unit Test 1"
-                  className="h-9 text-sm max-w-md"
-                />
-              </Section>
-
-              {/* ─── 3. Classes ──────────────────────────────────────── */}
-              <Section
-                label="Classes"
-                required
-                hint={selectedExamClassKeys.length > 0 ? `${selectedExamClassKeys.length} selected` : undefined}
+            {selectedTemplate && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="space-y-6"
               >
-                {examClasses.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-3">No classes configured. Add classes in Students &amp; Classes first.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {examClasses.map((examCls) => {
-                      const isSelected = selectedExamClassKeys.includes(examCls.key)
-                      return (
-                        <div
-                          key={examCls.key}
-                          role="checkbox"
-                          aria-checked={isSelected}
-                          tabIndex={0}
-                          onClick={() => handleClassToggle(examCls.key)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClassToggle(examCls.key) } }}
-                          className={cn(
-                            'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-medium transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30',
-                            isSelected ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground hover:bg-muted/30',
-                          )}
-                        >
-                          <span className={cn('flex h-3.5 w-3.5 items-center justify-center rounded-full border shrink-0', isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40')}>
-                            {isSelected && <Check className="h-2.5 w-2.5" />}
-                          </span>
-                          <span>{examCls.label}</span>
-                          {examCls.sectionCount > 1 && <span className="text-[9px] text-muted-foreground/60">· {examCls.sectionCount} sections</span>}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </Section>
-
-              {/* ─── 4. Subjects (auto-included, READ-ONLY by default) ──── */}
-              {autoSubjects.length > 0 && (
-                <Section
-                  label="Subjects"
-                  hint={`${effectiveSubjects.length} auto-included from selected classes`}
-                >
-                  <div className="rounded-lg border border-border bg-muted/20 p-3">
-                    {subjectsEditable ? (
-                      // Editable mode — principal can deselect individual subjects
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {autoSubjects.map((subj) => {
-                            const isSelected = !deselectedSubjectNames.has(subj.name)
-                            return (
-                              <button
-                                key={subj.id}
-                                onClick={() => toggleSubjectDeselection(subj.name)}
-                                className={cn(
-                                  'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-all',
-                                  isSelected
-                                    ? 'border-primary/40 bg-primary/10 text-foreground'
-                                    : 'border-border bg-card text-muted-foreground/60 line-through',
-                                )}
-                              >
-                                <span className={cn('flex h-3.5 w-3.5 items-center justify-center rounded-full border shrink-0', isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40')}>
-                                  {isSelected && <Check className="h-2.5 w-2.5" />}
-                                </span>
-                                {subj.name}
-                              </button>
-                            )
-                          })}
-                        </div>
-                        <div className="flex justify-end pt-1 border-t border-border/40">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-[10px] gap-1"
-                            onClick={() => {
-                              setSubjectsEditable(false)
-                              setDeselectedSubjectNames(new Set())
-                            }}
-                          >
-                            <CheckCircle2 className="h-3 w-3" /> Done
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      // Read-only mode — subjects shown as plain chips, with subtle Edit affordance
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {effectiveSubjects.map((subj) => (
-                          <span
-                            key={subj.id}
-                            className="inline-flex items-center rounded-md bg-card border border-border/60 px-2 py-1 text-xs font-medium"
-                          >
-                            {subj.name}
-                          </span>
-                        ))}
-                        <button
-                          onClick={() => setSubjectsEditable(true)}
-                          className="inline-flex items-center gap-1 rounded-md border border-dashed border-border/60 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground hover:border-border transition-colors ml-1"
-                          aria-label="Edit subjects"
-                        >
-                          <Pencil className="h-2.5 w-2.5" /> Edit
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                <Section label="Examination Name" required>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Unit Test 1"
+                    className="h-9 text-sm max-w-md"
+                  />
                 </Section>
-              )}
 
-              {/* ─── 5. Assessment (auto-configured from template) ─────── */}
-              {assessment && (
-                <Section label="Assessment">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {/* Theory / Practical toggle — obvious active state */}
-                    <div className="inline-flex items-center rounded-lg border border-border bg-muted/30 p-0.5">
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors',
-                          !hasPractical ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
-                        )}
-                      >
+                <Section
+                  label="Classes"
+                  required
+                  hint={selectedExamClassKeys.length > 0 ? `${selectedExamClassKeys.length} selected` : undefined}
+                >
+                  {examClasses.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-3">No classes configured. Add classes in Students &amp; Classes first.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {examClasses.map((examCls) => {
+                        const isSelected = selectedExamClassKeys.includes(examCls.key)
+                        return (
+                          <div
+                            key={examCls.key}
+                            role="checkbox"
+                            aria-checked={isSelected}
+                            tabIndex={0}
+                            onClick={() => handleClassToggle(examCls.key)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClassToggle(examCls.key) } }}
+                            className={cn(
+                              'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-medium transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30',
+                              isSelected ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground hover:bg-muted/30',
+                            )}
+                          >
+                            <span className={cn('flex h-3.5 w-3.5 items-center justify-center rounded-full border shrink-0', isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40')}>
+                              {isSelected && <Check className="h-2.5 w-2.5" />}
+                            </span>
+                            <span>{examCls.label}</span>
+                            {examCls.sectionCount > 1 && <span className="text-[9px] text-muted-foreground/60">· {examCls.sectionCount} sections</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </Section>
+
+                {/* Subjects — auto-included, removable */}
+                {autoSubjects.length > 0 && (
+                  <Section label="Subjects" hint={`${effectiveSubjects.length} auto-included`}>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {effectiveSubjects.map((subj) => (
                         <span
-                          className={cn(
-                            'h-2 w-2 rounded-full',
-                            !hasPractical ? 'bg-emerald-500' : 'bg-muted-foreground/40',
+                          key={subj.id}
+                          className="inline-flex items-center gap-1 rounded-md bg-card border border-border/60 px-2 py-1 text-xs font-medium"
+                        >
+                          {subj.name}
+                          {subjectsEditable && (
+                            <button
+                              onClick={() => toggleSubjectDeselection(subj.name)}
+                              className="text-muted-foreground hover:text-rose-600 ml-0.5"
+                              aria-label={`Remove ${subj.name}`}
+                            >
+                              ×
+                            </button>
                           )}
-                        />
-                        Theory
-                      </span>
+                        </span>
+                      ))}
                       <button
-                        onClick={togglePractical}
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors',
-                          hasPractical ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                        )}
-                        aria-pressed={hasPractical}
+                        onClick={() => setSubjectsEditable(!subjectsEditable)}
+                        className="inline-flex items-center gap-1 rounded-md border border-dashed border-border/60 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground hover:border-border transition-colors ml-1"
                       >
-                        <span
-                          className={cn(
-                            'h-2 w-2 rounded-full',
-                            hasPractical ? 'bg-emerald-500' : 'bg-muted-foreground/40',
-                          )}
-                        />
-                        Practical
+                        <Pencil className="h-2.5 w-2.5" /> {subjectsEditable ? 'Done' : 'Edit'}
                       </button>
                     </div>
-                    {/* Auto marks summary — read-only display, not inputs */}
-                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <span className="font-semibold text-foreground tabular-nums">{assessment.maxMarks}</span>
-                        max
-                      </span>
-                      <span className="text-muted-foreground/40">·</span>
-                      <span className="inline-flex items-center gap-1">
-                        <span className="font-semibold text-foreground tabular-nums">{assessment.theoryMarks}</span>
-                        theory
-                      </span>
-                      {hasPractical && (
-                        <>
-                          <span className="text-muted-foreground/40">·</span>
-                          <span className="inline-flex items-center gap-1">
-                            <span className="font-semibold text-foreground tabular-nums">{assessment.practicalMarks}</span>
-                            practical
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </Section>
-              )}
+                  </Section>
+                )}
 
-              {/* ─── 6. Examination Window ──────────────────────────── */}
-              {effectiveSubjects.length > 0 && (
-                <Section label="Examination Window" required>
-                  <div className="grid grid-cols-2 gap-3 max-w-md">
-                    <Field label="Start Date">
-                      <DatePicker
-                        value={startDate}
-                        onChange={setStartDate}
-                        placeholder="Start date"
-                        minDate={minStartDate}
-                      />
-                    </Field>
-                    <Field label="End Date">
-                      <DatePicker
-                        value={endDate}
-                        onChange={setEndDate}
-                        placeholder="End date"
-                        minDate={startDate || minStartDate}
-                      />
-                    </Field>
-                  </div>
-                  <div className="flex items-center gap-3 mt-3 max-w-md flex-wrap">
-                    <Field label="Start Time">
-                      <Input
-                        type="time"
-                        value={examTime}
-                        onChange={(e) => setExamTime(e.target.value)}
-                        className="h-9 text-xs w-32"
-                      />
-                    </Field>
-                    <p className="text-[10px] text-muted-foreground mt-4">
-                      {selectedTemplate.id.startsWith('unit-test')
-                        ? '2 papers/day · 1h each · 15-min gap'
-                        : selectedTemplate.id === 'half-yearly' || selectedTemplate.id === 'annual'
-                          ? '1 paper/day · 3h 15m'
-                          : '1 paper/day'}
-                    </p>
-                  </div>
-                  {startDate && !endDate && (
-                    <p className="text-[10px] text-muted-foreground mt-2">
-                      Single-day examination. Add last date for multi-day.
-                    </p>
-                  )}
-
-                  {/* Date validation warning */}
-                  {dateValidation && !dateValidation.isValid && startDate && (
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 mt-3 flex items-start gap-2">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-                      <div className="text-[11px]">
-                        <p className="text-amber-700 dark:text-amber-300 font-medium">
-                          {dateValidation.message}
-                        </p>
-                        <p className="text-amber-600/80 dark:text-amber-400/80 mt-0.5">
-                          Required: {dateValidation.requiredDays} working days · Available: {dateValidation.availableDays}
-                        </p>
+                {/* Assessment — auto from template, no pass-percentage input */}
+                {assessment && (
+                  <Section label="Assessment">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="inline-flex items-center rounded-lg border border-border bg-muted/30 p-0.5">
+                        <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium', !hasPractical ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground')}>
+                          <span className={cn('h-2 w-2 rounded-full', !hasPractical ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
+                          Theory
+                        </span>
+                        <button
+                          onClick={togglePractical}
+                          className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors', hasPractical ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                          aria-pressed={hasPractical}
+                        >
+                          <span className={cn('h-2 w-2 rounded-full', hasPractical ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
+                          Practical
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1"><span className="font-semibold text-foreground tabular-nums">{assessment.maxMarks}</span> max</span>
+                        <span className="text-muted-foreground/40">·</span>
+                        <span className="inline-flex items-center gap-1"><span className="font-semibold text-foreground tabular-nums">{assessment.theoryMarks}</span> theory</span>
+                        {hasPractical && (
+                          <>
+                            <span className="text-muted-foreground/40">·</span>
+                            <span className="inline-flex items-center gap-1"><span className="font-semibold text-foreground tabular-nums">{assessment.practicalMarks}</span> practical</span>
+                          </>
+                        )}
                       </div>
                     </div>
-                  )}
-                </Section>
-              )}
+                  </Section>
+                )}
 
-              {/* ─── 7. Generated Schedule Preview (class-column timetable) ─── */}
-              {scheduleState.timetable && scheduleState.timetable.rows.length > 0 && (
-                <Section
-                  label="Generated Schedule"
-                  hint={`${scheduleState.timetable.rows.length} slot${scheduleState.timetable.rows.length === 1 ? '' : 's'} · ${scheduleState.timetable.classes.length} class${scheduleState.timetable.classes.length === 1 ? '' : 'es'}`}
-                >
-                  <ScheduleTable
-                    timetable={scheduleState.timetable}
-                    onMoveSubject={scheduleState.moveSubjectCell}
-                  />
-                  <p className="text-[10px] text-muted-foreground mt-2">
-                    Drag a subject vertically within its class column to reorder. Schedule can also be edited after creation.
-                  </p>
-                </Section>
-              )}
-            </motion.div>
-          )}
+                {/* Examination Window — dates + time */}
+                {effectiveSubjects.length > 0 && (
+                  <Section label="Examination Window" required>
+                    <div className="grid grid-cols-2 gap-3 max-w-md">
+                      <Field label="Start Date">
+                        <DatePicker value={startDate} onChange={setStartDate} placeholder="Start date" minDate={minStartDate} />
+                      </Field>
+                      <Field label="Last Examination Date">
+                        <DatePicker value={endDate} onChange={setEndDate} placeholder="Last date" minDate={startDate || minStartDate} />
+                      </Field>
+                    </div>
+                    <div className="flex items-center gap-3 mt-3 max-w-md flex-wrap">
+                      <Field label="Start Time">
+                        <Input type="time" value={examTime} onChange={(e) => setExamTime(e.target.value)} className="h-9 text-xs w-32" />
+                      </Field>
+                      <p className="text-[10px] text-muted-foreground mt-4">
+                        {selectedTemplate.id.startsWith('unit-test') ? '2 papers/day · 1h each · 15-min gap' : '1 paper/day'}
+                      </p>
+                    </div>
+                    {dateValidation && !dateValidation.isValid && startDate && (
+                      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 mt-3 flex items-start gap-2">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="text-[11px]">
+                          <p className="text-amber-700 dark:text-amber-300 font-medium">{dateValidation.message}</p>
+                          <p className="text-amber-600/80 dark:text-amber-400/80 mt-0.5">
+                            Required: {dateValidation.requiredDays} working days · Available: {dateValidation.availableDays}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </Section>
+                )}
+              </motion.div>
+            )}
           </div>
         )}
 
-        {/* ─── STEP 2 — Official Timetable Preview (Spec §9 STEP 2) ─────── */}
-        {step === 2 && consolidatedTimetable && (
-          <div className="max-w-5xl mx-auto">
-            {consolidatedTimetable.rows.length === 0 ? (
-              <div className="py-10 text-center">
-                <p className="text-sm text-muted-foreground">No schedule to preview. Go back and adjust the examination window.</p>
+        {/* ─── STEP 2 — Timetable Builder (editable, full width) ─────── */}
+        {step === 2 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Timetable Builder</h2>
+                <p className="text-[10px] text-muted-foreground">{name || selectedTemplate?.label} · {dateRangeLabel}</p>
               </div>
+              <div className="text-[10px] text-muted-foreground">
+                {scheduleState.timetable?.rows.length ?? 0} slots · {scheduleState.timetable?.classes.length ?? 0} classes
+              </div>
+            </div>
+            {scheduleState.timetable && scheduleState.timetable.rows.length > 0 ? (
+              <ScheduleTable timetable={scheduleState.timetable} onMoveSubject={scheduleState.moveSubjectCell} />
             ) : (
+              <div className="py-10 text-center text-xs text-muted-foreground">
+                No timetable could be generated. Adjust the examination window or subjects in Step 1.
+              </div>
+            )}
+            {scheduleState.timetable && !scheduleState.timetable.fits && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="text-[11px]">
+                  <p className="text-amber-700 dark:text-amber-300 font-medium">Schedule window is too short</p>
+                  <p className="text-amber-600/80 dark:text-amber-400/80 mt-0.5">
+                    Need ~{scheduleState.timetable.additionalDaysNeeded} more day(s). Go back and extend the Last Examination Date.
+                  </p>
+                </div>
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground">
+              Drag a subject vertically within its class column to reorder. Times follow the slot automatically.
+            </p>
+          </div>
+        )}
+
+        {/* ─── STEP 3 — Complete Examination Preview (read-only) ────── */}
+        {step === 3 && consolidatedTimetable && (
+          <div className="max-w-5xl mx-auto space-y-5">
+            <div className="text-center">
+              <h2 className="text-base font-bold tracking-tight text-foreground">Examination Preview</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Review the complete examination before creating.</p>
+            </div>
+            <ConfirmationSummary
+              examName={name.trim() || selectedTemplate?.label || 'Examination'}
+              examType={selectedTemplate?.label ?? ''}
+              academicSession={academicYear}
+              classCount={selectedExamClasses.length}
+              subjectCount={effectiveSubjects.length}
+              dateRangeLabel={dateRangeLabel}
+              papersPerDay={selectedTemplate ? getTemplateMeta(selectedTemplate.id).papersPerDay : 1}
+              startTime={examTime}
+              timetable={consolidatedTimetable}
+            />
+            {consolidatedTimetable.rows.length > 0 && (
               <OfficialTimetable
                 timetable={consolidatedTimetable}
                 schoolName="Demo School of Scholario"
@@ -799,69 +733,32 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
             )}
           </div>
         )}
-
-        {/* ─── STEP 3 — Final Confirmation (Spec §9 STEP 3) ────────────── */}
-        {step === 3 && consolidatedTimetable && (
-          <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-5">
-              <h2 className="text-lg font-bold tracking-tight text-foreground">Confirm Examination</h2>
-              <p className="text-xs text-muted-foreground mt-1">Review the final configuration and create the examination.</p>
-            </div>
-            <ConfirmationSummary
-              examName={name.trim() || selectedTemplate?.label || 'Examination'}
-              examType={selectedTemplate?.label ?? ''}
-              academicSession={academicYear}
-              classCount={selectedExamClasses.length}
-              subjectCount={effectiveSubjects.length}
-              dateRangeLabel={dateRangeLabel}
-              papersPerDay={selectedTemplate ? getTemplateMeta(selectedTemplate.id).papersPerDay : 1}
-              startTime={examTime}
-              timetable={consolidatedTimetable}
-            />
-          </div>
-        )}
       </div>
 
-      {/* ─── Action row — compact, no heavy border ──────────────────────── */}
+      {/* ─── Compact action row — no heavy footer bar ────────────────── */}
       <div className="px-4 sm:px-6 pb-4 pt-2 shrink-0">
-        <div className="max-w-3xl mx-auto flex justify-between items-center gap-2">
+        <div className="max-w-5xl mx-auto flex justify-between items-center gap-2">
           {step === 1 ? (
             <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={onBack}>
               <ArrowLeft className="h-3.5 w-3.5" /> Cancel
             </Button>
           ) : (
             <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={() => setStep(step === 3 ? 2 : 1)}>
-              <ArrowLeft className="h-3.5 w-3.5" /> {step === 3 ? 'Back to Preview' : 'Back to Edit Schedule'}
+              <ArrowLeft className="h-3.5 w-3.5" /> {step === 3 ? 'Back to Timetable' : 'Back to Setup'}
             </Button>
           )}
-
           {step === 1 && (
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => setStep(2)}
-              disabled={!canCreate || !consolidatedTimetable}
-            >
-              Next → Preview Timetable
+            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setStep(2)} disabled={!canCreate}>
+              Build Timetable →
             </Button>
           )}
           {step === 2 && (
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => setStep(3)}
-              disabled={!consolidatedTimetable}
-            >
-              Next → Finalize Examination
+            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setStep(3)} disabled={!consolidatedTimetable}>
+              Preview Examination →
             </Button>
           )}
           {step === 3 && (
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleCreate}
-              disabled={loading || !canCreate}
-            >
+            <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCreate} disabled={loading || !canCreate}>
               {loading ? 'Creating…' : (<><Check className="h-3.5 w-3.5" /> Create Examination</>)}
             </Button>
           )}
