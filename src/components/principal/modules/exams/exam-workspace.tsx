@@ -477,11 +477,11 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
   const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
   const [subjectId, setSubjectId] = useState('')
   const [showResults, setShowResults] = useState(false)
-  const store = useMockMarksStore()
+  const storeMarks = useMockMarksStore((s) => s.marks)
+  const declaredClassIds = useMockMarksStore((s) => s.declaredClassIds)
+  const publishedClassIds = useMockMarksStore((s) => s.publishedClassIds)
 
-  const allMarks = useMemo(() => store.marks.filter((m) => m.examId === exam.id), [store.marks, exam.id])
-  const declaredClassIds = store.declaredClassIds
-  const publishedClassIds = store.publishedClassIds
+  const allMarks = useMemo(() => storeMarks.filter((m) => m.examId === exam.id), [storeMarks, exam.id])
 
   // Summary
   const summary = useMemo(() => {
@@ -522,7 +522,11 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
       for (const subj of exam.subjects.filter((s: any) => s.classId === c.classId)) {
         const marks = allMarks.filter((m) => m.classId === c.classId && m.subjectId === subj.subjectId)
         const entered = marks.filter((m) => m.marksObtained !== null).length
-        const status = store.getPaperStatus(exam.id, c.classId, subj.subjectId)
+        const statuses = new Set(marks.map((m) => m.workflowStatus))
+        const allLocked = marks.length > 0 && [...statuses].every((s) => s === 'LOCKED')
+        const allVerified = marks.length > 0 && [...statuses].every((s) => ['VERIFIED', 'LOCKED'].includes(s))
+        const allSubmitted = marks.length > 0 && [...statuses].every((s) => ['SUBMITTED', 'VERIFIED', 'LOCKED'].includes(s))
+        const status = allLocked ? 'LOCKED' : allVerified ? 'VERIFIED' : allSubmitted ? 'SUBMITTED' : entered > 0 ? 'IN_PROGRESS' : 'DRAFT'
         rows.push({
           classId: c.classId, className: c.className,
           subjectId: subj.subjectId, subjectName: subj.subjectName,
@@ -531,7 +535,7 @@ function MarksSection({ exam }: { exam: ExamDTO; onReload: () => void }) {
       }
     }
     return rows
-  }, [exam, allMarks, store])
+  }, [exam, allMarks])
 
   const handleAction = async (action: 'submit' | 'verify' | 'lock' | 'declare' | 'publish', cid?: string, sid?: string) => {
     try {
@@ -666,10 +670,11 @@ function Stat({ label, value, pct }: { label: string; value: string; pct?: numbe
 }
 
 function ResultsInline({ exam, classId, onClose }: { exam: ExamDTO; classId: string; onClose: () => void }) {
-  const store = useMockMarksStore()
-  const allExamMarks = store.marks
+  const storeMarks = useMockMarksStore((s) => s.marks)
+  const allExamMarks = storeMarks
   const marks = useMemo(() => allExamMarks.filter((m) => m.examId === exam.id && m.classId === classId), [allExamMarks, exam.id, classId])
-  const students = useStudentsStore((s) => s.students.filter((st) => st.classId === classId && st.status === 'Active'))
+  const allStudents = useStudentsStore((s) => s.students)
+  const students = useMemo(() => allStudents.filter((st) => st.classId === classId && st.status === 'Active'), [allStudents, classId])
   const subjects = exam.subjects.filter((s: any) => s.classId === classId)
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null)
 
