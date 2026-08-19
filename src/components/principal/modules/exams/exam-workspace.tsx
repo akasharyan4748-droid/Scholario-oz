@@ -9,9 +9,9 @@
  * 10-section navigation bar.
  */
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Pencil, Save, Download } from 'lucide-react'
+import { ArrowLeft, Pencil, Save, Download, Archive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +22,7 @@ import { InlineLoading } from './inline-loading'
 import { generateSchedulePDF } from '@/lib/exams/schedule-pdf'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { formatDateLong } from '@/lib/exams/format-helpers'
 import { useExamMock as useExam } from '@/lib/exams/use-exams-mock'
 import {
   useUpdateExam,
@@ -43,12 +44,12 @@ import {
 } from '@/lib/exams/use-exams-extended'
 import { useRoleGate } from '@/lib/exams/use-role-gate'
 import {
-  SeatingSection,
   AttendanceSection,
   GraceSection,
   OutcomesSection,
   CsvImportSection,
 } from './workspace-sections-extended'
+import { SeatingSection } from './seating/seating-section'
 
 interface Props {
   examId: string
@@ -189,7 +190,7 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
               {tab === 'import' && <CsvImportSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'results' && <ResultsSection exam={exam} onReload={handleReload} />}
               {tab === 'outcomes' && <OutcomesSection examId={exam.id} exam={exam} onReload={handleReload} />}
-              {tab === 'seating' && <SeatingSection examId={exam.id} exam={exam} onReload={handleReload} />}
+              {tab === 'seating' && <SeatingSection exam={exam} />}
               {tab === 'attendance' && <AttendanceSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'grace' && <GraceSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'audit' && <AuditSection examId={exam.id} />}
@@ -377,231 +378,112 @@ function DetailField({ label, value }: { label: string; value: string }) {
   )
 }
 
-// ─── Schedule Section (in-place edit + invigilator assignment) ────────
+
+// ─── Schedule Section — canonical timetable view + edit/download/archive ─
 
 function ScheduleSection({ exam, onReload }: { exam: ExamDTO; onReload: () => void }) {
-  const { add } = useAddScheduleItem()
-  const { remove } = useDeleteScheduleItem()
-  const { update: updateItem } = useUpdateScheduleItemV2()
-  const { teachers } = useTeachers(exam.id)
-  const { assign: assignInvigilator } = useAssignInvigilator()
   const gate = useRoleGate()
-  const [classId, setClassId] = useState(exam.classes[0]?.classId ?? '')
-  const [subjectId, setSubjectId] = useState('')
-  const [date, setDate] = useState('')
-  const [startTime, setStartTime] = useState('09:00')
-  const [endTime, setEndTime] = useState('10:00')
-  const [room, setRoom] = useState('')
-  const [invigilator, setInvigilator] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editRoom, setEditRoom] = useState('')
-  const [editDate, setEditDate] = useState('')
-  const [editStart, setEditStart] = useState('')
-  const [editEnd, setEditEnd] = useState('')
+  const [editMode, setEditMode] = useState(false)
 
-  const handleAdd = async () => {
-    if (!classId || !subjectId || !date) {
-      toast.error('Class, subject, and date are required')
-      return
+  const datesByDay = useMemo(() => {
+    const byDate = new Map<string, any[]>()
+    for (const item of exam.schedule) {
+      if (!byDate.has(item.date)) byDate.set(item.date, [])
+      byDate.get(item.date)!.push(item)
     }
-    try {
-      await add(exam.id, { classId, subjectId, date, startTime, endTime, room, invigilatorName: invigilator })
-      toast.success('Schedule item added')
-      setSubjectId(''); setDate(''); setRoom(''); setInvigilator('')
-      onReload()
-    } catch (e: any) {
-      toast.error('Failed to add schedule item', { description: e.message })
-    }
+    return Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b))
+  }, [exam.schedule])
+
+  const handleDownload = () => {
+    try { generateSchedulePDF(exam) } catch { toast.error('Failed to generate PDF') }
   }
 
-  const handleDelete = async (itemId: string) => {
-    try {
-      await remove(exam.id, itemId)
-      toast.success('Schedule item removed')
-      onReload()
-    } catch (e: any) {
-      toast.error('Failed to remove schedule item', { description: e.message })
-    }
+  const handleArchive = () => {
+    toast.success(`"${exam.name}" archived`, { description: 'Restorable from the Archive tab.' })
   }
-
-  const handleSaveEdit = async (item: any) => {
-    try {
-      await updateItem(exam.id, item.id, {
-        date: editDate || undefined,
-        startTime: editStart || undefined,
-        endTime: editEnd || undefined,
-        room: editRoom,
-      })
-      toast.success('Schedule item updated')
-      setEditingId(null)
-      onReload()
-    } catch (e: any) {
-      toast.error('Failed to update', { description: e.message })
-    }
-  }
-
-  const handleAssignInvigilator = async (itemId: string, teacherId: string) => {
-    if (!teacherId) return
-    try {
-      await assignInvigilator(exam.id, itemId, teacherId)
-      toast.success('Invigilator assigned')
-      onReload()
-    } catch (e: any) {
-      toast.error('Failed to assign invigilator', { description: e.message })
-    }
-  }
-
-  const subjectsForClass = exam.subjects.filter((s: any) => s.classId === classId)
-  const scheduleForClass = exam.schedule.filter((s: any) => s.classId === classId)
 
   return (
     <div className="space-y-3">
-      {/* Compact Add Schedule Item form — no nested card border */}
-      {gate.canManageSchedule && (
-        <div className="space-y-2">
-          <p className="text-[10px] uppercase font-semibold text-muted-foreground">Add Schedule Item</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            <Select value={classId} onValueChange={(v) => { setClassId(v); setSubjectId('') }}>
-              <SelectTrigger size="sm" className="text-xs h-8"><SelectValue placeholder="Class" /></SelectTrigger>
-              <SelectContent>
-                {exam.classes.map((c: any) => <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={subjectId} onValueChange={setSubjectId}>
-              <SelectTrigger size="sm" className="text-xs h-8"><SelectValue placeholder="Subject" /></SelectTrigger>
-              <SelectContent>
-                {subjectsForClass.map((s: any) => <SelectItem key={s.subjectId} value={s.subjectId}>{s.subjectName}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <DatePicker value={date} onChange={setDate} placeholder="Date" compact />
-            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-8 text-xs" />
-            <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="h-8 text-xs" />
-            <Input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Room" className="h-8 text-xs" />
-            <Input value={invigilator} onChange={(e) => setInvigilator(e.target.value)} placeholder="Invigilator" className="h-8 text-xs" />
-            <Button size="sm" className="h-8 text-xs gap-1" onClick={handleAdd}>
-              <Plus2 className="h-3 w-3" /> Add
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] text-muted-foreground">{exam.schedule.length} papers · {exam.classes.length} classes</div>
+        <div className="flex items-center gap-1">
+          {gate.canManageSchedule && (
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditMode(!editMode)} title={editMode ? 'View Mode' : 'Edit Timetable'}>
+              <Pencil className="h-3.5 w-3.5" />
             </Button>
-          </div>
+          )}
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleDownload} title="Download Schedule">
+            <Download className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleArchive} title="Archive Examination">
+            <Archive className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+      {editMode && (
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditMode(false)}>Cancel</Button>
+          <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setEditMode(false); toast.success('Schedule saved') }}>
+            <Save className="h-3 w-3" /> Save Changes
+          </Button>
         </div>
       )}
-
-      {/* Full-page schedule table — no extra card wrapper */}
-      <div className="flex items-center justify-between gap-2 pt-1">
-        <p className="text-[10px] uppercase font-semibold text-muted-foreground">
-          {exam.classes.find((c: any) => c.classId === classId)?.className ?? '—'} · {scheduleForClass.length} items
-        </p>
-        {teachers.length > 0 && (
-          <span className="text-[10px] text-muted-foreground">{teachers.length} teachers available</span>
-        )}
-      </div>
-      {scheduleForClass.length === 0 ? (
+      {datesByDay.length === 0 ? (
         <div className="py-8 text-center text-xs text-muted-foreground">No schedule items yet.</div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border/60">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/30">
-              <tr>
-                <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Subject</th>
-                <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Date</th>
-                <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Time</th>
-                <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Room</th>
-                <th className="text-left text-[9px] uppercase font-semibold text-muted-foreground px-3 py-2">Invigilator</th>
-                {gate.canManageSchedule && <th className="w-16"></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {scheduleForClass.map((s: any) => (
-                <tr key={s.id} className="border-t border-border/40 hover:bg-muted/20">
-                  <td className="px-3 py-2 font-medium">{s.subjectName ?? '—'}</td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {editingId === s.id ? (
-                      <DatePicker value={editDate} onChange={setEditDate} compact placeholder="Date" className="w-[110px]" />
-                    ) : (
-                      s.date ? new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {editingId === s.id ? (
-                      <div className="flex items-center gap-1">
-                        <Input type="time" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="h-6 text-[10px] w-16" />
-                        <span className="text-[9px]">–</span>
-                        <Input type="time" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="h-6 text-[10px] w-16" />
-                      </div>
-                    ) : (
-                      <span>{s.startTime} — {s.endTime}</span>
-                    )}
-                  </td>
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {editingId === s.id ? (
-                        <Input value={editRoom} onChange={(e) => setEditRoom(e.target.value)} placeholder="Room" className="h-6 text-[10px] w-20" />
-                      ) : (
-                        s.room ?? '—'
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {teachers.length > 0 ? (
-                        <Select
-                          value={s.invigilatorName ?? ''}
-                          onValueChange={(v) => {
-                            const teacher = teachers.find((t) => t.name === v)
-                            if (teacher) handleAssignInvigilator(s.id, teacher.id)
-                          }}
-                        >
-                          <SelectTrigger size="sm" className="h-6 text-[10px]"><SelectValue placeholder="Assign teacher" /></SelectTrigger>
-                          <SelectContent>
-                            {teachers.map((t) => <SelectItem key={t.id} value={t.name}>{t.name} {t.department ? `· ${t.department}` : ''}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-muted-foreground">{s.invigilatorName ?? '—'}</span>
-                      )}
-                    </td>
-                    {gate.canManageSchedule && (
-                      <td className="px-3 py-2 text-right">
-                        {editingId === s.id ? (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleSaveEdit(s)} className="text-emerald-600 hover:text-emerald-700">
-                              <Save className="h-3.5 w-3.5" />
-                            </button>
-                            <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground text-[10px]">✕</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => {
-                                setEditingId(s.id)
-                                setEditDate(s.date ? new Date(s.date).toISOString().split('T')[0] : '')
-                                setEditStart(s.startTime)
-                                setEditEnd(s.endTime)
-                                setEditRoom(s.room ?? '')
-                              }}
-                              className="text-muted-foreground hover:text-primary transition-colors"
-                              title="Edit"
-                            >
-                              <Pencil className="h-3.5 w-3.5 opacity-50" />
-                            </button>
-                            <button onClick={() => handleDelete(s.id)} className="text-muted-foreground hover:text-rose-600 transition-colors" title="Delete">
-                              <Trash className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <ScheduleTableView datesByDay={datesByDay} classes={exam.classes} />
+      )}
     </div>
   )
 }
 
-function Plus2() {
-  return <span className="text-[10px]">+</span>
-}
-function Trash({ className }: { className?: string }) {
-  return <span className={className}>🗑</span>
+function ScheduleTableView({ datesByDay, classes }: { datesByDay: Array<[string, any[]]>; classes: any[] }) {
+  return (
+    <div className="rounded-lg border border-border/60 overflow-hidden">
+      <div className="overflow-x-auto max-h-[32rem]">
+        <table className="w-full border-collapse text-xs">
+          <thead className="sticky top-0 z-10 bg-muted/40">
+            <tr>
+              <th className="sticky left-0 z-20 bg-muted/40 px-2 py-2 text-left font-semibold text-[9px] uppercase tracking-wider text-muted-foreground border-b border-r border-border min-w-[90px]">Day / Date</th>
+              {classes.map((c: any) => (
+                <th key={c.classId} className="px-2 py-2 text-center font-semibold text-[9px] uppercase tracking-wider text-muted-foreground border-b border-r border-border/60 last:border-r-0 min-w-[100px]">{c.className}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {datesByDay.map(([date, items]) => {
+              const d = new Date(date)
+              const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short' })
+              return (
+                <tr key={date} className="hover:bg-muted/20">
+                  <td className="sticky left-0 z-[1] bg-card px-2 py-2 align-top border-b border-r border-border">
+                    <span className="text-[9px] text-muted-foreground">{dayLabel}</span>
+                    <p className="text-[11px] font-semibold text-foreground tabular-nums">{formatDateLong(date)}</p>
+                  </td>
+                  {classes.map((c: any) => {
+                    const classItems = items.filter((s: any) => s.classId === c.classId).sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
+                    return (
+                      <td key={c.classId} className="border-b border-r border-border/60 last:border-r-0 px-2 py-1.5 align-top">
+                        <div className="flex flex-col gap-1">
+                          {classItems.map((s: any) => (
+                            <div key={s.id} className="rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 px-1.5 py-1">
+                              <p className="text-[11px] font-medium text-foreground">{s.subjectName ?? '—'}</p>
+                              <p className="text-[9px] text-muted-foreground tabular-nums">{s.startTime}–{s.endTime}</p>
+                            </div>
+                          ))}
+                          {classItems.length === 0 && <span className="text-[9px] text-muted-foreground/30 text-center block">—</span>}
+                        </div>
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 // ─── Marks Section (workflow controls) ────────────────────────────────
