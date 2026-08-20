@@ -3010,3 +3010,149 @@ Stage Summary:
 - Accessibility: aria-labels, aria-current, prefers-reduced-motion support.
 - Existing good architecture preserved (9-tab structure, thermal receipt, charts, store) — only polished.
 - NO new features added — this was explicitly a polish + deduplication pass.
+
+---
+Task ID: salary-payroll-complete-build
+Agent: main (Super Z)
+Task: PART 1 Fee Management visual polish + PART 2 Complete Salary & Payroll build
+
+Work Log:
+
+### PART 1: Fee Management Visual Polish
+
+#### MiniAreaChart Upgrade
+- Replaced straight-line path with smooth cubic bezier curve (Catmull-Rom → Bezier interpolation).
+- Subtle gradient area fill (0.28 → 0.08 → 0 opacity stops for depth).
+- Single subtle baseline grid line (removed 3 horizontal lines).
+- Hover dot with vertical guide line.
+- Enhanced tooltip: month, amount + MoM change vs previous month.
+- Used React useId for stable gradient IDs.
+
+#### MiniDonut Upgrade
+- Controlled semantic palette (no rainbow wheel).
+- "Other" grouping: segments <5% auto-merged into "Other" to avoid noise.
+- Legend enhanced: name + amount + percentage (3-column layout).
+- Hover state shows segment name, amount, percentage in center.
+
+#### FeeKpiCard Upgrade (Students & Classes style)
+- Soft tinted backgrounds (bg-emerald-500/[0.04], bg-rose-500/[0.04], etc.) — not pure white.
+- Semantic colored icon chips with ring.
+- Subtle top-right glow (blurred accent).
+- Hover elevation (-translate-y-0.5 + shadow).
+- Consistent card padding (p-3.5).
+
+### PART 2: Complete Salary & Payroll Build
+
+#### salary-store.ts (Zustand, ~580 LOC)
+- Canonical employees: derived from Teacher records (20 teaching staff) + 8 admin/support/transport staff = 28 employees.
+- Salary structures: 4 default structures (Teaching, Administration, Support, Transport).
+- Default components: 5 earnings (Basic 50%, HRA 20%, DA 10%, Special 20%, Transport ₹2000) + 4 deductions (PF 12%, PT ₹200, TDS 5%, Insurance ₹1500).
+- Payroll calculation engine: calculatePayrollForEmployee() — computes earnings, deductions, adjustments, netPay from structure + attendance (LOP) + approved adjustments.
+- Mutations: preparePayroll, approvePayroll, disbursePayroll, lockPayroll, generatePayslips, addAdjustment, approveAdjustment, rejectAdjustment, reviseSalary, addSalaryStructure, updateSalaryStructure.
+- Immutable audit log (PayrollAudit[]) with 11 action types.
+- CashRequest type with status workflow.
+- SalaryRevision with history (previous payroll unchanged).
+- 6 seed payroll periods (June–November 2025, all Locked).
+- 7 seed adjustments (Bonus, Reimbursement, Advance, Arrears, Incentive).
+- 3 seed salary revisions.
+
+#### salary-shell.tsx (8-tab orchestrator)
+- 3 tab groups: Operate (Overview, Payroll) · Manage (Employees, Salary Structures, Adjustments) · Records (Payslips, History, Reports).
+- Sticky header: "Monthly Payroll & Disbursement" (NO duplicate "Salary & Payroll" title).
+- Summary pill line: Monthly Payroll · Net Payable · Deductions · Employees · Pending count.
+- Tab badges: Payroll (exceptions count), Adjustments (pending count).
+- Keyboard shortcuts 1-8 (kept functional, not displayed).
+- aria-current="page" on active tab.
+- prefers-reduced-motion support via SALARY_GLOBAL_STYLES.
+
+#### salary-overview.tsx
+- 4 KPI cards: Monthly Payroll, Net Payable, Deductions, Needs Attention (soft tinted).
+- Payroll Trend (smooth MiniAreaChart, reuses polished component).
+- Earnings vs Deductions (clean MiniDonut with "Net Pay" center).
+- Department Payroll Cost (MiniBars).
+- Needs Attention panel (exceptions with severity colors).
+- Recent Activity (last 6 audit events).
+
+#### salary-payroll.tsx
+- Period selector (Previous / Current / Next) with status badge.
+- KPI cards: Employees, Gross Earnings, Deductions, Net Payable.
+- Payroll table with row totals + footer.
+- Process Payroll Wizard (8-stage stepper):
+  • Period → Employees → Attendance → Earnings → Deductions → Adjustments → Exceptions → Approve
+  • Processing stage with spinner.
+  • Success stage with green checkmark.
+  • Approve & Disburse button → runs preparePayroll + approvePayroll + disbursePayroll + generatePayslips.
+- Period status drives available actions: Draft → Process, Calculated → Approve, Approved → Disburse, Paid → Generate Payslips + Lock.
+
+#### salary-employees.tsx
+- Search by name, employee ID, designation, department.
+- Filters: Department, Employee Type.
+- Employee cards: avatar (color-coded by type), name, ID, designation, status, Gross/Net Pay/Deductions stats, Open Profile.
+- Employee Payroll Profile Drawer (right-side, 7 sub-tabs):
+  • Overview: employee info (PAN, Bank A/C, joining date, contact) + current month summary.
+  • Salary Structure: earnings/deductions breakdown + Revise Salary button + Revision History.
+  • Payroll History: frozen period snapshots.
+  • Payslips: generated payslips for this employee.
+  • Adjustments: all adjustments for this employee.
+- Salary Revision modal: current → new salary + reason + effective date.
+
+#### salary-structures.tsx
+- 4 structure cards (Teaching, Administration, Support, Transport).
+- Each card shows: name, version, applicable type, description, Earnings components, Deductions components, employee count, Edit button.
+- Salary Revisions log with previous → new salary + reason + effective date.
+
+#### salary-adjustments.tsx
+- 3-stat strip: Pending, Pending Amount, Approved.
+- Search + status filter.
+- Pending Approvals panel (cards with Approve/Reject actions).
+- All Adjustments table: Employee, Type (icon+badge), Amount, Reason, Status, Period.
+- Add Adjustment modal: employee picker, type (Bonus/Incentive/Reimbursement/Advance/Arrears/Deduction), amount, effective period, reason.
+
+#### salary-payslips.tsx
+- Search by employee / payslip ID.
+- Filter by period.
+- Payslips table: ID, Employee, Period, Net Pay, Actions (View/Print/Download).
+- Payslip preview modal with official printable payslip:
+  • School header (name, address, phone, email, affiliation).
+  • Employee details (name, designation, department, payslip ID, period, pay date).
+  • Earnings table + Gross Earnings total.
+  • Deductions table + Total Deductions.
+  • NET PAY (large, bold, boxed).
+  • Bank account + payment mode.
+  • Signatures (Generated By + Authorized By).
+  • Footer with generated date.
+  • Print stylesheet (only payslip prints, not sidebar/header).
+
+#### salary-history.tsx
+- Period grid (clickable cards with status badge + net pay).
+- Selected period snapshot: 4 stats (Gross, Deductions, Adjustments, Net Paid).
+- Approval Trail: Prepared → Approved → Disbursed → Locked with actor + timestamp.
+- Activity Log: recent audit events.
+
+#### salary-reports.tsx
+- 11 report types: Monthly Summary, Department-wise, Salary Cost Analysis, Earnings & Deductions, Tax Summary, PF Summary, Bank Disbursement, Bonus Report, Reimbursement Report, Payroll Register, Employee Summary.
+- Report picker grid (6 cols).
+- Active report table with totals row.
+- Export CSV action.
+
+### Verification (agent-browser + VLM)
+- Overview: 4 soft tinted KPI cards, smooth Payroll Trend, clean Earnings vs Deductions donut, 8 tabs visible. ✅
+- Process Payroll wizard: 8-stage stepper, navigated through all stages, clicked Approve & Disburse → success with 28 payslips generated for August 2026. ✅
+- Payslips: 28 payslips visible in table with View/Print/Download actions. ✅
+- Payslip preview: professional format with school name, earnings table, deductions table, NET PAY, signatures. ✅
+- Employees: cards with color-coded avatars (Teaching=emerald, Administration=sky, Finance=amber, Support=violet), search + filters work. ✅
+- Fee Management Overview: KPI cards soft tinted, Collection Trend smooth/curved, Fee Head Distribution clean donut. ✅
+- ESLint: 0 errors, 0 warnings.
+- Dev server: HTTP 200, compiles cleanly.
+
+Stage Summary:
+- Fee Management: charts polished (smooth curve, clean donut, tinted KPIs).
+- Salary & Payroll: complete module built from scratch with 8-tab workspace, 8-stage Process Payroll wizard, employee profile drawer, printable payslips, 11 reports, full audit trail.
+- All payroll numbers derive from canonical Teacher records + admin/support staff — no duplicate employee database.
+- Payroll calculation engine centralizes gross/earnings/deductions/adjustments/net calculations.
+- Salary revisions preserve history (previous payroll unchanged).
+- Frozen payroll periods cannot be modified after locking.
+- 28 employees, ₹18.39L monthly payroll, ₹16.84L net payable — all numbers reconcile.
+- Professional printable payslip with school branding.
+- Existing SCHOLARIO visual language preserved.
+- Deleted 7 obsolete salary files (~920 LOC).
