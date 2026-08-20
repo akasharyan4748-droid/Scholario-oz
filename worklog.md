@@ -2798,3 +2798,112 @@ Stage Summary:
 - Class-wise finance identifies classes with unusual outstanding balances
 - Cash approval workflow preserved with principal verification
 - No fake financial numbers — all derived from canonical student fee data
+
+---
+Task ID: fee-management-wave-2
+Agent: main (Super Z)
+Task: Fee Management Wave 2 — Second-pass transformation into a complete premium Principal Fee Management workspace
+
+Work Log:
+
+### Phase 1: Architecture Redesign
+- Read full uploaded spec (1700+ lines, 57 acceptance criteria) for Fee Management second-pass transformation.
+- Designed 9-tab information architecture (replacing accordion-only structure):
+  • Operate: Overview · Collections · Student Accounts
+  • Administer: Fee Structures · Pending Dues · Transactions · Approvals
+  • Insights: Reports · Settings
+- Removed duplicate "Fee Management" title — global header already has it; content starts with "Academic Year 2025-26 · Financial Control Center".
+
+### Phase 2: Enhanced Fee Store (src/lib/store/fee-store.ts, ~880 lines)
+- Converted from useMemo-hook to proper Zustand store with mutations.
+- Added: recordPayment (with validation: amount>0, payment mode active, reference required per mode, duplicate reference check, student exists).
+- Added: approveCashRequest / rejectCashRequest / requestClarification (cash workflow with full context).
+- Added: reprintReceipt (creates audit record without second transaction).
+- Added: addFeeHead / updateFeeHead / archiveFeeHead (preserves historical transactions).
+- Added: togglePaymentMode / updateLateFeeRule / updateConcessionRule / updateReceiptSettings.
+- Added immutable Audit log (AuditRecord[]) with action types: payment.recorded, cash.submitted, cash.approved, cash.rejected, cash.clarification, concession.granted, fee_structure.changed, payment.reversed, refund.approved, receipt.generated, receipt.reprinted, fee_head.created/updated/archived, payment_mode.updated.
+- Added CashRequest type with status (Pending Principal Acceptance / Collected by Teacher / Confirmed by Principal / Rejected / Clarification Requested).
+- Added LedgerEntry type with running balance (chronological charge + payment entries).
+- computeAccount now derives paid from `Math.max(canonicalStudent.feePaid, sumOfRecordedTransactions)` — newly recorded payments reflect immediately.
+- Added today/week/month/year collection analytics.
+- Added PaymentModeConfig (requiresReference, requiresBankName, requiresChequeDetails).
+- Added LateFeeRule (enabled, amountPerMonth, gracePeriodDays, maxLateFee, appliesTo).
+- Added ConcessionRule (sibling/staffWard/scholarship discount %).
+- Added ReceiptSettings (prefix, startNumber, footerMessage, showAuthorizedSignature, paperSize: 80mm|A5).
+- Expanded seed: 3 cash requests, 5 audit records, 15 transactions.
+
+### Phase 3: Shell + Shared Primitives
+- fees-shared.tsx: FeeKpiCard (clickable, animated), FeePanel, FeeStat, FeePill, FeeStatusBadge (with dot), FeeEmptyState, ModeIcon, modeAccent, statusAccent.
+- fees-charts.tsx: MiniAreaChart (gradient fill + hover tooltip), MiniDonut (animated segments + clickable legend), MiniRadial (collection rate), MiniBars (with secondary bars), Sparkline.
+- fees-shell.tsx: Orchestrator with 9-tab grouped navigation (Operate/Administer/Insights), sticky header, summary pill line (Expected/Collected/Outstanding/Collection Rate/Pending), keyboard shortcuts (1-9).
+
+### Phase 4: Core Sections (9 new files)
+- fees-overview.tsx: 4 KPI cards (clickable → navigate) + Quick Actions row + Collection Trend (MiniAreaChart) + Fee Head Distribution (MiniDonut) + Outstanding Aging (5 buckets) + Class-wise Top Performers (MiniBars with secondary) + Recent Collections (last 5) + Urgent Dues (oldest+largest).
+- fees-collections.tsx: Today/Week/Month/Academic Year tiles + Collect Payment banner + Payment Mode Mix (donut) + Daily Collection last 15 days (bars) + Recent Payments table.
+- fees-student-accounts.tsx: Search bar (by name/ID/admission/roll/class/section) → student grid → Student Fee Account Drawer with 7 sub-tabs: Overview · Fee Ledger · Payments · Receipts · Concessions · Dues · Audit. Receipt preview opens inside the drawer.
+- fees-structures.tsx: 5 category cards (Pre-Primary/Senior) with per-class fee head breakdown + version (v1) + View Students/Duplicate/Add actions + inline AddFeeHeadForm + archived heads disclosure.
+- fees-pending-dues.tsx: Filters (class/status/aging/min-amount) + bulk selection (select-all + bulk remind) + student cards with Collect/View Account/Remind actions + View Account quick modal.
+- fees-transactions.tsx: 3-stat strip (count/total/avg) + filters (class/mode/status/fee-head) + 10-column financial table + per-row actions (View/Print/Download/Reprint) + receipt preview modal.
+- fees-approvals.tsx: 3-stat strip (pending/amount/resolved) + Cash workflow explainer + Pending approvals with full context (student/amount/feeHead/collectedBy/collectedAt/studentBalanceAtSubmission/notes) + Approve/Reject/Clarify actions + Reason modal + Approval history + Audit trail.
+- fees-reports.tsx: 10 report types (Daily/Monthly/Class-wise/Outstanding/FeeHead/PaymentMode/Overdue/Concession/Cash/Transactions) + Export CSV + ReportTable with totals row.
+- fees-settings.tsx: 5 sub-tabs (Fee Heads/Payment Modes/Late Fee Rules/Concession Rules/Receipt Settings) with version-safety banner.
+
+### Phase 5: Thermal Receipt Component (fees-receipt.tsx)
+- ReceiptPreview: 80mm thermal-paper style with monospaced typography, perforated edges, dashed separators, school header + address + affiliation, fee head table, TOTAL/PAID/BALANCE rows, payment mode details, Received By + Authorized By signature lines, footer with thank you message + computer-generated receipt + scan-line mock.
+- generateReceiptHTML: standalone HTML receipt for download.
+- downloadReceiptHTML: triggers browser download of receipt HTML.
+- printReceipt: opens print dialog with formatted receipt.
+
+### Phase 6: Complete Collect Payment Modal (fees-collect-payment.tsx)
+- 5-stage flow: find → review → confirm → processing → success.
+- Find: search by name/ID/admission/roll/class/section + outstanding badges.
+- Review: selected student card + outstanding/lateFee/totalDue + amount input + fee head select + purpose + payment method picker (6 modes) + mode-specific reference fields (cheque bank/date, card last4, etc.).
+- Confirm: all details in emerald-tinted card + audit notice + validation errors shown inline.
+- Processing: animated spinner with "Do not close this window" warning.
+- Success: confetti + green checkmark + ReceiptPreview embedded + Print/Download buttons + "all updates applied" notice.
+
+### Phase 7: Cleanup
+- Deleted 11 obsolete fees sub-component files (kpi-row, charts, pending-dues, cash-approvals, fee-structures, transactions, data, collect-dialog, collect-form-stage, collect-result-stages, shared) — ~1300 LOC of orphan code.
+- Replaced index.tsx (was 560 lines, now thin re-export of FeesShell).
+- Fixed Zustand unstable selector warning in AccountAudit component (was filtering inside selector — moved to useMemo).
+- Fixed lint react-hooks/immutability error in MiniDonut (replaced `offset += circumference * pct` inside map with prefix-sum approach via useMemo + reduce).
+
+### Phase 8: End-to-End Verification (agent-browser)
+- Logged in as principal (Dr. Ananya Iyer).
+- Navigated to Fee Management → confirmed: NO duplicate "Fee Management" title, "Academic Year 2025-26 · Financial Control Center" header, summary pill line, 9-tab navigation with tab badges (28 pending dues, 3 approvals).
+- Tested Collect Payment workflow end-to-end:
+  • Click Collect Payment → modal opens to "find" stage with student search.
+  • Selected student with ₹54,400 outstanding → auto-filled amount + went to review stage.
+  • Selected UPI mode → reference field appeared.
+  • Initially tried without reference → caught validation error: "UPI requires a reference number."
+  • Tried with existing reference number → caught duplicate: "Duplicate reference number detected (UPI-9988776655)."
+  • Used fresh reference → review → confirm → Pay → processing → SUCCESS with thermal receipt preview (RCP-2025-1058 · ₹54,400).
+  • Receipt showed school name, address, fee head, amount, mode, signatures, footer.
+  • Done → modal closed → new transaction visible at TOP of Transactions table.
+  • Verified Pending Dues count decreased (was 28, now reflects new payment).
+- Tested all 9 tabs:
+  • Overview: KPIs clickable, charts render, recent collections + urgent dues visible.
+  • Collections: today/week/month/year tiles + payment mode donut + daily bars + recent payments table.
+  • Student Accounts: search → student grid → drawer with 7 tabs (Overview/Ledger/Payments/Receipts/Concessions/Dues/Audit) + receipt preview modal.
+  • Fee Structures: 5 category cards with fee head breakdown + Add Head form + version safety banner.
+  • Pending Dues: 3 stats + filters + bulk selection + student cards with Collect/View/Remind actions.
+  • Transactions: stats + filters + 10-col table + per-row actions (View/Print/Download/Reprint) + receipt modal.
+  • Approvals: stats + workflow explainer + pending cards with full context + Approve/Reject/Clarify + history + audit.
+  • Reports: 10 report type cards + active report table with totals row + Export CSV.
+  • Settings: 5 sub-tabs (Fee Heads/Payment Modes/Late Fee/Concession/Receipt) with version-safety banner.
+- Verified Fee Ledger shows chronological entries with running balance.
+- ESLint: 0 errors, 0 warnings. Dev server compiles cleanly.
+
+Stage Summary:
+- Fee Management transformed from accordion-only dashboard (560 lines) into premium Principal Fee Management workspace with 9-tab navigation, 15 new focused files, ~3500 LOC.
+- All numbers derive from canonical StudentRecord[] — no fake financial data.
+- Charts use real underlying analytics (collection trend, fee head distribution, payment mode mix, aging).
+- Thermal receipt (80mm thermal-paper style) with print/download/reprint — reprint creates audit record without second transaction.
+- Complete collect payment workflow: find student → review → confirm → processing → success + receipt.
+- Cash approval workflow: principal reviews full context (collector, submission time, student balance snapshot) + Approve/Reject/Clarify with reasons.
+- Student Fee Account drawer: 7 sub-tabs (Overview/Ledger/Payments/Receipts/Concessions/Dues/Audit) — complete student financial history without leaving Fee Management.
+- Audit log: immutable record of every financial action (payment recorded, cash submitted/approved/rejected, fee head changed, receipt reprinted).
+- Validation: amount>0, payment mode active, reference required per mode, duplicate reference detection, student exists in canonical record.
+- Version-safety notices on Settings (changes apply to new transactions only — historical preserved).
+- No duplicate "Fee Management" page title (global header already shows it).
+- All existing good work preserved (canonical student connection, SCHOLARIO visual language, KPI cards, status pills).
