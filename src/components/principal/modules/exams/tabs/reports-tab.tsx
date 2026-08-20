@@ -56,7 +56,6 @@ export function ReportsTab({ exams }: Props) {
   const [examId, setExamId] = useState<string>(exams[0]?.id ?? '')
   const [classId, setClassId] = useState<string>('all')
   const [studentId, setStudentId] = useState<string>('')
-  const [admitLayout, setAdmitLayout] = useState<'1' | '2'>('1')
 
   const exam = exams.find((e) => e.id === examId) ?? null
 
@@ -178,35 +177,6 @@ export function ReportsTab({ exams }: Props) {
     } catch (e: any) { toast.error('Failed to export grade sheet', { description: e.message }) }
   }
 
-  const handleAdmitCard = (mode: 'single' | 'class' | 'all') => {
-    try {
-      const school = schoolCtx ?? fallbackSchool(exam)
-      const config = admitCfg ?? DEFAULT_ADMIT
-      let students: AdmitCardStudent[] = []
-
-      if (mode === 'single') {
-        if (!studentId) { toast.error('Select a student first'); return }
-        const s = allStudents.find((st) => st.id === studentId)
-        if (!s) { toast.error('Student not found'); return }
-        students = [buildAdmitCardStudent(s, exam, allStudents)]
-      } else if (mode === 'class') {
-        const targetClassId = classId === 'all' ? (exam.classes[0]?.classId ?? '') : classId
-        students = allStudents
-          .filter((s) => s.classId === targetClassId && s.status === 'Active')
-          .map((s) => buildAdmitCardStudent(s, exam, allStudents))
-      } else {
-        students = allStudents
-          .filter((s) => exam.classes.some((c: any) => c.classId === s.classId) && s.status === 'Active')
-          .map((s) => buildAdmitCardStudent(s, exam, allStudents))
-      }
-
-      if (students.length === 0) { toast.error('No students found for admit card generation'); return }
-      const className = mode === 'single' ? students[0].name : mode === 'class' ? `Class` : 'All Students'
-      const { filename } = generateBatchAdmitCardPDF(exam, className, students, school, config, admitLayout)
-      toast.success(`Admit cards generated for ${students.length} student(s)`, { description: filename })
-    } catch (e: any) { toast.error('Failed to generate admit cards', { description: e.message }) }
-  }
-
   const handleResultPDF = () => {
     try {
       const className = classId === 'all' ? 'All Classes' : (exam.classes.find((c: any) => c.classId === classId)?.className ?? 'All Classes')
@@ -263,35 +233,51 @@ export function ReportsTab({ exams }: Props) {
         </div>
       </div>
 
-      {/* ─── Section 1: Results & Official Records ─── */}
-      <CollapsibleSection title="Results & Official Records" subtitle="report cards, grade sheets, result summary" accent="emerald" defaultOpen={true}>
-        <div className="p-3 space-y-3">
-          {/* Report action tiles */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            <ReportTile icon={<User className="h-4 w-4" />} title="Student Report Card" desc="A4 portrait, subject marks, grade, rank, signatures"
-              onDownload={handleStudentReportCard} disabled={!studentId}
-            />
-            <ReportTile icon={<GraduationCap className="h-4 w-4" />} title="Class Grade Sheet" desc="A4 landscape, all students, marks, totals, ranks"
-              onDownload={handleClassGradeSheet} disabled={studentResults.length === 0}
-            />
-            <ReportTile icon={<FileText className="h-4 w-4" />} title="Result PDF" desc="Class result summary with totals and grades"
-              onDownload={handleResultPDF} disabled={studentResults.length === 0}
-            />
-            <ReportTile icon={<ShieldCheck className="h-4 w-4" />} title="Result Verification" desc="Preview what students see on public result page"
-              onClick={() => toast.info('Result verification preview', { description: 'Public result page coming soon' })}
-            />
+      {/* Status-aware section rendering */}
+      {exam.status === 'Draft' || exam.status === 'Scheduled' ? (
+        /* ─── UPCOMING EXAM: Pre-Examination Monitoring ─── */
+        <CollapsibleSection title="Pre-Examination Monitoring" subtitle="readiness & configuration status" accent="sky" defaultOpen={true}>
+          <PreExamMonitoring exam={exam} examSessions={examSessions} examDuties={examDuties} examMarks={examMarks} />
+        </CollapsibleSection>
+      ) : exam.status === 'Ongoing' ? (
+        /* ─── LIVE EXAM: Live Examination Monitoring ─── */
+        <CollapsibleSection title="Live Examination Monitoring" subtitle="sessions, attendance & evaluation progress" accent="amber" defaultOpen={true}>
+          <LiveExamMonitoring exam={exam} examSessions={examSessions} attendanceRecords={attendanceStore.records} examMarks={examMarks} />
+        </CollapsibleSection>
+      ) : null}
+
+      {/* ─── Section 1: Results & Official Records (only for completed exams) ─── */}
+      {(exam.status === 'Completed' || exam.resultStatus !== 'Not Started') && (
+        <CollapsibleSection title="Results & Official Records" subtitle="report cards, grade sheets, result summary" accent="emerald" defaultOpen={true}>
+          <div className="p-3 space-y-3">
+            {/* Report action tiles */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              <ReportTile icon={<User className="h-4 w-4" />} title="Student Report Card" desc="A4 portrait, subject marks, grade, rank, signatures"
+                onDownload={handleStudentReportCard} disabled={!studentId}
+              />
+              <ReportTile icon={<GraduationCap className="h-4 w-4" />} title="Class Grade Sheet" desc="A4 landscape, all students, marks, totals, ranks"
+                onDownload={handleClassGradeSheet} disabled={studentResults.length === 0}
+              />
+              <ReportTile icon={<FileText className="h-4 w-4" />} title="Result PDF" desc="Class result summary with totals and grades"
+                onDownload={handleResultPDF} disabled={studentResults.length === 0}
+              />
+              <ReportTile icon={<ShieldCheck className="h-4 w-4" />} title="Result Verification" desc="Preview what students see on public result page"
+                onClick={() => toast.info('Result verification preview', { description: 'Public result page coming soon' })}
+              />
+            </div>
+
+            {/* Result Summary table */}
+            <ResultSummaryTable analytics={analytics} studentResults={studentResults} />
           </div>
+        </CollapsibleSection>
+      )}
 
-          {/* Result Summary table */}
-          <ResultSummaryTable analytics={analytics} studentResults={studentResults} />
-        </div>
-      </CollapsibleSection>
-
-      {/* ─── Section 2: Performance Analytics ─── */}
-      <CollapsibleSection title="Performance Analytics" subtitle="class, subject & grade analysis" accent="violet" defaultOpen={false}>
-        <div className="p-3 space-y-3">
-          {/* Class Performance */}
-          <ClassPerformanceTable classPerf={classPerf} />
+      {/* ─── Section 2: Performance Analytics (only for completed exams) ─── */}
+      {(exam.status === 'Completed' || exam.resultStatus !== 'Not Started') && (
+        <CollapsibleSection title="Performance Analytics" subtitle="class, subject & grade analysis" accent="violet" defaultOpen={false}>
+          <div className="p-3 space-y-3">
+            {/* Class Performance */}
+            <ClassPerformanceTable classPerf={classPerf} />
 
           {/* Subject Performance */}
           <SubjectPerformanceTable subjectPerf={subjectPerf} classId={classId} />
@@ -300,6 +286,7 @@ export function ReportsTab({ exams }: Props) {
           <GradeDistributionTable analytics={analytics} />
         </div>
       </CollapsibleSection>
+      )}
 
       {/* ─── Section 3: Attendance Reports ─── */}
       <CollapsibleSection title="Attendance Reports" subtitle="exam attendance, room-wise, invigilator duty" accent="amber" defaultOpen={false}>
@@ -319,53 +306,14 @@ export function ReportsTab({ exams }: Props) {
         </div>
       </CollapsibleSection>
 
-      {/* ─── Section 5: Documents — Admit Cards ─── */}
-      <CollapsibleSection title="Documents — Admit Cards" subtitle="professional A4, 1-per-page / 2-per-page, bulk" accent="rose" defaultOpen={false}>
-        <div className="p-3 space-y-3">
-          {/* Admit card layout selector */}
-          <div className="flex items-center gap-3">
-            <Label className="text-[10px] font-semibold text-muted-foreground uppercase">Layout:</Label>
-            <div className="flex items-center gap-1 rounded-lg bg-muted/40 p-0.5">
-              <button
-                onClick={() => setAdmitLayout('1')}
-                className={cn('px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors', admitLayout === '1' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
-              >1 per A4</button>
-              <button
-                onClick={() => setAdmitLayout('2')}
-                className={cn('px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors', admitLayout === '2' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
-              >2 per A4 (paper-saving)</button>
-            </div>
-          </div>
-
-          {/* Admit card action tiles */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            <ReportTile icon={<User className="h-4 w-4" />} title="Individual Admit Card" desc="Single student A4 admit card"
-              onDownload={() => handleAdmitCard('single')} disabled={!studentId}
-            />
-            <ReportTile icon={<Users className="h-4 w-4" />} title="Class Admit Cards" desc="All students in selected class"
-              onDownload={() => handleAdmitCard('class')}
-            />
-            <ReportTile icon={<Layers className="h-4 w-4" />} title="Entire Exam" desc="All students across all classes"
-              onDownload={() => handleAdmitCard('all')}
-            />
-            <ReportTile icon={<Eye className="h-4 w-4" />} title="Preview" desc="Preview admit card layout"
-              onClick={() => handleAdmitCard('single')}
-            />
-          </div>
-
-          {/* Admit card info banner */}
-          <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-2.5 flex items-start gap-2">
-            <Ticket className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-[11px] font-medium text-rose-700 dark:text-rose-300">Professional Admit Card</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                Includes school header, student identity, complete examination timetable, room/seat assignment, and instructions.
-                {admitLayout === '2' && ' Two cards per A4 with dotted cutting line for paper efficiency.'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </CollapsibleSection>
+      {/* ─── Section 5: Documents — Navigation (Admit Cards managed in Examination workspace) ─── */}
+      <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2 flex items-center gap-2">
+        <Ticket className="h-4 w-4 text-muted-foreground shrink-0" />
+        <p className="text-[11px] text-muted-foreground">
+          Admit Cards are managed from{' '}
+          <span className="font-medium text-foreground">Examination → [Open Exam] → Admit Cards</span>.
+        </p>
+      </div>
     </div>
   )
 }
@@ -380,33 +328,90 @@ function fallbackSchool(exam: ExamDTO): SchoolContextDTO {
   }
 }
 
-function buildAdmitCardStudent(student: any, exam: ExamDTO, allStudents: any[]): AdmitCardStudent {
-  const className = exam.classes.find((c: any) => c.classId === student.classId)?.className ?? ''
-  const schedule = exam.schedule
-    .filter((item: any) => item.classId === student.classId)
-    .map((item: any) => ({
-      subjectId: item.subjectId,
-      subjectName: item.subjectName,
-      date: item.date,
-      startTime: item.startTime,
-      endTime: item.endTime,
-      room: item.room ?? 'Room A',
-      seatNumber: null as number | null,
-      invigilatorName: item.invigilatorName ?? null,
-    }))
-  return {
-    id: student.id,
-    name: student.name,
-    rollNo: student.rollNo,
-    admissionNo: null,
-    className,
-    section: null,
-    stream: null,
-    photo: null,
-    room: schedule[0]?.room ?? 'Room A',
-    seatNumber: null,
-    schedule,
-  }
+// ─── Pre-Examination Monitoring (for upcoming exams) ─────────────────
+
+function PreExamMonitoring({ exam, examSessions, examDuties, examMarks }: {
+  exam: ExamDTO; examSessions: any[]; examDuties: any[]; examMarks: any[]
+}) {
+  const hasSchedule = exam.schedule.length > 0
+  const hasSeating = examSessions.length > 0
+  const hasInvigilators = examDuties.length > 0
+  const hasMarks = examMarks.length > 0
+
+  const items = [
+    { label: 'Schedule published', done: hasSchedule, detail: `${exam.schedule.length} papers scheduled` },
+    { label: 'Classes configured', done: exam.classes.length > 0, detail: `${exam.classes.length} classes` },
+    { label: 'Subjects configured', done: exam.subjects.length > 0, detail: `${exam.subjects.length} subjects` },
+    { label: 'Seating ready', done: hasSeating, detail: hasSeating ? `${examSessions.length} sessions` : 'Not generated' },
+    { label: 'Invigilators assigned', done: hasInvigilators, detail: hasInvigilators ? `${examDuties.length} duties` : 'Not assigned' },
+    { label: 'Marks entry started', done: hasMarks, detail: hasMarks ? `${examMarks.length} marks` : 'Not started' },
+  ]
+
+  return (
+    <div className="p-3 space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {items.map((item) => (
+          <div key={item.label} className="rounded-lg border border-border/60 bg-card p-2.5">
+            <div className="flex items-center gap-2">
+              <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
+                item.done ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-muted text-muted-foreground')}>
+                {item.done ? '✓' : '—'}
+              </span>
+              <span className="text-[11px] font-medium">{item.label}</span>
+            </div>
+            <p className="text-[9px] text-muted-foreground mt-1 ml-7">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-2.5 flex items-start gap-2">
+        <AlertTriangle className="h-3.5 w-3.5 text-sky-600 shrink-0 mt-0.5" />
+        <p className="text-[10px] text-muted-foreground">
+          This examination is upcoming. Result analytics will appear here after marks are entered and the exam is completed.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Live Examination Monitoring (for ongoing exams) ─────────────────
+
+function LiveExamMonitoring({ exam, examSessions, attendanceRecords, examMarks }: {
+  exam: ExamDTO; examSessions: any[]; attendanceRecords: any[]; examMarks: any[]
+}) {
+  const submittedSessions = examSessions.filter((s) => s.submitted).length
+  const pendingSessions = examSessions.length - submittedSessions
+  const totalAttendanceRecords = attendanceRecords.filter((r) => r.examId === exam.id).length
+  const presentCount = attendanceRecords.filter((r) => r.examId === exam.id && r.status === 'PRESENT').length
+  const enteredMarks = examMarks.filter((m) => m.marksObtained !== null).length
+  const totalMarks = examMarks.length
+
+  const items = [
+    { label: 'Sessions Total', value: examSessions.length },
+    { label: 'Sessions Submitted', value: submittedSessions, color: 'text-emerald-600' },
+    { label: 'Sessions Pending', value: pendingSessions, color: pendingSessions > 0 ? 'text-amber-600' : 'text-muted-foreground' },
+    { label: 'Attendance Records', value: totalAttendanceRecords },
+    { label: 'Students Present', value: presentCount, color: 'text-emerald-600' },
+    { label: 'Marks Entered', value: `${enteredMarks}/${totalMarks}`, color: 'text-amber-600' },
+  ]
+
+  return (
+    <div className="p-3 space-y-3">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        {items.map((item) => (
+          <div key={item.label} className="rounded-md bg-muted/30 border border-border/40 px-2.5 py-1.5 text-center">
+            <p className="text-[8px] uppercase tracking-wider text-muted-foreground">{item.label}</p>
+            <p className={cn('text-[13px] font-bold tabular-nums mt-0.5', item.color ?? '')}>{item.value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 flex items-start gap-2">
+        <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+        <p className="text-[10px] text-muted-foreground">
+          This examination is in progress. Full result analytics will appear here after all marks are entered and the exam is completed.
+        </p>
+      </div>
+    </div>
+  )
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────

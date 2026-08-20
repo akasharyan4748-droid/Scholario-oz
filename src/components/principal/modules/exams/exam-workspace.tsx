@@ -57,6 +57,7 @@ import {
 import { CollapsibleSection } from './collapsible-section'
 import { SeatingSection } from './seating/seating-section'
 import { ExamAttendanceSection } from './exam-attendance-section'
+import { AdmitCardsSection } from './admit-cards-section'
 
 interface Props {
   examId: string
@@ -64,13 +65,15 @@ interface Props {
   onMutated: () => void
 }
 
-type Tab = 'overview' | 'schedule' | 'marks' | 'attendance' | 'outcomes' | 'seating' | 'grace' | 'grade' | 'audit'
+type Tab = 'overview' | 'schedule' | 'marks' | 'attendance' | 'outcomes' | 'seating' | 'admit-cards' | 'grace' | 'grade' | 'audit'
 
 // Tabs grouped into 3 phases for easier scanning.
 // Each group is rendered with a small separator dot before it.
 // NOTE: The old "results" tab has been merged into "marks" to remove the
 // duplication the spec called out. Marks now contains the full assessment
 // experience (entry → submit → verify → lock → declare → publish → view).
+// Admit Cards belong inside the examination (not in Reports) — they are
+// examination-specific operational documents, not analytics.
 const TAB_GROUPS: Array<{ label: string; items: Array<{ value: Tab; label: string }> }> = [
   {
     label: 'Setup',
@@ -78,6 +81,7 @@ const TAB_GROUPS: Array<{ label: string; items: Array<{ value: Tab; label: strin
       { value: 'overview', label: 'Overview' },
       { value: 'schedule', label: 'Schedule' },
       { value: 'seating', label: 'Seating' },
+      { value: 'admit-cards', label: 'Admit Cards' },
     ],
   },
   {
@@ -222,6 +226,7 @@ export function ExamWorkspace({ examId, onBack, onMutated }: Props) {
               {tab === 'marks' && <MarksSection exam={exam} onReload={handleReload} />}
               {tab === 'outcomes' && <OutcomesSection examId={exam.id} exam={exam} onReload={handleReload} />}
               {tab === 'seating' && <SeatingSection exam={exam} />}
+              {tab === 'admit-cards' && <AdmitCardsSection exam={exam} />}
               {tab === 'attendance' && <ExamAttendanceSection exam={exam} />}
               {tab === 'grade' && <GradeSection exam={exam} />}
               {tab === 'grace' && <GraceSection examId={exam.id} exam={exam} onReload={handleReload} />}

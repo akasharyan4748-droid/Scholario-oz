@@ -2581,3 +2581,42 @@ Stage Summary:
 - All data from canonical mock stores (marks, attendance, invigilators, students) — no duplicate datasets.
 - Shared analytics utility (analytics.ts) created for reuse across Grade tab and Reports tab.
 - Performance: stable Zustand selectors, useMemo for all derivations, useEffect for data initialization.
+
+---
+Task ID: reports-architecture-correction
+Agent: main (Super Z)
+Task: Architecture correction — move Admit Cards to Examination workspace, make Reports status-aware, remove duplication
+
+Work Log:
+- Rethought the information architecture per user spec:
+  • EXAMINATION WORKSPACE = operate one exam
+  • EXAMINATION REPORTS = analytics, monitoring, verification, official records
+  • STUDENT PROFILE → ACADEMICS = longitudinal academic history
+  • PUBLIC RESULT = student-facing published result
+- Added "Admit Cards" tab to ExamWorkspace (Setup group, after Seating):
+  • New admit-cards-section.tsx component — canonical admit card management inside the examination.
+  • Filters: Class, Student, Layout selector (1 per A4 / 2 per A4).
+  • Actions: Preview, Publish, Individual/Class/Entire Exam download.
+  • Readiness checklist (schedule, classes, subjects, seating, invigilators, marks).
+  • Published status banner.
+  • Uses canonical exam data (students, schedule, seating) — no disconnected mock datasets.
+- Removed Admit Card management from Reports tab:
+  • Replaced "Documents — Admit Cards" CollapsibleSection with a navigation link: "Admit Cards are managed from Examination → [Open Exam] → Admit Cards."
+  • Removed handleAdmitCard function, buildAdmitCardStudent helper, admitLayout state, and related imports.
+  • Reports no longer duplicates admit card generation — one canonical location in the examination workspace.
+- Made Reports tab status-aware:
+  • UPCOMING (Draft/Scheduled): Shows "Pre-Examination Monitoring" with readiness checklist (schedule, classes, subjects, seating, invigilators, marks). Does NOT show result statistics. Shows info message: "Result analytics will appear here after marks are entered."
+  • LIVE (Ongoing): Shows "Live Examination Monitoring" with sessions submitted/pending, attendance progress, marks entered. Shows info message about in-progress status.
+  • COMPLETED/Result Declared: Shows "Results & Official Records" (report cards, grade sheets, result PDF, verification, result summary) and "Performance Analytics" (class performance, subject performance, grade distribution). Also shows Attendance Reports and Examination Operations.
+- Created PreExamMonitoring and LiveExamMonitoring components.
+- Fixed admit-cards-section.tsx import (useSchoolContext from use-pdf-context, not use-exam-settings).
+- Lint passes clean on all modified files. Dev server compiles successfully.
+- No browser errors. Server status 200.
+
+Stage Summary:
+- Architecture corrected: Admit Cards moved to Examination workspace (canonical location).
+- Reports tab is now status-aware (Upcoming → monitoring, Live → live progress, Completed → full analytics).
+- No duplication: Admit Card management exists in ONE place (Examination → Admit Cards).
+- Navigation link in Reports points to the correct location.
+- Canonical data flow maintained: all data from mock marks, attendance, invigilator stores.
+- Verified: Mid-Term (Completed) shows full analytics; Unit Test 2 (Scheduled) shows readiness monitoring only.
