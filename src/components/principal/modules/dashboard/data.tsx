@@ -1,7 +1,7 @@
 'use client'
 
 import {
-  CalendarCheck, IndianRupee, Clock, FileText, ShieldAlert, UserPlus,
+  CalendarCheck, IndianRupee, Clock, ShieldAlert, UserPlus,
   BookMarked, Package, Megaphone,
 } from 'lucide-react'
 
@@ -41,15 +41,8 @@ export const weeklyTrends: WeeklyTrend[] = [
     icon: <IndianRupee className="h-3.5 w-3.5" />,
     invertTrend: false,
   },
-  {
-    label: 'Homework Submitted',
-    thisWeek: 86,
-    lastWeek: 91,
-    history: [{ w: 'W1', v: 88 }, { w: 'W2', v: 91 }, { w: 'W3', v: 89 }, { w: 'W4', v: 86 }],
-    color: 'oklch(0.6 0.18 300)',
-    icon: <FileText className="h-3.5 w-3.5" />,
-    invertTrend: false,
-  },
+  // 'Homework Submitted' card removed — Homework module deferred from Wave 1.
+  // Will be re-added when Homework is built as Teacher → Student → Parent ecosystem.
   {
     label: 'Late Arrivals',
     thisWeek: 7,

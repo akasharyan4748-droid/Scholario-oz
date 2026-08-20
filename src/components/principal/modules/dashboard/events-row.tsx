@@ -75,12 +75,10 @@ function ClassToppersCard() {
   )
 }
 
-// Pending Reviews card — progress bars for homework/assignment/fee/leave
-// review queues + a final admission applications count.
+// Pending Reviews card — progress bars for fee/leave review queues.
+// Homework Review and Assignment Grading removed — modules deferred from Wave 1.
 function PendingReviewsCard() {
   const reviews = [
-    { label: 'Homework Review', done: 14, total: 18, color: 'oklch(0.6 0.18 300)' },
-    { label: 'Assignment Grading', done: 9, total: 18, color: 'oklch(0.65 0.16 75)' },
     { label: 'Fee Approvals', done: 7, total: 12, color: 'oklch(0.62 0.2 25)', pendingLabel: '7 pending' },
     { label: 'Leave Requests', done: 3, total: 8, color: 'oklch(0.7 0.15 200)', pendingLabel: '3 pending' },
   ]

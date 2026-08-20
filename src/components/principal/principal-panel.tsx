@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import {
   LayoutDashboard, UserPlus, GraduationCap, School, CalendarCheck, IndianRupee,
-  Wallet, FileText, BookOpen, ClipboardList, Megaphone, CalendarDays,
+  Wallet, FileText, Megaphone, CalendarDays,
   BookMarked, Bus, Package, Award, Settings, MessageSquare,
   PieChart, Truck, Download, LayoutGrid, Users, Layers, Clock
 } from 'lucide-react'
@@ -21,8 +21,11 @@ import { AttendanceModule } from './modules/attendance'
 import { FeesModule } from './modules/fees'
 import { SalaryModule } from './modules/salary'
 import { ExamsModule } from './modules/exams'
-import { HomeworkModule } from './modules/homework'
-import { AssignmentsModule } from './modules/assignments'
+// Wave 1 scope: Homework & Assignments are intentionally deferred from the
+// Principal role. They will be rebuilt as a connected Teacher → Student →
+// Parent → Principal ecosystem in a future phase. Code preserved for reuse.
+// import { HomeworkModule } from './modules/homework'
+// import { AssignmentsModule } from './modules/assignments'
 import { CommunicationModule } from './modules/communication'
 import { CalendarModule } from './modules/calendar'
 import { LibraryModule } from './modules/library'
@@ -50,8 +53,8 @@ const moduleRegistry: Record<string, React.ComponentType<any>> = {
   salary: SalaryModule,
   finance: FinanceDashboardModule,
   exams: ExamsModule,
-  homework: HomeworkModule,
-  assignments: AssignmentsModule,
+  // homework: HomeworkModule,        // Wave 1: deferred
+  // assignments: AssignmentsModule,  // Wave 1: deferred
   communication: CommunicationModule,
   messaging: MessagingModule,
   calendar: CalendarModule,
@@ -80,8 +83,8 @@ const navGroups: NavGroup[] = [
       { key: 'timetable', label: 'Timetable', icon: <Clock className="h-4.5 w-4.5" /> },
       { key: 'attendance', label: 'Attendance', icon: <CalendarCheck className="h-4.5 w-4.5" /> },
       { key: 'exams', label: 'Examinations', icon: <FileText className="h-4.5 w-4.5" /> },
-      { key: 'homework', label: 'Homework', icon: <BookOpen className="h-4.5 w-4.5" /> },
-      { key: 'assignments', label: 'Assignments', icon: <ClipboardList className="h-4.5 w-4.5" /> },
+      // { key: 'homework', label: 'Homework', icon: <BookOpen className="h-4.5 w-4.5" /> },        // Wave 1: deferred
+      // { key: 'assignments', label: 'Assignments', icon: <ClipboardList className="h-4.5 w-4.5" /> }, // Wave 1: deferred
     ],
   },
   {
