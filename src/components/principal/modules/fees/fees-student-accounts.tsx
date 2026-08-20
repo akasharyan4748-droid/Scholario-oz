@@ -69,7 +69,7 @@ export function FeesStudentAccountsSection({ data, onCollect }: Props) {
       {!search && (
         <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 p-2.5 flex items-start gap-2">
           <Search className="h-3.5 w-3.5 text-sky-600 shrink-0 mt-0.5" />
-          <p className="text-[11px] text-muted-foreground">Search the canonical student database — same records used in Admissions, Students & Classes, Attendance, Examinations. Click any student to open their complete fee account.</p>
+          <p className="text-[11px] text-muted-foreground">Search students by name, ID, admission number, class or section. Click any student to open their fee account.</p>
         </div>
       )}
 
@@ -186,7 +186,7 @@ function StudentFeeAccountDrawer({ account, onClose, onCollect }: { account: Stu
             <div className="min-w-0 flex-1">
               <h2 className="text-base font-bold truncate">{account.studentName}</h2>
               <p className="text-[11px] text-muted-foreground font-mono">
-                {account.admissionNo} · Roll {account.rollNo} · {account.className}-{account.section} · AY 2025-26
+                {account.admissionNo} · Roll {account.rollNo} · {account.className}-{account.section}
               </p>
               <p className="text-[10px] text-muted-foreground mt-0.5">
                 Guardian: {account.guardianName} · {account.guardianPhone}
@@ -218,7 +218,7 @@ function StudentFeeAccountDrawer({ account, onClose, onCollect }: { account: Stu
             { value: 'receipts' as const, label: 'Receipts', icon: <Receipt className="h-3 w-3" /> },
             { value: 'concessions' as const, label: 'Concessions', icon: <IndianRupee className="h-3 w-3" /> },
             { value: 'dues' as const, label: 'Dues', icon: <AlertCircle className="h-3 w-3" /> },
-            { value: 'audit' as const, label: 'Audit', icon: <ShieldCheck className="h-3 w-3" /> },
+            { value: 'audit' as const, label: 'History', icon: <ShieldCheck className="h-3 w-3" /> },
           ].map((t) => (
             <button
               key={t.value}
@@ -309,7 +309,7 @@ function AccountOverview({ account }: { account: StudentFeeAccount }) {
             </div>
           ))}
           {account.transactions.length === 0 && (
-            <FeeEmptyState icon={<Wallet className="h-5 w-5" />} title="No payments recorded yet" description="This account has no transaction history." />
+            <FeeEmptyState icon={<Wallet className="h-5 w-5" />} title="No payments yet" description="Payments will appear here once recorded." />
           )}
         </div>
       </FeePanel>
@@ -443,11 +443,11 @@ function AccountConcessions({ account }: { account: StudentFeeAccount }) {
             <p className="text-[10px] text-muted-foreground mt-1">Approved By: Principal · Date: 2025-04-02</p>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            Concessions do not silently alter historical charges. Original amounts remain on record for auditability.
+            Concession does not change past payments. Original amounts remain on record.
           </p>
         </div>
       ) : (
-        <FeeEmptyState icon={<IndianRupee className="h-5 w-5" />} title="No concessions on this account" description="Approved concessions will appear here." />
+        <FeeEmptyState icon={<IndianRupee className="h-5 w-5" />} title="No concessions" description="Approved concessions will appear here." />
       )}
     </FeePanel>
   )
@@ -487,7 +487,7 @@ function AccountAudit({ account }: { account: StudentFeeAccount }) {
     a.entityId === account.studentId || account.transactions.some((t) => t.id === a.entityId)
   ), [allAudit, account.studentId, account.transactions])
   return (
-    <FeePanel title="Audit Trail" subtitle="immutable financial event log">
+    <FeePanel title="Activity History" subtitle="record of payment actions on this account">
       <div className="space-y-2">
         {audit.length > 0 ? audit.map((a) => (
           <div key={a.id} className="flex items-start gap-2 rounded-md border border-border/40 px-2 py-1.5">
@@ -500,7 +500,7 @@ function AccountAudit({ account }: { account: StudentFeeAccount }) {
             </div>
           </div>
         )) : (
-          <FeeEmptyState icon={<ShieldCheck className="h-5 w-5" />} title="No audit events" description="Financial events will be logged here." />
+          <FeeEmptyState icon={<ShieldCheck className="h-5 w-5" />} title="No activity yet" description="Past actions will appear here." />
         )}
       </div>
     </FeePanel>

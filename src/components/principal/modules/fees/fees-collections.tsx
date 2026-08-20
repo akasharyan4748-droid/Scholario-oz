@@ -123,7 +123,7 @@ export function FeesCollectionsSection({ data, onCollect }: Props) {
           {modeData.length > 0 ? (
             <MiniDonut data={modeData} centerLabel="Collected" centerValue={formatINR(analytics.totalCollected, true)} />
           ) : (
-            <FeeEmptyState icon={<Banknote className="h-5 w-5" />} title="No payments recorded yet" />
+            <FeeEmptyState icon={<Banknote className="h-5 w-5" />} title="No payments yet" />
           )}
         </FeePanel>
 
@@ -131,7 +131,7 @@ export function FeesCollectionsSection({ data, onCollect }: Props) {
           {dayBars.length > 0 ? (
             <MiniBars data={dayBars} format={(n) => formatINR(n, true)} height={140} />
           ) : (
-            <FeeEmptyState icon={<Calendar className="h-5 w-5" />} title="No collection activity in last 15 days" />
+            <FeeEmptyState icon={<Calendar className="h-5 w-5" />} title="No recent collections" />
           )}
         </FeePanel>
       </div>

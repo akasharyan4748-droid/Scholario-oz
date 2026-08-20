@@ -44,8 +44,8 @@ export function FeesSettingsSection() {
       <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 p-2.5 flex items-start gap-2">
         <ShieldCheck className="h-3.5 w-3.5 text-sky-600 shrink-0 mt-0.5" />
         <div className="text-[11px] text-muted-foreground">
-          <p className="font-semibold text-sky-700 dark:text-sky-300">Settings are version-safe</p>
-          <p className="mt-0.5">Changes apply to <strong>new transactions</strong> only. Historical records remain unchanged for auditability.</p>
+          <p className="font-semibold text-sky-700 dark:text-sky-300">Fee Structure History</p>
+          <p className="mt-0.5">New fee plans will use the updated settings. Previous payments remain unchanged.</p>
         </div>
       </div>
 
@@ -79,7 +79,7 @@ export function FeesSettingsSection() {
 
 function FeeHeadsSettings() {
   const feeStructures = useFeeStore((s) => s.feeStructures)
-  // Build canonical fee head list from all structures
+  // Build fee head list from all structures
   const allHeads = feeStructures.flatMap((s) => s.components.map((c) => ({ ...c, structure: s.className })))
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
@@ -94,7 +94,7 @@ function FeeHeadsSettings() {
         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="overflow-hidden mb-2">
           <div className="rounded-md border border-border bg-muted/20 p-2 flex items-center gap-2">
             <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New fee head name…" className="h-7 text-xs flex-1" />
-            <Button size="sm" className="h-7 text-[10px] gap-1" onClick={() => { toast.success('Fee head created', { description: `${newName} added to canonical registry.` }); setNewName(''); setShowAdd(false) }}>
+            <Button size="sm" className="h-7 text-[10px] gap-1" onClick={() => { toast.success('Fee head created', { description: `${newName} added.` }); setNewName(''); setShowAdd(false) }}>
               <Check className="h-3 w-3" /> Save
             </Button>
             <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => setShowAdd(false)}>Cancel</Button>
@@ -112,7 +112,7 @@ function FeeHeadsSettings() {
               <p className="text-[9px] text-muted-foreground">{h.structure} · {h.frequency} · {h.mandatory ? 'Mandatory' : 'Optional'}</p>
             </div>
             <span className="font-mono text-xs font-semibold tabular-nums">{formatINR(h.amount, true)}</span>
-            <Button size="sm" variant="ghost" className="h-6 text-[9px] gap-1 text-amber-600" onClick={() => toast.info('Archive requires confirmation', { description: 'Historical transactions will be preserved.' })}>
+            <Button size="sm" variant="ghost" className="h-6 text-[9px] gap-1 text-amber-600" onClick={() => toast.info('Archive requires confirmation', { description: 'Past payments remain on record.' })}>
               <Archive className="h-3 w-3" />
             </Button>
           </div>

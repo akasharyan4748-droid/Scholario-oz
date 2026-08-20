@@ -210,3 +210,17 @@ export function FeeStatusBadge({ status }: { status: string }) {
     </span>
   )
 }
+
+// ─── Reduced motion + print styles ──────────────────────────────────
+// Honour the user's preference for reduced motion across the fees workspace.
+// Framer Motion's `motion` components respect this automatically when
+// MotionConfig is used; we additionally suppress transitions via CSS.
+export const FEES_GLOBAL_STYLES = `
+@media (prefers-reduced-motion: reduce) {
+  .fees-shell * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+`

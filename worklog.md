@@ -2907,3 +2907,106 @@ Stage Summary:
 - Version-safety notices on Settings (changes apply to new transactions only — historical preserved).
 - No duplicate "Fee Management" page title (global header already shows it).
 - All existing good work preserved (canonical student connection, SCHOLARIO visual language, KPI cards, status pills).
+
+---
+Task ID: fee-management-polish-pass
+Agent: main (Super Z)
+Task: Fee Management FINAL UX / Product Polish + Deduplication Pass
+
+Work Log:
+
+### Phase 1: Audit
+- Read full polish spec (1683 lines, 55 sections).
+- Audited all 15 fees files for developer language, duplication, and noise.
+- Identified key issues:
+  • Tab numbering (1-9) shown as <kbd> badges — pure noise, no business meaning
+  • Duplicate "Collect Payment" / "Find Student" between global header and Overview quick-action row
+  • Developer-facing copy: "canonical student database", "version-safe policy", "auditability", "historical transactions remain unchanged", "immutable audit record", "Cash approval workflow"
+  • Receipt had fake "scan: scholario.in/r/RCP-..." line + mock barcode at bottom
+  • Empty states used generic phrases like "No transactions match your filters"
+  • Student Account drawer duplicated "AY 2025-26" already shown in global header
+  • "Audit" tab name is developer-facing; "History" is user-friendly
+
+### Phase 2: Shell Polish
+- Removed tab numbering <kbd> badges (kept keyboard shortcuts functional, just not displayed).
+- Added `aria-current="page"` to active tab for accessibility.
+- Removed duplicate Quick Actions row from Overview (was duplicating Collect Payment/Find Student).
+- Removed `onCollect` prop from FeesOverviewSection (no longer needed).
+
+### Phase 3: Copy Rewrite (Developer → School Language)
+- Student Accounts search hint: "Search the canonical student database — same records used in Admissions, Students & Classes, Attendance, Examinations" → "Search students by name, ID, admission number, class or section. Click any student to open their fee account."
+- Fee Structures banner: "Version-safe policy / Fee structure changes apply to new student accounts only. Historical transactions remain unchanged for auditability. Archiving a fee head preserves its past transactions." → "Fee Structure History / New fee plans will use the updated structure. Previous payments remain unchanged."
+- Approvals workflow explainer: "Cash approval workflow / Teacher collects cash → submits to Principal → Principal verifies + approves → transaction verified → receipt issued. Approval creates an immutable audit record." → "Cash Payment Verification / Teachers submit cash collections for Principal verification. Approved payments generate a receipt and are recorded for audit."
+- Settings banner: "Settings are version-safe / Changes apply to new transactions only. Historical records remain unchanged for auditability." → "Fee Structure History / New fee plans will use the updated settings. Previous payments remain unchanged."
+- Concessions note: "Concessions do not silently alter historical charges. Original amounts remain on record for auditability." → "Concession does not change past payments. Original amounts remain on record."
+- Audit Trail: renamed to "Activity History" / "Activity Log" with subtitle "record of payment actions on this account"
+- Collect Payment success: "All updates applied: Student balance updated · Transaction history updated · Dashboard totals updated · Pending dues updated · Audit event created" → "Payment recorded / Student balance, transactions, and reports updated."
+- Collect Payment confirm: "Audit record will be created. Receipt will be generated on success." → "Receipt will be generated on success."
+- Fee head archive toast: "Historical transactions will be preserved." → "Past payments remain on record."
+- Fee head create toast: "added to canonical registry." → "added."
+
+### Phase 4: Receipt Polish
+- Removed fake "scan: scholario.in/r/{receiptNo}" line.
+- Removed mock barcode at bottom.
+- Receipt now ends cleanly after signature lines + footer message.
+
+### Phase 5: Empty States Polish
+- "No transactions match your filters" → "No transactions"
+- "No dues match your filters" → "No dues found"
+- "No collection activity in last 15 days" → "No recent collections"
+- "No payments recorded yet" → "No payments yet"
+- "No resolved approvals yet" → "No resolved approvals"
+- "No cash audit events yet" → "No approval actions yet"
+- "No audit events" → "No activity yet / Past actions will appear here."
+- "Report not implemented / Coming soon." → "Report not available"
+- "No data for this report / No records match the current data." → "No records / No data for this report yet."
+
+### Phase 6: Reports Subtitles Cleanup
+- "Day-wise collection breakdown" → "Day-wise collected amount"
+- "Per-class collection performance" → "Collection by class"
+- "All approved concessions" → "Approved concessions"
+- "All cash transactions + approvals" → "Cash payments and approvals"
+- "Raw transaction log export" → "All transactions"
+
+### Phase 7: Pending Dues Row Polish
+- Cleaner row hierarchy with `tabular-nums` alignment.
+- Avatar size 8→9 with text 10→11 for better readability.
+- Action buttons kept compact with aria-labels for accessibility.
+- "SMS dispatched to guardian" → "SMS sent to guardian" (simpler).
+
+### Phase 8: Student Account Drawer Polish
+- Removed redundant "AY 2025-26" from drawer subtitle (already in global header).
+- Renamed "Audit" sub-tab to "History" (user-friendly).
+- Renamed "Audit Trail" panel to "Activity History".
+
+### Phase 9: Accessibility & Reduced Motion
+- Added `FEES_GLOBAL_STYLES` export with `@media (prefers-reduced-motion: reduce)` rule.
+- Injected styles via `<style>` tag in FeesShell root.
+- Added `aria-label` attributes to icon-only buttons in Pending Dues (View Account, Send Reminder).
+- Added `aria-current="page"` to active tab in shell navigation.
+
+### Phase 10: Verification (agent-browser + VLM)
+- Verified Overview: NO tab numbers shown, NO duplicate Quick Actions row, KPIs flow directly to charts.
+- Verified Student Accounts search hint: "Search students by name, ID, admission number, class or section. Click any student to open their fee account." (clean school language).
+- Verified Fee Structures banner: "Fee Structure History / New fee plans will use the updated structure. Previous payments remain unchanged."
+- Verified Approvals workflow: "Cash Payment Verification / Teachers submit cash collections for Principal verification. Approved payments generate a receipt and are recorded for audit."
+- Verified Settings banner: "Fee Structure History / New fee plans will use the updated settings. Previous payments remain unchanged."
+- Verified Receipt: NO fake scan-line or barcode at bottom — ends cleanly after signatures.
+- Verified Collect Payment modal: title "Collect Fee Payment", Stage 1 with student search.
+- ESLint: 0 errors, 0 warnings.
+- Dev server: HTTP 200, compiles cleanly.
+- No page errors in browser console.
+
+Stage Summary:
+- Fee Management polished from "very good enterprise interface" to "exceptional production product".
+- All developer-facing language removed from Principal UI.
+- Tab numbering removed (kept keyboard shortcuts functional, just not displayed).
+- Duplicate Quick Actions row removed (was duplicating global header actions).
+- Receipt cleaned of fake scan-line + barcode (production-quality now).
+- Empty states rewritten to human language.
+- Reports subtitles tightened.
+- Student Account drawer deduplicated (no redundant AY).
+- "Audit" renamed to "History" / "Activity History" / "Activity Log" throughout.
+- Accessibility: aria-labels, aria-current, prefers-reduced-motion support.
+- Existing good architecture preserved (9-tab structure, thermal receipt, charts, store) — only polished.
+- NO new features added — this was explicitly a polish + deduplication pass.

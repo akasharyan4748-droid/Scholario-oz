@@ -206,9 +206,9 @@ export function FeesPendingDuesSection({ data, onCollect }: Props) {
 
         <div className="max-h-[32rem] overflow-y-auto divide-y divide-border/30">
           {filtered.map((a) => (
-            <div key={a.studentId} className={cn('flex items-center gap-3 px-3 py-2 hover:bg-muted/20 transition-colors', selected.has(a.studentId) && 'bg-primary/5')}>
-              <input type="checkbox" checked={selected.has(a.studentId)} onChange={() => toggleSelect(a.studentId)} className="rounded shrink-0" />
-              <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-[10px] font-semibold',
+            <div key={a.studentId} className={cn('flex items-center gap-3 px-3 py-2.5 hover:bg-muted/20 transition-colors', selected.has(a.studentId) && 'bg-primary/5')}>
+              <input type="checkbox" checked={selected.has(a.studentId)} onChange={() => toggleSelect(a.studentId)} aria-label={`Select ${a.studentName}`} className="rounded shrink-0" />
+              <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white text-[11px] font-semibold',
                 a.status === 'Overdue' ? 'bg-gradient-to-br from-rose-500 to-pink-600' : 'bg-gradient-to-br from-amber-500 to-orange-600')}>
                 {a.studentName.split(' ').map((n) => n[0]).slice(0, 2).join('')}
               </div>
@@ -216,34 +216,30 @@ export function FeesPendingDuesSection({ data, onCollect }: Props) {
                 <p className="text-xs font-semibold truncate">{a.studentName}</p>
                 <p className="text-[9px] text-muted-foreground font-mono">{a.admissionNo} · {a.className}-{a.section}</p>
               </div>
-              <div className="hidden sm:block text-right shrink-0">
+              <div className="hidden sm:block text-right shrink-0 tabular-nums">
                 <p className="text-[9px] text-muted-foreground">Outstanding</p>
-                <p className="text-xs font-bold tabular-nums text-rose-600">{formatINR(a.outstanding, true)}</p>
+                <p className="text-xs font-bold text-rose-600">{formatINR(a.outstanding, true)}</p>
               </div>
-              <div className="hidden md:block text-right shrink-0">
+              <div className="hidden md:block text-right shrink-0 tabular-nums">
                 <p className="text-[9px] text-muted-foreground">Late Fee</p>
-                <p className="text-xs font-bold tabular-nums text-amber-600">{a.lateFee > 0 ? formatINR(a.lateFee, true) : '—'}</p>
-              </div>
-              <div className="hidden lg:block text-right shrink-0">
-                <p className="text-[9px] text-muted-foreground">Last Payment</p>
-                <p className="text-[10px] font-medium">{a.lastPaymentDate ? formatDate(a.lastPaymentDate) : '—'}</p>
+                <p className="text-xs font-bold text-amber-600">{a.lateFee > 0 ? formatINR(a.lateFee, true) : '—'}</p>
               </div>
               <FeeStatusBadge status={a.status} />
               <div className="flex items-center gap-0.5 shrink-0">
-                <Button size="sm" className="h-7 text-[9px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-2" onClick={() => onCollect(a.studentId)}>
+                <Button size="sm" className="h-7 text-[9px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-2.5" onClick={() => onCollect(a.studentId)}>
                   <Wallet className="h-2.5 w-2.5" /> Collect
                 </Button>
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setViewAccount(a)} title="View Account">
-                  <Eye className="h-3 w-3" />
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setViewAccount(a)} title="View Account" aria-label={`View ${a.studentName} account`}>
+                  <Eye className="h-3.5 w-3.5" />
                 </Button>
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast.success('Reminder sent', { description: `SMS dispatched to guardian of ${a.studentName}.` })} title="Send Reminder">
-                  <Send className="h-3 w-3" />
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast.success('Reminder sent', { description: `SMS sent to guardian of ${a.studentName}.` })} title="Send Reminder" aria-label={`Send reminder to ${a.studentName}`}>
+                  <Send className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
           ))}
           {filtered.length === 0 && (
-            <FeeEmptyState icon={<CheckCircle2 className="h-6 w-6" />} title="No dues match your filters" description="Try adjusting filters or search." />
+            <FeeEmptyState icon={<CheckCircle2 className="h-6 w-6" />} title="No dues found" description="Try adjusting filters or search." />
           )}
         </div>
       </FeePanel>

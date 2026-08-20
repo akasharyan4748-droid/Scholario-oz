@@ -69,8 +69,8 @@ export function FeesApprovalsSection({ data }: { data: ReturnType<typeof useFeeD
       <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 p-2.5 flex items-start gap-2">
         <ShieldCheck className="h-3.5 w-3.5 text-sky-600 shrink-0 mt-0.5" />
         <div className="text-[11px] text-muted-foreground">
-          <p className="font-semibold text-sky-700 dark:text-sky-300">Cash approval workflow</p>
-          <p className="mt-0.5">Teacher collects cash → submits to Principal → Principal verifies + approves → transaction verified → receipt issued. Approval creates an immutable audit record.</p>
+          <p className="font-semibold text-sky-700 dark:text-sky-300">Cash Payment Verification</p>
+          <p className="mt-0.5">Teachers submit cash collections for Principal verification. Approved payments generate a receipt and are recorded for audit.</p>
         </div>
       </div>
 
@@ -174,9 +174,9 @@ export function FeesApprovalsSection({ data }: { data: ReturnType<typeof useFeeD
       </FeePanel>
 
       {/* Resolved history */}
-      <FeePanel title="Approval History" subtitle={`${resolved.length} resolved cash requests`}>
+      <FeePanel title="Approval History" subtitle={`${resolved.length} resolved requests`}>
         {resolved.length === 0 ? (
-          <FeeEmptyState icon={<History className="h-5 w-5" />} title="No resolved approvals yet" description="Approved / rejected requests will appear here." />
+          <FeeEmptyState icon={<History className="h-5 w-5" />} title="No resolved approvals" description="Approved and rejected requests will appear here." />
         ) : (
           <div className="space-y-1.5">
             {resolved.map((r) => (
@@ -203,7 +203,7 @@ export function FeesApprovalsSection({ data }: { data: ReturnType<typeof useFeeD
       </FeePanel>
 
       {/* Audit log for cash requests */}
-      <FeePanel title="Cash Approval Audit Trail" subtitle="immutable log of all approval actions">
+      <FeePanel title="Activity Log" subtitle="record of approval actions">
         {cashAudit.length > 0 ? (
           <div className="space-y-1.5">
             {cashAudit.slice(0, 10).map((a) => (
@@ -219,7 +219,7 @@ export function FeesApprovalsSection({ data }: { data: ReturnType<typeof useFeeD
             ))}
           </div>
         ) : (
-          <FeeEmptyState icon={<ShieldCheck className="h-5 w-5" />} title="No cash audit events yet" />
+          <FeeEmptyState icon={<ShieldCheck className="h-5 w-5" />} title="No approval actions yet" />
         )}
       </FeePanel>
 

@@ -216,7 +216,7 @@ export function FeesTransactionsSection({ data, onCollect }: Props) {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={10} className="py-12"><FeeEmptyState icon={<ReceiptIcon className="h-6 w-6" />} title="No transactions match your filters" description="Try adjusting filters or search." /></td></tr>
+                <tr><td colSpan={10} className="py-12"><FeeEmptyState icon={<ReceiptIcon className="h-6 w-6" />} title="No transactions" description="Try adjusting filters or search." /></td></tr>
               )}
             </tbody>
           </table>

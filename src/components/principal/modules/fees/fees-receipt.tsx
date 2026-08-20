@@ -177,12 +177,6 @@ export function ReceiptPreview({ transaction: t, settings, onClose, onPrint, onD
           <div className="text-center my-2">
             <p className="text-[9px] text-gray-700">{settings.footerMessage}</p>
             <p className="text-[8px] text-gray-500 mt-1">This is a computer-generated receipt.</p>
-            <div className="mt-2 inline-flex items-center gap-0.5">
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
-                <span key={i} className="text-[14px] leading-none">{Math.floor((t.id.charCodeAt(i % t.id.length) + i) % 10)}</span>
-              ))}
-            </div>
-            <p className="text-[8px] text-gray-400 mt-0.5">scan: scholario.in/r/{t.receiptNo}</p>
           </div>
         </div>
 

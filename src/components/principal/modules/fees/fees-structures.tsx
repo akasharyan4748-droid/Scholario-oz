@@ -58,8 +58,8 @@ export function FeesStructuresSection({ data }: { data: ReturnType<typeof useFee
       <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 p-2.5 flex items-start gap-2">
         <ShieldCheck className="h-3.5 w-3.5 text-sky-600 shrink-0 mt-0.5" />
         <div className="text-[11px] text-muted-foreground">
-          <p className="font-semibold text-sky-700 dark:text-sky-300">Version-safe policy</p>
-          <p className="mt-0.5">Fee structure changes apply to <strong>new</strong> student accounts only. Historical transactions remain unchanged for auditability. Archiving a fee head preserves its past transactions.</p>
+          <p className="font-semibold text-sky-700 dark:text-sky-300">Fee Structure History</p>
+          <p className="mt-0.5">New fee plans will use the updated structure. Previous payments remain unchanged.</p>
         </div>
       </div>
 

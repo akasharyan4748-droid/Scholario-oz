@@ -43,16 +43,16 @@ interface ReportMeta {
 }
 
 const REPORTS: ReportMeta[] = [
-  { id: 'daily', label: 'Daily Collection', description: 'Day-wise collection breakdown', icon: <Calendar className="h-4 w-4" />, accent: 'bg-emerald-500/10 text-emerald-600' },
+  { id: 'daily', label: 'Daily Collection', description: 'Day-wise collected amount', icon: <Calendar className="h-4 w-4" />, accent: 'bg-emerald-500/10 text-emerald-600' },
   { id: 'monthly', label: 'Monthly Collection', description: 'Month-wise collection trend', icon: <CalendarDays className="h-4 w-4" />, accent: 'bg-emerald-500/10 text-emerald-600' },
-  { id: 'class-wise', label: 'Class-wise Collection', description: 'Per-class collection performance', icon: <Users className="h-4 w-4" />, accent: 'bg-sky-500/10 text-sky-600' },
-  { id: 'outstanding', label: 'Student Outstanding', description: 'All students with outstanding balance', icon: <AlertCircle className="h-4 w-4" />, accent: 'bg-rose-500/10 text-rose-600' },
+  { id: 'class-wise', label: 'Class-wise Collection', description: 'Collection by class', icon: <Users className="h-4 w-4" />, accent: 'bg-sky-500/10 text-sky-600' },
+  { id: 'outstanding', label: 'Student Outstanding', description: 'Students with outstanding balance', icon: <AlertCircle className="h-4 w-4" />, accent: 'bg-rose-500/10 text-rose-600' },
   { id: 'fee-head', label: 'Fee Head Collection', description: 'Revenue by fee head', icon: <IndianRupee className="h-4 w-4" />, accent: 'bg-amber-500/10 text-amber-600' },
   { id: 'payment-mode', label: 'Payment Mode Report', description: 'Distribution by payment method', icon: <Smartphone className="h-4 w-4" />, accent: 'bg-cyan-500/10 text-cyan-600' },
   { id: 'overdue', label: 'Overdue Report', description: 'Students with overdue payments', icon: <AlertCircle className="h-4 w-4" />, accent: 'bg-rose-500/10 text-rose-600' },
-  { id: 'concession', label: 'Concession Report', description: 'All approved concessions', icon: <Gift className="h-4 w-4" />, accent: 'bg-violet-500/10 text-violet-600' },
-  { id: 'cash', label: 'Cash Collection Report', description: 'All cash transactions + approvals', icon: <Banknote className="h-4 w-4" />, accent: 'bg-amber-500/10 text-amber-600' },
-  { id: 'transactions', label: 'Transaction Report', description: 'Raw transaction log export', icon: <List className="h-4 w-4" />, accent: 'bg-sky-500/10 text-sky-600' },
+  { id: 'concession', label: 'Concession Report', description: 'Approved concessions', icon: <Gift className="h-4 w-4" />, accent: 'bg-violet-500/10 text-violet-600' },
+  { id: 'cash', label: 'Cash Collection Report', description: 'Cash payments and approvals', icon: <Banknote className="h-4 w-4" />, accent: 'bg-amber-500/10 text-amber-600' },
+  { id: 'transactions', label: 'Transaction Report', description: 'All transactions', icon: <List className="h-4 w-4" />, accent: 'bg-sky-500/10 text-sky-600' },
 ]
 
 export function FeesReportsSection({ data }: { data: ReturnType<typeof useFeeData> }) {
@@ -280,7 +280,7 @@ function ReportBody({ type, data }: { type: ReportType; data: ReturnType<typeof 
     )
   }
 
-  return <FeeEmptyState icon={<FileBarChart2 className="h-6 w-6" />} title="Report not implemented" description="Coming soon." />
+  return <FeeEmptyState icon={<FileBarChart2 className="h-6 w-6" />} title="Report not available" />
 }
 
 function ReportTable({ headers, rows, totals }: { headers: string[]; rows: string[][]; totals?: string[] }) {
@@ -309,7 +309,7 @@ function ReportTable({ headers, rows, totals }: { headers: string[]; rows: strin
             </tr>
           ))}
           {rows.length === 0 && (
-            <tr><td colSpan={headers.length} className="py-8"><FeeEmptyState icon={<FileBarChart2 className="h-6 w-6" />} title="No data for this report" description="No records match the current data." /></td></tr>
+            <tr><td colSpan={headers.length} className="py-8"><FeeEmptyState icon={<FileBarChart2 className="h-6 w-6" />} title="No records" description="No data for this report yet." /></td></tr>
           )}
           {totals && rows.length > 0 && (
             <tr className="border-t-2 border-border bg-muted/40 font-bold">

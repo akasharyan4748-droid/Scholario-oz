@@ -34,6 +34,7 @@ import { FeesApprovalsSection } from './fees-approvals'
 import { FeesReportsSection } from './fees-reports'
 import { FeesSettingsSection } from './fees-settings'
 import { CollectPaymentModal } from './fees-collect-payment'
+import { FEES_GLOBAL_STYLES } from './fees-shared'
 
 const TAB_GROUPS: Array<{ label: string; items: Array<{ value: FeeTab; label: string; icon: React.ReactNode }> }> = [
   {
@@ -76,7 +77,7 @@ export function FeesShell() {
     approvals: data.analytics.pendingCashRequests,
   }
 
-  // Keyboard shortcuts: 1-9 switches tabs.
+  // Keyboard shortcuts: 1-9 switch tabs (kept for power users, not displayed).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName
@@ -100,7 +101,8 @@ export function FeesShell() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full fees-shell">
+      <style dangerouslySetInnerHTML={{ __html: FEES_GLOBAL_STYLES }} />
       {/* Header — contextual content (NOT a duplicate "Fee Management" title) */}
       <div className="border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
         <div className="px-4 sm:px-6 py-3">
@@ -155,13 +157,12 @@ export function FeesShell() {
                 {gi > 0 && <span className="text-muted-foreground/40 text-xs select-none" aria-hidden>•</span>}
                 <div className="flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5">
                   {group.items.map((t) => {
-                    const tabIdx = TABS.findIndex((x) => x.value === t.value)
                     const badge = tabBadges[t.value]
                     return (
                       <button
                         key={t.value}
                         onClick={() => setTab(t.value)}
-                        title={`${t.label} (Press ${tabIdx + 1})`}
+                        aria-current={tab === t.value ? 'page' : undefined}
                         className={cn(
                           'px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5',
                           tab === t.value
@@ -179,10 +180,6 @@ export function FeesShell() {
                             {badge}
                           </span>
                         )}
-                        <kbd className={cn(
-                          'hidden sm:inline-flex items-center justify-center h-3.5 px-0.5 rounded text-[8px] font-mono leading-none',
-                          tab === t.value ? 'bg-muted/60 text-muted-foreground' : 'bg-muted/30 text-muted-foreground/50',
-                        )}>{tabIdx + 1}</kbd>
                       </button>
                     )
                   })}
@@ -203,7 +200,7 @@ export function FeesShell() {
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
           >
-            {tab === 'overview' && <FeesOverviewSection data={data} onNavigate={setTab} onCollect={() => openCollect()} />}
+            {tab === 'overview' && <FeesOverviewSection data={data} onNavigate={setTab} />}
             {tab === 'collections' && <FeesCollectionsSection data={data} onCollect={() => openCollect()} />}
             {tab === 'accounts' && <FeesStudentAccountsSection data={data} onCollect={(id) => openCollect(id)} />}
             {tab === 'structures' && <FeesStructuresSection data={data} />}

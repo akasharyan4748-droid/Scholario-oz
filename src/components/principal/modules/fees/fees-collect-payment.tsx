@@ -296,7 +296,7 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
                 </div>
                 <div className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border p-2.5">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  <p className="text-[11px] text-muted-foreground">Audit record will be created. Receipt will be generated on success.</p>
+                  <p className="text-[11px] text-muted-foreground">Receipt will be generated on success.</p>
                 </div>
               </motion.div>
             )}
@@ -350,8 +350,8 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
                 <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-2.5 flex items-start gap-2">
                   <Sparkles className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
                   <div className="text-[10px] text-muted-foreground">
-                    <p className="font-semibold text-emerald-700 dark:text-emerald-400">All updates applied:</p>
-                    <p>• Student balance updated · Transaction history updated · Dashboard totals updated · Pending dues updated · Audit event created</p>
+                    <p className="font-semibold text-emerald-700 dark:text-emerald-400">Payment recorded</p>
+                    <p>Student balance, transactions, and reports updated.</p>
                   </div>
                 </div>
               </motion.div>
