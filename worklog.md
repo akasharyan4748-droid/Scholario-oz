@@ -2726,3 +2726,40 @@ Task: Project-wide code health audit, safe refactoring, and examination function
 3. `create-exam-fullscreen.tsx` (816 lines) — multi-step wizard. Acceptable as one file. Priority: SKIP.
 4. Pre-existing TypeScript errors in lib/exams/ (not introduced by refactoring). Priority: MEDIUM.
 
+
+---
+Task ID: examination-settings-upgrade
+Agent: main (Super Z)
+Task: Examination Settings Policy Architecture + UX + Functional Upgrade
+
+Work Log:
+- Completely rewrote settings-tab.tsx (737 → ~750 lines, completely restructured):
+  • General: Redesigned as school-wide workflow policies (verification/lock/override/audit/teacher-edits). Removed type-specific fields (max marks, pass marks, duration, grace) that belong in Exam Types. Added version-safety notice: "Changes apply only to examinations created after this policy is saved."
+  • Exam Types: Upgraded from flat list to expandable per-type policy center. Each type now has expandable config panel with 3 policy groups:
+    - Academic/Marking: Max Marks, Pass %, Duration, Grace Limit
+    - Workflow: Admit Card required, Attendance required, Seating required, Invigilator required
+    - Result: Use grading scale, Calculate rank, Allow compartment, Allow retest
+  • Grading: Fixed grade colors to be distinct (A1=emerald, A2=sky, B1=amber, B2=orange, C1=violet, C2=rose, E=rose). Updated DEFAULT_GRADE_BOUNDARIES in types.ts. Added version-safety notice.
+  • Marks & Results: Added version-safety notice. Kept mark processing, result calculation, and workflow rules.
+  • Publication: Upgraded to "Result Publication Control Center":
+    - Publication Mode: Manual / Automatic / Scheduled
+    - Require Principal approval + Notify students on publish toggles
+    - Publication Workflow readiness checklist (8 steps with visual indicators)
+    - Post-Publication Correction workflow (controlled 4-step process)
+  • Added VersionSafetyNotice component (reusable, sky-tinted with ShieldCheck icon)
+  • Added SaveBar component (reusable save button with dirty state)
+  • Added descriptions to RuleSwitch components
+- Removed duplicate Archive button from top-right (index.tsx: showArchiveButton = false)
+- Updated grade colors in types.ts: A1/A2 no longer share same color, B1/B2/C1/C2 all distinct
+- Lint passes clean. No browser errors. Server status 200.
+- Verified: General shows 6 workflow policies with descriptions, Exam Types shows expandable config panels, Publication shows 3 modes + readiness checklist + correction workflow.
+
+Stage Summary:
+- Settings transformed from "collection of toggles" to "Examination Policy & Configuration Center"
+- General = school-wide workflow policies (not type-specific)
+- Exam Types = per-type policy templates (marks/passing/duration/grace/workflow/result)
+- Grading = canonical source of truth with distinct grade colors
+- Publication = controlled workflow with readiness checklist and correction process
+- Version-safety notices on all policy sections
+- No duplicate Archive button
+- Same SCHOLARIO visual language preserved

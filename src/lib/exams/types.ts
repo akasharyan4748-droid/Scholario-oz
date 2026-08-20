@@ -59,10 +59,10 @@ export type Outcome = (typeof OUTCOMES)[number]
 
 export const DEFAULT_GRADE_BOUNDARIES = [
   { grade: 'A1', minPct: 90, color: 'emerald' },
-  { grade: 'A2', minPct: 80, color: 'emerald' },
-  { grade: 'B1', minPct: 70, color: 'sky' },
-  { grade: 'B2', minPct: 60, color: 'amber' },
-  { grade: 'C1', minPct: 50, color: 'orange' },
+  { grade: 'A2', minPct: 80, color: 'sky' },
+  { grade: 'B1', minPct: 70, color: 'amber' },
+  { grade: 'B2', minPct: 60, color: 'orange' },
+  { grade: 'C1', minPct: 50, color: 'violet' },
   { grade: 'C2', minPct: 33, color: 'rose' },
   { grade: 'E', minPct: 0, color: 'rose' },
 ] as const

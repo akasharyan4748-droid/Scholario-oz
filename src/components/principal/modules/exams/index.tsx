@@ -130,7 +130,7 @@ export function ExamsModule() {
   // for the Overview dashboard). Settings shows the Archive button instead.
   // Exams and Reports inherit the session context without showing a picker.
   const showSessionPicker = section === 'overview'
-  const showArchiveButton = section === 'settings'
+  const showArchiveButton = false // Removed — Archive is in the Settings sidebar only
 
   return (
     <PageTransition className="space-y-4">
