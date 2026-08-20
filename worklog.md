@@ -2763,3 +2763,38 @@ Stage Summary:
 - Version-safety notices on all policy sections
 - No duplicate Archive button
 - Same SCHOLARIO visual language preserved
+
+---
+Task ID: fee-management-wave-1
+Agent: main (Super Z)
+Task: Fee Management Wave 1 — canonical student connection, SCHOLARIO design, student fee accounts, aging analysis
+
+Work Log:
+- Created canonical fee store (src/lib/store/fee-store.ts):
+  • Connected to useStudentsStore — all fee data derives from canonical StudentRecord[]
+  • StudentFeeAccount: totalApplicable, concession, netPayable, paid, outstanding, lateFee, totalDue, status, daysOverdue, transactions
+  • FeeTransaction: receiptNo, studentId, mode, status, feeHead, collectedBy, verifiedBy, referenceNo, academicYear
+  • FeeStructureConfig: 5 categories (Pre-Primary through Senior), 23 fee heads with mandatory/optional flags
+  • useFeeData() hook: computes all analytics from canonical students — totalExpected, totalCollected, totalOutstanding, collectionRate, overdueCount, pendingVerification, monthly trend, fee head distribution, class-wise finance, aging analysis (due soon / 1-7d / 8-30d / 31-60d / 60+d)
+- Completely rewrote fees/index.tsx (218 → ~450 lines):
+  • KPI Dashboard: Total Expected, Collected (with collection rate), Outstanding (with student count), Pending Verification
+  • Analytics section (CollapsibleSection): Collection rate progress bar, monthly trend bar chart, fee head distribution with colored bars, overdue aging analysis grid
+  • Class-wise Finance (CollapsibleSection): per-class expected/collected/outstanding/collection% with color-coded pills
+  • Fee Structures (CollapsibleSection): 5 category cards with fee head breakdowns
+  • Transaction History (CollapsibleSection): searchable/filterable table with mode/status pills, receipt download
+  • Pending Dues (CollapsibleSection): actionable student cards with outstanding/late fee/total due/last payment, Collect/View Account/Remind buttons
+  • Cash Approvals (CollapsibleSection): principal verification workflow preserved
+  • Student Fee Account Modal: full ledger with charges/payments/outstanding/receipts, status badge, collect button
+- All numbers derived from canonical students — no fake dashboard values
+- VLM rated 9/10 — "polished, enterprise-grade interface", "highly consistent with Examination module"
+- Lint passes clean. No browser errors. Server status 200.
+- Pushed to GitHub: commit 5d09318 on main branch.
+
+Stage Summary:
+- Fee Management now connected to canonical student data (same StudentRecord[] as Students & Classes, Admissions, Attendance, Examinations)
+- SCHOLARIO design language applied: CollapsibleSection, KPI cards, status pills, sticky headers
+- Student fee account modal provides full financial ledger per student
+- Aging analysis shows overdue distribution (due soon / 1-7d / 8-30d / 31-60d / 60+d)
+- Class-wise finance identifies classes with unusual outstanding balances
+- Cash approval workflow preserved with principal verification
+- No fake financial numbers — all derived from canonical student fee data
