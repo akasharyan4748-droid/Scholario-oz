@@ -235,7 +235,7 @@ export function SeatingSection({ exam }: Props) {
       const classNameLabel = rooms.length === 1
         ? rooms[0].name
         : `${allSeatedStudents.length} students`
-      generateBatchAdmitCardPDF(exam, classNameLabel, allSeatedStudents, school, config)
+      generateBatchAdmitCardPDF(exam, classNameLabel, allSeatedStudents, school, config, '1')
       toast.success(`Admit cards generated for ${allSeatedStudents.length} students`)
     } catch (e: any) {
       toast.error('Failed to generate admit cards', { description: e.message })

@@ -2386,3 +2386,198 @@ Stage Summary:
 - All Examination module features verified working via agent-browser.
 - No errors. Preview is showing properly.
 - The `exec` approach keeps the server process alive between bash commands.
+
+---
+Task ID: 1
+Agent: audit-reports
+Task: Audit existing Reports tab, Admit Card system, and PDF utilities
+
+Work Log:
+- Read worklog.md (2388 lines) to absorb prior context — 10 prior tasks, latest = server-restart-and-verify; all Settings sub-tabs have fallback defaults; Reports tab has mock-data fallback.
+- Inspected all 13 listed files in parallel batches. Verified imports/callers via Grep to identify dead code.
+- Confirmed `seating-pdf.ts` is dead code (no importers anywhere in src/).
+- Confirmed no public/student/parent-facing result verification or admit-card verification route exists in `src/app/` (only 4 non-api files: page.tsx, layout.tsx, not-found.tsx, global-error.tsx).
+- Cross-checked `student/modules/results.tsx` — uses `@/lib/mock/academics` mock, NOT connected to the exam module.
+- Verified the only "DigitalVerification" pattern is in `OfficialAdmissionLetter/DigitalVerification.tsx` (for admission letters, not exam admit cards).
+
+Stage Summary:
+
+### 1. reports-tab.tsx (365 LOC)
+**What it does:** Top-level Examination → Reports tab. Renders 4 report tiles + an in-page EvaluationStatusTable.
+**Key exports:** `ReportsTab({ exams })`, internal `EvaluationStatusTable({ exam, classId, studentsCount })`.
+**Data deps:** `useClassResults` (API → fallback to `useMockMarksStore` + `useStudentsStore`), `useSchoolContext`, `useAdmitCardConfig`, `useReportCardConfig`. Computes `mockResults: StudentResult[]` locally via `getGradeForPercentage(pct, [])` (empty scale → DEFAULT_GRADE_BOUNDARIES). Computes a fallback `ExamAnalyticsDTO` from results when API analytics is missing.
+**Tiles:** `report-card` → `generateStudentReportCardPDF`; `grade-sheet` → `generateClassGradeSheetPDF`; `admit-card` → `generateBatchAdmitCardPDF` (single student built inline from `exam.schedule` filtered by classId, with `photo: null`, `room: null`, `seatNumber: null`); `eval-status` → toast only (renders inline table below).
+**Missing/upgrades needed:**
+- Admit-card tile is per-student only; no class-batch button (batch lives in `workspace-sections-extended.tsx::SeatingSection`).
+- Admit card always passes `photo: null, room: null, seatNumber: null` — does NOT query the seating plan store/API. Should be wired to seat assignments.
+- No QR code rendering even though `AdmitCardConfigDTO.showQrCode` exists.
+- No progress card / rank certificate / character certificate.
+- Mock results pass `[]` as the grade scale to `getGradeForPercentage` — should pass `useGradeScales()` so school-configured scales win.
+
+### 2. pdf.ts (354 LOC) — primary PDF utilities
+**What it does:** School-header-aware generators for grade sheet, report card, admit card, seating plan. Uses `SchoolContextDTO` (passed in, no hardcoding). Honors `AdmitCardConfigDTO` + `ReportCardConfigDTO` toggles.
+**Key exports:**
+- `generateClassGradeSheetPDF(exam, className, results: StudentResult[], analytics: ExamAnalyticsDTO, school)` → `PdfResult { filename, blobUrl }` — landscape A4, subjects × students table, summary line.
+- `generateStudentReportCardPDF(exam, result: StudentResult, school, config: ReportCardConfigDTO)` → `PdfResult` — portrait A4, subject table + totals + rank + remarks box + signature lines. Honors showRank/showPercentage/showRemarks/showClassTeacherSign/showPrincipalSign.
+- `generateBatchAdmitCardPDF(exam, className, students: AdmitCardStudent[], school, config: AdmitCardConfigDTO)` → `PdfResult` — one page per student. Honors showRollNumber/showTimetable/showInstructions. **`showQrCode` is read from config but NOT rendered** (TODO). `showPhoto` config exists in DTO but is **never drawn** either.
+- `generateSeatingPlanPDF(exam, seatAssignments: SeatAssignmentDTO[], school)` → `PdfResult` — landscape, room-grouped table.
+- Helpers: `drawSchoolHeader(doc, school, subtitle?)` (logo optional, schoolName/address/contact, emerald rule line), `formatDate`, `saveDoc`.
+**Missing/upgrades needed:**
+- `showQrCode` flag is wired but no QR-code library is imported/used.
+- `showPhoto` flag is in the config but never read inside `generateBatchAdmitCardPDF`.
+- No "exam controller" / "class teacher" signature variant for admit cards.
+- No board-exam center code / center number field support.
+
+### 3. result-pdf.ts (237 LOC)
+**What it does:** Standalone A4 portrait class result sheet, individual student card, CSV marks export, grade-analysis PDF. Used by GradeSection's "Export PDF" + "Report Cards" buttons.
+**Key exports:**
+- `generateClassResultPDF(exam, className, results: LOCAL StudentResult[])` → void — portrait, students × subjects table.
+- `generateStudentResultPDF(exam, result: LOCAL StudentResult)` → void — portrait, subject table + summary.
+- `exportMarksCSV(exam, className, subjectName, marks[])` → void.
+- `generateGradeAnalysisPDF(exam, data)` → void — summary + grade distribution + subject comparison tables.
+**Data deps:** Local `StudentResult` interface (defined inline, **diverges from canonical types.ts** — uses `name` not `studentName`, `obtained` not `marksObtained`/`subjects`).
+**Missing/upgrades needed:**
+- **Does NOT accept `SchoolContextDTO`** — hardcodes "Demo School of Scholario". Should be refactored to take school context.
+- Divergent `StudentResult` type creates friction with canonical type. Should be replaced by `import { StudentResult } from './types'`.
+- No page break logic for large classes (>40 students) in `generateClassResultPDF`.
+- No co-scholastic / attendance / remarks blocks in individual card.
+
+### 4. seating-pdf.ts (131 LOC) — **DEAD CODE**
+**What it does:** Newer bench-layout seating PDF using `SeatingPlan`, `ExamSlot`, `InvigilationAssignment` types from `@/lib/exams/seating/types`. Renders benches (rows × cols × seatingType) with student name/roll/class per seat, invigilator info, "INVIGILATOR DESK" marker.
+**Key exports:** `generateSeatingPlanPDF(exam, plan: SeatingPlan, examSlots?: ExamSlot[], invigilators?: InvigilationAssignment[])` → void.
+**Status:** NOT imported anywhere in src/. The active `generateSeatingPlanPDF` is in `pdf.ts` (simpler room-grouped table).
+**Missing/upgrades needed:** Either delete, or wire this richer version into `seating-section.tsx` and `workspace-sections-extended.tsx` instead of the simpler `pdf.ts` version. Also hardcodes "Demo School of Scholario".
+
+### 5. schedule-pdf.ts (105 LOC)
+**What it does:** Landscape A4 examination timetable grid; shift times shown ONCE in header; cells show only subject + shift indicator.
+**Key exports:** `generateSchedulePDF(exam, timetable?: ConsolidatedTimetable)` → void.
+**Data deps:** `ConsolidatedTimetable` from `@/lib/exams/schedule/consolidate`, `formatDateLong` from format-helpers.
+**Missing:** Hardcodes "Demo School of Scholario". No room/invigilator column (by design — separate PDFs). No school logo.
+
+### 6. collapsible-section.tsx (117 LOC)
+**Props:** `title?: string`, `subtitle?: string`, `actions?: ReactNode`, `accent?: 'default'|'emerald'|'amber'|'rose'|'sky'|'violet'`, `defaultOpen?: boolean` (default true), `open?: boolean` (controlled), `onOpenChange?: (open: boolean) => void`, `children: ReactNode`, `className?: string`, `headerClassName?: string`.
+**Behaviour:** Compact header (10px uppercase title, 9px subtitle, right-side actions + chevron toggle). Uses `useId()` for `aria-controls`. Keyboard accessible (Enter/Space via `<button>`). Accent renders as left-border colour. No icon prop, no collapse animation.
+
+### 7. types.ts (463 LOC) — type shapes
+- **AdmitCardStudent** = `{ id, name, rollNo: string|null, admissionNo: string|null, className, section: string|null, stream: string|null, photo: string|null, room: string|null, seatNumber: number|null, schedule: Array<{ id?, subjectId, subjectName, date, startTime, endTime, room: string|null, seatNumber?: number|null, invigilatorName?: string|null }> }`
+- **AdmitCardConfigDTO** = `{ showPhoto, showRollNumber, showRoom, showSeatNumber, showTimetable, showInstructions, showQrCode }` — 7 booleans.
+- **ReportCardConfigDTO** = `{ showAttendance, showRank, showPercentage, showGrade, showCoScholastic, showRemarks, showClassTeacherSign, showPrincipalSign }` — 8 booleans.
+- **StudentResult** = `{ studentId, studentName, rollNo: string|null, className, classId, subjects: SubjectResult[], totalObtained, totalMax, percentage, grade, gradeColor, passed, subjectsPassed, subjectsCount, isAbsentInAll, rank: number|null }`
+- **SubjectResult** = `{ subjectId, subjectName, maxMarks, passMarks, marksObtained: number|null, status: MarkStatus, isAbsent, passed, percentage }`
+- **ExamAnalyticsDTO** = `{ totalStudents, passed, failed, passRate, averagePercentage, highestPercentage, lowestPercentage, gradeDistribution: Record<string,number>, subjectPerformance: Array<{ subjectId, subjectName, averagePercentage, averageMarks, entered, total }>, toppers: Array<{ rank, studentId, name, rollNo, className, percentage, total, maxTotal, grade }> }`
+- **ClassResultsDTO** (in `use-exams.ts`, NOT types.ts) = `{ students: StudentDTO[], subjects: ExamDTO['subjects'], marks: ExamMarkDTO[], results: StudentResult[], analytics: ExamAnalyticsDTO }`
+- **SchoolContextDTO** = `{ schoolId, schoolName, schoolCode, address: string|null, city: string|null, phone: string|null, email: string|null, logoUrl: string|null, academicYear: string|null, board: Board }`
+- **SeatAssignmentDTO** = `{ id, examId, classId, className, studentId, studentName, studentRollNo: string|null, room, seatNumber, row: number|null, column: number|null }`
+- **DEFAULT_GRADE_BOUNDARIES**: 7 grades — A1(90,emerald), A2(80,emerald), B1(70,sky), B2(60,amber), C1(50,orange), C2(33,rose), E(0,rose).
+- `getGradeForPercentage(pct, scale?: GradeScaleRow[])` → `{ grade: string, color: string }`.
+
+### 8. mock-marks-data.ts (461 LOC) — `useMockMarksStore` (zustand)
+- State: `marks: ExamMarkDTO[]`, `declaredClassIds: string[]`, `publishedClassIds: string[]`, `timeline: PaperTimelineEvent[]`.
+- Methods: `initMarks(exam, students)` (seeds demo for Classes 9-12: subj[0,1]=LOCKED, subj[2]=VERIFIED, subj[3]=SUBMITTED, rest=DRAFT; random marks 50-90%), `setMark`, `getMarks`, `submitMarks`, `verifyMarks`, `lockMarks`, `unlockMarks(reason)`, `applyGrace(markId, grace, reason)`, `declareClass`, `publishClass`, `getPaperStatus`, `isClassReady`, `allLocked`, `getPaperTimeline`, `pushTimeline`.
+- Records audit events on every workflow transition (submit/verify/lock/unlock/declare/publish).
+
+### 9. mock-attendance-data.ts (319 LOC) — `useMockAttendanceStore`
+- State: `records: ExamAttendanceRecord[]`, `sessions: ExamSession[]`.
+- Methods: `initAttendance(exam, students)` (auto-assigns invigilators via invigilator store; one session per `scheduleItemId`; deterministic seat numbers A01/A02/...), `markStatus`, `markAllPresent`, `submitSession(sessionId, byRole, byName)` (blocked if any NOT_MARKED), `reviewSession`, `getSessionRecords`.
+- Exports: `computeGateStatus(session)` → 'Scheduled'|'Ready'|'In Progress'|'Submitted'|'Reviewed' (30-min gate); `computeAttendanceOpenAt(session)`.
+
+### 10. mock-outcomes-data.ts (295 LOC) — `useMockOutcomesStore`
+- State: `outcomes: StudentOutcome[]`.
+- Methods: `initOutcomes(exam)` (auto-computes from marks), `computeForClass(examId, classId)`, `overrideOutcome(examId, studentId, outcome, reason)`, `getOutcomes(examId, classId)`.
+- Rules: 0 fails → PROMOTED; 1 fail → COMPARTMENT; 2 fails → RETEST; 3+ fails → NOT_PROMOTED; absent in all → NOT_PROMOTED.
+- `StudentOutcome` shape mirrors `ResultOutcomeDTO` (id, examId, studentId, studentName, studentRollNo, classId, className, outcome, reason, overrideBy, notes, percentage, grade, passed, subjectsFailed, subjectsCount, isAbsentInAll, createdAt, updatedAt).
+
+### 11. mock-invigilator-data.ts (189 LOC) — `useMockInvigilatorStore`
+- State: `teachers: InvigilatorTeacher[]` (10 seeded with Indian names + departments — T-RAJESH Math, T-PRIYA English, T-IYER Physics, etc.), `duties: InvigilatorDuty[]`.
+- Methods: `assignDuty`, `autoAssignForExam(exam)` (round-robin across schedule), `getExamDuties(examId)`, `findInvigilator(examId, scheduleItemId)`, `acceptDuty(dutyId)`, `markDutySubmitted(examId, scheduleItemId)`.
+- Duty status flow: ASSIGNED → ACCEPTED → SUBMITTED.
+- `pickRoomName`: deterministic from classId+idx; rooms = ['Room A','Room B','Room C','Room D','Hall 1','Hall 2'].
+
+### 12. exam-workspace.tsx GradeSection (lines 1876–2350)
+**Analytics computation patterns to reuse:**
+- `gradeData = useMemo(...)` → `{ distribution, totalStudents, passedCount, failedCount, absentCount, highestPct, lowestPct, avgPct }`. Filters marks by `filterClass`/`filterSubject`; iterates student IDs from `allMarks`; computes per-student % from subjects of their class; applies `getGradeForPercentage(pct, [])`.
+- `subjectComparison = useMemo(...)` → `Array<{ subjectName, className, classId, subjectId, distribution: Record<string,number>, total }>` — per (class × subject) grade distribution.
+- `studentPerformance = useMemo(...)` → `Array<{ studentId, studentName, rollNo, className, totalObtained, totalMax, percentage, grade, passed, subjectsFailed, rank }>` — sorted desc by %, rank = i+1.
+- `filteredStudentPerformance` — drill-down by `selectedGrade` from donut click.
+- Grade scale: hardcoded `DEFAULT_GRADE_BOUNDARIES` (NOT `useGradeScales()` — opportunity to upgrade).
+- Buttons: "Export PDF" → `generateGradeAnalysisPDF(exam, {...})`; "Report Cards" → `generateClassResultPDF(exam, className, studentPerformance mapped to local result-pdf StudentResult with subjects: [])`.
+- Sub-components: `GradeDonut`, `SubjectDrillDownModal` (heatmap), donut drill-down.
+
+### 13. use-exam-settings.ts (333 LOC)
+- `useAdmitCardConfig()` → `{ config: AdmitCardConfigDTO|null, loading, reload, save(partial) }`. Defaults: `showPhoto: false, showRollNumber: true, showRoom: true, showSeatNumber: true, showTimetable: true, showInstructions: true, showQrCode: false`.
+- `useReportCardConfig()` → `{ config: ReportCardConfigDTO|null, loading, reload, save(partial) }`. Defaults: all true except `showCoScholastic: false`.
+- `useExamTypes()`, `useGradeScales()`, `useExamRules()` — all with mock-mode fallbacks to constants.
+- All `save()` calls catch errors and update local state (mock mode).
+
+### Other findings
+- **Public result / admit card verification page:** NONE. `src/app/` has only 4 non-api files. No `/verify-result/[token]`, `/admit-card/[token]`, `/parent/result` route. Student `results.tsx` is a standalone mock UI.
+- **Existing PDF functions table:**
+  | Function | File | Returns | Notes |
+  |---|---|---|---|
+  | `generateClassGradeSheetPDF` | pdf.ts | `{ filename, blobUrl }` | landscape, takes SchoolContextDTO |
+  | `generateStudentReportCardPDF` | pdf.ts | `{ filename, blobUrl }` | portrait, takes ReportCardConfigDTO |
+  | `generateBatchAdmitCardPDF` | pdf.ts | `{ filename, blobUrl }` | one page/student; showQrCode flag ignored |
+  | `generateSeatingPlanPDF` (active) | pdf.ts | `{ filename, blobUrl }` | room-grouped table |
+  | `generateSeatingPlanPDF` (dead) | seating-pdf.ts | void | bench layout, NOT imported |
+  | `generateClassResultPDF` | result-pdf.ts | void | hardcodes school name |
+  | `generateStudentResultPDF` | result-pdf.ts | void | hardcodes school name |
+  | `exportMarksCSV` | result-pdf.ts | void | CSV download |
+  | `generateGradeAnalysisPDF` | result-pdf.ts | void | summary + dist + subject cmp |
+  | `generateSchedulePDF` | schedule-pdf.ts | void | hardcodes school name |
+- **Reused default config fallback** is duplicated in THREE places: `reports-tab.tsx` (DEFAULT_ADMIT/DEFAULT_REPORT local consts), `workspace-sections-extended.tsx::SeatingSection` (DEFAULT_ADMIT), `use-exam-settings.ts` (DEFAULT_ADMIT_CARD_CONFIG/DEFAULT_REPORT_CARD_CONFIG). Should be consolidated.
+- **AdmitCardStudent.schedule** has `seatNumber?: number|null` and `invigilatorName?: string|null` fields, but `ReportsTab.handleReport` does NOT populate them from the seating plan or invigilator store — both stay null/undefined.
+- `ReportsTab` does not offer class-batch admit card export (only single-student). Batch button lives separately in `workspace-sections-extended.tsx::SeatingSection` — UI fragmentation.
+
+---
+Task ID: reports-redesign-phase-1
+Agent: main (Super Z)
+Task: Redesign Reports tab as Examination Intelligence, Analytics & Official Records Center
+
+Work Log:
+- Performed comprehensive audit of existing Reports tab, Admit Card system, and PDF utilities via subagent.
+- Created shared analytics utility (src/lib/exams/analytics.ts) with computeStudentResults, computeExamAnalytics, computeSubjectPerformance, computeClassPerformance — all derived from canonical marks data.
+- Completely rebuilt reports-tab.tsx as a professional 5-section Examination Intelligence Center:
+  1. Results & Official Records: Student Report Card, Class Grade Sheet, Result PDF, Result Verification tiles + Result Summary table with 9 stats (total/appeared/absent/passed/failed/pass%/avg%/highest%/lowest%) + grade distribution chips.
+  2. Performance Analytics: Class Performance table (per-class: students/appeared/passed/failed/pass%/avg%/high%/low%), Subject Performance table (per-subject: entered/avg/high/low/pass/fail/absent/pass% with color-coded pass rate pills), Grade Distribution with gradient bars.
+  3. Attendance Reports: Room-wise Attendance table (date/subject/class/room/invigilator/students/present/absent/status), Invigilator Duty Report (invigilator/date/subject/class/room/students/status).
+  4. Examination Operations: Marks Submission & Evaluation Report (class/subject/teacher/entered/status with color-coded pills).
+  5. Documents — Admit Cards: Layout selector (1 per A4 / 2 per A4 paper-saving), Individual/Class/Entire Exam/Preview tiles, professional info banner.
+- All sections use CollapsibleSection (default collapsed except Results & Official Records).
+- All data consumed from canonical mock stores: useMockMarksStore, useMockAttendanceStore, useMockInvigilatorStore, useStudentsStore.
+- Added useEffect to initialize mock marks + attendance when Reports tab loads (so data is available without opening exam workspace first).
+- Professional filter bar: Examination selector, Class selector, Student selector, Status badges.
+- Empty states with icons for all tables.
+- VLM rated 9/10 — "excellent usability and visual clarity", "top-tier dashboard design", "polished and enterprise-ready".
+- Verified: Mid-Term exam shows 16 students, 9 passed, 7 failed, 56% pass rate, 63.3% avg, grade distribution B1:4 B2:8 C1:2 C2:2.
+- Verified: Class Performance table shows 6 classes with per-class stats.
+- Verified: Subject Performance table shows 32 subjects with per-subject stats including teacher names.
+- Verified: Grade Distribution shows gradient bars for all 7 grades.
+- Lint passes clean. No browser errors. Server status 200.
+
+---
+Task ID: reports-redesign-phase-2-admit-card
+Agent: main (Super Z)
+Task: Upgrade Admit Card generator with 1-per-A4 and 2-per-A4 modes
+
+Work Log:
+- Upgraded generateBatchAdmitCardPDF in pdf.ts with new `layout` parameter ('1' | '2'):
+  • 1-per-A4 mode (drawAdmitCardFull): Professional layout with school header, EXAMINATION ADMIT CARD banner, student identity (name, roll, class, stream, session, admission no), exam period dates, complete timetable with Day column (Subject | Date | Day | Time | Room | Seat), examination instructions (5 rules), signature lines (Student + Principal).
+  • 2-per-A4 mode (drawAdmitCardCompact): Paper-saving layout with two cards per page, compact school header, admit card banner, student info in two columns, compact timetable (5 columns, 6pt font), condensed instructions (1 line), signature lines. Dotted cutting line with ✂ scissors indicator at page midpoint.
+  • Dotted line: setDashPattern([2,2]) with grey color (150) and scissors emoji at center.
+  • Filename includes '_2x' suffix for 2-per-A4 mode.
+- Updated reports-tab.tsx to pass `admitLayout` parameter to generateBatchAdmitCardPDF.
+- Updated seating-section.tsx to pass '1' (default 1-per-A4) for backward compatibility.
+- Reports tab verified working:
+  • Unit Test 2: 24 students, 5 passed, 19 failed, 21% pass rate, grade distribution A2:1 B1:3 B2:5 C1:5 C2:4 E:6.
+  • Mid-Term: 16 students, 9 passed, 7 failed, 56% pass rate, grade distribution B1:4 B2:8 C1:2 C2:2.
+  • All 5 sections rendering with CollapsibleSection, professional filter bar, empty states.
+- VLM rated Reports tab 9/10 — "excellent usability and visual clarity", "top-tier dashboard design".
+- Lint passes clean on all modified files. No browser errors. Server status 200.
+
+Stage Summary:
+- Reports tab completely redesigned as Examination Intelligence, Analytics & Official Records Center.
+- 5 grouped sections: Results & Official Records, Performance Analytics, Attendance Reports, Examination Operations, Documents — Admit Cards.
+- Admit Card upgraded with professional 1-per-A4 and paper-saving 2-per-A4 modes.
+- All data from canonical mock stores (marks, attendance, invigilators, students) — no duplicate datasets.
+- Shared analytics utility (analytics.ts) created for reuse across Grade tab and Reports tab.
+- Performance: stable Zustand selectors, useMemo for all derivations, useEffect for data initialization.
