@@ -1,70 +1,86 @@
 'use client'
 
 /**
- * fees-shared — Shared primitives for the Fee Management workspace.
+ * salary-shared — Shared primitives for the Salary & Payroll workspace.
  *
- * - FeeTab type
- * - FeeKpiCard (clickable KPI)
- * - FeeStat (compact stat block)
- * - FeePill (status/mode pill)
- * - FeePanel (rounded card container)
- * - FeeEmptyState
- * - ModeIcon + mode accent helpers
+ * - SalaryTab type
+ * - SalaryKpiCard (soft tinted backgrounds, Students & Classes style)
+ * - SalaryPanel (rounded card container)
+ * - SalaryStat (compact stat block)
+ * - SalaryStatusBadge (with dot indicator)
+ * - SalaryEmptyState
+ * - Helpers for department/type accents
  */
 
 import { motion } from 'framer-motion'
-import {
-  Smartphone, CreditCard, Building2, Banknote, FileText, Wallet, ArrowRight,
-} from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { PaymentMode } from '@/lib/store/fee-store'
+import type { PayrollStatus, EmployeeStatus, AdjustmentStatus } from '@/lib/store/salary-store'
 
 // ─── Tab type ────────────────────────────────────────────────────────
 
-export type FeeTab =
+export type SalaryTab =
   | 'overview'
-  | 'collections'
-  | 'accounts'
+  | 'payroll'
+  | 'employees'
   | 'structures'
-  | 'dues'
-  | 'transactions'
-  | 'approvals'
+  | 'adjustments'
+  | 'payslips'
+  | 'history'
   | 'reports'
-  | 'settings'
 
-// ─── Mode icon/accent ────────────────────────────────────────────────
+// ─── Status accents ──────────────────────────────────────────────────
 
-export function ModeIcon({ mode, className }: { mode: PaymentMode; className?: string }) {
-  switch (mode) {
-    case 'UPI': return <Smartphone className={className} />
-    case 'Card': return <CreditCard className={className} />
-    case 'Net Banking': return <Building2 className={className} />
-    case 'Cash': return <Banknote className={className} />
-    case 'Cheque': return <FileText className={className} />
-    case 'Bank Transfer': return <Wallet className={className} />
+export function payrollStatusAccent(status: PayrollStatus): string {
+  switch (status) {
+    case 'Paid': case 'Locked': return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+    case 'Approved': return 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
+    case 'Calculated': return 'bg-violet-500/10 text-violet-700 dark:text-violet-300'
+    case 'Needs Review': case 'On Hold': return 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+    case 'Processing': return 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'
+    case 'Failed': case 'Cancelled': return 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+    case 'Draft': default: return 'bg-muted text-muted-foreground'
   }
 }
 
-export function modeAccent(mode: PaymentMode): string {
-  switch (mode) {
-    case 'UPI': return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-emerald-500/20'
-    case 'Card': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/20'
-    case 'Net Banking': return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 ring-cyan-500/20'
-    case 'Cash': return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 ring-rose-500/20'
-    case 'Cheque': return 'bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-violet-500/20'
-    case 'Bank Transfer': return 'bg-sky-500/10 text-sky-600 dark:text-sky-400 ring-sky-500/20'
+export function employeeStatusAccent(status: EmployeeStatus): string {
+  switch (status) {
+    case 'Active': return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+    case 'On Leave': return 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+    case 'Suspended': case 'Resigned': case 'Terminated': return 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+    case 'Retired': case 'Inactive': return 'bg-muted text-muted-foreground'
   }
 }
 
-export function statusAccent(status: string): string {
-  if (status === 'Success' || status === 'Paid' || status === 'Confirmed by Principal') return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-  if (status === 'Pending' || status === 'Partially Paid' || status === 'Collected by Teacher') return 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-  if (status === 'Under Verification' || status === 'Clarification Requested') return 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
-  if (status === 'Overdue' || status === 'Failed' || status === 'Rejected') return 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
-  return 'bg-muted text-muted-foreground'
+export function adjustmentStatusAccent(status: AdjustmentStatus): string {
+  switch (status) {
+    case 'Approved': case 'Paid': return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+    case 'Pending': return 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+    case 'Rejected': return 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+  }
 }
 
-// ─── FeeKpiCard ──────────────────────────────────────────────────────
+// ─── Department colors ───────────────────────────────────────────────
+
+const DEPT_COLORS: Record<string, string> = {
+  'Administration': 'oklch(0.55 0.14 162)',
+  'Science': 'oklch(0.55 0.14 162)',
+  'Mathematics': 'oklch(0.65 0.16 75)',
+  'Languages': 'oklch(0.6 0.18 300)',
+  'Social Sciences': 'oklch(0.7 0.15 200)',
+  'Computer Science': 'oklch(0.55 0.16 250)',
+  'Commerce': 'oklch(0.6 0.15 60)',
+  'Arts & Sports': 'oklch(0.62 0.2 25)',
+  'Finance': 'oklch(0.7 0.15 200)',
+  'Transport': 'oklch(0.6 0.18 140)',
+  'Support': 'oklch(0.65 0.14 250)',
+}
+
+export function deptColor(dept: string): string {
+  return DEPT_COLORS[dept] ?? 'oklch(0.6 0.01 250)'
+}
+
+// ─── SalaryKpiCard ───────────────────────────────────────────────────
 
 interface KpiProps {
   icon: React.ReactNode
@@ -76,8 +92,6 @@ interface KpiProps {
   delay?: number
 }
 
-// Soft tinted backgrounds matching the Students & Classes module's KPI design.
-// Each accent has a soft pastel card background, semantic icon chip, and subtle border.
 const ACCENT_MAP: Record<KpiProps['accent'], { bg: string; ring: string; hover: string; cardBg: string; cardBorder: string }> = {
   emerald: { bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300', ring: 'ring-emerald-500/20', hover: 'hover:shadow-emerald-500/20', cardBg: 'bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06]', cardBorder: 'border-emerald-500/20' },
   rose: { bg: 'bg-rose-500/15 text-rose-700 dark:text-rose-300', ring: 'ring-rose-500/20', hover: 'hover:shadow-rose-500/20', cardBg: 'bg-rose-500/[0.04] dark:bg-rose-500/[0.06]', cardBorder: 'border-rose-500/20' },
@@ -87,7 +101,7 @@ const ACCENT_MAP: Record<KpiProps['accent'], { bg: string; ring: string; hover: 
   cyan: { bg: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300', ring: 'ring-cyan-500/20', hover: 'hover:shadow-cyan-500/20', cardBg: 'bg-cyan-500/[0.04] dark:bg-cyan-500/[0.06]', cardBorder: 'border-cyan-500/20' },
 }
 
-export function FeeKpiCard({ icon, label, value, sub, accent, onClick, delay = 0 }: KpiProps) {
+export function SalaryKpiCard({ icon, label, value, sub, accent, onClick, delay = 0 }: KpiProps) {
   const a = ACCENT_MAP[accent]
   return (
     <motion.button
@@ -103,7 +117,6 @@ export function FeeKpiCard({ icon, label, value, sub, accent, onClick, delay = 0
         onClick && 'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
       )}
     >
-      {/* subtle top-right glow */}
       <div className={cn('absolute -top-6 -right-6 h-16 w-16 rounded-full blur-2xl opacity-30', a.bg)} aria-hidden />
       <div className="relative flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -122,7 +135,7 @@ export function FeeKpiCard({ icon, label, value, sub, accent, onClick, delay = 0
   )
 }
 
-// ─── FeePanel (rounded card container) ───────────────────────────────
+// ─── SalaryPanel ─────────────────────────────────────────────────────
 
 interface PanelProps {
   title?: string
@@ -133,7 +146,7 @@ interface PanelProps {
   bodyClassName?: string
 }
 
-export function FeePanel({ title, subtitle, action, children, className, bodyClassName }: PanelProps) {
+export function SalaryPanel({ title, subtitle, action, children, className, bodyClassName }: PanelProps) {
   return (
     <div className={cn('rounded-xl border border-border bg-card overflow-hidden', className)}>
       {(title || action) && (
@@ -150,7 +163,7 @@ export function FeePanel({ title, subtitle, action, children, className, bodyCla
   )
 }
 
-// ─── FeeStat (compact stat block) ────────────────────────────────────
+// ─── SalaryStat ──────────────────────────────────────────────────────
 
 interface StatProps {
   label: string
@@ -160,7 +173,7 @@ interface StatProps {
   className?: string
 }
 
-export function FeeStat({ label, value, sub, accent = 'default', className }: StatProps) {
+export function SalaryStat({ label, value, sub, accent = 'default', className }: StatProps) {
   const accentMap = {
     default: '',
     emerald: 'text-emerald-600',
@@ -176,19 +189,38 @@ export function FeeStat({ label, value, sub, accent = 'default', className }: St
   )
 }
 
-// ─── FeePill ─────────────────────────────────────────────────────────
+// ─── Status badges ───────────────────────────────────────────────────
 
-export function FeePill({ children, accent, className }: { children: React.ReactNode; accent?: string; className?: string }) {
+export function PayrollStatusBadge({ status }: { status: PayrollStatus }) {
   return (
-    <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap', accent, className)}>
-      {children}
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap', payrollStatusAccent(status))}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+      {status}
     </span>
   )
 }
 
-// ─── FeeEmptyState ───────────────────────────────────────────────────
+export function EmployeeStatusBadge({ status }: { status: EmployeeStatus }) {
+  return (
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap', employeeStatusAccent(status))}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+      {status}
+    </span>
+  )
+}
 
-export function FeeEmptyState({ icon, title, description, action }: { icon: React.ReactNode; title: string; description?: string; action?: React.ReactNode }) {
+export function AdjustmentStatusBadge({ status }: { status: AdjustmentStatus }) {
+  return (
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap', adjustmentStatusAccent(status))}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+      {status}
+    </span>
+  )
+}
+
+// ─── SalaryEmptyState ────────────────────────────────────────────────
+
+export function SalaryEmptyState({ icon, title, description, action }: { icon: React.ReactNode; title: string; description?: string; action?: React.ReactNode }) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.98 }}
@@ -205,24 +237,11 @@ export function FeeEmptyState({ icon, title, description, action }: { icon: Reac
   )
 }
 
-// ─── FeeStatusBadge (with dot indicator) ─────────────────────────────
+// ─── Reduced motion styles ────────────────────────────────────────────
 
-export function FeeStatusBadge({ status }: { status: string }) {
-  return (
-    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold', statusAccent(status))}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
-      {status}
-    </span>
-  )
-}
-
-// ─── Reduced motion + print styles ──────────────────────────────────
-// Honour the user's preference for reduced motion across the fees workspace.
-// Framer Motion's `motion` components respect this automatically when
-// MotionConfig is used; we additionally suppress transitions via CSS.
-export const FEES_GLOBAL_STYLES = `
+export const SALARY_GLOBAL_STYLES = `
 @media (prefers-reduced-motion: reduce) {
-  .fees-shell * {
+  .salary-shell * {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

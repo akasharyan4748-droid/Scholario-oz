@@ -20,7 +20,7 @@
  */
 
 import { motion } from 'framer-motion'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useId } from 'react'
 import { cn } from '@/lib/utils'
 import { formatINR } from '@/lib/format'
 
@@ -37,22 +37,44 @@ export function MiniAreaChart({ data, height = 120, format = (n) => formatINR(n,
   const max = Math.max(...data.map((d) => d.collected), 1)
   const w = 100
   const h = height
-  const pad = 8
+  const pad = 10
   const points = data.map((d, i) => ({
     x: pad + (i / Math.max(1, data.length - 1)) * (w - 2 * pad),
     y: h - pad - (d.collected / max) * (h - 2 * pad),
     d,
   }))
-  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')
-  const areaPath = `${path} L${points[points.length - 1].x.toFixed(2)},${h - pad} L${points[0].x.toFixed(2)},${h - pad} Z`
-  const uid = 'area' + Math.random().toString(36).slice(2, 7)
+
+  // Build a smooth cubic bezier path through the points (Catmull-Rom → Bezier).
+  const smoothPath = useMemo(() => {
+    if (points.length < 2) return ''
+    const pts = points
+    let path = `M ${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i === 0 ? 0 : i - 1]
+      const p1 = pts[i]
+      const p2 = pts[i + 1]
+      const p3 = pts[i + 2 >= pts.length ? pts.length - 1 : i + 2]
+      const cp1x = p1.x + (p2.x - p0.x) / 6
+      const cp1y = p1.y + (p2.y - p0.y) / 6
+      const cp2x = p2.x - (p3.x - p1.x) / 6
+      const cp2y = p2.y - (p3.y - p1.y) / 6
+      path += ` C ${cp1x.toFixed(2)},${cp1y.toFixed(2)} ${cp2x.toFixed(2)},${cp2y.toFixed(2)} ${p2.x.toFixed(2)},${p2.y.toFixed(2)}`
+    }
+    return path
+  }, [points])
+  const areaPath = useMemo(() => {
+    if (!smoothPath) return ''
+    return `${smoothPath} L ${points[points.length - 1].x.toFixed(2)},${h - pad} L ${points[0].x.toFixed(2)},${h - pad} Z`
+  }, [smoothPath, points, h, pad])
+  const uid = useId().replace(/:/g, '')
 
   return (
     <div className="relative w-full" style={{ height }}>
       <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
         <defs>
           <linearGradient id={`${uid}-fill`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="oklch(0.55 0.14 162)" stopOpacity="0.25" />
+            <stop offset="0%" stopColor="oklch(0.55 0.14 162)" stopOpacity="0.28" />
+            <stop offset="60%" stopColor="oklch(0.55 0.14 162)" stopOpacity="0.08" />
             <stop offset="100%" stopColor="oklch(0.55 0.14 162)" stopOpacity="0" />
           </linearGradient>
           <linearGradient id={`${uid}-stroke`} x1="0" y1="0" x2="1" y2="0">
@@ -60,49 +82,51 @@ export function MiniAreaChart({ data, height = 120, format = (n) => formatINR(n,
             <stop offset="100%" stopColor="oklch(0.6 0.16 200)" />
           </linearGradient>
         </defs>
-        {/* horizontal grid lines */}
-        {[0.25, 0.5, 0.75].map((p) => (
-          <line key={p} x1={pad} x2={w - pad} y1={pad + (h - 2 * pad) * p} y2={pad + (h - 2 * pad) * p}
-            stroke="currentColor" className="text-muted-foreground/10" strokeWidth={0.2} strokeDasharray="0.5 0.5" />
-        ))}
+        {/* single subtle baseline grid line at 50% */}
+        <line x1={pad} x2={w - pad} y1={pad + (h - 2 * pad) * 0.5} y2={pad + (h - 2 * pad) * 0.5}
+          stroke="currentColor" className="text-muted-foreground/8" strokeWidth={0.2} strokeDasharray="1 1" />
         <motion.path
           d={areaPath}
           fill={`url(#${uid}-fill)`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
+          transition={{ duration: 0.7, delay: 0.2 }}
         />
         <motion.path
-          d={path}
+          d={smoothPath}
           fill="none"
           stroke={`url(#${uid}-stroke)`}
-          strokeWidth={1.5}
+          strokeWidth={1.8}
           strokeLinecap="round"
           strokeLinejoin="round"
           initial={{ pathLength: 0 }}
           animate={{ pathLength: 1 }}
-          transition={{ duration: 0.8, ease: 'easeInOut' }}
+          transition={{ duration: 1, ease: 'easeInOut' }}
         />
         {/* hover dots */}
         {points.map((p, i) => (
           <g key={i}>
             <rect
-              x={p.x - 4} y={0} width={8} height={h} fill="transparent"
+              x={p.x - 5} y={0} width={10} height={h} fill="transparent"
               onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}
             />
             <circle
-              cx={p.x} cy={p.y} r={hover === i ? 2 : 1.2}
-              fill={hover === i ? 'oklch(0.55 0.14 162)' : 'white'}
-              stroke="oklch(0.55 0.14 162)" strokeWidth={1}
+              cx={p.x} cy={p.y} r={hover === i ? 2.5 : 0}
+              fill="oklch(0.55 0.14 162)"
+              stroke="white" strokeWidth={1}
               className="transition-all"
+              style={{ opacity: hover === i ? 1 : 0 }}
             />
+            {hover === i && (
+              <line x1={p.x} y1={p.y} x2={p.x} y2={h - pad} stroke="oklch(0.55 0.14 162)" strokeWidth={0.3} strokeDasharray="1 1" opacity={0.4} />
+            )}
           </g>
         ))}
       </svg>
       {/* x-axis labels */}
-      <div className="absolute inset-x-0 bottom-0 flex justify-between px-2 text-[8px] text-muted-foreground/60 pointer-events-none">
+      <div className="absolute inset-x-0 bottom-0 flex justify-between px-2 text-[9px] text-muted-foreground/70 pointer-events-none font-medium">
         {data.map((d, i) => (
-          <span key={i}>{d.month}</span>
+          <span key={i} className={hover === i ? 'text-foreground' : ''}>{d.month}</span>
         ))}
       </div>
       {/* tooltip */}
@@ -110,11 +134,16 @@ export function MiniAreaChart({ data, height = 120, format = (n) => formatINR(n,
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute z-10 pointer-events-none rounded-md bg-popover border border-border shadow-md px-2 py-1 text-[10px] -translate-x-1/2"
-          style={{ left: `${(points[hover].x / w) * 100}%`, top: 0 }}
+          className="absolute z-10 pointer-events-none rounded-md bg-popover border border-border shadow-md px-2 py-1.5 text-[10px] -translate-x-1/2 min-w-[80px]"
+          style={{ left: `${(points[hover].x / w) * 100}%`, top: -4 }}
         >
-          <p className="font-semibold">{data[hover].month}</p>
-          <p className="text-emerald-600 tabular-nums">{format(data[hover].collected)}</p>
+          <p className="font-semibold text-foreground">{data[hover].month}</p>
+          <p className="text-emerald-600 tabular-nums font-bold">{format(data[hover].collected)}</p>
+          {hover > 0 && data[hover - 1].collected > 0 && (
+            <p className="text-[9px] text-muted-foreground tabular-nums mt-0.5">
+              {data[hover].collected >= data[hover - 1].collected ? '↑' : '↓'} {format(Math.abs(data[hover].collected - data[hover - 1].collected))} vs {data[hover - 1].month}
+            </p>
+          )}
         </motion.div>
       )}
     </div>
@@ -135,7 +164,19 @@ interface DonutProps {
 export function MiniDonut({ data, size = 140, thickness = 16, centerLabel, centerValue, onSelect }: DonutProps) {
   const [hover, setHover] = useState<number | null>(null)
   const [selected, setSelected] = useState<number | null>(null)
+
+  // Group segments smaller than 5% into "Other" to avoid rainbow wheel.
   const total = data.reduce((s, d) => s + d.value, 0)
+  const groupedData = useMemo(() => {
+    if (total === 0) return data
+    const threshold = 0.05 // 5%
+    const major = data.filter((d) => d.value / total >= threshold)
+    const minor = data.filter((d) => d.value / total < threshold)
+    if (minor.length <= 1) return data
+    const otherValue = minor.reduce((s, d) => s + d.value, 0)
+    return [...major, { name: 'Other', value: otherValue, color: 'oklch(0.6 0.01 250)' }]
+  }, [data, total])
+
   const r = (size - thickness) / 2
   const cx = size / 2
   const cy = size / 2
@@ -143,7 +184,7 @@ export function MiniDonut({ data, size = 140, thickness = 16, centerLabel, cente
 
   // Compute segment offsets via cumulative reduce — the accumulator is the running offset.
   const segmentData = useMemo(() => {
-    const computed = data.map((d, i) => ({
+    const computed = groupedData.map((d, i) => ({
       ...d,
       pct: total > 0 ? d.value / total : 0,
       index: i,
@@ -158,7 +199,7 @@ export function MiniDonut({ data, size = 140, thickness = 16, centerLabel, cente
       dashArray: circumference * c.pct,
       dashOffset: circumference - cumulative[i],
     }))
-  }, [data, total, circumference])
+  }, [groupedData, total, circumference])
 
   return (
     <div className="flex items-center gap-3">
@@ -188,9 +229,9 @@ export function MiniDonut({ data, size = 140, thickness = 16, centerLabel, cente
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           {hover !== null ? (
             <>
-              <p className="text-[10px] text-muted-foreground font-medium">{data[hover].name}</p>
-              <p className="text-sm font-bold tabular-nums">{formatINR(data[hover].value, true)}</p>
-              <p className="text-[9px] text-muted-foreground">{((data[hover].value / total) * 100).toFixed(1)}%</p>
+              <p className="text-[10px] text-muted-foreground font-medium">{groupedData[hover].name}</p>
+              <p className="text-sm font-bold tabular-nums">{formatINR(groupedData[hover].value, true)}</p>
+              <p className="text-[9px] text-muted-foreground">{((groupedData[hover].value / total) * 100).toFixed(1)}%</p>
             </>
           ) : (
             <>
@@ -202,7 +243,7 @@ export function MiniDonut({ data, size = 140, thickness = 16, centerLabel, cente
       </div>
       {/* Legend */}
       <div className="flex-1 space-y-1 min-w-0">
-        {data.map((d, i) => (
+        {groupedData.map((d, i) => (
           <button
             key={d.name}
             onMouseEnter={() => setHover(i)}
@@ -212,7 +253,8 @@ export function MiniDonut({ data, size = 140, thickness = 16, centerLabel, cente
           >
             <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
             <span className="text-[10px] font-medium truncate flex-1 text-left">{d.name}</span>
-            <span className="text-[10px] tabular-nums text-muted-foreground">{total > 0 ? ((d.value / total) * 100).toFixed(0) : 0}%</span>
+            <span className="text-[9px] tabular-nums text-muted-foreground">{formatINR(d.value, true)}</span>
+            <span className="text-[10px] tabular-nums text-muted-foreground w-8 text-right">{total > 0 ? ((d.value / total) * 100).toFixed(0) : 0}%</span>
           </button>
         ))}
       </div>
