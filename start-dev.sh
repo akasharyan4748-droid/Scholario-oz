@@ -1,11 +1,9 @@
 #!/bin/bash
-# Auto-restart dev server with signal trapping
-trap '' SIGHUP SIGTERM
+# Dev server startup script — uses node directly (not bun) because bun
+# exits after ~14 seconds in this sandbox environment.
 cd /home/z/my-project
 while true; do
-  env NODE_OPTIONS="--max-old-space-size=256" bun run dev >> dev.log 2>&1 &
-  PID=$!
-  wait $PID 2>/dev/null
-  echo "[watchdog] Server died at $(date), restarting in 2s..." >> dev.log
+  node /home/z/my-project/node_modules/.bin/next dev -p 3000 >> dev.log 2>&1
+  echo "[watchdog] Server exited at $(date), restarting in 2s..." >> dev.log
   sleep 2
 done
