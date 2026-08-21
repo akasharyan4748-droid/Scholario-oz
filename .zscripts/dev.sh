@@ -173,5 +173,9 @@ start_mini_services
 echo "Next.js dev server is running in background (PID: $DEV_PID)."
 echo "Use 'kill $DEV_PID' to stop it."
 disown "$DEV_PID" 2>/dev/null || true
+
+# Start keepalive to prevent sandbox from killing idle dev server
+nohup bash "$SCRIPT_DIR/keepalive.sh" > /dev/null 2>&1 &
+disown
 # Unset DEV_PID so trap never affects it
 unset DEV_PID
