@@ -33,7 +33,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useFeeStore, type PaymentMode, type StudentFeeAccount } from '@/lib/store/fee-store'
-import { useStudentsStore as useCanonicalStudents } from '@/lib/store/students-store'
+import { useStudentsStore } from '@/lib/store/students-store'
 import { formatINR } from '@/lib/format'
 import { ModeIcon, modeAccent, FeeStatusBadge } from './fees-shared'
 import { ReceiptPreview, downloadReceiptHTML, printReceipt } from './fees-receipt'
@@ -55,7 +55,7 @@ const PURPOSE_OPTIONS = [
 ]
 
 export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, onRecorded }: Props) {
-  const students = useCanonicalStudents((s) => s.students)
+  const students = useStudentsStore((s) => s.students)
   const recordPayment = useFeeStore((s) => s.recordPayment)
   const paymentModes = useFeeStore((s) => s.paymentModes)
   const receiptSettings = useFeeStore((s) => s.receiptSettings)

@@ -156,7 +156,7 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
         <FinancePanel
           title="Financial Health"
           subtitle="key ratios"
-          action={<HealthStatusBadge status={data.overallHealth} />}
+          action={<HealthStatusBadge status={data.overallHealth as 'Healthy' | 'Watch' | 'Attention'} />}
         >
           <div className="space-y-1.5">
             {data.healthMetrics.map((m, i) => (
@@ -169,9 +169,9 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
               >
                 <div>
                   <p className="text-[10px] text-muted-foreground">{m.label}</p>
-                  <p className={cn('text-xs font-bold tabular-nums', severityColor(m.severity))}>{m.value}</p>
+                  <p className={cn('text-xs font-bold tabular-nums', severityColor(m.severity as 'healthy' | 'watch' | 'attention'))}>{m.value}</p>
                 </div>
-                <span className={cn('text-[9px] font-semibold', severityColor(m.severity))}>{m.status}</span>
+                <span className={cn('text-[9px] font-semibold', severityColor(m.severity as 'healthy' | 'watch' | 'attention'))}>{m.status}</span>
               </motion.div>
             ))}
           </div>

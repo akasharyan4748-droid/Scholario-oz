@@ -197,7 +197,7 @@ function AddAdjustmentModal({ onClose, data }: { onClose: () => void; data: Retu
     }
     addAdjustment({
       employeeId, employeeName: employee.name, type, amount, reason,
-      effectivePeriod, status: 'Pending', submittedBy: 'Principal',
+      effectivePeriod, submittedBy: 'Principal',
     })
     toast.success('Adjustment added', { description: `${type} of ${formatINR(amount)} for ${employee.name} — pending approval.` })
     onClose()

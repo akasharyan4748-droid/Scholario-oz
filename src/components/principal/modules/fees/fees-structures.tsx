@@ -164,7 +164,7 @@ function AddFeeHeadForm({ structureId, onClose }: { structureId: string; onClose
       toast.error('Fill all fields', { description: 'Fee head name and amount are required.' })
       return
     }
-    addFeeHead(structureId, { name, amount, frequency, mandatory })
+    addFeeHead(structureId, { name, amount, frequency, mandatory, active: true })
     toast.success('Fee head added', { description: `${name} (${formatINR(amount, true)}) added to structure.` })
     onClose()
   }
