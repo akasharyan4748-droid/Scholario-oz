@@ -1,6 +1,6 @@
 #!/bin/bash
-# Dev server startup script — uses node directly (not bun) because bun
-# exits after ~14 seconds in this sandbox environment.
+# Auto-restart dev server using node directly (not bun, which exits after 14s)
+# This script keeps the server alive by restarting it whenever it dies.
 cd /home/z/my-project
 while true; do
   node /home/z/my-project/node_modules/.bin/next dev -p 3000 >> dev.log 2>&1
