@@ -1,0 +1,312 @@
+/**
+ * Finance store — single source of truth for the Finance Dashboard.
+ *
+ * Aggregates from:
+ *   - Fee Management (fee-store.ts) → Fee Revenue + Receivables
+ *   - Salary & Payroll (salary-store.ts) → Payroll Expense + Payables
+ *   - P&L data (mock/finance-dashboard.ts) → Operating expenses, other income
+ *   - Balance sheet data → Assets / Liabilities / Net Worth
+ *
+ * All dashboard numbers derive from this store — no independent hardcoding
+ * in different components. Numbers reconcile mathematically:
+ *   Revenue - Expenses = Net Surplus
+ *   Assets - Liabilities = Net Worth
+ *   Opening Cash + Cash In - Cash Out = Closing Cash
+ *   Budget - Actual = Variance
+ */
+
+import { useMemo } from 'react'
+import { useFeeData } from './fee-store'
+import { useSalaryData, calculatePayrollForEmployee } from './salary-store'
+import { formatINR } from '@/lib/format'
+import {
+  pnlData, balanceSheet, cashflow, financeStats,
+} from '@/lib/mock/finance-dashboard'
+
+// ─── Periods ─────────────────────────────────────────────────────────
+
+export interface FinancePeriod {
+  id: string
+  label: string
+  shortLabel: string
+  fiscalYear: string
+}
+
+export const FINANCE_PERIODS: FinancePeriod[] = [
+  { id: 'fy25-26', label: 'FY 2025–26', shortLabel: 'FY 25-26', fiscalYear: '2025-26' },
+  { id: 'fy24-25', label: 'FY 2024–25', shortLabel: 'FY 24-25', fiscalYear: '2024-25' },
+  { id: 'q1-26', label: 'Q1 2025-26', shortLabel: 'Q1', fiscalYear: '2025-26' },
+  { id: 'q2-26', label: 'Q2 2025-26', shortLabel: 'Q2', fiscalYear: '2025-26' },
+  { id: 'q3-26', label: 'Q3 2025-26', shortLabel: 'Q3', fiscalYear: '2025-26' },
+  { id: 'q4-26', label: 'Q4 2025-26', shortLabel: 'Q4', fiscalYear: '2025-26' },
+]
+
+// ─── Hook: useFinanceData ────────────────────────────────────────────
+
+export function useFinanceData(periodId: string = 'fy25-26') {
+  const feeData = useFeeData('2025-2026')
+  const salaryData = useSalaryData()
+
+  return useMemo(() => {
+    // ── Revenue ────────────────────────────────────────────────────
+    // Derive fee revenue from fee-store (collected amount).
+    const feeRevenue = feeData.analytics.totalCollected
+    const feeExpected = feeData.analytics.totalExpected
+    const feeOutstanding = feeData.analytics.totalOutstanding
+    const feeCollectionRate = feeData.analytics.collectionRate
+
+    // Other revenue (from P&L data: transport, admissions, donations, etc.)
+    // Excluding the tuition/fee income which is already in feeRevenue.
+    const otherIncomeItems = pnlData.filter((p) =>
+      p.type === 'income' &&
+      !p.category.toLowerCase().includes('tuition') &&
+      !p.category.toLowerCase().includes('transport fees')  // transport is in fee structure
+    )
+    const otherRevenue = otherIncomeItems.reduce((s, p) => s + p.amount, 0)
+
+    // For demo coherence, we use the canonical financeStats.monthlyRevenue
+    // for the trend chart and aggregate to fiscal-year totals.
+    const monthlyRevenue = financeStats.monthlyRevenue
+    const totalRevenue = monthlyRevenue.reduce((s, m) => s + m.revenue, 0)
+    const totalExpenses = monthlyRevenue.reduce((s, m) => s + m.expense, 0)
+    const netSurplus = totalRevenue - totalExpenses
+    const surplusMargin = totalRevenue > 0 ? Math.round((netSurplus / totalRevenue) * 1000) / 10 : 0
+
+    // ── Expenses ────────────────────────────────────────────────────
+    // Derive payroll expense from salary-store (current month calculated).
+    const monthlyPayroll = salaryData.analytics.monthlyPayroll
+    const annualizedPayroll = monthlyPayroll * 12
+
+    // Use P&L data expense breakdown for category analysis.
+    const expenseBreakdown = financeStats.expenseBreakdown
+    // Replace the salaries line with the canonical payroll-derived figure.
+    const payrollDerivedExpense = expenseBreakdown.map((e) =>
+      e.name === 'Salaries' ? { ...e, value: annualizedPayroll, label: 'Staff & Payroll' } : e
+    )
+
+    // ── Cash Position ──────────────────────────────────────────────
+    const cashAvailable = balanceSheet.find((b) => b.account === 'Cash & Bank Balance')?.amount ?? financeStats.cashOnHand
+    const monthlyOperatingExpense = totalExpenses / 12
+    const reserveCoverage = monthlyOperatingExpense > 0 ? Math.round((cashAvailable / monthlyOperatingExpense) * 10) / 10 : 0
+
+    // ── Cash Flow ───────────────────────────────────────────────────
+    const operatingNet = cashflow.filter((c) => c.activity === 'operating').reduce((s, c) => s + c.inflow - c.outflow, 0)
+    const investingNet = cashflow.filter((c) => c.activity === 'investing').reduce((s, c) => s + c.inflow - c.outflow, 0)
+    const financingNet = cashflow.filter((c) => c.activity === 'financing').reduce((s, c) => s + c.inflow - c.outflow, 0)
+    const netCashChange = operatingNet + investingNet + financingNet
+    const openingCash = cashAvailable - netCashChange
+    const closingCash = cashAvailable
+
+    // ── Balance Sheet ──────────────────────────────────────────────
+    const currentAssets = balanceSheet.filter((b) => b.type === 'asset' && b.category === 'Current Assets').reduce((s, b) => s + b.amount, 0)
+    const fixedAssets = balanceSheet.filter((b) => b.type === 'asset' && b.category === 'Fixed Assets').reduce((s, b) => s + b.amount, 0)
+    const totalAssets = currentAssets + fixedAssets
+    const currentLiabilities = balanceSheet.filter((b) => b.type === 'liability' && b.category === 'Current Liabilities').reduce((s, b) => s + b.amount, 0)
+    const longTermLiabilities = balanceSheet.filter((b) => b.type === 'liability' && b.category === 'Long-term Liabilities').reduce((s, b) => s + b.amount, 0)
+    const totalLiabilities = currentLiabilities + longTermLiabilities
+    const totalEquity = balanceSheet.filter((b) => b.type === 'equity').reduce((s, b) => s + b.amount, 0)
+    const netWorth = totalAssets - totalLiabilities
+
+    // ── Receivables ────────────────────────────────────────────────
+    const feeReceivables = feeOutstanding
+    const otherReceivables = balanceSheet.find((b) => b.account === 'Fees Receivable')?.amount ?? 0
+    const totalReceivables = feeReceivables + otherReceivables
+    const receivableStudentCount = feeData.analytics.pendingCount
+
+    // ── Payables ────────────────────────────────────────────────────
+    const payrollPayable = balanceSheet.find((b) => b.account === 'Salary Payable')?.amount ?? monthlyPayroll
+    const vendorPayables = balanceSheet.find((b) => b.account === 'Vendor Payables')?.amount ?? 0
+    const totalPayables = payrollPayable + vendorPayables + longTermLiabilities / 12 // monthly loan portion
+
+    // ── Budget vs Actual ────────────────────────────────────────────
+    const budgetData = financeStats.budgetVsActual.map((b) => {
+      // Override Salaries actual with payroll-derived figure
+      if (b.category === 'Salaries') {
+        return { ...b, actual: annualizedPayroll, category: 'Staff' }
+      }
+      return b
+    })
+    const totalBudget = budgetData.reduce((s, b) => s + b.budget, 0)
+    const totalActual = budgetData.reduce((s, b) => s + b.actual, 0)
+    const totalVariance = totalBudget - totalActual
+    const budgetUtilization = totalBudget > 0 ? Math.round((totalActual / totalBudget) * 1000) / 10 : 0
+
+    // ── Quarterly ──────────────────────────────────────────────────
+    const quarterly = financeStats.quarterlyRevExp.map((q) => ({
+      ...q,
+      surplus: q.revenue - q.expense,
+    }))
+    const quarterlySurplus = quarterly.map((q) => ({ quarter: q.quarter, surplus: q.surplus }))
+    const bestQuarter = quarterly.reduce((best, q) => q.surplus > best.surplus ? q : best, quarterly[0])
+    const lowestQuarter = quarterly.reduce((low, q) => q.surplus < low.surplus ? q : low, quarterly[0])
+
+    // ── Financial Health ───────────────────────────────────────────
+    const currentRatio = currentLiabilities > 0 ? Math.round((currentAssets / currentLiabilities) * 100) / 100 : 0
+    const debtToEquity = totalEquity > 0 ? Math.round((totalLiabilities / totalEquity) * 100) / 100 : 0
+    const operatingEfficiency = totalRevenue > 0 ? Math.round((totalExpenses / totalRevenue) * 1000) / 10 : 0
+    const collectionRate = feeCollectionRate
+
+    const healthMetrics = [
+      { label: 'Current Ratio', value: `${currentRatio.toFixed(2)}×`, status: currentRatio >= 2 ? 'Healthy' : currentRatio >= 1 ? 'Watch' : 'Attention', severity: currentRatio >= 2 ? 'healthy' : currentRatio >= 1 ? 'watch' : 'attention' },
+      { label: 'Debt to Equity', value: `${debtToEquity.toFixed(2)}×`, status: debtToEquity <= 0.5 ? 'Healthy' : debtToEquity <= 1 ? 'Watch' : 'Attention', severity: debtToEquity <= 0.5 ? 'healthy' : debtToEquity <= 1 ? 'watch' : 'attention' },
+      { label: 'Surplus Margin', value: `${surplusMargin}%`, status: surplusMargin >= 20 ? 'Healthy' : surplusMargin >= 10 ? 'Watch' : 'Attention', severity: surplusMargin >= 20 ? 'healthy' : surplusMargin >= 10 ? 'watch' : 'attention' },
+      { label: 'Operating Efficiency', value: `${operatingEfficiency}%`, status: operatingEfficiency <= 60 ? 'Healthy' : operatingEfficiency <= 75 ? 'Watch' : 'Attention', severity: operatingEfficiency <= 60 ? 'healthy' : operatingEfficiency <= 75 ? 'watch' : 'attention' },
+      { label: 'Reserve Coverage', value: `${reserveCoverage} months`, status: reserveCoverage >= 3 ? 'Healthy' : reserveCoverage >= 1 ? 'Watch' : 'Attention', severity: reserveCoverage >= 3 ? 'healthy' : reserveCoverage >= 1 ? 'watch' : 'attention' },
+      { label: 'Collection Rate', value: `${collectionRate}%`, status: collectionRate >= 85 ? 'Healthy' : collectionRate >= 70 ? 'Watch' : 'Attention', severity: collectionRate >= 85 ? 'healthy' : collectionRate >= 70 ? 'watch' : 'attention' },
+    ]
+    const overallHealth = healthMetrics.filter((m) => m.severity === 'attention').length > 0 ? 'Attention'
+      : healthMetrics.filter((m) => m.severity === 'watch').length > 0 ? 'Watch'
+      : 'Healthy'
+
+    // ── Alerts ────────────────────────────────────────────────────
+    const alerts: Array<{ id: string; title: string; description: string; severity: 'critical' | 'warning' | 'info'; action?: string }> = []
+    if (feeOutstanding > 1000000) {
+      alerts.push({ id: 'fee-outstanding', title: 'Outstanding Fees', description: `${formatINR(feeOutstanding, true)} pending from ${receivableStudentCount} students`, severity: 'warning', action: 'View Pending Dues' })
+    }
+    const techBudget = budgetData.find((b) => b.category === 'Tech')
+    if (techBudget && techBudget.actual > techBudget.budget) {
+      alerts.push({ id: 'tech-overrun', title: 'Technology Budget Exceeded', description: `${formatINR(techBudget.actual - techBudget.budget, true)} over budget`, severity: 'critical', action: 'View Budget' })
+    }
+    if (salaryData.analytics.pendingAdjustments > 0) {
+      alerts.push({ id: 'payroll-pending', title: 'Payroll Adjustments Pending', description: `${salaryData.analytics.pendingAdjustments} adjustments awaiting approval`, severity: 'warning', action: 'View Payroll' })
+    }
+    if (collectionRate < 85) {
+      alerts.push({ id: 'collection-low', title: 'Fee Collection Below Target', description: `${collectionRate}% collected — target 85%`, severity: 'warning', action: 'View Fee Management' })
+    }
+    if (reserveCoverage < 3) {
+      alerts.push({ id: 'reserve-low', title: 'Cash Reserve Below Target', description: `${reserveCoverage} months coverage — target 3+ months`, severity: 'info' })
+    }
+
+    // ── Recent Activity ────────────────────────────────────────────
+    const recentActivity: Array<{ id: string; date: string; type: 'income' | 'expense' | 'payroll' | 'adjustment'; description: string; amount: number; status: string }> = [
+      ...feeData.analytics.recentCollections.slice(0, 3).map((t) => ({
+        id: t.id, date: t.date, type: 'income' as const,
+        description: `Fee payment from ${t.studentName}`,
+        amount: t.amount, status: t.status,
+      })),
+      ...salaryData.audit.slice(0, 2).map((a) => ({
+        id: a.id, date: a.timestamp.split('T')[0], type: a.action.includes('payroll') ? 'payroll' as const : 'adjustment' as const,
+        description: a.description,
+        amount: 0, status: 'Recorded',
+      })),
+      // A couple of expense entries from P&L
+      { id: 'exp-1', date: '2025-11-28', type: 'expense', description: 'Vendor payment — Lab equipment supplier', amount: 840000, status: 'Paid' },
+      { id: 'exp-2', date: '2025-11-25', type: 'expense', description: 'Utility bill — Electricity', amount: 280000, status: 'Paid' },
+    ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6)
+
+    // ── Upcoming Obligations ───────────────────────────────────────
+    const upcomingObligations = [
+      { id: 'obl-1', title: 'Payroll', amount: monthlyPayroll, due: 'End of month', severity: 'warning' as const },
+      { id: 'obl-2', title: 'Utilities', amount: 420000, due: '25th of month', severity: 'info' as const },
+      { id: 'obl-3', title: 'Vendor Payments', amount: 860000, due: '28th of month', severity: 'info' as const },
+      { id: 'obl-4', title: 'Loan Repayment', amount: 400000, due: '5th next month', severity: 'info' as const },
+    ]
+
+    // ── Monthly trend (revenue vs expense) ─────────────────────────
+    const monthlyTrend = monthlyRevenue.map((m) => ({
+      month: m.month,
+      revenue: m.revenue,
+      expense: m.expense,
+      surplus: m.revenue - m.expense,
+    }))
+
+    return {
+      period: FINANCE_PERIODS.find((p) => p.id === periodId) ?? FINANCE_PERIODS[0],
+
+      // Top summary
+      totalRevenue,
+      totalExpenses,
+      netSurplus,
+      surplusMargin,
+      cashAvailable,
+      monthlyOperatingExpense,
+      reserveCoverage,
+
+      // Revenue breakdown
+      feeRevenue,
+      feeExpected,
+      feeOutstanding,
+      feeCollectionRate,
+      otherRevenue,
+      otherIncomeItems,
+
+      // Expenses
+      expenseBreakdown: payrollDerivedExpense,
+      monthlyPayroll,
+      annualizedPayroll,
+
+      // Cash flow
+      operatingNet,
+      investingNet,
+      financingNet,
+      netCashChange,
+      openingCash,
+      closingCash,
+
+      // Balance sheet
+      currentAssets,
+      fixedAssets,
+      totalAssets,
+      currentLiabilities,
+      longTermLiabilities,
+      totalLiabilities,
+      totalEquity,
+      netWorth,
+
+      // Receivables / Payables
+      feeReceivables,
+      otherReceivables,
+      totalReceivables,
+      receivableStudentCount,
+      payrollPayable,
+      vendorPayables,
+      totalPayables,
+      upcomingObligations,
+
+      // Budget
+      budgetData,
+      totalBudget,
+      totalActual,
+      totalVariance,
+      budgetUtilization,
+
+      // Quarterly
+      quarterly,
+      quarterlySurplus,
+      bestQuarter,
+      lowestQuarter,
+
+      // Financial health
+      currentRatio,
+      debtToEquity,
+      operatingEfficiency,
+      collectionRate,
+      healthMetrics,
+      overallHealth,
+
+      // Alerts & activity
+      alerts,
+      recentActivity,
+
+      // Charts
+      monthlyTrend,
+      monthlyRevenue,
+
+      // Raw data
+      pnlData,
+      balanceSheet,
+      cashflow,
+    }
+  }, [feeData, salaryData, periodId])
+}
+
+// ─── Format helpers ──────────────────────────────────────────────────
+
+export function formatINRCompact(n: number): string {
+  if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`
+  if (n >= 100000) return `₹${(n / 100000).toFixed(2)} L`
+  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`
+  return `₹${n}`
+}
+
+export { formatDate, formatRelativeTime } from '@/lib/format'
