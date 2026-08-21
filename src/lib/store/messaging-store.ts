@@ -3,22 +3,24 @@
  *
  * One connected messaging system:
  *   Conversations → Messages → Send/Reply → Star/Archive/Draft
+ *   Groups → Group Members → Group Conversation → Send to Group
  *
  * Recipient data comes from canonical Teachers + Students (for parents).
  * No fake "online" status — we use role/department labels instead.
  * No fake "read receipts" or "typing" indicators.
  *
- * Folders: Inbox · Starred · Sent · Drafts · Archive
+ * Folders: Inbox · Starred · Sent · Groups · Drafts · Archive
  * Labels: Staff · Parents · Groups · Urgent (all functional filters)
  *
  * State mutations:
- *   - sendMessage (creates/replies to conversation)
+ *   - sendMessage (creates/replies to conversation; group replies use a random member name)
  *   - markRead (clears unread on open)
  *   - starConversation / unstarConversation
  *   - archiveConversation / unarchiveConversation
  *   - saveDraft / deleteDraft / sendDraft
  *   - markUrgent
  *   - composeNew (recipient picker)
+ *   - createGroup / addMember / removeMember (group management)
  */
 
 import { create } from 'zustand'
@@ -28,9 +30,26 @@ import { useStudentsStore } from '@/lib/store/students-store'
 // ─── Types ───────────────────────────────────────────────────────────
 
 export type ConversationType = 'staff' | 'parent' | 'group'
-export type Folder = 'inbox' | 'starred' | 'sent' | 'drafts' | 'archive'
+export type Folder = 'inbox' | 'starred' | 'sent' | 'groups' | 'drafts' | 'archive'
 export type Label = 'Staff' | 'Parents' | 'Groups' | 'Urgent'
 export type MessageStatus = 'sent' | 'delivered'
+
+export type GroupType =
+  | 'Class Group'
+  | 'Teachers Group'
+  | 'Staff Group'
+  | 'Department Group'
+  | 'Parents Group'
+  | 'Custom Group'
+
+export const GROUP_TYPE_LIST: GroupType[] = [
+  'Class Group',
+  'Teachers Group',
+  'Staff Group',
+  'Department Group',
+  'Parents Group',
+  'Custom Group',
+]
 
 export interface Message {
   id: string
@@ -59,6 +78,7 @@ export interface Conversation {
   studentClass?: string
   // For group conversations
   memberCount?: number
+  groupId?: string // links to a Group entry when created via Create Group
   // For staff — linked teacher
   teacherId?: string
 }
@@ -69,6 +89,96 @@ export interface Draft {
   recipientName?: string // if composing new
   text: string
   timestamp: string
+}
+
+/**
+ * Group — a managed chat group with structured membership.
+ *
+ * `memberRefs` is an array of stable references:
+ *   - `t:T-014` → teacher by id
+ *   - `p:STU-12` → parent of a student by student id (we resolve the father's name)
+ *
+ * A Group ALWAYS has a linked Conversation (same name) so the existing
+ * message-thread UI works without changes — opening the group's conversation
+ * shows the chat thread; the Group panel surfaces member management.
+ */
+export interface Group {
+  id: string
+  name: string
+  type: GroupType
+  memberRefs: string[]
+  conversationId: string
+  createdAt: string
+}
+
+// ─── Member ref helpers ─────────────────────────────────────────────
+
+export type MemberType = 'teacher' | 'parent'
+
+export interface MemberDisplay {
+  ref: string
+  type: MemberType
+  name: string
+  avatar: string
+  role: string
+}
+
+/** Resolve a single member ref into a display object. Returns null if not found. */
+export function resolveMemberRef(ref: string): MemberDisplay | null {
+  if (ref.startsWith('t:')) {
+    const id = ref.slice(2)
+    const t = teachers.find((x) => x.id === id)
+    if (!t || t.archived) return null
+    return {
+      ref,
+      type: 'teacher',
+      name: t.name,
+      avatar: t.avatar,
+      role: `${t.designation} · ${t.department}`,
+    }
+  }
+  if (ref.startsWith('p:')) {
+    const sid = ref.slice(2)
+    const s = useStudentsStore.getState().students.find((x) => x.id === sid)
+    if (!s || s.status !== 'Active') return null
+    const avatar = s.fatherName.split(' ').map((n) => n[0]).slice(0, 2).join('') || 'P'
+    return {
+      ref,
+      type: 'parent',
+      name: s.fatherName,
+      avatar,
+      role: `Parent · ${s.name} (${s.className}-${s.section})`,
+    }
+  }
+  return null
+}
+
+/** Resolve a list of member refs into display objects (skips missing). */
+export function resolveMemberRefs(refs: string[]): MemberDisplay[] {
+  return refs.map(resolveMemberRef).filter((x): x is MemberDisplay => x !== null)
+}
+
+/** All parents (as refs) of active students in a given class+section. */
+export function getParentsOfClassSection(className: string, section: string): string[] {
+  return useStudentsStore
+    .getState()
+    .students.filter((s) => s.status === 'Active' && s.className === className && s.section === section)
+    .map((s) => `p:${s.id}`)
+}
+
+/** All teachers (as refs) whose classes array includes a given class name (e.g. "Class 10-A"). */
+export function getTeachersOfClass(className: string): string[] {
+  return teachers.filter((t) => !t.archived && t.classes.includes(className)).map((t) => `t:${t.id}`)
+}
+
+/** All teachers (as refs) in a given department. */
+export function getTeachersOfDepartment(department: string): string[] {
+  return teachers.filter((t) => !t.archived && t.department === department).map((t) => `t:${t.id}`)
+}
+
+/** All active teachers (as refs) — used by Staff Group default. */
+export function getAllStaffRefs(): string[] {
+  return teachers.filter((t) => !t.archived).map((t) => `t:${t.id}`)
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -90,6 +200,10 @@ function formatMessageTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
+function avatarFromName(name: string): string {
+  return name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase() || 'G'
+}
+
 // ─── Seed Conversations (connected to canonical data) ───────────────
 
 const SEED_CONVERSATIONS: Conversation[] = [
@@ -104,10 +218,12 @@ const SEED_CONVERSATIONS: Conversation[] = [
   { id: 'C04', name: 'Vikram Sharma', avatar: 'VS', role: 'Parent · Aarav Sharma', type: 'parent', lastMessage: 'When is the next parent-teacher meeting?', lastTimestamp: new Date(Date.now() - 3 * 60 * 60000).toISOString(), unread: 0, starred: false, archived: false, urgent: false, studentName: 'Aarav Sharma', studentClass: 'Class 9-A' },
   { id: 'C07', name: 'Nikhil Patel', avatar: 'NP', role: 'Parent · Diya Patel', type: 'parent', lastMessage: 'Diya will be late today due to a doctor appointment.', lastTimestamp: new Date(Date.now() - 26 * 60 * 60000).toISOString(), unread: 0, starred: false, archived: false, urgent: false, studentName: 'Diya Patel', studentClass: 'Class 9-A' },
 
-  // Group conversations — linked to class structure
-  { id: 'C02', name: 'Class 2-A Parents', avatar: '2A', role: 'Group · 18 members', type: 'group', lastMessage: 'Mrs. Sharma: Thank you for the PTM update!', lastTimestamp: new Date(Date.now() - 18 * 60000).toISOString(), unread: 5, starred: true, archived: false, urgent: false, memberCount: 18 },
-  { id: 'C09', name: 'Science Department', avatar: 'SD', role: 'Group · 6 members', type: 'group', lastMessage: 'Kavita: Lab safety protocols updated for Term 2.', lastTimestamp: new Date(Date.now() - 4 * 60 * 60000).toISOString(), unread: 0, starred: false, archived: false, urgent: false, memberCount: 6 },
-  { id: 'C10', name: 'Class 10 Teachers', avatar: '10T', role: 'Group · 8 members', type: 'group', lastMessage: 'Rajesh: Pre-board exam preparation meeting tomorrow.', lastTimestamp: new Date(Date.now() - 8 * 60 * 60000).toISOString(), unread: 3, starred: false, archived: false, urgent: true, memberCount: 8 },
+  // Group conversations — linked to class structure (groupId linked below).
+  // memberCount / role are kept in sync with the Group.memberRefs length at
+  // seed time (see buildSeedGroups) so add/remove mutations stay consistent.
+  { id: 'C02', name: 'Class 2-A Parents', avatar: '2A', role: 'Group · 6 members', type: 'group', lastMessage: 'Mrs. Sharma: Thank you for the PTM update!', lastTimestamp: new Date(Date.now() - 18 * 60000).toISOString(), unread: 5, starred: true, archived: false, urgent: false, memberCount: 6, groupId: 'G01' },
+  { id: 'C09', name: 'Science Department', avatar: 'SD', role: 'Group · 6 members', type: 'group', lastMessage: 'Kavita: Lab safety protocols updated for Term 2.', lastTimestamp: new Date(Date.now() - 4 * 60 * 60000).toISOString(), unread: 0, starred: false, archived: false, urgent: false, memberCount: 6, groupId: 'G02' },
+  { id: 'C10', name: 'Class 10 Teachers', avatar: '10T', role: 'Group · 8 members', type: 'group', lastMessage: 'Rajesh: Pre-board exam preparation meeting tomorrow.', lastTimestamp: new Date(Date.now() - 8 * 60 * 60000).toISOString(), unread: 3, starred: false, archived: false, urgent: true, memberCount: 8, groupId: 'G03' },
 
   // Archived
   { id: 'C11', name: 'Deepa Menon', avatar: 'DM', role: 'Senior Teacher · English', type: 'staff', lastMessage: 'PTM preparation notes shared.', lastTimestamp: new Date(Date.now() - 5 * 24 * 60 * 60000).toISOString(), unread: 0, starred: false, archived: true, urgent: false, teacherId: 'T-020' },
@@ -153,12 +269,73 @@ const SEED_DRAFTS: Draft[] = [
   { id: 'D03', recipientName: 'Accounts Office', text: 'Please share the Q3 expense summary for the board meeting.', timestamp: new Date(Date.now() - 2 * 60 * 60000).toISOString() },
 ]
 
+// ─── Seed Groups (linked to existing seed conversations) ────────────
+
+function buildSeedGroups(): Group[] {
+  // Class 2-A Parents — pull parents from ALL Class 2 sections so the
+  // membership roster is rich enough (the seed has only 2 students per
+  // section, so limiting to section A would give just 2 parents).
+  const class2Sections = ['A', 'B', 'C']
+  const class2Parents = Array.from(
+    new Set(class2Sections.flatMap((sec) => getParentsOfClassSection('Class 2', sec))),
+  ).slice(0, 6)
+  // Science Department — all Science-dept teachers + a couple of HoDs that work with Science
+  const scienceTeachers = getTeachersOfDepartment('Science')
+  // Class 10 Teachers — teachers of Class 10 + senior-school HoDs that coordinate
+  const class10a = getTeachersOfClass('Class 10-A')
+  const class10b = getTeachersOfClass('Class 10-B')
+  const class9 = getTeachersOfClass('Class 9-A')
+  const class11Sci = getTeachersOfClass('Class 11-Sci-A')
+  const class12Sci = getTeachersOfClass('Class 12-Sci-A')
+  const class10Teachers = Array.from(new Set([...class10a, ...class10b, ...class9, ...class11Sci, ...class12Sci]))
+  // Backfill with senior HoDs / teachers to reach 8
+  const backfill = ['T-020', 'T-029', 'T-032', 'T-026', 'T-014', 'T-023']
+    .map((id) => `t:${id}`)
+    .filter((r) => !class10Teachers.includes(r))
+  const class10Final = [...class10Teachers, ...backfill].slice(0, 8)
+  // Science Department backfill to reach 6
+  const sciBackfill = ['T-041', 'T-014']
+    .map((id) => `t:${id}`)
+    .filter((r) => !scienceTeachers.includes(r))
+  const sciFinal = [...scienceTeachers, ...sciBackfill].slice(0, 6)
+
+  return [
+    {
+      id: 'G01',
+      name: 'Class 2-A Parents',
+      type: 'Class Group',
+      memberRefs: class2Parents,
+      conversationId: 'C02',
+      createdAt: new Date(Date.now() - 30 * 24 * 60 * 60000).toISOString(),
+    },
+    {
+      id: 'G02',
+      name: 'Science Department',
+      type: 'Department Group',
+      memberRefs: sciFinal,
+      conversationId: 'C09',
+      createdAt: new Date(Date.now() - 90 * 24 * 60 * 60000).toISOString(),
+    },
+    {
+      id: 'G03',
+      name: 'Class 10 Teachers',
+      type: 'Teachers Group',
+      memberRefs: class10Final,
+      conversationId: 'C10',
+      createdAt: new Date(Date.now() - 60 * 24 * 60 * 60000).toISOString(),
+    },
+  ]
+}
+
+const SEED_GROUPS: Group[] = buildSeedGroups()
+
 // ─── Zustand Store ───────────────────────────────────────────────────
 
 interface MessagingState {
   conversations: Conversation[]
   messages: Record<string, Message[]>
   drafts: Draft[]
+  groups: Group[]
   activeConversationId: string | null
   activeFolder: Folder
   activeLabel: Label | null
@@ -180,15 +357,25 @@ interface MessagingState {
   sendDraft: (id: string) => void
   composeNew: (recipientName: string, text: string) => void
 
+  // group actions
+  createGroup: (input: { name: string; type: GroupType; memberRefs: string[] }) => string
+  addMember: (groupId: string, memberRef: string) => { success: boolean; error?: string }
+  removeMember: (groupId: string, memberRef: string) => void
+  renameGroup: (groupId: string, name: string) => void
+  deleteGroup: (groupId: string) => void
+
   // selectors
   getFilteredConversations: () => Conversation[]
   getUnreadCount: () => number
+  getGroupById: (id: string) => Group | undefined
+  getGroupByConversationId: (conversationId: string) => Group | undefined
 }
 
 export const useMessagingStore = create<MessagingState>((set, get) => ({
   conversations: SEED_CONVERSATIONS,
   messages: SEED_MESSAGES,
   drafts: SEED_DRAFTS,
+  groups: SEED_GROUPS,
   activeConversationId: 'C01',
   activeFolder: 'inbox',
   activeLabel: null,
@@ -245,9 +432,9 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
       })
     }, 800)
 
-    // Simulate auto-reply for staff/parent conversations after 3.5s
+    // Simulate auto-reply for staff/parent/group conversations after 3.5s
     const convo = state.conversations.find((c) => c.id === conversationId)
-    if (convo && (convo.type === 'staff' || convo.type === 'parent')) {
+    if (convo && (convo.type === 'staff' || convo.type === 'parent' || convo.type === 'group')) {
       const replies = [
         'Thank you, Ma\'am. I will follow up on this.',
         'Noted. Will get back to you shortly.',
@@ -257,11 +444,24 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
       ]
       setTimeout(() => {
         const replyState = get()
+        // For groups, pick a real member name; for staff/parent, senderName is undefined (uses convo.name)
+        let senderName: string | undefined
+        if (convo.type === 'group') {
+          const group = replyState.groups.find((g) => g.id === convo.groupId)
+          if (group && group.memberRefs.length > 0) {
+            const members = resolveMemberRefs(group.memberRefs)
+            if (members.length > 0) {
+              const pick = members[Math.floor(Math.random() * members.length)]
+              senderName = pick.name
+            }
+          }
+          if (!senderName) senderName = convo.name.split(' ')[0]
+        }
         const reply: Message = {
           id: `M${Date.now() + 1}`,
           conversationId,
           sender: 'them',
-          senderName: convo.type === 'group' ? convo.name.split(' ')[0] : undefined,
+          senderName,
           text: replies[Math.floor(Math.random() * replies.length)],
           timestamp: new Date().toISOString(),
         }
@@ -368,7 +568,7 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
 
     // Create new conversation
     const id = `C${Date.now()}`
-    const isGroup = recipientName.includes('Parents') || recipientName.includes('Department') || recipientName.includes('Teachers')
+    const isGroup = recipientName.includes('Parents') || recipientName.includes('Department') || recipientName.includes('Teachers') || recipientName.includes('Group')
     const isStaff = !isGroup && teachers.some((t) => t.name === recipientName)
     const teacher = teachers.find((t) => t.name === recipientName)
     const type: ConversationType = isGroup ? 'group' : isStaff ? 'staff' : 'parent'
@@ -376,7 +576,7 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
     const newConvo: Conversation = {
       id,
       name: recipientName,
-      avatar: recipientName.split(' ').map((n) => n[0]).slice(0, 2).join(''),
+      avatar: avatarFromName(recipientName),
       role: teacher ? `${teacher.designation} · ${teacher.department}` : isGroup ? 'Group' : 'Parent',
       type,
       lastMessage: text.trim(),
@@ -386,7 +586,7 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
       archived: false,
       urgent: false,
       teacherId: teacher?.id,
-      memberCount: isGroup ? 8 : undefined,
+      memberCount: isGroup ? 1 : undefined,
     }
 
     const newMsg: Message = {
@@ -403,6 +603,123 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
       messages: { ...state.messages, [id]: [newMsg] },
       activeFolder: 'inbox',
       activeConversationId: id,
+    })
+  },
+
+  // ─── Group actions ─────────────────────────────────────────────────
+
+  createGroup: ({ name, type, memberRefs }) => {
+    const state = get()
+    const trimmed = name.trim()
+    const groupId = `G${Date.now()}`
+    const conversationId = `C${Date.now() + 1}`
+    const uniqueMembers = Array.from(new Set(memberRefs))
+    const memberCount = uniqueMembers.length
+
+    // Build the linked conversation
+    const newConvo: Conversation = {
+      id: conversationId,
+      name: trimmed,
+      avatar: avatarFromName(trimmed),
+      role: `Group · ${memberCount} member${memberCount === 1 ? '' : 's'}`,
+      type: 'group',
+      lastMessage: 'Group created · say hi to your members!',
+      lastTimestamp: new Date().toISOString(),
+      unread: 0,
+      starred: false,
+      archived: false,
+      urgent: false,
+      memberCount,
+      groupId,
+    }
+
+    const seedMsg: Message = {
+      id: `M${Date.now() + 2}`,
+      conversationId,
+      sender: 'me',
+      text: `Group "${trimmed}" created with ${memberCount} member${memberCount === 1 ? '' : 's'}.`,
+      timestamp: new Date().toISOString(),
+      status: 'delivered',
+    }
+
+    const newGroup: Group = {
+      id: groupId,
+      name: trimmed,
+      type,
+      memberRefs: uniqueMembers,
+      conversationId,
+      createdAt: new Date().toISOString(),
+    }
+
+    set({
+      groups: [newGroup, ...state.groups],
+      conversations: [newConvo, ...state.conversations],
+      messages: { ...state.messages, [conversationId]: [seedMsg] },
+      activeFolder: 'groups',
+      activeConversationId: conversationId,
+    })
+
+    return groupId
+  },
+
+  addMember: (groupId, memberRef) => {
+    const state = get()
+    const group = state.groups.find((g) => g.id === groupId)
+    if (!group) return { success: false, error: 'Group not found' }
+    if (group.memberRefs.includes(memberRef)) {
+      return { success: false, error: 'Already a member' }
+    }
+    const nextRefs = [...group.memberRefs, memberRef]
+    set({
+      groups: state.groups.map((g) => g.id === groupId ? { ...g, memberRefs: nextRefs } : g),
+      conversations: state.conversations.map((c) =>
+        c.id === group.conversationId
+          ? { ...c, memberCount: nextRefs.length, role: `Group · ${nextRefs.length} member${nextRefs.length === 1 ? '' : 's'}` }
+          : c,
+      ),
+    })
+    return { success: true }
+  },
+
+  removeMember: (groupId, memberRef) => {
+    const state = get()
+    const group = state.groups.find((g) => g.id === groupId)
+    if (!group) return
+    const nextRefs = group.memberRefs.filter((r) => r !== memberRef)
+    set({
+      groups: state.groups.map((g) => g.id === groupId ? { ...g, memberRefs: nextRefs } : g),
+      conversations: state.conversations.map((c) =>
+        c.id === group.conversationId
+          ? { ...c, memberCount: nextRefs.length, role: `Group · ${nextRefs.length} member${nextRefs.length === 1 ? '' : 's'}` }
+          : c,
+      ),
+    })
+  },
+
+  renameGroup: (groupId, name) => {
+    const state = get()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const group = state.groups.find((g) => g.id === groupId)
+    if (!group) return
+    set({
+      groups: state.groups.map((g) => g.id === groupId ? { ...g, name: trimmed } : g),
+      conversations: state.conversations.map((c) =>
+        c.id === group.conversationId ? { ...c, name: trimmed, avatar: avatarFromName(trimmed) } : c,
+      ),
+    })
+  },
+
+  deleteGroup: (groupId) => {
+    const state = get()
+    const group = state.groups.find((g) => g.id === groupId)
+    if (!group) return
+    set({
+      groups: state.groups.filter((g) => g.id !== groupId),
+      conversations: state.conversations.filter((c) => c.id !== group.conversationId),
+      activeConversationId: state.activeConversationId === group.conversationId ? null : state.activeConversationId,
+      // Remove any drafts tied to the conversation
+      drafts: state.drafts.filter((d) => d.conversationId !== group.conversationId),
     })
   },
 
@@ -424,6 +741,9 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
           const msgs = state.messages[c.id] ?? []
           return msgs.length > 0 && msgs[msgs.length - 1].sender === 'me' && !c.archived
         })
+        break
+      case 'groups':
+        result = result.filter((c) => c.type === 'group' && !c.archived)
         break
       case 'drafts':
         // Conversations that have an associated draft
@@ -468,40 +788,72 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
   getUnreadCount: () => {
     return get().conversations.filter((c) => !c.archived).reduce((sum, c) => sum + c.unread, 0)
   },
+
+  getGroupById: (id) => get().groups.find((g) => g.id === id),
+
+  getGroupByConversationId: (conversationId) =>
+    get().groups.find((g) => g.conversationId === conversationId),
 }))
 
 // ─── Recipient options (for Compose) ────────────────────────────────
 
-export function getRecipientOptions(): Array<{ name: string; role: string; type: ConversationType; avatar: string }> {
+export interface RecipientOption {
+  name: string
+  role: string
+  type: ConversationType
+  avatar: string
+}
+
+export function getRecipientOptions(): RecipientOption[] {
   const students = useStudentsStore.getState().students
   const activeStudents = students.filter((s) => s.status === 'Active')
 
-  const staff = teachers.map((t) => ({
-    name: t.name,
-    role: `${t.designation} · ${t.department}`,
-    type: 'staff' as ConversationType,
-    avatar: t.avatar,
-  }))
+  const staff: RecipientOption[] = teachers
+    .filter((t) => !t.archived)
+    .map((t) => ({
+      name: t.name,
+      role: `${t.designation} · ${t.department}`,
+      type: 'staff' as ConversationType,
+      avatar: t.avatar,
+    }))
 
   // Some parents (based on students)
-  const parents = activeStudents.slice(0, 8).map((s) => ({
+  const parents: RecipientOption[] = activeStudents.slice(0, 8).map((s) => ({
     name: s.fatherName,
     role: `Parent · ${s.name}`,
     type: 'parent' as ConversationType,
     avatar: s.fatherName.split(' ').map((n) => n[0]).slice(0, 2).join(''),
   }))
 
-  // Groups
-  const groups = [
-    { name: 'Class 2-A Parents', role: 'Group · 18 members', type: 'group' as ConversationType, avatar: '2A' },
-    { name: 'Class 10 Teachers', role: 'Group · 8 members', type: 'group' as ConversationType, avatar: '10T' },
-    { name: 'Science Department', role: 'Group · 6 members', type: 'group' as ConversationType, avatar: 'SD' },
-    { name: 'Mathematics Department', role: 'Group · 5 members', type: 'group' as ConversationType, avatar: 'MD' },
-    { name: 'Class 9 Parents', role: 'Group · 42 members', type: 'group' as ConversationType, avatar: '9P' },
-    { name: 'All Staff', role: 'Group · 28 members', type: 'group' as ConversationType, avatar: 'AS' },
-  ]
+  // Groups — pulled from the live store so newly-created groups appear automatically
+  const groups: RecipientOption[] = useMessagingStore.getState().groups.map((g) => ({
+    name: g.name,
+    role: `Group · ${g.memberRefs.length} member${g.memberRefs.length === 1 ? '' : 's'}`,
+    type: 'group' as ConversationType,
+    avatar: avatarFromName(g.name),
+  }))
 
   return [...staff, ...parents, ...groups]
+}
+
+// ─── Group options (for the Groups panel + compose picker) ──────────
+
+export interface GroupOption {
+  id: string
+  name: string
+  type: GroupType
+  memberCount: number
+  conversationId: string
+}
+
+export function getGroupOptions(): GroupOption[] {
+  return useMessagingStore.getState().groups.map((g) => ({
+    id: g.id,
+    name: g.name,
+    type: g.type,
+    memberCount: g.memberRefs.length,
+    conversationId: g.conversationId,
+  }))
 }
 
 // ─── Format helpers ──────────────────────────────────────────────────

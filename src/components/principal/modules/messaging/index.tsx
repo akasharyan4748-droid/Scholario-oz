@@ -3,9 +3,9 @@
 /**
  * MessagingModule — Messages & Inbox.
  *
- * Layout: Folders sidebar · Conversation list · Active conversation · Reply composer
+ * Layout: Folders sidebar · (Conversation list OR Groups panel) · Active conversation · Reply composer
  *
- * Compact summary row (Unread + Drafts count) — NOT giant KPI cards.
+ * Compact summary row (Unread + Starred + Drafts + Groups counts) — NOT giant KPI cards.
  *
  * NO fake "online" status, NO fake "typing" indicators, NO fake "read" receipts.
  * NO dead Call/Video buttons.
@@ -19,33 +19,47 @@
  *   - Drafts → auto-saved, restored on re-open, removed on send
  *   - Search → filters by name + message content (not just titles)
  *   - Labels (Staff/Parents/Groups/Urgent) → all functional filters
+ *   - Groups folder → opens the GroupsPanel (group management + create group +
+ *     manage members + send-to-group via compose preselect)
  */
 
 import { useState, useEffect } from 'react'
-import { MessageSquare, Send, Mail, FileText, Star } from 'lucide-react'
+import { MessageSquare, Send, Mail, FileText, Star, Users } from 'lucide-react'
 import { useMessagingStore } from '@/lib/store/messaging-store'
 import { FoldersSidebar } from './folders-sidebar'
 import { ConversationList } from './conversation-list'
 import { ThreadView } from './thread-view'
 import { ComposeModal } from './compose-modal'
+import { GroupsPanel } from './groups-panel'
 import { cn } from '@/lib/utils'
 
 export function MessagingModule() {
   const conversations = useMessagingStore((s) => s.conversations)
   const drafts = useMessagingStore((s) => s.drafts)
   const activeConversationId = useMessagingStore((s) => s.activeConversationId)
+  const activeFolder = useMessagingStore((s) => s.activeFolder)
+  const groups = useMessagingStore((s) => s.groups)
   const [composeOpen, setComposeOpen] = useState(false)
+  const [composeRecipient, setComposeRecipient] = useState<string | null>(null)
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list')
 
   // Real unread count from store
   const unreadCount = conversations.filter((c) => !c.archived && c.unread > 0).length
   const draftCount = drafts.length
   const starredCount = conversations.filter((c) => c.starred && !c.archived).length
+  const groupCount = groups.length
 
   // Switch to thread view on mobile when conversation opened
   useEffect(() => {
     if (activeConversationId) setMobileView('thread')
   }, [activeConversationId])
+
+  const handleCompose = (recipientName?: string) => {
+    setComposeRecipient(recipientName ?? null)
+    setComposeOpen(true)
+  }
+
+  const isGroupsFolder = activeFolder === 'groups'
 
   return (
     <div className="flex flex-col h-full">
@@ -57,7 +71,7 @@ export function MessagingModule() {
               <h1 className="text-base sm:text-lg font-bold tracking-tight">Messages & Inbox</h1>
             </div>
             <button
-              onClick={() => setComposeOpen(true)}
+              onClick={() => handleCompose()}
               className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white"
             >
               <Send className="h-3.5 w-3.5" /> Compose
@@ -70,6 +84,9 @@ export function MessagingModule() {
             </span>
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold tabular-nums">
               <Star className="h-2.5 w-2.5" /> {starredCount} starred
+            </span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-violet-500/10 text-violet-700 dark:text-violet-300 font-semibold tabular-nums">
+              <Users className="h-2.5 w-2.5" /> {groupCount} groups
             </span>
             {draftCount > 0 && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-semibold tabular-nums">
@@ -86,19 +103,27 @@ export function MessagingModule() {
           {/* Folders sidebar — desktop only */}
           <FoldersSidebar />
 
-          {/* Conversation list — hidden on mobile when in thread view */}
-          <div className={cn('lg:block', mobileView === 'thread' && 'hidden')}>
-            <ConversationList onCompose={() => setComposeOpen(true)} />
+          {/* Middle pane — ConversationList OR GroupsPanel */}
+          <div className={cn('lg:block min-w-0', mobileView === 'thread' && 'hidden')}>
+            {isGroupsFolder ? (
+              <GroupsPanel onCompose={handleCompose} />
+            ) : (
+              <ConversationList onCompose={() => handleCompose()} />
+            )}
           </div>
 
           {/* Thread view — hidden on mobile when in list view */}
           <div className={cn('lg:block flex-1 min-w-0', mobileView === 'list' && 'hidden')}>
-            <ThreadView onBack={() => setMobileView('list')} onCompose={() => setComposeOpen(true)} />
+            <ThreadView onBack={() => setMobileView('list')} onCompose={() => handleCompose()} />
           </div>
         </div>
       </div>
 
-      <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} />
+      <ComposeModal
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        preselectedRecipient={composeRecipient}
+      />
     </div>
   )
 }

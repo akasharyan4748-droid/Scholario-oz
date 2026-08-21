@@ -5,12 +5,14 @@
  *
  * - Searchable recipient picker (teachers/parents/groups from canonical data)
  * - Message text area
- * - Send button creates a new conversation or opens existing
+ * - Send button creates a new conversation OR opens an existing one (incl. groups)
+ * - Supports `preselectedRecipient` so callers (GroupsPanel) can pre-fill the
+ *   recipient — the user still sees the selected chip and can change it.
  */
 
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Send, X, Check, Users, AlertCircle } from 'lucide-react'
+import { Search, Send, X, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useMessagingStore, getRecipientOptions, type ConversationType } from '@/lib/store/messaging-store'
 import { cn } from '@/lib/utils'
@@ -19,16 +21,24 @@ import { toast } from 'sonner'
 interface Props {
   open: boolean
   onClose: () => void
+  /** Optional recipient name to pre-fill the picker with. */
+  preselectedRecipient?: string | null
 }
 
-export function ComposeModal({ open, onClose }: Props) {
+export function ComposeModal({ open, onClose, preselectedRecipient }: Props) {
   const composeNew = useMessagingStore((s) => s.composeNew)
+  const sendMessage = useMessagingStore((s) => s.sendMessage)
+  const conversations = useMessagingStore((s) => s.conversations)
+  const groups = useMessagingStore((s) => s.groups)
+  const openConversation = useMessagingStore((s) => s.openConversation)
+  const setActiveFolder = useMessagingStore((s) => s.setActiveFolder)
   const saveNewDraft = useMessagingStore((s) => s.saveNewDraft)
   const [search, setSearch] = useState('')
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null)
   const [text, setText] = useState('')
 
-  const recipients = useMemo(() => getRecipientOptions(), [])
+  // Recompute recipients whenever groups change (so new groups appear)
+  const recipients = useMemo(() => getRecipientOptions(), [groups])
 
   const filtered = useMemo(() => {
     if (!search) return recipients.slice(0, 10)
@@ -39,14 +49,30 @@ export function ComposeModal({ open, onClose }: Props) {
   useEffect(() => {
     if (open) {
       setSearch('')
-      setSelectedRecipient(null)
       setText('')
+      setSelectedRecipient(preselectedRecipient ?? null)
     }
-  }, [open])
+  }, [open, preselectedRecipient])
 
   const handleSend = () => {
     if (!selectedRecipient) { toast.error('Select a recipient'); return }
     if (!text.trim()) { toast.error('Write a message'); return }
+
+    // If a conversation already exists for this recipient, send directly to it
+    // (covers existing group conversations and seeded staff/parent threads).
+    const existing = conversations.find((c) => c.name === selectedRecipient && !c.archived)
+    if (existing) {
+      sendMessage(existing.id, text)
+      openConversation(existing.id)
+      // If the existing conversation is a group, jump to the Groups folder
+      if (existing.type === 'group') setActiveFolder('groups')
+      else setActiveFolder('inbox')
+      toast.success('Message sent', { description: `To ${selectedRecipient}` })
+      onClose()
+      return
+    }
+
+    // Otherwise compose a new conversation
     composeNew(selectedRecipient, text)
     toast.success('Message sent', { description: `To ${selectedRecipient}` })
     onClose()
@@ -60,6 +86,7 @@ export function ComposeModal({ open, onClose }: Props) {
   }
 
   const selectedRecipientData = recipients.find((r) => r.name === selectedRecipient)
+  const isGroupRecipient = selectedRecipientData?.type === 'group'
 
   return (
     <AnimatePresence>
@@ -105,7 +132,7 @@ export function ComposeModal({ open, onClose }: Props) {
                   <div className="mt-2 space-y-1 max-h-[280px] overflow-y-auto">
                     {filtered.map((r) => (
                       <button
-                        key={r.name}
+                        key={`${r.type}-${r.name}`}
                         onClick={() => setSelectedRecipient(r.name)}
                         className="w-full flex items-center gap-2.5 rounded-md border border-border/40 hover:border-primary/40 hover:bg-muted/30 px-2.5 py-2 transition-colors text-left"
                       >
@@ -152,6 +179,12 @@ export function ComposeModal({ open, onClose }: Props) {
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
+
+                  {isGroupRecipient && (
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <Users className="h-3 w-3" /> Sending to the whole group — every member will see your message.
+                    </p>
+                  )}
 
                   {/* Message */}
                   <div>

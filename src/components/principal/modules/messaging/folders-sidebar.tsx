@@ -3,13 +3,13 @@
 /**
  * FoldersSidebar — folder navigation + label filters.
  *
- * Folders: Inbox · Starred · Sent · Drafts · Archive (counts from real store)
+ * Folders: Inbox · Starred · Sent · Groups · Drafts · Archive (counts from real store)
  * Labels: Staff · Parents · Groups · Urgent (functional filters)
  *
  * NO Smart Replies / AI gimmicks.
  */
 
-import { Inbox as InboxIcon, Star, Send, FileText, Archive, Users, AlertCircle } from 'lucide-react'
+import { Inbox as InboxIcon, Star, Send, Users, FileText, Archive } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMessagingStore, type Folder, type Label } from '@/lib/store/messaging-store'
 
@@ -21,6 +21,7 @@ export function FoldersSidebar() {
   const conversations = useMessagingStore((s) => s.conversations)
   const drafts = useMessagingStore((s) => s.drafts)
   const messages = useMessagingStore((s) => s.messages)
+  const groups = useMessagingStore((s) => s.groups)
 
   // Real counts from store
   const inboxCount = conversations.filter((c) => !c.archived && c.unread > 0).length
@@ -29,19 +30,21 @@ export function FoldersSidebar() {
     const msgs = messages[c.id] ?? []
     return msgs.length > 0 && msgs[msgs.length - 1].sender === 'me' && !c.archived
   }).length
+  const groupCount = groups.length
   const draftCount = drafts.length
   const archiveCount = conversations.filter((c) => c.archived).length
 
   // Label counts
   const staffCount = conversations.filter((c) => c.type === 'staff' && !c.archived).length
   const parentCount = conversations.filter((c) => c.type === 'parent' && !c.archived).length
-  const groupCount = conversations.filter((c) => c.type === 'group' && !c.archived).length
+  const groupLabelCount = conversations.filter((c) => c.type === 'group' && !c.archived).length
   const urgentCount = conversations.filter((c) => c.urgent && !c.archived).length
 
   const folders: Array<{ id: Folder; label: string; icon: React.ReactNode; count: number }> = [
     { id: 'inbox', label: 'Inbox', icon: <InboxIcon className="h-4 w-4" />, count: inboxCount },
     { id: 'starred', label: 'Starred', icon: <Star className="h-4 w-4" />, count: starredCount },
     { id: 'sent', label: 'Sent', icon: <Send className="h-4 w-4" />, count: sentCount },
+    { id: 'groups', label: 'Groups', icon: <Users className="h-4 w-4" />, count: groupCount },
     { id: 'drafts', label: 'Drafts', icon: <FileText className="h-4 w-4" />, count: draftCount },
     { id: 'archive', label: 'Archive', icon: <Archive className="h-4 w-4" />, count: archiveCount },
   ]
@@ -49,7 +52,7 @@ export function FoldersSidebar() {
   const labels: Array<{ id: Label; label: string; color: string; count: number }> = [
     { id: 'Staff', label: 'Staff', color: 'bg-emerald-500', count: staffCount },
     { id: 'Parents', label: 'Parents', color: 'bg-amber-500', count: parentCount },
-    { id: 'Groups', label: 'Groups', color: 'bg-violet-500', count: groupCount },
+    { id: 'Groups', label: 'Groups', color: 'bg-violet-500', count: groupLabelCount },
     { id: 'Urgent', label: 'Urgent', color: 'bg-rose-500', count: urgentCount },
   ]
 

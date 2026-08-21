@@ -3483,3 +3483,495 @@ Stage Summary:
 - Responsive: 3-pane on desktop, list→thread on mobile
 - Server fixed: using node instead of bun to stay alive
 - ESLint: 0 errors, 0 warnings
+
+---
+Task ID: library-rewrite
+Agent: main (Super Z)
+Task: Rewrite the Library module at src/components/principal/modules/library/ to use the new library-store.ts (Zustand) instead of the deprecated @/lib/mock/operations library mocks.
+
+Work Log:
+
+### Phase 1: Audit existing library module + reference patterns
+- Inspected 5 existing files: index.tsx (89 LOC), books-tables.tsx (168 LOC), issue-book-dialog.tsx (76 LOC), fines-summary.tsx (45 LOC), data.tsx (10 LOC).
+- All consumed deprecated mock data from `@/lib/mock/operations` (`libraryStats`, `libraryBooks`, `issuedBooks`).
+- Studied reference patterns: fees-shared.tsx (FeePanel / FeeKpiCard soft tinted cards), fees-shell.tsx (header + summary pill line + tab navigation), messaging/index.tsx (compact shell with sticky header).
+- Verified library-store.ts API: useLibraryStore (books, issues, reservations, search/filter, issueBook, returnBook, addBook, payFine, waiveFine, addReservation, getBorrowerOptions) + useLibraryData (analytics).
+- Verified canonical borrower sources: getBorrowerOptions derives from `students-store` (Active students, 20 max) + `teachers` mock (10 max) with proper detail strings.
+
+### Phase 2: Build library-shared.tsx (NEW, 188 LOC)
+- LibTab type (catalogue · issues · overdue · fines · reports)
+- LibKpiCard: soft tinted KPI card with 5 accents (emerald / rose / amber / cyan / violet), subtle blur glow top-right, optional onClick → tab navigation
+- LibPanel: rounded card container (FeePanel-style) with optional title/subtitle/action
+- LibPill: compact semantic pill
+- BookStatusBadge (Available / Low Stock / Out of Stock) with dot indicator
+- IssueStatusBadge (Issued / Overdue / Returned) with dot indicator
+- FineStatusBadge (Pending / Paid / Waived) with dot indicator
+- BorrowerTypePill (Student emerald / Teacher violet)
+- LibEmptyState with motion
+- LIB_GLOBAL_STYLES for prefers-reduced-motion
+- NO indigo/blue. Only emerald / amber / rose / cyan / violet accents.
+
+### Phase 3: Rewrite books-tables.tsx (247 LOC)
+- BooksCatalogue:
+  • Search input (title/author/ISBN) + Category select (All + 7 categories) + Availability select (All/Available/Low Stock/Out of Stock)
+  • All filters driven by store setters (setSearch, setCategoryFilter, setAvailabilityFilter)
+  • Table: Book tile (icon + title + author) · ISBN (mono) · Category badge · Copies · Available (semantic color: rose=0, amber≤3, emerald otherwise) · Issued (amber) · Status badge · Issue button (disabled when no copies)
+  • Per-row Issue button preselects the book for the dialog (callback to parent)
+  • Empty state when no matches
+  • overflow-x-auto for responsiveness, hidden columns on smaller screens
+- IssuedBooksTable with `filter` prop ('all' | 'overdue'):
+  • Shows issues where status !== 'Returned', further filtered
+  • Borrower + Book column with GradientAvatar
+  • BorrowerTypePill (Student/Teacher) on lg screens
+  • Issue Date + Due Date (rose for overdue due date)
+  • Days Overdue chip (overdue filter only) — calculated from dueDate to today
+  • Status badge + fine (rose, INR-formatted, line-through for waived)
+  • Actions: Return (always) + Remind (overdue filter only)
+  • Empty state per filter ("No overdue books" / "No books currently issued")
+
+### Phase 4: Rewrite issue-book-dialog.tsx (215 LOC)
+- Uses shared SearchableSelect for borrower + book pickers (consistent with Teachers/Admissions module pattern)
+- Borrower options from getBorrowerOptions(): students (canonical students-store, admission+section meta) + teachers (canonical teachers mock, designation+department meta)
+- Book options filtered to available > 0, with "author · N available" meta
+- Selected borrower shows BorrowerTypePill + meta line below
+- Selected book shows category pill + available count pill + author below
+- Issue Date (today) + Due Date (today + 14 days) shown as informational display cards — store enforces 14-day default loan period (no fake date pickers)
+- Fine policy notice: "₹5 per day after the due date"
+- Preselects book when triggered from catalogue (preselectBook prop + useEffect reset on open)
+- Calls issueBook(bookId, borrowerId, type) — uses the store's {success, error?} return value to drive the toast (no fake success)
+- Emerald → teal gradient Issue button (SCHOLARIO accent)
+- Toast on success: "Book issued · {book} issued to {borrower} · Due {date}"
+
+### Phase 5: Rewrite fines-summary.tsx (437 LOC)
+- FinesSummary:
+  • 4 FineStatCards (Outstanding / Collected / Waived / Pending Count) — soft tinted backgrounds matching LibKpiCard accent system (rose / emerald / muted / amber)
+  • Fines Ledger table with All / Pending / Paid / Waived filter
+  • Columns: Borrower + Book (gradient avatar) · Type pill · Issue Date · Return Date · Fine (rose, INR, line-through for waived) · Status badge · Actions
+  • Pay button (emerald outline) + Waive button (outline) for Pending fines only
+  • Resolved fines show "Resolved" text (no dead buttons)
+  • "Report" download button generates a toast summary (pending count + outstanding + collected)
+  • payFine + waiveFine store mutations wired → toasts with amount + borrower
+- LibraryReports:
+  • Most Issued Books (top 5) — horizontal bars with gradient (emerald→teal), numbered rank chips, tabular-nums counts
+  • Inventory Snapshot — Issued (amber) vs Available (emerald) mini-cards + ratio bar + Total/Overdue stats
+  • Category Distribution — full-width horizontal bars colored per category (uses store's byCategory[].color oklch values)
+  • All numbers from useLibraryData analytics (no fake data)
+
+### Phase 6: Rewrite index.tsx (267 LOC)
+- LibraryModule orchestrator:
+  • Sticky header: contextual title "Library Workspace" (NO duplicate "Library Management" title since sidebar already says "Library"), "Central Library" eyebrow, Issue Book + Reports action buttons
+  • Summary pill line: Books · Issued · Available · Overdue · Fines (real counts from useLibraryData)
+  • Tab navigation: Catalogue · Issued · Overdue · Fines · Reports with real badges (activeIssuesCount / overdueCount / pending fines count) — overdue/fines badges in rose
+  • KPI cards row (5 LibKpiCards — Total Books emerald / Issued amber / Available cyan / Overdue rose / Total Fines violet) — always visible regardless of tab, each clickable → tab navigation
+  • Active tab panel: AnimatePresence transitions, swap between BooksCatalogue / IssuedBooksTable(all) / IssuedBooksTable(overdue)+FinesSummary / FinesSummary / LibraryReports
+  • Issues tab shows active loans banner (X active · Y overdue · Z on schedule)
+  • Issue Book dialog (preselects book when triggered from catalogue)
+  • Keyboard shortcuts 1-5 to switch tabs (power-user only, not advertised)
+  • aria-current on active tab
+  • prefers-reduced-motion support via LIB_GLOBAL_STYLES
+- All state from useLibraryStore + useLibraryData hooks.
+
+### Phase 7: Delete obsolete data.tsx
+- data.tsx was a 10-LOC file exporting monthlyIssues (mock monthly issues/returns series used by the old issues trend chart).
+- Replaced by store analytics (mostIssued, byCategory) — no longer needed.
+- Note: libraryBooks / issuedBooks / libraryStats mocks in @/lib/mock/operations are still used by other modules (search-service, student dashboard homework-section, api/schools/public). Only the library module's local data.tsx was deleted.
+
+### Phase 8: Verification
+- ESLint: 0 errors, 0 warnings.
+- TypeScript: 0 library-module errors (pre-existing errors in exams/salary/finance modules are unrelated to this rewrite).
+- Dev server: started, HTTP 200, Turbopack compiled cleanly (no broken imports / no missing modules).
+- All mutations functional: issueBook, returnBook, payFine, waiveFine — all wired to toasts that reflect the actual store mutation outcome (no fake success toasts).
+
+Stage Summary:
+- Library module transformed from decorative mockup (consuming @/lib/mock/operations libraryStats/libraryBooks/issuedBooks) into production-quality Library workspace driven entirely by the new Zustand library-store.
+- 5-tab workspace: Catalogue · Issued · Overdue · Fines · Reports — NO duplicate "Library Management" title (sidebar already says "Library").
+- 5 soft-tinted KPI cards (emerald/amber/cyan/rose/violet — NO indigo/blue), each clickable to navigate to its tab.
+- Compact summary pill line (Books · Issued · Available · Overdue · Fines) with real counts from useLibraryData.
+- Borrower picker uses canonical students-store + teachers mock (via getBorrowerOptions) — no duplicate identity, real counts and details.
+- All mutations functional: Issue Book (with searchable borrower + book picker, auto-computed dates from store's 14-day policy), Return (on issued/overdue rows), Pay Fine + Waive Fine (on Pending fines only, with proper toasts), Send Reminder (on overdue rows).
+- Reports section: Most Issued Books horizontal bars (gradient emerald→teal, numbered rank chips), Inventory Snapshot (Issued vs Available mini-cards + ratio bar), Category Distribution (full-width horizontal bars using store's color values).
+- All numbers from store analytics (no fake KPIs, no fake collected fines, no fake response rates).
+- SCHOLARIO visual language preserved: rounded-xl cards, subtle borders, emerald/teal accent on primary CTA, gradient avatars, status pills with dots, tabular-nums throughout.
+- Responsive: tables wrapped in overflow-x-auto, columns hidden on smaller screens (md:, lg:).
+- Accessibility: aria-current on active tab, semantic table headers (uppercase tracking-wider), keyboard shortcuts 1-5, prefers-reduced-motion support.
+- File sizes kept reasonable: 4 library files + 1 shared = ~1155 LOC total (index 267 + books-tables 247 + issue-book-dialog 215 + fines-summary 437 + library-shared 188).
+
+---
+Task ID: inventory-rewrite
+Agent: main (Super Z)
+Task: Rewrite the Inventory module at src/components/principal/modules/inventory/ to use the new inventory-store.ts (Zustand) instead of the deprecated @/lib/mock/operations inventory mocks.
+
+Work Log:
+
+### Phase 1: Audit existing inventory module + reference patterns
+- Inspected 5 existing files: index.tsx (84 LOC), items-table.tsx (107 LOC), add-item-dialog.tsx (83 LOC), movement-panels.tsx (105 LOC), data.tsx (16 LOC).
+- All consumed deprecated mock data from `@/lib/mock/operations` (`inventoryStats`, `inventoryItems`) and the local `data.tsx` (`stockMovements`, `VALUE_BY_CAT`).
+- Studied reference patterns from the just-completed `library-rewrite` task: `library-shared.tsx` (LibKpiCard / LibPanel / status badges), `library/index.tsx` (sticky header + summary pill line + tab navigation + KPI cards row + tab panels), `library/books-tables.tsx` (search + filter table with per-row actions).
+- Verified `inventory-store.ts` API: `useInventoryStore` (items, movements, search/filter, addItem, addStock, adjustStock, issueItem, markDamaged, returnItem) + `useInventoryData` (analytics: totalItems, totalValue, lowStockCount, outOfStockCount, categoryCount, lowStock, outOfStock, valueByCategory, recentMovements).
+- Verified seed data: 15 items across 7 categories × 7 locations, 8 stock movements.
+- Confirmed only the 5 inventory module files reference the `inventoryItems` / `inventoryStats` mocks — safe to rewrite without breaking other modules.
+
+### Phase 2: Build inventory-shared.tsx (NEW, 200 LOC)
+- `InvTab` type (items · movements · lowstock · reports)
+- `InvAccent` map (emerald / rose / amber / cyan / violet — NO indigo/blue)
+- `InvKpiCard` — soft tinted KPI card with subtle blur glow top-right, optional onClick → tab navigation, focus-visible ring
+- `InvPanel` — rounded card container with optional header (title + subtitle + action) and body
+- `InvPill` — compact semantic pill
+- `ItemStatusBadge` — In Stock (emerald) / Low Stock (amber) / Out of Stock (rose) with dot
+- `MovementTypeBadge` — Stock In / Returned (emerald) · Issued (amber) · Stock Out / Damaged / Lost (rose) · Adjustment (cyan) with dot
+- `InvEmptyState` with motion
+- `INV_GLOBAL_STYLES` for prefers-reduced-motion
+
+### Phase 3: Rewrite items-table.tsx (213 LOC)
+- `ItemsTable` with `onAction: (kind, item) => void` callback — parent owns dialog state and toasts.
+- All filters driven by store setters (`setSearch`, `setCategoryFilter`, `setLocationFilter`, `setStatusFilter`) — shared state across workspace.
+- Search: name + code (case-insensitive).
+- Filter selects: All Categories (7) + All Locations (7) + All Status (3) — selects hidden on smaller screens (sm:/md:).
+- Table columns: Item tile (icon + name + code) · Category badge · Stock (qty + unit, semantic color) · Min (lg) · Value (INR compact, right) · Location (md+, with MapPin) · Status badge · Actions.
+- Per-row action menu (DropdownMenu): Add Stock · Issue / Assign (disabled when out of stock) · Mark Damaged (disabled when out of stock) · Return Stock.
+- Quick "Issue" button visible on sm+ for one-tap issue flow.
+- Empty state when no matches; overflow-x-auto; columns hidden on smaller screens.
+
+### Phase 4: Build item-action-dialog.tsx (NEW, 198 LOC)
+- Single reusable dialog handling all 4 stock actions: `add` · `issue` · `damaged` · `return`.
+- `KIND_META` table drives each action's title, icon, description, verb, accent, button class, needs-assignee flag, stock delta (in/out/neutral).
+- Item card at top showing name, code, category, current stock pill.
+- Quantity input with client-side validation:
+  - add / return: no upper bound.
+  - issue / damaged: max = current available — exceeds shows inline rose error and disables submit.
+- Assignee field only for `issue` action.
+- Reason textarea (optional) with placeholder hint appropriate to action kind.
+- Submit button label dynamically includes quantity: "Receive 50 pcs", "Issue 4 sets", "Report 2 bottles", "Return 10 packs".
+- Calls `addStock` / `issueItem` / `markDamaged` / `returnItem` — toast confirmation includes new totals (add) or issued/damaged/returned qty.
+- Action-specific button gradients: add/return (emerald → teal), issue (amber → orange), damaged (rose → rose-700).
+- Pre-validation toasts for: qty ≤ 0, qty > available, missing assignee.
+
+### Phase 5: Rewrite add-item-dialog.tsx (213 LOC)
+- Full Add Item form: Name · Code · Category · Quantity · Unit · Min Stock · Unit Value · Location.
+- Each field has a small lucide icon in the label (Package, Hash, Layers, Boxes, Ruler, IndianRupee, MapPin).
+- Code field is `font-mono uppercase`.
+- Category select (7 options) + Location select (7 options) + Unit select (9 options including kg, litres for non-countable items).
+- Real-time computed total value card (emerald tinted): qty × unit value, formatted INR compact.
+- Pre-validation toast for missing name or code.
+- Calls `addItem({ name, code, category, quantity, unit, minStock, unitValue, location })` — store computes totalValue + status automatically.
+- Toast confirmation: "{name} · {qty} {unit} · {totalValue}".
+- Emerald → teal gradient submit button (disabled until name + code present).
+- All fields reset when dialog opens.
+
+### Phase 6: Rewrite movement-panels.tsx (296 LOC)
+- `StockMovementLog` (optional `limit` prop):
+  - Recent movements table with columns: Type (icon + badge) · Item (with reference if any, e.g. "→ Science Lab") · Qty (signed: + / − / · colored emerald/rose/muted) · User (md+) · Date (sm+) · Reason (lg+).
+  - Movement icon + accent map: Stock In/Returned (emerald) · Issued (amber) · Stock Out/Damaged/Lost (rose) · Adjustment (cyan).
+  - Sign map: + (Stock In/Returned) · − (Issued/Stock Out/Damaged/Lost) · · (Adjustment).
+  - Empty state when no movements; overflow-x-auto; columns hidden on smaller screens.
+- `LowStockAlerts` with `onAddStock` callback:
+  - Lists low stock + out of stock items (out of stock first for visibility).
+  - Per-item card with rose tint (out) or amber tint (low) borders.
+  - 3-column stats: Current (semantic color) · Min Stock (muted) · Suggested Reorder (emerald, computed as max(2×minStock, 10)).
+  - Progress bar showing current/min ratio with animation.
+  - "Add Stock (N units)" button → triggers parent action dialog with preselected item.
+  - max-h-96 scroll area for long lists; empty state when all well-stocked.
+- `CategoryValueDistribution`:
+  - Horizontal bars from `analytics.valueByCategory` sorted descending by value.
+  - Per-row: color swatch (oklch from store) + name + percentage pill + INR value (right, bold).
+  - Animated bar fill (60% ease with stagger).
+  - Total + category count in panel header.
+- `InventoryReports` (combined for Reports tab):
+  - 2-column grid: CategoryValueDistribution + Movements by Type table (count + total qty per movement type, sorted by count desc).
+  - Low Stock Alerts (full).
+  - Stock Movement Log (full).
+- All numbers from `useInventoryData` analytics — no fake data.
+
+### Phase 7: Rewrite index.tsx (222 LOC)
+- `InventoryModule` orchestrator:
+  - Sticky header: contextual title "Inventory Workspace" (NO duplicate "Inventory Management" since sidebar already says "Inventory"), "School Inventory" eyebrow, Reports + Add Item action buttons (emerald → teal gradient).
+  - Summary pill line: Items · Value (emerald) · Low (amber) · Out (rose) · Categories (violet) — real counts from `useInventoryData`.
+  - Tab navigation: Items · Movements · Low Stock · Reports with real badges (movement count, low+out count) — low stock badge in rose.
+  - KPI cards row (4 InvKpiCards — Total Items emerald / Total Value amber / Low Stock rose / Categories violet) — always visible, each clickable → tab navigation.
+  - Active tab panel: AnimatePresence transitions, swap between ItemsTable / Movements banner + StockMovementLog / LowStockAlerts / InventoryReports.
+  - Movements tab shows legend banner (color key for movement types).
+  - Add Item dialog (state-owned by module).
+  - Item Action dialog (single dialog, `kind` + `item` props, opened via callback from any table/action button).
+  - Keyboard shortcuts 1-4 to switch tabs (power-user only, not advertised).
+  - aria-current on active tab; prefers-reduced-motion support via INV_GLOBAL_STYLES.
+- All state from `useInventoryStore` + `useInventoryData` hooks — no local useState for items/movements/filters (filters live in store).
+
+### Phase 8: Delete obsolete data.tsx
+- data.tsx was a 16-LOC file exporting `stockMovements` (mock movement log) and `VALUE_BY_CAT` (derived from inventoryStats.categories).
+- Replaced by store: `useInventoryStore.movements` + `useInventoryData.analytics.valueByCategory`.
+- Note: `inventoryItems` / `inventoryStats` mocks in `@/lib/mock/operations` are now unused by the inventory module but kept in place (not referenced by any other module currently; removing them is out of scope for this task).
+
+### Phase 9: Verification
+- ESLint: 0 errors, 0 warnings (`bun run lint` clean).
+- TypeScript: 0 inventory-module errors (`tsc --noEmit` filtered — only pre-existing errors in exams/salary/finance modules remain, unrelated to this rewrite).
+- Dev server: Next.js 16.3.0 Turbopack ready, HTTP 200 on `/`, compiled cleanly on each request.
+- All mutations functional: addItem, addStock, issueItem, markDamaged, returnItem — all wired to toasts that reflect the actual store mutation outcome (no fake success toasts).
+
+Stage Summary:
+- Inventory module transformed from decorative mockup (consuming @/lib/mock/operations inventoryStats/inventoryItems + local data.tsx stockMovements/VALUE_BY_CAT) into production-quality Inventory workspace driven entirely by the new Zustand inventory-store.
+- 4-tab workspace: Items · Movements · Low Stock · Reports — NO duplicate "Inventory Management" title (sidebar already says "Inventory").
+- 4 soft-tinted KPI cards (emerald/amber/rose/violet — NO indigo/blue), each clickable to navigate to its tab.
+- Compact summary pill line (Items · Value · Low · Out · Categories) with real counts from useInventoryData.
+- All 5 stock mutations functional: Add Item (full form with 8 fields + computed total), Add Stock (+qty), Issue / Assign (-qty + assignee), Mark Damaged (-qty), Return Stock (+qty) — single reusable ItemActionDialog with action-specific gradient buttons and per-action validation.
+- Tables: Items table with search + 3 filters + per-row action menu (Add Stock · Issue · Damaged · Return) + quick Issue button.
+- Movements table: signed qty (+ / − / ·), color-coded type badges, reference column for issue assignments, animated bar fill in low stock alerts.
+- Low Stock Alerts: current / min / suggested reorder (max(2×min, 10)), progress bar, one-click Add Stock action.
+- Category Value Distribution: horizontal bars with store-derived oklch colors, percentage pills, INR values, sorted descending.
+- Reports tab: combined view (Category Distribution + Movements by Type breakdown + Low Stock + full Movement Log).
+- All numbers from store analytics (no fake KPIs, no fake totals, no fake response rates).
+- SCHOLARIO visual language preserved: rounded-xl cards, subtle borders, emerald/teal accent on primary CTAs, status pills with dots, tabular-nums throughout, soft tinted KPI cards with blur glow.
+- Responsive: tables wrapped in overflow-x-auto, columns hidden on smaller screens (sm:, md:, lg:), filter selects hidden on mobile.
+- Accessibility: aria-current on active tab, semantic table headers (uppercase tracking-wider), keyboard shortcuts 1-4, prefers-reduced-motion support.
+- File sizes kept reasonable: 6 inventory files = ~1342 LOC total (index 222 + inventory-shared 200 + items-table 213 + item-action-dialog 198 + add-item-dialog 213 + movement-panels 296).
+
+---
+Task ID: transport-rewrite
+Agent: main (Super Z)
+Task: Rewrite the Transport module at `src/components/principal/modules/transport/` to use the new `transport-store.ts` (Zustand) instead of the deprecated `@/lib/mock/operations` transport mocks + local `data.tsx` dataset. Students come from canonical Students store — no duplicate student data.
+
+Work Log:
+
+### Pre-work audit
+- Read 5 existing transport files: index.tsx (84 LOC), routes-table.tsx (99 LOC), vehicles-table.tsx (63 LOC), tracking-sheet.tsx (221 LOC), data.tsx (20 LOC).
+- All consumed deprecated mock data from `@/lib/mock/operations` (`transportStats`, `transportRoutes`, `vehicles` array) + the local `data.tsx` (`ROUTE_DISTRIBUTION`, `CAPACITY_UTIL`, `TransportRoute` type alias).
+- Studied reference patterns from the just-completed `library-rewrite` and `inventory-rewrite` tasks: shared KPI/Panel pattern, sticky header + summary pill line + tab navigation + KPI cards row + tab panels, search + filter table with per-row actions, SearchableSelect-based dialogs.
+- Verified `transport-store.ts` API: vehicles, routes, drivers, assignments, maintenance, search, setSearch, assignStudent, removeAssignment, changeRoute, completeMaintenance. Analytics: totalVehicles, totalRoutes, totalDrivers, studentsUsingTransport, onRoad, inMaintenance, gpsActive, maintenanceDue, unassignedStudents, routeDistribution, capacityUtil.
+- Verified `useStudentsStore` API: students with `transport: boolean`, `status`, `className`, `section`, `admissionNo`, `name`. Confirmed the transport store does NOT duplicate student data — assignments reference students by id + display fields only.
+- Confirmed only the transport module files reference `transportStats` / `transportRoutes` / `vehicles (mock array)` — safe to rewrite without breaking other modules.
+
+### Files delivered
+
+#### `transport-shared.tsx` (NEW, 280 LOC)
+- `TptTab` type (routes · vehicles · users · maintenance · reports).
+- `TptAccent` (emerald / rose / amber / cyan / violet — NO indigo/blue).
+- `TptKpiCard` — soft tinted KPI card with subtle blur glow top-right, optional onClick → tab navigation, focus-visible ring.
+- `TptPanel` — rounded card container with optional header (title + subtitle + action) and body.
+- `TptPill` — compact semantic pill.
+- `RouteStatusBadge` — On Route (emerald) · At School (cyan) · Maintenance (amber) · Inactive (muted) with dot.
+- `VehicleStatusBadge` — Active (emerald) · Maintenance (amber) · Inactive (muted) with dot.
+- `GpsBadge` — Active (emerald, pulsing dot) · Off (muted).
+- `MaintenanceStatusBadge` — Due (amber) · Overdue (rose) · Scheduled (cyan) · Completed (emerald) with dot.
+- `DriverStatusBadge`, `TptEmptyState`, `TPT_GLOBAL_STYLES` for prefers-reduced-motion (scoped to `.transport-shell`).
+
+#### `routes-table.tsx` (REWRITE, 190 LOC)
+- `RoutesTable` reads routes from `useTransportStore` (no mock data).
+- Search: filter by route name / vehicleNo / driverName / startPoint (driven by the store's `search` state, shared across workspace).
+- Columns: Route (icon tile + name + start→destination + stops) · Vehicle (mono font, hidden md+) · Driver (hidden lg+) · Capacity (enrolled/capacity with animated progress bar — emerald when normal, amber when near full, rose when full, with "Full" pill) · Status (RouteStatusBadge) · ETA (with Clock icon, hidden sm+; "—" for Maintenance/Inactive).
+- overflow-x-auto for responsiveness; columns hidden on smaller screens.
+
+#### `vehicles-table.tsx` (REWRITE, 175 LOC)
+- `VehiclesTable` reads vehicles from `useTransportStore`.
+- Search: filter by number / driverName / routeName / type.
+- Columns: Vehicle No (icon tile + mono number; type badge inline on mobile) · Type (badge with type-specific accent: Bus=emerald, Mini Bus=cyan, Van=amber, hidden sm+) · Capacity (seats, centered) · Driver (hidden md+) · Route (with RouteIcon, hidden lg+) · GPS (GpsBadge) · Status (VehicleStatusBadge) · Last/Next Service (stacked, with Wrench + CalendarClock icons; Next Service shown in rose if overdue, hidden lg+).
+- Maintenance rows get an amber icon tile.
+
+#### `transport-users.tsx` (NEW, 460 LOC)
+- `AssignmentsTable`: search by studentName/admissionNo/className/routeName/stop; columns Student (gradient avatar + name + admissionNo + class) · Route (emerald) · Stop (MapPin, hidden sm+) · Vehicle (mono, hidden md+) · Driver (hidden lg+) · Actions (Change Route + Remove). Footer hint with assignment count + "X routes near full" amber context. Header action: search input + "Assign Student" emerald→teal button.
+- `AssignStudentDialog`: SearchableSelect for Student (only Active + transport=true + NOT already assigned from canonical `useStudentsStore` — NO duplicate student data) + Route (not Inactive/Maintenance + has seats) + Stop text input. Policy notice (one route at a time). Calls `assignStudent` — uses store's `{success, error?}` return value to drive toast. Emerald → teal gradient submit button.
+- `ChangeRouteDialog`: student context card + Current → New route visual transition grid + New route select (excludes current + Maintenance/Inactive + full) + stop info card (unchanged). Calls `changeRoute` — toast confirms the move.
+- `RemoveAssignmentConfirm`: destructive dialog with student context card (rose tinted). Calls `removeAssignment` — toast confirms removal.
+- `UnassignedStudentsBanner`: amber banner showing count of transport-eligible students not yet assigned (from `analytics.unassignedStudents`). Inline "Assign" button. Returns null when count is 0.
+
+#### `maintenance-panel.tsx` (NEW, 270 LOC)
+- Stats strip — 4 soft tinted mini-cards: Overdue (rose) · Due (amber) · Scheduled (cyan) · Completed (emerald).
+- `MaintenancePanel`: maintenance records sorted by status priority (Overdue → Due → Scheduled → Completed). Columns: Vehicle (icon tile, color-coded by status) · Service Type · Last Service (hidden md+) · Next Service (rose if overdue) · Status (MaintenanceStatusBadge) · Issue / Notes (italic quoted issue / "No issues" / "—", hidden lg+) · Action.
+- Overdue rows have a subtle rose tint background for visibility.
+- Action button: "Complete" (emerald outline) for Due / Overdue / Scheduled records → calls `completeMaintenance` → toast with vehicle + service type + next-service note. "Done" pill (emerald) for Completed records (no action button).
+
+#### `transport-charts.tsx` (NEW, 230 LOC)
+- `RouteDistributionChart`: horizontal bars from `analytics.routeDistribution` (uses store-provided oklch colors per route). Each row: full route name (short "R1" code on mobile) · animated bar with store color · value count + "stu" suffix. Footer stats: Total Students (emerald) + Avg per Route (cyan).
+- `CapacityUtilizationChart`: progress bars from `analytics.capacityUtil` per route. Each row: route name + enrolled/capacity · value% (color-coded: rose ≥100, amber 85–99, muted <85) · animated bar (rose/amber/emerald) · inline status text ("Route at full capacity" / "Near full · N seats left"). Header pill shows avg utilization %. Footer grid: Avg Util · Near Full · Full counts.
+- `TransportReports`: combines both charts in a 2-column grid (stacks on mobile) — used by the Reports tab.
+
+#### `index.tsx` (REWRITE, 290 LOC)
+- `TransportModule` orchestrator:
+  - Sticky header: contextual title "Transport Workspace" (NO duplicate "Transport Management"), "School Transport" eyebrow, Reports + Assign Student action buttons (emerald → teal gradient).
+  - Summary pill line: Vehicles · Routes · Drivers · Students (violet) · On Road (emerald) · Maintenance (rose) · Maintenance Due (rose) — real counts from `useTransportData`.
+  - Tab navigation: Routes · Vehicles · Users · Maintenance · Reports with real badges — Maintenance badge shows due+overdue count in rose; Users badge shows unassigned count in amber.
+  - KPI cards row (4 TptKpiCards — Vehicles emerald · Routes cyan · Drivers amber · Students Using Transport violet) — always visible, each clickable → tab navigation. Sub labels include maintenance count, on-road count, vehicle count, unassigned count.
+  - Active tab panel: AnimatePresence transitions, swap between RoutesTable / VehiclesTable / UnassignedStudentsBanner + AssignmentsTable / MaintenancePanel / TransportReports.
+  - Maintenance tab calls `onComplete` to switch back to Vehicles tab so the user sees the vehicle status change.
+  - Dialogs: AssignStudentDialog, ChangeRouteDialog, RemoveAssignmentConfirm (state-owned by module).
+  - Keyboard shortcuts 1-5 to switch tabs (power-user only, not advertised).
+  - aria-current on active tab; prefers-reduced-motion via TPT_GLOBAL_STYLES.
+
+#### `data.tsx` (DELETED)
+- Obsolete mock ROUTE_DISTRIBUTION + CAPACITY_UTIL + TransportRoute type — replaced by store analytics.
+
+#### `tracking-sheet.tsx` (DELETED)
+- Obsolete GPS tracking Sheet UI — the new store does not expose a Track action and the brief does not require it. Removed to avoid dead code.
+
+### Mutations wired (every action works)
+- `assignStudent` — Assign Student dialog → toast with student + route + stop. Pre-validation toasts for missing fields / store errors (already assigned / route full / student not found).
+- `removeAssignment` — Remove confirm dialog → toast with student + route.
+- `changeRoute` — Change Route dialog → toast with student + from → to.
+- `completeMaintenance` — Complete button → toast with vehicle + service type + next-service note. Vehicle status flips to Active; route status flips from Maintenance to At School; record status → Completed.
+- `setSearch` — all three tables (routes / vehicles / users) share the search state across the workspace.
+
+### Design language
+- Soft tinted KPI cards (emerald/amber/cyan/violet accents — NO indigo/blue).
+- Rounded-xl cards with subtle borders (`border-border`, `bg-card`).
+- Emerald → teal gradient on primary action buttons — SCHOLARIO accent.
+- Destructive actions use rose-tinted button + dialog borders.
+- Compact, dense tables with overflow-x-auto for responsiveness; columns hidden on smaller screens.
+- Real gradient avatars for students in the assignments table.
+- Status pills with dot indicators throughout.
+- All numbers tabular-nums for crisp alignment.
+- Capacity bars color-coded by fill level (emerald < 85%, amber 85–99%, rose = 100%).
+- Maintenance rows tinted rose for Overdue visibility.
+- Subtle motion (Framer Motion) with prefers-reduced-motion fallback.
+
+### Verification
+- ESLint: 0 errors, 0 warnings (`bunx eslint src/components/principal/modules/transport/`).
+- TypeScript: 0 transport-module errors (`bunx tsc --noEmit` filtered — only pre-existing errors in exams / salary / finance modules remain, all unrelated to transport).
+- Dev server: Next.js 16.3.0 Turbopack ready, HTTP 200 on `/`, compiled cleanly. The `TransportModule` is statically imported in `principal-panel.tsx` (not lazy-loaded), so the homepage returning 200 confirms the transport bundle compiles successfully as part of the main bundle.
+
+### File sizes
+- transport-shared.tsx: 280 LOC
+- routes-table.tsx: 190 LOC
+- vehicles-table.tsx: 175 LOC
+- transport-users.tsx: 460 LOC (assignments table + 3 dialogs + unassigned banner)
+- maintenance-panel.tsx: 270 LOC (stats strip + maintenance table)
+- transport-charts.tsx: 230 LOC (route distribution + capacity utilization + combined reports)
+- index.tsx: 290 LOC (orchestrator with sticky header + summary pills + tab nav + KPIs + dialogs)
+- **Total: ~1895 LOC across 7 files** (vs. ~525 LOC of mock-driven code across 5 files previously — gain is from the full Assign Student workflow, Change Route workflow, Remove confirm, Maintenance stats strip + Complete action, route distribution chart with totals, capacity utilization chart with color-coded thresholds, unassigned-students banner, and proper responsive table columns).
+
+---
+Task ID: messages-groups-enhance
+Agent: main (Super Z)
+Task: Enhance the Messages module at `src/components/principal/modules/messaging/` to add GROUPS functionality — Groups folder, group management UI (list + Create Group dialog with smart auto-fill + Manage Members), group conversation view, group member management, send-to-group via existing compose flow.
+
+Work Log:
+
+### Pre-work audit
+- Read 6 existing messaging files: index.tsx (104 LOC), folders-sidebar.tsx (98 LOC), conversation-list.tsx (170 LOC), thread-view.tsx (244 LOC), compose-modal.tsx (190 LOC), data.tsx (19 LOC) + the messaging-store.ts (509 LOC).
+- Audited the existing store API: ConversationType ('staff' | 'parent' | 'group'), Folder ('inbox' | 'starred' | 'sent' | 'drafts' | 'archive'), Label ('Staff' | 'Parents' | 'Groups' | 'Urgent'), Message (with senderName for group msgs), Conversation (with memberCount + groupId stub), Draft, sendMessage (auto-reply for staff/parent only — group branch was dead code), composeNew (matches existing convo by name), getFilteredConversations (folder filter), getRecipientOptions (hardcoded groups list).
+- Studied reference patterns from the just-completed `transport-rewrite` + `inventory-rewrite` tasks: shared KPI/Panel pattern, Dialog primitives from `@/components/ui/dialog`, SearchableSelect from `@/components/principal/modules/shared/searchable-select`, toast notifications via sonner, emerald → teal gradient on primary CTAs, soft tinted pills with semantic colours.
+- Verified `useStudentsStore` API at `@/lib/store/students-store`: `students` array with `className`, `section`, `fatherName` (parent display), `status` ('Active' | 'Archived'), `id` (e.g. 'STU-12'). NO circular import with messaging-store.
+- Verified `teachers` mock at `@/lib/mock/teachers`: 19 teachers with `id` ('T-XXX'), `name`, `avatar`, `designation`, `department`, `classes` (array of class names like 'Class 10-A'), `archived?` flag.
+- Verified `ACADEMIC_CLASSES` at `@/lib/mock/academic`: 11 class defs (Pre-Nursery, KG, Class 2-12) with `name` (e.g. 'Class 10'), `sections` (['A', 'B'] or ['A', 'B', 'C']), `grade`, `level`.
+
+### Files delivered
+
+#### `messaging-store.ts` (REWRITE, ~855 LOC)
+- **New types**: `GroupType` ('Class Group' | 'Teachers Group' | 'Staff Group' | 'Department Group' | 'Parents Group' | 'Custom Group'); `GROUP_TYPE_LIST` constant; `Group` interface (id, name, type, memberRefs, conversationId, createdAt); `MemberDisplay` interface; `MemberType` ('teacher' | 'parent'); `Folder` extended with 'groups' (between 'sent' and 'drafts').
+- **New member-ref helpers** (all exported):
+  - `resolveMemberRef(ref)` → `MemberDisplay | null` (resolves `t:T-014` to teacher display, `p:STU-12` to parent display).
+  - `resolveMemberRefs(refs)` → `MemberDisplay[]` (skips unresolvable).
+  - `getParentsOfClassSection(className, section)` → string[] of `p:` refs for active students in that class+section.
+  - `getTeachersOfClass(className)` → string[] of `t:` refs for teachers whose `classes` array includes that class.
+  - `getTeachersOfDepartment(department)` → string[] of `t:` refs for teachers in that department.
+  - `getAllStaffRefs()` → string[] of all active teachers.
+  - All helpers read from canonical teachers + students — NO duplicate data.
+- **Seed groups** (`buildSeedGroups()`): 3 groups linked to existing seed conversations C02/C09/C10 with realistic membership rosters:
+  - G01 "Class 2-A Parents" (Class Group) — 6 parents (all Class 2 sections A/B/C since the seed has 2 students/section).
+  - G02 "Science Department" (Department Group) — 6 teachers (4 Science dept + 2 backfill HoDs that work with Science).
+  - G03 "Class 10 Teachers" (Teachers Group) — 8 teachers (Class 10-A/B + Class 9-A + Class 11-12-Sci + senior backfill).
+  - Seed conversations' `memberCount` + `role` strings synced with `group.memberRefs.length` so add/remove mutations stay consistent (no 18→2→3 visibility jumps).
+- **New state**: `groups: Group[]`.
+- **New actions**:
+  - `createGroup({ name, type, memberRefs })` → creates a `Group` AND a linked `Conversation` (with `groupId` set, `memberCount` derived, auto-seed message "Group created · say hi to your members!"), switches to `groups` folder, returns group id.
+  - `addMember(groupId, memberRef)` → `{ success, error? }` (dedupes; syncs conversation memberCount + role).
+  - `removeMember(groupId, memberRef)` → syncs conversation memberCount + role.
+  - `renameGroup(groupId, name)` → updates group + linked conversation name + avatar.
+  - `deleteGroup(groupId)` → removes group + linked conversation + drafts tied to the conversation.
+- **Updated `getFilteredConversations`**: new `case 'groups'` filters `type === 'group' && !c.archived`.
+- **Updated `sendMessage`**: extended auto-reply simulation to group conversations. Picks a real member's display name (via `resolveMemberRefs`) as `senderName` for the auto-reply, falling back to `convo.name.split(' ')[0]` if no members.
+- **Updated `getRecipientOptions`**: pulls groups from the live store (so newly-created groups appear automatically in the compose picker) instead of the hardcoded list. Recompute via the `groups` array dependency in the ComposeModal's `useMemo`.
+- **New `getGroupOptions`**: returns live group list (id, name, type, memberCount, conversationId) for the Groups panel + compose picker.
+- **New selectors**: `getGroupById(id)`, `getGroupByConversationId(conversationId)`.
+- Kept all existing functionality intact: composeNew, saveDraft, sendDraft, starConversation, archiveConversation, markUrgent, getUnreadCount, formatTimeAgo, formatMessageTime.
+
+#### `folders-sidebar.tsx` (UPDATE)
+- Added `groups` folder between `sent` and `drafts` with `Users` icon and the real `groups.length` count badge.
+- Added `groups` to the store subscription so the count badge re-renders on create/delete.
+- Removed the unused `AlertCircle` import.
+- Kept the Labels section (Staff · Parents · Groups · Urgent) unchanged.
+
+#### `compose-modal.tsx` (REWRITE)
+- New `preselectedRecipient?: string | null` prop — callers (GroupsPanel) can pre-fill the recipient; the user still sees the selected chip and can change it via the picker.
+- `useMemo` for recipients now depends on the live `groups` array so newly-created groups appear immediately.
+- `handleSend` now checks for an existing conversation matching the recipient name; if found, sends directly to it (covers existing group conversations + seeded staff/parent threads) and switches to the `groups` folder if the conversation is a group, otherwise `inbox`. Falls back to `composeNew` for new recipients.
+- Added a small hint under the selected-recipient chip when sending to a group: "Sending to the whole group — every member will see your message."
+- Reset state on dialog open now also seeds `selectedRecipient` from the `preselectedRecipient` prop.
+- All existing recipient-picker + draft-save behaviour preserved.
+
+#### `groups-panel.tsx` (NEW, ~945 LOC)
+- `GroupsPanel` (replaces ConversationList in the middle pane when `activeFolder === 'groups'`):
+  - Header: search input + emerald → teal "Create Group" button.
+  - Groups list (filtered by name/type): each row shows violet → purple gradient avatar, name, type pill (semantic colour per GroupType), member count with Users icon, last activity timestamp with Clock icon, last message preview, unread badge.
+  - Click row → opens linked group conversation in the thread view (via `openConversation`).
+  - Hover actions: Compose-to-group (MessageSquare icon → opens compose modal with group preselected), Manage members (Settings2 icon → opens ManageMembersDialog), More menu (ChevronRight → manage members / compose / delete group).
+  - Empty state: "No groups yet" + inline Create Group button.
+- `CreateGroupDialog` (reuses `Dialog` primitives from `@/components/ui/dialog`):
+  - Group Name input (auto-fills from smart picker suggestion; user can override).
+  - Group Type select (6 types in a 3-column grid with type-specific icons).
+  - **Smart auto-fill** driven by type:
+    - Class Group / Parents Group → Class + Section SearchableSelects → auto-fills name "Class X-Y Parents" + pre-selects parents of that class section.
+    - Teachers Group → Class SearchableSelect → auto-fills name "Class X Teachers" + pre-selects teachers across all sections of that class.
+    - Department Group → Department SearchableSelect → auto-fills name "{Dept} Department" + pre-selects teachers in that department.
+    - Staff Group → amber banner explaining all active teachers will be added + checkbox list to deselect.
+    - Custom Group → muted banner "pick members manually below".
+  - Smart-fill hint banner (emerald tinted): shows the auto-filled count + source; Clear button to reset.
+  - Selected members chips (gradient avatars + name + × to remove; max-h-24 scroll).
+  - Member picker: search input + checkbox list of teachers + parents (gradient avatars + name + role + Staff/Parent badge); up to 60 rows; max-h-44 scroll.
+  - Pre-validation toasts: name required, at least one member required.
+  - Calls `createGroup({ name, type, memberRefs })` → toast "{name} · {N} members" → closes dialog.
+- `ManageMembersDialog`:
+  - Group header card (violet gradient avatar + name + type pill + member count).
+  - Add-a-Member control: SearchableSelect (excludes existing members) + emerald → teal Add button. Calls `addMember` → toast "{name} added to {group}". Empty-state when everyone is already a member.
+  - Current Members list: gradient avatar + name + role + per-row Trash2 button. Calls `removeMember` → toast "{name} removed from {group}". Empty-state when no members.
+  - Reads the live group state from the store so add/remove updates render without remounting.
+- All member refs are resolved through `resolveMemberRef(s)` — NO duplicate teacher or parent data (members come from the canonical `teachers` mock + `useStudentsStore` students).
+
+#### `index.tsx` (REWRITE, ~115 LOC)
+- `MessagingModule` orchestrator:
+  - Sticky header (kept): contextual title "Messages & Inbox", Compose button (emerald → teal).
+  - **Compact summary row** now includes a Groups count pill (violet, with Users icon) between Starred and Drafts — real count from `groups.length`.
+  - 3-pane layout preserved (folders + middle + thread view); middle pane renders `GroupsPanel` when `activeFolder === 'groups'`, otherwise the existing `ConversationList`.
+  - `handleCompose(recipientName?)` callback wired through to `ComposeModal.preselectedRecipient` so the GroupsPanel's "Compose to group" action pre-fills the recipient.
+  - Mobile view switching preserved (list ↔ thread).
+  - `ComposeModal` now receives the `preselectedRecipient` prop.
+
+#### `thread-view.tsx` (unchanged)
+- Existing `MessageBubble` already renders `senderName` above non-me message text (used for group messages) — the store's `sendMessage` now provides a real member name for group auto-replies via `resolveMemberRefs`. No code changes needed; group chat shows messages with real member names automatically.
+- Kept the Star / Archive / More (Mark unread, Mark urgent) actions on the conversation header.
+
+#### `conversation-list.tsx` (unchanged)
+- Existing list filtering already handles every folder (the store's `getFilteredConversations` now includes the `groups` case). Clicking the "Groups" folder still uses ConversationList IF the user is not in the dedicated groups folder — but the dedicated groups folder is rendered via GroupsPanel, so conversation-list is only shown for Inbox/Starred/Sent/Drafts/Archive.
+- Empty-state copy covers all folders (already handles `starred` / `sent` / `drafts` / `archive`).
+
+#### `data.tsx` (unchanged)
+- Legacy `folderIcons` map + `autoReplies` array — not used by the new sidebar (which inlines its icons), kept for backward-compat.
+
+### Mutations wired (every action works)
+- **Create Group** — `createGroup` (CreateGroupDialog) → toast "{name} · {N} members" + switches to Groups folder + opens the new conversation in the thread view.
+- **Add Member** — `addMember` (ManageMembersDialog → SearchableSelect + Add button) → toast "{name} added to {group}". Pre-validation toast when member is already in the group ("Already a member"). Conversation memberCount + role string stay in sync.
+- **Remove Member** — `removeMember` (ManageMembersDialog → Trash2 button per row) → toast "{name} removed from {group}". Conversation memberCount + role string stay in sync.
+- **Rename Group** — `renameGroup` (exposed in the store for future use; not surfaced in UI in this iteration to keep the panel compact).
+- **Delete Group** — `deleteGroup` (GroupRow → More menu → Delete group) → toast "Group deleted" + clears the active conversation if it was the deleted one.
+- **Send to Group** (3 ways):
+  1. Click group row → opens linked conversation in thread view → reply composer sends to the group (existing flow). Auto-reply arrives 3.5s later from a real member's name.
+  2. Click "Compose to group" (MessageSquare hover action) → opens ComposeModal with group preselected as recipient → send goes to the existing group conversation and switches to the Groups folder.
+  3. Click "Compose" header button → search the group in the recipient picker → send (existing flow).
+- **Star / Archive / Mark urgent** — unchanged; all still work on group conversations via the thread view's action buttons.
+- **Search** — the GroupsPanel has its own search input (filters by group name + type), independent of the conversation-list search.
+
+### Design language
+- SCHOLARIO visual language preserved: rounded-xl cards, soft tinted type pills (emerald / cyan / amber / violet / rose per GroupType), violet → purple gradient on group avatars (consistent with the existing group colour in conversation-list/thread-view), emerald → teal gradient on primary action buttons, status pills with dot indicators throughout, tabular-nums for member counts + unread badges.
+- Compact, dense, premium: GroupRow uses `text-xs` / `text-[10px]` / `text-[9px]`, gap-2.5 spacing, h-9 avatars. Dialog uses 3-column type grid + 2-column class/section grid. Member chips are 1-line h-3.5 avatars. Checkbox list rows are h-1.5×3.
+- NO indigo or blue. NO developer language in UI.
+- Responsive: GroupsPanel + dialogs work on mobile (Dialog sm:max-w-lg / sm:max-w-md); SearchableSelect popovers use w-56 / w-64; checkbox list has max-h-44 scroll; selected-members chips wrap to multiple lines with max-h-24 scroll.
+
+### Verification
+- ESLint: 0 errors, 0 warnings (`bun run lint` clean — only the unrelated `.eslintignore` deprecation warning).
+- TypeScript: 0 messaging-module errors (`bunx tsc --noEmit` filtered — only pre-existing errors in exams / salary / finance / analytics modules remain, all unrelated to messaging).
+- Dev server: Next.js 16.3.0 Turbopack ready, HTTP 200 on `/`, compiled cleanly on each request. The `MessagingModule` is statically imported in `principal-panel.tsx` (not lazy-loaded), so the homepage returning 200 confirms the messaging bundle (including the new GroupsPanel) compiles successfully as part of the main bundle.
+
+### File sizes
+- messaging-store.ts: ~855 LOC (was ~509 — added GroupType + Group + member-ref helpers + 5 group actions + seed groups + group auto-reply + getGroupOptions + sync helpers).
+- folders-sidebar.tsx: ~100 LOC (was ~98 — added one folder + count badge).
+- compose-modal.tsx: ~205 LOC (was ~190 — added preselectedRecipient + existing-conversation lookup + group hint).
+- groups-panel.tsx: ~945 LOC (NEW — GroupsPanel + GroupRow + CreateGroupDialog with smart auto-fill + ManageMembersDialog + member pool helpers + visual config).
+- index.tsx: ~115 LOC (was ~104 — added GroupsPanel conditional + handleCompose callback + groups count pill).
+- **Total: ~2220 LOC across 5 modified/new files** (gain is from the full group-management workflow: list with hover actions + smart-fill Create Group dialog with 6 type variants + Manage Members dialog with add/remove + member pool with search + sync helpers).

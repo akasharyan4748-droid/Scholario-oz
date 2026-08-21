@@ -1,78 +1,132 @@
 'use client'
 
+/**
+ * books-tables — Book catalogue + Issued/Overdue tables.
+ *
+ * Catalogue: search (title/author/ISBN) + filter (category, availability),
+ *   book tile, ISBN, category, copies/available/issued counts, status.
+ *
+ * IssuedBooksTable: shows currently issued (status !== Returned) with
+ *   Return action. Doubles as Overdue table when filter='overdue'.
+ *
+ * State from library-store (no mock data here).
+ */
+
 import { motion } from 'framer-motion'
-import { BookMarked, RotateCcw, Search } from 'lucide-react'
-import { GlassCard, StatusBadge, GradientAvatar } from '@/components/shared/ui'
-import { Badge } from '@/components/ui/badge'
+import { BookMarked, Search, RotateCcw, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from '@/components/ui/table'
-import { libraryBooks, issuedBooks } from '@/lib/mock/operations'
-import { formatINR, formatDate } from '@/lib/format'
+import { useLibraryStore } from '@/lib/store/library-store'
+import type { Book, IssueRecord, BookCategory, BookStatus } from '@/lib/store/library-store'
+import { formatDate, formatINR, initials } from '@/lib/format'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { GradientAvatar } from '@/components/shared/ui'
+import { LibPanel, LibEmptyState, BookStatusBadge, IssueStatusBadge, BorrowerTypePill } from './library-shared'
 
-type LibraryBook = (typeof libraryBooks)[number]
-type IssuedBook = (typeof issuedBooks)[number]
+const CATEGORIES: Array<BookCategory | 'all'> = ['all', 'Fiction', 'Reference', 'Textbooks', 'Story Books', 'Biography', 'Magazines', 'Science']
+const AVAILABILITY: Array<{ value: string; label: string }> = [
+  { value: 'all', label: 'All Availability' },
+  { value: 'available', label: 'Available' },
+  { value: 'low', label: 'Low Stock' },
+  { value: 'out', label: 'Out of Stock' },
+]
 
-export function BooksCatalogue({
-  search, setSearch, category, setCategory, categories, filteredBooks,
-}: {
-  search: string
-  setSearch: (s: string) => void
-  category: string
-  setCategory: (c: string) => void
-  categories: string[]
-  filteredBooks: LibraryBook[]
-}) {
+// ─── BooksCatalogue ─────────────────────────────────────────────────
+
+export function BooksCatalogue({ onIssueBook }: { onIssueBook: (book: Book) => void }) {
+  const books = useLibraryStore((s) => s.books)
+  const search = useLibraryStore((s) => s.search)
+  const categoryFilter = useLibraryStore((s) => s.categoryFilter)
+  const availabilityFilter = useLibraryStore((s) => s.availabilityFilter)
+  const setSearch = useLibraryStore((s) => s.setSearch)
+  const setCategoryFilter = useLibraryStore((s) => s.setCategoryFilter)
+  const setAvailabilityFilter = useLibraryStore((s) => s.setAvailabilityFilter)
+
+  const filtered = books.filter((b) => {
+    const q = search.trim().toLowerCase()
+    const matchSearch = !q
+      || b.title.toLowerCase().includes(q)
+      || b.author.toLowerCase().includes(q)
+      || b.isbn.toLowerCase().includes(q)
+    const matchCat = categoryFilter === 'all' || b.category === categoryFilter
+    const matchAvail = availabilityFilter === 'all'
+      || (availabilityFilter === 'available' && b.status === 'Available')
+      || (availabilityFilter === 'low' && b.status === 'Low Stock')
+      || (availabilityFilter === 'out' && b.status === 'Out of Stock')
+    return matchSearch && matchCat && matchAvail
+  })
+
   return (
-    <GlassCard className="p-3 sm:p-4 lg:p-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <div>
-          <h3 className="font-semibold text-sm">Book Catalogue</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">{filteredBooks.length} books found</p>
-        </div>
-        <div className="flex gap-2">
+    <LibPanel
+      title="Book Catalogue"
+      subtitle={`${filtered.length} of ${books.length} books`}
+      action={
+        <div className="flex items-center gap-1.5">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search title, author, ISBN" className="pl-8 w-full sm:w-56" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Title, author, ISBN"
+              className="pl-8 h-8 w-40 sm:w-56 text-xs"
+            />
           </div>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {CATEGORIES.map((c) => (
+                <SelectItem key={c} value={c}>{c === 'all' ? 'All Categories' : c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
+            <SelectTrigger className="w-32 h-8 text-xs hidden sm:flex"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {AVAILABILITY.map((a) => (
+                <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
-      </div>
-
-      <div className="rounded-xl border border-border overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/40">
-              <TableHead className="font-semibold">Book</TableHead>
-              <TableHead className="font-semibold hidden md:table-cell">ISBN</TableHead>
-              <TableHead className="font-semibold">Category</TableHead>
-              <TableHead className="font-semibold text-center">Copies</TableHead>
-              <TableHead className="font-semibold text-center">Available</TableHead>
-              <TableHead className="font-semibold text-center">Issued</TableHead>
-              <TableHead className="font-semibold">Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredBooks.map((b, i) => {
-              const status = b.available === 0 ? 'Out of Stock' : b.available < b.copies / 2 ? 'Low Stock' : 'Available'
-              const variant = status === 'Out of Stock' ? 'danger' : status === 'Low Stock' ? 'warning' : 'success'
-              return (
+      }
+      bodyClassName="p-0"
+    >
+      {filtered.length === 0 ? (
+        <LibEmptyState
+          icon={<BookMarked className="h-5 w-5" />}
+          title="No books found"
+          description="Try adjusting your search or filter."
+        />
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider">Book</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider hidden md:table-cell">ISBN</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider hidden sm:table-cell">Category</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider text-center">Copies</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider text-center">Avail.</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider text-center">Issued</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider">Status</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((b, i) => (
                 <motion.tr
                   key={b.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.04 }}
+                  transition={{ delay: i * 0.02 }}
                   className="hover:bg-accent/30 transition-colors"
                 >
                   <TableCell>
@@ -80,89 +134,181 @@ export function BooksCatalogue({
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <BookMarked className="h-4 w-4" />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 max-w-[260px]">
                         <p className="font-medium text-sm truncate">{b.title}</p>
-                        <p className="text-[11px] text-muted-foreground">{b.author}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{b.author}</p>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">{b.isbn}</TableCell>
-                  <TableCell><Badge variant="outline" className="text-xs">{b.category}</Badge></TableCell>
-                  <TableCell className="text-center font-medium">{b.copies}</TableCell>
-                  <TableCell className="text-center"><span className="font-semibold text-emerald-600">{b.available}</span></TableCell>
-                  <TableCell className="text-center"><span className="font-semibold text-amber-600">{b.issued}</span></TableCell>
-                  <TableCell><StatusBadge status={status} variant={variant} dot /></TableCell>
+                  <TableCell className="hidden md:table-cell font-mono text-[11px] text-muted-foreground">{b.isbn}</TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    <Badge variant="outline" className="text-[10px] font-medium">{b.category}</Badge>
+                  </TableCell>
+                  <TableCell className="text-center font-medium tabular-nums">{b.copies}</TableCell>
+                  <TableCell className="text-center">
+                    <span className={cn(
+                      'font-semibold tabular-nums',
+                      b.available === 0 ? 'text-rose-600' : b.available <= 3 ? 'text-amber-600' : 'text-emerald-600',
+                    )}>{b.available}</span>
+                  </TableCell>
+                  <TableCell className="text-center"><span className="font-semibold text-amber-600 tabular-nums">{b.issued}</span></TableCell>
+                  <TableCell><BookStatusBadge status={b.status} /></TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={b.available <= 0}
+                      onClick={() => onIssueBook(b)}
+                      className="gap-1.5 text-[11px] h-7"
+                    >
+                      Issue
+                    </Button>
+                  </TableCell>
                 </motion.tr>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </GlassCard>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </LibPanel>
   )
 }
 
-export function IssuedBooksTable({ issued }: { issued: IssuedBook[] }) {
-  return (
-    <GlassCard className="p-3 sm:p-4 lg:p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="font-semibold text-sm">Issued Books</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">{issued.length} currently issued</p>
-        </div>
-        <StatusBadge status={`${issued.filter((b) => b.status === 'Overdue').length} overdue`} variant="warning" dot />
-      </div>
+// ─── IssuedBooksTable (also handles 'overdue' filter) ───────────────
 
-      <div className="rounded-xl border border-border overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/40">
-              <TableHead className="font-semibold">Book & Student</TableHead>
-              <TableHead className="font-semibold hidden sm:table-cell">Admission No</TableHead>
-              <TableHead className="font-semibold hidden md:table-cell">Issue Date</TableHead>
-              <TableHead className="font-semibold hidden md:table-cell">Due Date</TableHead>
-              <TableHead className="font-semibold">Status</TableHead>
-              <TableHead className="font-semibold text-right">Fine</TableHead>
-              <TableHead className="font-semibold text-right">Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {issued.map((b, i) => (
-              <motion.tr
-                key={b.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: i * 0.04 }}
-                className="hover:bg-accent/30 transition-colors"
-              >
-                <TableCell>
-                  <div className="flex items-center gap-2.5">
-                    <GradientAvatar name={b.student} size="sm" />
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm truncate">{b.book}</p>
-                      <p className="text-[11px] text-muted-foreground">{b.student}</p>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="hidden sm:table-cell font-mono text-xs text-muted-foreground">{b.admissionNo}</TableCell>
-                <TableCell className="hidden md:table-cell text-xs">{formatDate(b.issueDate)}</TableCell>
-                <TableCell className="hidden md:table-cell text-xs">{formatDate(b.dueDate)}</TableCell>
-                <TableCell>
-                  <StatusBadge status={b.status} variant={b.status === 'Overdue' ? 'danger' : 'primary'} dot />
-                </TableCell>
-                <TableCell className="text-right">
-                  {b.fine > 0 ? <span className="font-semibold text-rose-600 text-sm">{formatINR(b.fine)}</span> : <span className="text-muted-foreground text-xs">—</span>}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={() => toast.success('Book returned', { description: `${b.book} returned by ${b.student}${b.fine > 0 ? ` · Fine collected: ${formatINR(b.fine)}` : ''}` })}>
-                    <RotateCcw className="h-3 w-3" /> Return
-                  </Button>
-                </TableCell>
-              </motion.tr>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </GlassCard>
+interface IssuedBooksTableProps {
+  filter: 'all' | 'overdue'
+  onReturn: (issueId: string) => void
+  onSendReminder?: (issue: IssueRecord) => void
+}
+
+export function IssuedBooksTable({ filter, onReturn, onSendReminder }: IssuedBooksTableProps) {
+  const issues = useLibraryStore((s) => s.issues)
+
+  const rows = issues
+    .filter((i) => i.status !== 'Returned')
+    .filter((i) => filter === 'all' ? true : i.status === 'Overdue')
+
+  const overdueCount = issues.filter((i) => i.status === 'Overdue').length
+
+  const title = filter === 'overdue' ? 'Overdue Books' : 'Issued Books'
+  const subtitle = filter === 'overdue'
+    ? `${rows.length} overdue · ${overdueCount} total`
+    : `${rows.length} currently issued · ${overdueCount} overdue`
+
+  return (
+    <LibPanel
+      title={title}
+      subtitle={subtitle}
+      bodyClassName="p-0"
+    >
+      {rows.length === 0 ? (
+        <LibEmptyState
+          icon={<BookMarked className="h-5 w-5" />}
+          title={filter === 'overdue' ? 'No overdue books' : 'No books currently issued'}
+          description={filter === 'overdue' ? 'All issued books are within their due dates.' : 'Issue a book from the catalogue to see it here.'}
+        />
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider">Borrower & Book</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider hidden lg:table-cell">Type</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider hidden md:table-cell">Issue Date</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider hidden md:table-cell">Due Date</TableHead>
+                {filter === 'overdue' && (
+                  <TableHead className="font-semibold text-[10px] uppercase tracking-wider text-center">Days Overdue</TableHead>
+                )}
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider">Status</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider text-right">Fine</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r, i) => {
+                const daysOverdue = filter === 'overdue'
+                  ? Math.max(0, Math.ceil((Date.now() - new Date(r.dueDate).getTime()) / (1000 * 60 * 60 * 24)))
+                  : 0
+                return (
+                  <motion.tr
+                    key={r.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.02 }}
+                    className="hover:bg-accent/30 transition-colors"
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2.5">
+                        <GradientAvatar name={r.borrowerName} initials={initials(r.borrowerName)} size="sm" />
+                        <div className="min-w-0 max-w-[280px]">
+                          <p className="font-medium text-sm truncate">{r.bookTitle}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {r.borrowerName}
+                            {r.admissionNo && <span className="font-mono"> · {r.admissionNo}</span>}
+                            {r.class && <span> · {r.class}</span>}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell"><BorrowerTypePill type={r.borrowerType} /></TableCell>
+                    <TableCell className="hidden md:table-cell text-xs">{formatDate(r.issueDate)}</TableCell>
+                    <TableCell className="hidden md:table-cell text-xs">
+                      <span className={cn(r.status === 'Overdue' && 'text-rose-600 font-semibold')}>
+                        {formatDate(r.dueDate)}
+                      </span>
+                    </TableCell>
+                    {filter === 'overdue' && (
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center justify-center min-w-7 h-6 px-1.5 rounded-md bg-rose-500/10 text-rose-700 dark:text-rose-300 text-xs font-bold tabular-nums">
+                          {daysOverdue}d
+                        </span>
+                      </TableCell>
+                    )}
+                    <TableCell><IssueStatusBadge status={r.status} /></TableCell>
+                    <TableCell className="text-right">
+                      {r.fine > 0 ? (
+                        <span className="font-semibold text-rose-600 text-sm tabular-nums">{formatINR(r.fine)}</span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {filter === 'overdue' && onSendReminder && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-[10px] h-7"
+                            onClick={() => onSendReminder(r)}
+                          >
+                            <Send className="h-3 w-3" /> Remind
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-[10px] h-7"
+                          onClick={() => onReturn(r.id)}
+                        >
+                          <RotateCcw className="h-3 w-3" /> Return
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </motion.tr>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </LibPanel>
   )
+}
+
+// helper exported for callers
+export function statusAccent(status: BookStatus): string {
+  if (status === 'Available') return 'text-emerald-600'
+  if (status === 'Low Stock') return 'text-amber-600'
+  return 'text-rose-600'
 }
