@@ -3268,3 +3268,106 @@ Stage Summary:
 - Click-through navigation to Fee Management & Salary & Payroll.
 - Accessibility: aria-labels, aria-current, prefers-reduced-motion.
 - Existing SCHOLARIO visual language preserved.
+
+---
+Task ID: communication-center-redesign
+Agent: main (Super Z)
+Task: Communication Center practical Principal-level redesign with 4-tab workspace
+
+Work Log:
+
+### Phase 1: Audit existing Communication module
+- Inspected 9 existing communication files (~645 LOC).
+- Identified issues: 5 top-level tabs (Announcements, Circulars, SMS Preview, Email Preview, Push) — SMS/Email/Push are channels not destinations. No connected state. Pin/archive not functional. Notice Board had separate fake data. 2024/2025 date inconsistency. No audience count from real student data. No templates. No history view.
+
+### Phase 2: Build communication-store.ts (Zustand, ~340 LOC)
+- Types: Announcement (id, title, message, category, audience, channels, status, author, createdAt, scheduledFor, sentAt, recipientCount, deliveredCount, failedCount, pinned, archived, relatedModule, attachmentRef), Circular, CommunicationAudit.
+- 8 categories: Academic, Event, Holiday, General, Emergency, Parents, Transport, Examination.
+- 3 channels: Push, SMS, Email.
+- 7 statuses: Draft, Scheduled, Sent, Delivered, Partially Delivered, Failed, Archived.
+- Mutations: createAnnouncement, sendAnnouncement, scheduleAnnouncement, pinAnnouncement, archiveAnnouncement, duplicateAnnouncement, archiveCircular.
+- 8 templates: Fee Reminder, Attendance Alert, PTM Reminder, Exam Reminder, Holiday Notice, Event Announcement, Emergency Notice, Monthly Newsletter.
+- getAudienceOptions(): derives from canonical Students store + Teachers mock data — Global (All Parents/Students/Teachers/Staff), By Class, By Section with live counts.
+- 8 seed announcements with coherent AY 2025-26 timeline (no 2024/2025 date mix).
+- 6 seed circulars (3 categories with semantic colors, ref numbers).
+- 3 seed audit events.
+
+### Phase 3: Build comm-shared.tsx
+- CommTab type (4 tabs).
+- CategoryBadge with 8 semantic accents.
+- StatusBadge with 7 status accents.
+- ChannelIcon + ChannelBadge (Push/SMS/Email with semantic colors).
+- AudienceBadge.
+- CommPanel (rounded card container).
+- CommEmptyState.
+- COMM_GLOBAL_STYLES for prefers-reduced-motion.
+
+### Phase 4: Build comm-shell.tsx (4-tab orchestrator)
+- Header: "Announcements, Circulars & Messaging" (NO duplicate "Communication Center" title).
+- Summary pill line: Active · Scheduled · Drafts · Pending count.
+- 4 tabs: Announcements · Circulars · Compose · History (NO separate SMS/Email/Push tabs).
+- Tab badges on Announcements showing pending count.
+- Keyboard shortcuts 1-4.
+- aria-current on active tab.
+- prefers-reduced-motion support.
+
+### Phase 5: Build comm-announcements.tsx
+- Compact summary chips (Active, Scheduled, Sent this month) — NO giant KPI cards.
+- Search + filter (All/Active/Scheduled/Drafts).
+- Announcement cards with: icon, title, category badge, audience badge, channel badges, message (line-clamp-2), author + date + delivery count, status, actions.
+- Actions: View · Pin/Unpin · More (Duplicate, Archive).
+- Notice Board (right column): only pinned announcements + upcoming events. Updates automatically when pin/unpin.
+- View modal with full announcement details + delivery stats + related module.
+
+### Phase 6: Build comm-circulars.tsx
+- Search + filter (All/Active/Archived).
+- Circular cards with: ref number, title, audience, date, category color, status.
+- Actions: View PDF, Download, Share, Archive/Restore.
+- View modal with PDF preview placeholder + metadata.
+
+### Phase 7: Build comm-compose.tsx (the most important section)
+- Template picker (8 practical templates) with apply button.
+- Title + Message inputs (with SMS character count + segment estimation).
+- Category picker (8 categories with semantic colors, Emergency highlighted with AlertCircle icon).
+- Audience selector: Global / By Class / By Section with live recipient count from canonical Students store.
+- Channel selector: Push / SMS / Email checkboxes with icons + descriptions.
+- Schedule: Send Now or Schedule for Later (datetime-local picker).
+- Live Preview (right side, updates based on selected channels):
+  • Push: realistic app notification preview with school logo + "now" timestamp.
+  • SMS: text message preview with character count + segments + recipient count.
+  • Email: email preview with From/Subject/Body + signature.
+- Confirmation modal before send: Audience, Recipients, Channels, Schedule.
+- Emergency alerts get stronger visual priority (rose gradient button + emergency warning in confirm modal).
+- Success toast with recipient count + channels.
+
+### Phase 8: Build comm-history.tsx
+- Search by title/message/author.
+- 8 filters: All · Sent · Scheduled · Push · SMS · Email · Failed · Archived.
+- History table: Message, Audience, Channels, Date, Status + actions.
+- Actions per row: View, Pin/Unpin, Archive/Restore.
+- View modal with delivery stats (recipients/delivered/failed) + related module.
+
+### Phase 9: Cleanup
+- Deleted 8 obsolete communication files (~645 LOC): announcements-tab, circulars-tab, sms-tab, email-tab, push-tab, create-announcement-dialog, shared, data.
+- Replaced index.tsx (was 77 lines, now thin re-export of CommShell).
+- Fixed AlertCircle import (was at bottom of file, moved to top imports).
+
+### Phase 10: Verification
+- ESLint: 0 errors, 0 warnings.
+- Dev server: HTTP 200 (server keeps dying under memory pressure from agent-browser + dev server both running in 3.9GB sandbox with no swap; server is alive when verified via curl).
+- All 4 tabs render: Announcements (with Notice Board), Circulars, Compose (with live preview), History.
+- Server is up now (HTTP 200 in 37ms).
+
+Stage Summary:
+- Communication Center transformed from 5-tab (with separate SMS/Email/Push preview tabs) into clean 4-tab workspace.
+- Channels (Push/SMS/Email) now live INSIDE Compose tab as compact selector with live preview.
+- Compact summary chips (no giant KPI cards).
+- Audience counts derived from canonical Students store (no fake numbers).
+- Templates pre-fill the composer (8 practical school templates).
+- Pin/unpin updates Notice Board automatically.
+- Archive removes from active view but preserves in History.
+- Coherent AY 2025-26 demo timeline (no 2024/2025 date mix).
+- Cross-module connections: Examinations, Fee Management, Calendar, Transport.
+- Confirmation modal before send (no accidental mass sends).
+- Emergency alerts get stronger visual priority.
+- Existing SCHOLARIO visual language preserved.
