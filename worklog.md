@@ -3156,3 +3156,115 @@ Stage Summary:
 - Professional printable payslip with school branding.
 - Existing SCHOLARIO visual language preserved.
 - Deleted 7 obsolete salary files (~920 LOC).
+
+---
+Task ID: finance-dashboard-complete-redesign
+Agent: main (Super Z)
+Task: Finance Dashboard complete redesign as Principal's School Financial Control Center
+
+Work Log:
+
+### Phase 1: Audit existing Finance Dashboard
+- Inspected 8 existing finance-dashboard files (~717 LOC).
+- Identified issues: hardcoded numbers in multiple components, large green hero banner too dominant, rainbow donut chart, empty Budget vs Actual card, empty Quarterly cards, no period selector affecting data, duplicate finance data not connected to Fee Management / Salary & Payroll.
+
+### Phase 2: Build finance-store.ts (single source of truth, ~312 LOC)
+- useFinanceData(periodId) hook aggregates from:
+  • fee-store (useFeeData) → feeRevenue, feeOutstanding, feeCollectionRate
+  • salary-store (useSalaryData) → monthlyPayroll, annualizedPayroll, pendingAdjustments
+  • mock/finance-dashboard → P&L items, balance sheet, cashflow, monthlyRevenue, budgetVsActual
+- All numbers reconcile mathematically:
+  • Revenue - Expenses = Net Surplus
+  • Assets - Liabilities = Net Worth
+  • Opening Cash + Cash In - Cash Out = Closing Cash
+  • Budget - Actual = Variance
+  • Actual / Budget = Utilization
+  • Net / Revenue = Surplus Margin
+- Payroll-derived expense replaces hardcoded "Salaries" line in expense breakdown.
+- 6 financial periods supported (FY 2025-26, FY 2024-25, Q1-Q4 2025-26).
+- Financial health metrics computed: Current Ratio, Debt-to-Equity, Surplus Margin, Operating Efficiency, Reserve Coverage, Collection Rate.
+- Alerts auto-generated: Outstanding Fees, Tech Budget Exceeded, Payroll Pending, Collection Low, Reserve Low.
+- Recent activity merges fee transactions + salary audit + expense entries.
+- Upcoming obligations: Payroll, Utilities, Vendor Payments, Loan Repayment.
+
+### Phase 3: Build finance-shared.tsx
+- FinanceKpiCard: soft tinted backgrounds (Students & Classes style), semantic colors, trend indicator, hover elevation.
+- FinancePanel: rounded card container with title/subtitle/action.
+- FinanceStat: compact stat block.
+- HealthStatusBadge: Healthy/Watch/Attention with semantic colors.
+- severityAccent + severityColor helpers.
+- FinanceEmptyState.
+- FINANCE_GLOBAL_STYLES for prefers-reduced-motion.
+
+### Phase 4: Build finance-charts.tsx (premium chart visualizations)
+- DualAreaChart: smooth cubic bezier (Catmull-Rom) for Revenue vs Expenses, gradient area fills, hover tooltip with Revenue + Expenses + Surplus, vertical guide line.
+- HorizontalBars: for expense breakdown and budget comparison, with optional secondary bars.
+- GroupedBars: quarterly revenue vs expense comparison with hover details.
+- FinanceDonut: clean donut with "Other" grouping for <5% segments (used sparingly).
+- ProgressBar: budget utilization with semantic color (green/amber/rose based on %).
+
+### Phase 5: Build finance-shell.tsx (3-tab orchestrator)
+- Header: "School Financial Control Center" (NO duplicate "Finance Dashboard" title).
+- Period selector dropdown (FY 2025-26, FY 2024-25, Q1-Q4).
+- Export button.
+- Summary pill line: Revenue · Expenses · Net Surplus · Cash · Alerts count.
+- Tab navigation: Overview · Statements · Reports.
+- Tab badge on Overview showing alerts count.
+- Keyboard shortcuts 1-3.
+- prefers-reduced-motion support.
+
+### Phase 6: Build finance-overview.tsx (command center landing)
+- 4 KPI cards: Total Revenue (emerald), Total Expenses (rose), Net Surplus (emerald), Cash Available (violet) — each with trend indicator.
+- Revenue vs Expenses smooth dual-line chart (DualAreaChart).
+- Expense Breakdown horizontal bars (no rainbow donut).
+- Budget vs Actual comparison table with variance + utilization progress bars + total.
+- Financial Health ratios (6 metrics with status: Healthy/Watch/Attention) + overall HealthStatusBadge.
+- Cash Position (Opening/In/Out/Closing + Monthly Expense + Reserve Coverage).
+- Quarterly Performance grouped bars.
+- Receivables (Outstanding Fees + Fee Revenue + Collection Rate).
+- Upcoming Obligations (Payroll, Utilities, Vendor, Loan).
+- Needs Attention (auto-generated alerts with severity + action).
+- Recent Financial Activity (income/expense/payroll with directional icons).
+- Quick navigation cards to Fee Management & Salary & Payroll.
+
+### Phase 7: Build finance-statements.tsx (P&L + Balance Sheet + Cash Flow)
+- Tabbed statement switcher.
+- P&L: Revenue items (left) + Expense items (right) + Net Surplus (boxed) — all reconciles.
+- Balance Sheet: Assets (Current + Fixed) + Liabilities (Current + Long-term) + Equity + Net Worth.
+- Cash Flow: Operating + Investing + Financing activities + Opening/Net Change/Closing.
+- Export button per statement.
+
+### Phase 8: Build finance-reports.tsx (12 report types)
+- Report picker grid (6 cols).
+- 12 reports: Financial Summary, P&L, Balance Sheet, Cash Flow, Fee Revenue, Payroll Expense, Budget vs Actual, Expense, Income, Receivables, Payables, Tax Summary.
+- Active report table with totals row.
+- Export CSV action.
+
+### Phase 9: Cleanup
+- Deleted 7 obsolete finance files: hero-summary, kpi-row, charts, reports, reports-statements, shared, data (~717 LOC).
+- Replaced index.tsx (was 112 lines, now thin re-export of FinanceShell).
+- Fixed formatINR import error (was used in finance-store but only re-exported, not imported as value).
+
+### Phase 10: Verification (agent-browser + VLM)
+- Overview: 4 KPI cards soft tinted (Revenue ₹20.92 Cr, Expenses ₹10.18 Cr, Surplus ₹10.74 Cr, Cash ₹2.84 Cr). ✅
+- Revenue vs Expenses smooth dual-line chart with hover tooltip. ✅
+- Expense Breakdown horizontal bars. ✅
+- Budget vs Actual with progress bars + variance. ✅
+- Financial Health with 6 ratios + overall status. ✅
+- Period selector dropdown works. ✅
+- Statements tab: P&L with Revenue/Expenses/Net Surplus. ✅
+- Reports tab: 12 report types + active report table. ✅
+- No page errors. ESLint clean. Dev server HTTP 200.
+
+Stage Summary:
+- Finance Dashboard transformed from generic admin dashboard into Principal's School Financial Control Center.
+- Single source of truth: all numbers derive from finance-store which aggregates Fee Management + Salary & Payroll + P&L data.
+- All accounting reconciles: Revenue - Expenses = Surplus, Assets - Liabilities = Net Worth, Opening + In - Out = Closing.
+- No duplicate data — Fee Management owns fee collection, Salary & Payroll owns payroll, Finance Dashboard aggregates.
+- Premium smooth dual-line chart (no jagged lines, no rainbow donuts).
+- Soft tinted KPI cards (Students & Classes design language).
+- 3-tab workspace: Overview (command center) · Statements (P&L/BS/CF) · Reports (12 types).
+- Period selector affects all metrics.
+- Click-through navigation to Fee Management & Salary & Payroll.
+- Accessibility: aria-labels, aria-current, prefers-reduced-motion.
+- Existing SCHOLARIO visual language preserved.
