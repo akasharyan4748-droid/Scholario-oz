@@ -3975,3 +3975,67 @@ Work Log:
 - groups-panel.tsx: ~945 LOC (NEW — GroupsPanel + GroupRow + CreateGroupDialog with smart auto-fill + ManageMembersDialog + member pool helpers + visual config).
 - index.tsx: ~115 LOC (was ~104 — added GroupsPanel conditional + handleCompose callback + groups count pill).
 - **Total: ~2220 LOC across 5 modified/new files** (gain is from the full group-management workflow: list with hover actions + smart-fill Create Group dialog with 6 type variants + Manage Members dialog with add/remove + member pool with search + sync helpers).
+
+---
+Task ID: certificates-full-build
+Agent: main (Super Z)
+Task: Build a complete Certificates / Document Generation system at /home/z/my-project/src/components/principal/modules/certificates/.
+
+Work Log:
+
+### Phase 1: Store (src/lib/store/certificates-store.ts)
+- New Zustand store (~360 LOC) covering 7 document types: Bonafide, Transfer, Character, ID Card, Fee Receipt, Migration, Marksheet.
+- Types: `DocType`, `TemplateStyle`, `DocStatus`, `DocumentTemplate`, `GeneratedDocument`, `CertificatesState`.
+- Document numbering: `<PREFIX>/<2026>/<SEQ5>` per doc type, where PREFIX ∈ {BON, TC, CHR, ID, FEE, MIG, MS}.
+- Default templates (24 total): Cert×4 styles each (Classic / Modern / Formal / Minimal) for the 4 certificate types; Marksheet×3 (Standard / Modern / Compact); ID Card×3 (Classic / Modern / Compact); Fee Receipt×2 (Standard / Compact).
+- Seed generated docs (8 records) with running counters inferred from seed numbers so new generations continue the sequence (BON/2026/00003 → 00004 → …).
+- Actions: `generateDocument`, `getTemplatesForType`, `setDefaultTemplate`, `duplicateTemplate`, `toggleTemplateActive`, `renameTemplate`, `getDocumentHistory(filters)`, `updateDocStatus`, `deleteDocument`, `getKpis` (total / thisMonth / activeTemplates / pending) — all derived from store state so KPIs always reconcile.
+
+### Phase 2: Delete legacy files
+- Removed 8 legacy certificate files (data.tsx, card-certs.tsx, cert-cards.tsx, document-certs.tsx, generate-dialog.tsx, recently-generated.tsx, shared.tsx, index.tsx) — ~770 LOC cleared.
+
+### Phase 3: New module files (6 files, ~1400 LOC total)
+- **cert-shared.tsx** — `DOC_TYPES` metadata (icon + accent + needsStudent / needsExam / needsFeeTxn flags), accent map (emerald/teal/amber/cyan/rose/violet/slate), `CertKpiCard`, `CertPanel`, `DocStatusBadge`, `StylePill`, `CertEmptyState`, `CERT_PRINT_STYLES` (print-only CSS that isolates `.print-area` and hides `.no-print`).
+- **previews.tsx** — 4 print-ready preview components:
+  - `CertificatePreview` — works for Bonafide / Transfer / Character / Migration; renders 4 distinct visual styles (Classic ornate border + serif, Modern sans-serif left-aligned header, Formal double border, Minimal single thin border). Transfer body includes the full TC details table; Bonafide/Character/Migration have unique body text.
+  - `MarksheetPreview` — table with Subject / Max / Pass / Obtained / % / Grade / Result columns; footer with Percentage / Division / Rank; Standard (full color border), Modern (colored header), Compact (dense) styles.
+  - `IDCardPreview` — Classic (portrait), Modern (landscape + QR placeholder), Compact (compact portrait). Each renders school header strip, photo placeholder, student info, valid year, authorised-by footer.
+  - `FeeReceiptPreview` — Standard (itemized table + signature block) and Compact (thermal 80mm monospace column with dashed separators).
+  - All previews wrap in `print-area` so the print CSS isolates them when the user clicks Print.
+- **generate-tab.tsx** — full workflow with 3-step panel on the left and a live preview panel on the right:
+  1. Doc-type card grid (7 cards with icons + descriptions).
+  2. Source data — Marksheets show exam → class → student pickers (auto-inits the mock marks store when an exam+class is selected so marksheet data is available even without navigating to Examinations); Fee Receipts show student → transaction picker (filter by studentId); everything else just student picker. Bonafide adds an optional purpose input.
+  3. Template picker (filtered by doc type; default preselected; shows DEFAULT badge).
+  - "Generate <DocType>" button + "Print preview" button.
+  - Live preview pane re-renders immediately on every selection.
+- **templates-tab.tsx** — Filter chips per doc type (with counts), grouped cards per doc type, each card shows a miniature abstract preview per style + Style pill + Active/Inactive status. Actions: Preview (modal), Duplicate, Set as default (star), Deactivate (toggle). Preview modal shows real preview with a sample student.
+- **history-tab.tsx** — Search (name / admission no / doc number) + doc type filter + status filter + clear button. Table with Student / Type / Doc No / Template / Date / Status / Actions columns. Actions: Preview (modal), Print (window.print with print CSS), Download (HTML blob download), Regenerate, Mark issued, Delete. Stats line shows live counts per status.
+- **index.tsx** — Orchestrator with "Document Generation" header (NO duplicate title), summary pills (Total / This Month / Templates Active / Pending), 4 KPI cards row, 3 tabs (Generate · Templates · History) with keyboard shortcuts (1-3), AnimatePresence transitions between tabs. Injects `CERT_PRINT_STYLES` so window.print works globally.
+
+### Phase 4: Data connections (NO duplication)
+- Students → `useStudentsStore` (canonical) — used in generate-tab, templates-tab preview modal, history-tab regenerate.
+- School branding → `src/lib/mock/school` — name, address, phone, affiliation, principal, academic year, shortName (used in all previews).
+- Fee transactions → `useFeeStore.transactions` — filtered by studentId for fee receipt selection; transaction data flows into the receipt preview.
+- Exam marks → `useMockExamsStore` (exam list + classes + subjects) + `useMockMarksStore` (actual marks) — generate-tab calls `initMarks(exam, classStudents)` on first selection so marksheet has data without the user having opened the Examinations module first.
+- Graceful fallback for marksheets: if no exam marks exist for the (exam, class, student), compute rows from `student.academics.subjects` (percent → obtained / 100).
+
+### Phase 5: Verification
+- ESLint: 0 errors (resolved 2 React Compiler `preserve-manual-memoization` errors by inlining cheap derived values instead of useMemo with object refs).
+- Live server tested via agent-browser:
+  - Module loads under "Certificates" sidebar item → "Document Generation" header.
+  - KPIs reconcile: seed state shows 8 / 24 / 7 / 0; after generating Bonafide + Marksheet + Fee Receipt → 11 / 24 / 10 / 1.
+  - Bonafide flow: pick student → preview renders "BONAFIDE CERTIFICATE" with school crest + body text → Generate → BON/2026/00003 appears at top of History.
+  - Marksheet flow: pick exam (Mid-Term) → pick class (Class 9) → student picker shows only Class 9 students (auto-filtered) → pick student → preview shows full marks table with Subject/Grade/Result columns and Total row → Generate → MS/2026/00002 increments.
+  - Fee Receipt flow: pick student → fee transaction picker shows real seed transaction (RCP-2025-1042 · ₹1,48,000 · UPI) → pick → preview renders Standard receipt → Generate → FEE/2026/00002.
+  - Templates tab: filter chips show correct counts (Bonafide 4, Transfer 4, Character 4, ID Card 3, Fee Receipt 2, Migration 4, Marksheet 3 = 24); DEFAULT badges show on the right cards; Preview modal opens with real cert preview; Duplicate / Set as default / Deactivate all wired.
+  - History tab: seed docs visible with correct doc numbers (BON/2026/00001, BON/2026/00002, CHR/2026/00001, ID/2026/00001, MS/2026/00001, FEE/2026/00001, MIG/2026/00001); just-generated docs appear at top with status "Generated"; search + filters work.
+- Console: no errors; only React DevTools info + HMR + Fast Refresh logs.
+
+### Files
+- src/lib/store/certificates-store.ts (NEW)
+- src/components/principal/modules/certificates/index.tsx (REPLACED)
+- src/components/principal/modules/certificates/cert-shared.tsx (NEW)
+- src/components/principal/modules/certificates/previews.tsx (NEW)
+- src/components/principal/modules/certificates/generate-tab.tsx (NEW)
+- src/components/principal/modules/certificates/templates-tab.tsx (NEW)
+- src/components/principal/modules/certificates/history-tab.tsx (NEW)

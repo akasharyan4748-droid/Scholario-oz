@@ -4,7 +4,7 @@
  * LibraryModule — Principal Library workspace orchestrator.
  *
  * The global sidebar already says "Library", so the header here uses a
- * contextual title ("Library Workspace") — NO duplicate "Library
+ * contextual title ("Library Catalogue & Issues") — NO duplicate "Library
  * Management" title.
  *
  * Layout:
@@ -117,7 +117,7 @@ export function LibraryModule() {
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]">
                 Central Library
               </p>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight">Library Workspace</h1>
+              <h1 className="text-base sm:text-lg font-bold tracking-tight">Library Catalogue & Issues</h1>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button

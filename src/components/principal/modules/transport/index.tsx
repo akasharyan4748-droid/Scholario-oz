@@ -4,7 +4,7 @@
  * TransportModule — Principal Transport workspace orchestrator.
  *
  * The global sidebar already says "Transport", so the header here uses a
- * contextual title ("Transport Workspace") — NO duplicate "Transport
+ * contextual title ("Transport Operations") — NO duplicate "Transport
  * Management" title.
  *
  * Layout:
@@ -139,7 +139,7 @@ export function TransportModule() {
                 School Transport
               </p>
               <h1 className="text-base sm:text-lg font-bold tracking-tight">
-                Transport Workspace
+                Transport Operations
               </h1>
             </div>
             <div className="flex items-center gap-2 shrink-0">

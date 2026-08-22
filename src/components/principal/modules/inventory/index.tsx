@@ -4,7 +4,7 @@
  * InventoryModule — Principal Inventory workspace orchestrator.
  *
  * The global sidebar already says "Inventory", so the header here uses a
- * contextual title ("Inventory Workspace") — no duplicate "Inventory
+ * contextual title ("Inventory & Assets") — no duplicate "Inventory
  * Management" title.
  *
  * Layout:
@@ -101,7 +101,7 @@ export function InventoryModule() {
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]">
                 School Inventory
               </p>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight">Inventory Workspace</h1>
+              <h1 className="text-base sm:text-lg font-bold tracking-tight">Inventory & Assets</h1>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button
