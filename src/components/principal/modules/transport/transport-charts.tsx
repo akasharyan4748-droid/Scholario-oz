@@ -55,6 +55,8 @@ export function CapacityUtilizationChart() {
           thickness={14}
           color={avgUtil > 90 ? 'oklch(0.62 0.2 25)' : avgUtil > 75 ? 'oklch(0.65 0.16 75)' : 'oklch(0.55 0.14 162)'}
           label="Avg Utilization"
+          showTicks
+          glow
         />
         <div className="flex-1 space-y-1.5">
           {capacityUtil.map((c, i) => {

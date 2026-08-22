@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  allowedDevOrigins: ["*.space-z.ai", "*.chatglm.cn", "*.z.ai"],
+  allowedDevOrigins: ["*.space-z.ai", "*.chatglm.cn", "*.z.ai", "127.0.0.1", "localhost", "*.localhost"],
   experimental: {
     optimizePackageImports: [
       'lucide-react',
