@@ -4039,3 +4039,134 @@ Work Log:
 - src/components/principal/modules/certificates/generate-tab.tsx (NEW)
 - src/components/principal/modules/certificates/templates-tab.tsx (NEW)
 - src/components/principal/modules/certificates/history-tab.tsx (NEW)
+
+---
+Task ID: downloads-redesign
+Agent: main (Super Z)
+Task: Completely redesign the Downloads module at `src/components/principal/modules/downloads/` from a colorful card grid into a refined premium DOCUMENT LIBRARY (table-style, slide-from-right detail drawer, generated docs auto-pulled from certificates-store).
+
+Work Log:
+
+### Pre-work audit
+- Read 4 legacy files: `index.tsx` (58 LOC), `data.tsx` (103 LOC), `filter-bar.tsx` (88 LOC), `category-section.tsx` (113 LOC) — confirmed card-grid pattern with large gradient icon tiles per category, dual duplicate Download + Preview buttons per card, no per-document metadata, no link to generated certificates.
+- Studied `certificates-store.ts` (446 LOC) for the data shape and the cert→download-doc mapping: 7 DocTypes (Bonafide/Transfer/Character/ID Card/Fee Receipt/Migration/Marksheet), seed of 8 generated docs with `studentName`, `admissionNo`, `class`, `docNumber`, `generatedBy`, `generatedAt`, `status`, `templateName`.
+- Studied the just-completed `library-rewrite` and `messaging` patterns for the premium table + drawer + search/filter/sort visual language used in SCHOLARIO (LibPanel/CertPanel, soft tinted pills, emerald/teal accents, sticky header + summary pills row, tab strip with counts).
+- Verified shadcn UI primitives available: `Drawer` (vaul, supports `direction="right"`), `Select`, `DropdownMenu`, `Input`, `Button`. Confirmed `formatDate` + `formatRelativeTime` helpers in `@/lib/format`.
+- Confirmed `useCertificatesStore.getState()` access pattern (Zustand allows reading other stores from inside actions/selectors without circular imports).
+
+### Files delivered
+
+#### `src/lib/store/downloads-store.ts` (NEW, 347 LOC)
+- **Types**: `DocSource` (Official Form | Template | Generated | Report | Resource), `DocFormat` (PDF | DOCX | XLSX | CSV | JPG), `DocCategory` (Admissions | Student Records | Finance | Academics | Operations | Health | Transport), `SortBy` (recent | name-az | name-za | type), `CategoryTab` (All | Recent | Generated | Forms | Templates | Reports), `DownloadDocument` (id, name, description SHORT 5 words max, category, format, source, updatedDate, size?, studentId?, studentName?, docNumber?, downloadUrl?).
+- **Static catalogue** (17 docs, no duplication): 8 Official Forms (Admission Form, Registration Form, School Prospectus, Transport Application Form, Hostel Application Form, Medical Declaration Form, Sports Participation Form, Examination Form), 5 Templates (Fee Receipt Template XLSX, ID Card Template PDF, Salary Slip Template XLSX, Transfer Certificate Format PDF, Fee Structure Sheet XLSX), 4 Reports (Monthly Fee Collection Report PDF, Payroll Summary Report PDF, Attendance Report PDF, Examination Result Report PDF).
+- **Generated-doc bridge**: `certToDownloadDoc(cert)` maps each `GeneratedDocument` from `useCertificatesStore.documents` to a `DownloadDocument` with `source: 'Generated'`, links back to `studentId` + `studentName` + `docNumber`, and assigns the right `category` (Student Records for cert/TC/character/ID, Finance for fee receipt, Academics for migration + marksheet) and `size` (per-doc-type placeholder file size).
+- **Live merge**: `getAllDocuments()` reads `useCertificatesStore.getState().documents` (so newly generated docs appear automatically without subscribing in every component), then concatenates + sorts by date desc. `getCountsByTab()` returns counts per category tab — Generated count is the live cert store count.
+- **State**: `query`, `categoryFilter`, `categoryTab`, `sortBy`, `downloadsCount` (per-doc id, seeded with 5 starter values for Quick Access), `lastAccessedAt`.
+- **Actions**: `setQuery` + `search` (alias), `setCategoryFilter`, `setCategoryTab`, `setSortBy`, `resetFilters`. **Selectors**: `getAllDocuments`, `getFilteredDocuments` (applies tab → category → search → sort in order), `getQuickAccess` (top 5 by downloadsCount + lastAccessedAt), `getDocumentById`, `getCountsByTab`. **Mutations**: `download(doc)` returns filename `${docNumber|name}.${format-lower}` and increments `downloadsCount` + sets `lastAccessedAt`; `recordPreview(doc)` sets `lastAccessedAt` for the Recency ranking.
+- **Search filter**: matches name, category, studentName, docNumber, description (case-insensitive).
+- **Sort**: `recent` (default, by updatedDate desc), `name-az` / `name-za` (localeCompare), `type` (by format then by name).
+
+#### `src/components/principal/modules/downloads/downloads-shared.tsx` (NEW, 289 LOC)
+- `DocIcon({ format, size })` — small file-type icon (sm h-8 / md h-9 / lg h-11). NOT a large colorful gradient square. Soft tinted background + ring + lucide icon (`FileText` for PDF/DOCX, `FileSpreadsheet` for XLSX/CSV, `FileImage` for JPG). Format-specific tint: PDF rose, DOCX sky, XLSX emerald, CSV teal, JPG violet.
+- `FormatBadge({ format })` — small neutral text badge (`px-1.5 py-px rounded text-[9px] font-bold border`) with the same per-format tint (rose/sky/emerald/teal/violet).
+- `SourceBadge({ source, showIcon })` — subtle pill with a colored dot (`h-1.5 w-1.5 rounded-full`): Official Form (slate, neutral), Template (teal), Generated (emerald), Report (amber), Resource (cyan). Optionally renders the lucide icon.
+- `CategoryPill({ category })` — text-only category chip with category-specific colour text (no background).
+- `DownloadsPanel({ title, subtitle, action, children })` — rounded card container with optional header + body, matches CertPanel/LibPanel pattern.
+- `DownloadsEmptyState({ icon, title, description, action })` — centered empty state with circular icon + title + description + optional action button.
+- `SORT_OPTIONS`, `CATEGORY_OPTIONS` constants for the Select dropdowns.
+- `docDescriptionLabel(doc)` — returns "For {studentName}" for generated docs, docNumber for static-with-number, or description otherwise.
+- `DOWNLOADS_GLOBAL_STYLES` — subtle scrollbar styling for `.downloads-list-scroll` + `prefers-reduced-motion` support.
+
+#### `src/components/principal/modules/downloads/document-list.tsx` (NEW, 280 LOC)
+- **Table layout** (NOT cards) with `overflow-x-auto` and `min-w-[720px]` so the table horizontally scrolls on small screens. Headers: DOCUMENT (44%) · CATEGORY · SOURCE · FORMAT · UPDATED · ACTIONS.
+- **Per-row** content:
+  - Small `DocIcon` (md size, h-9 w-9) on the left.
+  - Document name (font-semibold, truncate) + description meta line (docDescriptionLabel + " · " + file size in tabular-nums).
+  - `CategoryPill` for category.
+  - `SourceBadge` for source (with dot).
+  - `FormatBadge` for format.
+  - Updated date (relative "2d ago" + absolute date, stacked, muted).
+  - Action buttons: Preview (`Eye` ghost icon button) + Download (`Download` ghost with emerald hover) + More (`MoreHorizontal` triggering a DropdownMenu).
+- **More menu**: Preview, Download, Print, Share (copy link), Add to favourites. For generated docs only: Regenerate + View record. Each menu item uses `e.stopPropagation()` so clicking them does NOT open the drawer.
+- **Row click**: clicking anywhere else on the row opens the detail drawer (via `onSelectDoc(doc)`).
+- **Footer summary**: live counts of generated / forms / templates in the current filtered list (sm+ only).
+- **Empty state**: contextual — if any filter is active, "No documents match the filters" with a Clear-filters button; otherwise "No documents yet".
+- Fixed a stale-memo bug after first browser test: added `query`, `categoryFilter`, `categoryTab`, `sortBy` to the `useMemo` deps so the list re-filters immediately when any control changes.
+
+#### `src/components/principal/modules/downloads/document-detail.tsx` (NEW, 300 LOC)
+- Slide-from-right `Drawer` (vaul, `direction="right"`, `sm:max-w-md`).
+- **Header**: small file-type icon (lg) + "DOCUMENTS & FILES" eyebrow + document name (DrawerTitle) + doc number / description (DrawerDescription). Close button on the right.
+- **Body** (scrollable):
+  - A4-style preview placeholder card (aspect-[3/4]) with a soft emerald blur glow + large file-type icon + document name + (for generated docs) doc number + "Issued to {studentName}" / description. Footer with "Generated preview" + date.
+  - Action buttons row: Download (emerald→teal gradient, primary), Print (outline), Share (icon), Add to favourites (icon).
+  - "Document information" metadata grid: Source (with badge) · Category · Format (badge) · File size · Last updated (relative + absolute) · Document no. (mono, if any) · Issued to (studentName + studentId, if any). Each row is an `MetaRow` (icon + uppercase label + value, right-aligned).
+  - "Activity" section: downloads count chip (emerald) + (for generated docs) status chip (amber) + template name chip (muted). For generated docs: a contextual info card showing "Generated by {generatedBy} on {date}. Admission no. {admissionNo}. Class {class}." + a Regenerate button.
+- All actions are real: Download → toast with the generated filename; Print → toast "Opening print view…"; Share → toast "Link copied"; Favourite → toast "Added to favourites"; Regenerate → toast for the linked cert doc.
+
+#### `src/components/principal/modules/downloads/index.tsx` (NEW, 368 LOC)
+- Orchestrator with sticky header (border-b + backdrop-blur) + scrollable body.
+- **Header**: eyebrow "DOCUMENTS & FILES" + h1 "Document Library" (with emerald Library icon) + subtitle "School documents, templates & generated files". NO duplicate "Downloads Workspace" title (the sidebar already says "Downloads").
+- **Summary pills row**: Total · Generated (emerald) · Forms · Templates (teal) · Reports (amber) — all with live counts from `getCountsByTab()` (Total/Generated/Forms/Templates/Reports reflect the live cert-doc count too).
+- **Search + filters row**: search input with `Search` icon, clearable (X button when non-empty). Category `Select` ("All categories" + 7 categories). Sort `Select` (4 sort options). "Clear" outline button (visible only when any filter is active). Keyboard shortcut "/" focuses the search input.
+- **Category tab strip**: 6 tabs (All · Recent · Generated · Forms · Templates · Reports) with live count badges. Active tab is primary-coloured, inactive are bordered/background. `aria-current` set when active. Horizontally scrollable on small screens (downloads-list-scroll).
+- **Quick Access section** (`QuickAccess` component): emerald-tinted panel with "Quick Access · most used documents" header. Up to 5 chips — each chip is a rounded card with the small file-type icon + truncated name + tiny FormatBadge + a small Download icon button (separate from the open action). Clicking the chip body opens the detail drawer; clicking the download icon downloads the file.
+- **Document list panel**: heading "{tab label}" + result count ("Showing N results" · "matching '{query}'" when searching). AnimatePresence transitions when tab/filter/sort changes. Renders `<DocumentList onSelectDoc={setSelectedDoc} />`.
+- **Detail drawer**: `<DocumentDetail doc={selectedDoc} open={!!selectedDoc} onClose={() => setSelectedDoc(null)} />`.
+- Fixed the same stale-memo bug: `filtered` useMemo now also depends on `query`, `categoryFilter`, `categoryTab`, `sortBy` so the count line updates immediately when filters change.
+
+### Files deleted
+- `category-section.tsx` (113 LOC, large card grid per category)
+- `data.tsx` (103 LOC, hardcoded CATEGORIES + 20 docs in nested structure)
+- `filter-bar.tsx` (88 LOC, simple category-only filter chips)
+
+### Data flow
+- Generated docs flow LIVE from `useCertificatesStore` → `useDownloadsStore.getAllDocuments()` (reads via `useCertificatesStore.getState().documents`, no React subscription in the store). The component subscribes to `useCertificatesStore((s) => s.documents.length)` so the merge + counts re-compute when a new cert is generated in the Certificates module — appears automatically in the Downloads "Generated" tab without further wiring.
+- Quick Access is seeded with 5 starter usage counts (Admission Form ×12, Fee Receipt Template ×9, Medical Declaration Form ×7, Monthly Fee Collection Report ×6, ID Card Template ×5) so the section is non-empty on first load. New downloads bump the count and surface new docs in Quick Access.
+- Search is server-free (filter on the merged list) — fast, no API route needed.
+- Download is a virtual action: it returns the filename and updates `downloadsCount`/`lastAccessedAt`; the actual file fetch isn't wired (matches the rest of SCHOLARIO's mocked download pattern), but the toast confirms the action.
+
+### Mutations wired (every action works)
+- **Search** — typing in the search input filters the document list across name, category, student name, doc number, and description (verified: searching "aarav" on the Generated tab → only "Bonafide — Aarav Sharma" remains; "1 result · matching 'aarav'" shown in the result line).
+- **Category filter** — Select dropdown filters the current tab by category (verified: Templates tab + Finance filter → only the 3 Finance templates show; Fee Structure Sheet, Fee Receipt Template, Salary Slip Template).
+- **Sort** — Select dropdown resorts the list (verified: Templates + Name A→Z → Fee Receipt Template, Fee Structure Sheet, Salary Slip Template in alphabetical order).
+- **Category tabs** — clicking All/Recent/Generated/Forms/Templates/Reports filters by source (verified: Generated tab → exactly the 8 cert seed docs with the right student names + doc numbers; Templates tab → 5 templates; Reports tab → 4 reports).
+- **Quick Access** — clicking a chip opens the detail drawer (verified: "Open Admission Form" → drawer opens with "Admission Form" heading); clicking the chip's download icon triggers the download toast.
+- **Document detail drawer** — slide-from-right drawer with full metadata + actions (verified by clicking the Bonafide row → drawer opens with student name, doc number, generatedBy, class, status, template, regenerate action).
+- **Preview** (eye icon) — opens the detail drawer for the row's doc (calls `recordPreview` to update the recency ranking).
+- **Download** (download icon) — increments `downloadsCount`, updates `lastAccessedAt`, shows a success toast with the generated filename + format.
+- **More menu** — opens a dropdown with Preview / Download / Print / Copy share link / Add to favourites, plus Regenerate + View record for generated docs. Each menu item `stopPropagation`s so the row click doesn't fire.
+- **Reset** — Clear button in the search+filter row resets query, category filter, category tab, and sort back to defaults.
+
+### Design language
+- SCHOLARIO visual: emerald/teal primary gradient on the Download CTA in the drawer + Quick Access section panel; soft tinted backgrounds for badges (rose/sky/emerald/teal/violet per format); rounded-xl cards; subtle borders (border-border); emerald → teal hover tint on table rows.
+- NO large colorful icon squares — replaced with small (h-9) `DocIcon` tiles with soft tint + ring.
+- NO giant green buttons on every row — replaced with subtle ghost icon buttons (Eye / Download / MoreHorizontal) + a small "More" dropdown.
+- Compact, premium, dense — `text-xs` body text, `text-[10px]` metadata, `text-[9px]` for badges; tabular-nums for counts + dates; max-w-md on the drawer; min-w-[720px] on the table with `overflow-x-auto`.
+- Responsive: tab strip + table scroll horizontally on mobile (downloads-list-scroll custom scrollbar). Summary pills + Quick Access chips wrap on small screens. Quick Access chip download icon is touch-friendly (h-6 w-6 = 24px).
+- NO duplicate titles: sidebar shows "Downloads"; module h1 shows "Document Library".
+
+### Verification
+- ESLint: 0 errors, 0 warnings (`bun run lint` clean — only the unrelated `.eslintignore` deprecation warning).
+- TypeScript: 0 downloads-module errors (`bunx tsc --noEmit` filtered — only pre-existing errors in exams / salary / finance / analytics modules remain, all unrelated to downloads).
+- Dev server: started manually (the system keepalive had stalled the previous server), Next.js 16.3.0 Turbopack ready, HTTP 200 on `/` after the new files were written. The `DownloadsModule` is statically imported in `principal-panel.tsx` so the homepage returning 200 confirms the downloads bundle compiles.
+- Live browser test via agent-browser (after fixing a curl/sandbox proxy quirk with `--noproxy '*'`):
+  - Sidebar "Downloads" → module loads with "Document Library" heading + summary pills (Total 25 · Generated 8 · Forms 8 · Templates 5 · Reports 4 — Generated count = the live seed of 8 cert docs).
+  - Category tab strip renders with correct counts; clicking "Generated" → 8 generated docs with the right student names (Aarav, Diya, Vivaan, Ananya, Reyansh, Saanvi, Arjun, Myra) and doc numbers (BON/2026/00001, TC/2026/00001, etc.).
+  - Quick Access section renders 5 chips with format badges + small download icons.
+  - Document table renders with 6 columns (Document, Category, Source, Format, Updated, Actions) and per-row Preview / Download / More buttons.
+  - Search for "aarav" → only "Bonafide — Aarav Sharma" remains, result count shows "1 result · matching 'aarav'" (verified after the stale-memo fix).
+  - Category filter "Finance" on Templates tab → 3 Finance templates.
+  - Sort by Name A→Z → Fee Receipt Template → Fee Structure Sheet → Salary Slip Template.
+  - Clicking a Quick Access chip ("Open Admission Form") → drawer slides in from the right with the doc name, source badge, category, format, file size, last updated, Download/Print/Share/Favourite buttons, metadata grid.
+  - Clicking a generated doc row (Bonafide — Aarav Sharma) → drawer shows doc number (mono), Issued to (Aarav Sharma + studentId), Activity (downloads count + status + template name), and the contextual "Generated by Dr. Sarah Jenkins on … Admission no. … Class …" info card with Regenerate button.
+  - Clicking Download in the drawer → success toast (verified via screenshot).
+- Console: only the unrelated "Router action dispatched before initialization" Next.js internal warning (from agent-browser's reload); no React/Next errors attributable to the downloads module.
+
+### File sizes
+- `src/lib/store/downloads-store.ts`: 347 LOC (NEW — types, 17-doc static catalogue, cert→download bridge, 6 actions/selectors, 2 mutations, helpers).
+- `src/components/principal/modules/downloads/downloads-shared.tsx`: 289 LOC (NEW — DocIcon, FormatBadge, SourceBadge, CategoryPill, DownloadsPanel, DownloadsEmptyState, SORT/CATEGORY options, docDescriptionLabel, global styles).
+- `src/components/principal/modules/downloads/document-list.tsx`: 280 LOC (NEW — table layout with overflow-x-auto, 6-column rows with badges + actions, More dropdown menu with Regenerate for generated docs, empty state with Clear button).
+- `src/components/principal/modules/downloads/document-detail.tsx`: 300 LOC (NEW — vaul Drawer direction="right", A4-style preview placeholder, action buttons row, metadata grid, activity section with generated-doc info card + Regenerate).
+- `src/components/principal/modules/downloads/index.tsx`: 368 LOC (NEW — sticky header + summary pills + search/filter/sort row + category tabs with counts + Quick Access section + AnimatePresence-wrapped list panel + drawer).
+- **Total: ~1584 LOC across 5 new files** (was ~362 LOC across 4 files in the legacy card-grid design — net gain is from the full library workflow: 17-doc static catalogue, cert→download bridge, 6-tab category strip with live counts, full per-row actions + More menu, slide-from-right drawer with full metadata grid + activity section + generated-doc info card + regenerate).
+- **Deleted**: `category-section.tsx` (113 LOC), `data.tsx` (103 LOC), `filter-bar.tsx` (88 LOC) — ~304 LOC removed.
