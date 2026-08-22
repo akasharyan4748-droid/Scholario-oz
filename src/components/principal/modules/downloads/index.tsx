@@ -42,10 +42,13 @@ import { useDownloadsStore, type DownloadDocument, type CategoryTab } from '@/li
 import { useCertificatesStore } from '@/lib/store/certificates-store'
 import { toast } from 'sonner'
 import {
-  DocIcon, FormatBadge,
   SORT_OPTIONS, CATEGORY_OPTIONS,
   DOWNLOADS_GLOBAL_STYLES,
 } from './downloads-shared'
+import {
+  DocumentThumbnail, FileTypeBadge,
+} from '@/components/shared/document-primitives'
+import type { DocFormat } from '@/components/shared/document-primitives'
 import { DocumentList } from './document-list'
 import { DocumentDetail } from './document-detail'
 
@@ -238,6 +241,11 @@ export function DownloadsModule() {
 }
 
 // ─── Quick Access section ─────────────────────────────────────────────
+//
+// Each Quick Access item is a compact document card (thumbnail + name +
+// format badge + small download icon) — reads like a real document, not
+// a pill. Grid: grid-cols-2 sm:grid-cols-3 gap-2 so 2 per row on mobile,
+// 3 per row on small+ screens.
 
 function QuickAccess({
   docs, onOpen, onDownload,
@@ -253,7 +261,7 @@ function QuickAccess({
       transition={{ duration: 0.25 }}
       className="rounded-xl border border-border bg-card p-4"
     >
-      <div className="flex items-center justify-between gap-2 mb-2.5">
+      <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-1.5 min-w-0">
           <Zap className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <h3 className="text-sm font-semibold tracking-tight text-foreground">Quick Access</h3>
@@ -266,35 +274,39 @@ function QuickAccess({
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {docs.map((doc, i) => (
           <motion.div
             key={doc.id}
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.18, delay: i * 0.03 }}
-            className="group inline-flex items-center gap-2 pl-1.5 pr-1 py-1 rounded-full bg-background border border-border hover:border-emerald-500/40 hover:shadow-sm transition-all max-w-full"
+            className="group relative flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 hover:border-emerald-500/40 hover:shadow-sm transition-all"
           >
             <button
               type="button"
               onClick={() => onOpen(doc)}
-              className="inline-flex items-center gap-2 min-w-0"
+              className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
               aria-label={`Open ${doc.name}`}
             >
-              <DocIcon format={doc.format} size="sm" className="!h-6 !w-6 !rounded-full" />
-              <span className="text-xs font-medium text-foreground truncate max-w-[140px]">
-                {doc.name}
-              </span>
-              <FormatBadge format={doc.format} className="!text-[8px]" />
+              <DocumentThumbnail format={doc.format as DocFormat} size="sm" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-foreground truncate leading-tight">
+                  {doc.name}
+                </p>
+                <div className="mt-1">
+                  <FileTypeBadge format={doc.format as DocFormat} size="xs" />
+                </div>
+              </div>
             </button>
             <button
               type="button"
               onClick={() => onDownload(doc)}
-              className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-muted text-muted-foreground hover:bg-emerald-500 hover:text-white transition-colors shrink-0"
+              className="inline-flex items-center justify-center h-7 w-7 shrink-0 rounded-md bg-muted text-muted-foreground hover:bg-emerald-600 hover:text-white transition-colors"
               aria-label={`Download ${doc.name}`}
               title="Download"
             >
-              <DownloadIcon className="h-3 w-3" />
+              <DownloadIcon className="h-3.5 w-3.5" />
             </button>
           </motion.div>
         ))}

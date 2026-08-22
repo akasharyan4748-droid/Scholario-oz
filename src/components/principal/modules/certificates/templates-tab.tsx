@@ -35,6 +35,7 @@ import {
 } from './previews'
 import type { StudentRecord } from '@/lib/store/students-store'
 import { useStudentsStore } from '@/lib/store/students-store'
+import { DocumentThumbnail } from '@/components/shared/document-primitives'
 
 export function TemplatesTab() {
   const templates = useCertificatesStore((s) => s.templates)
@@ -213,10 +214,11 @@ function TemplateCard({
 }) {
   return (
     <div className="relative rounded-xl border border-border bg-card overflow-hidden">
-      {/* Mini preview — neutral background, not per-accent tinted */}
+      {/* Mini preview — neutral background, not per-accent tinted.
+          Bumped from h-28 to h-36 for more document presence. */}
       <button
         onClick={onPreview}
-        className="block w-full h-28 p-2 relative bg-muted/30 hover:bg-muted/50 transition-colors"
+        className="block w-full h-36 p-2 relative bg-muted/30 hover:bg-muted/50 transition-colors"
       >
         <MiniPreview template={template} />
         {template.isDefault && (
@@ -226,16 +228,14 @@ function TemplateCard({
           </span>
         )}
       </button>
-      {/* Footer info */}
-      <div className="p-2.5">
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <span
-            className="h-2.5 w-2.5 rounded-sm shrink-0"
-            style={{ background: template.accentColor }}
-          />
-          <p className="text-[11px] font-semibold truncate">{template.name}</p>
+      {/* Footer info — document thumbnail replaces the accent swatch for
+          real document identity. Keeps the single emerald accent. */}
+      <div className="p-3">
+        <div className="flex items-center gap-2 mb-1.5">
+          <DocumentThumbnail docType={template.docType} size="sm" />
+          <p className="text-xs font-semibold truncate flex-1 min-w-0">{template.name}</p>
         </div>
-        <div className="flex items-center gap-1 mb-2">
+        <div className="flex items-center gap-1 mb-2 pl-0.5">
           <StylePill style={template.style} accent={template.accentColor} />
           <span className={cn(
             'inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold',

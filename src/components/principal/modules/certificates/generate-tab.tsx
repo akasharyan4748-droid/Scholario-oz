@@ -15,7 +15,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import {
-  Search, Sparkles, Check, RotateCw, Info,
+  Search, Sparkles, Check, RotateCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,8 +37,11 @@ import {
   type DocType, type DocumentTemplate,
 } from '@/lib/store/certificates-store'
 import {
-  DOC_TYPES, DOC_TYPE_BY_LABEL, accentClasses, CertPanel, CertEmptyState,
+  DOC_TYPES, DOC_TYPE_BY_LABEL, CertPanel,
 } from './cert-shared'
+import {
+  DocumentCard, DocumentThumbnail, getDocTypeMeta,
+} from '@/components/shared/document-primitives'
 import {
   CertificatePreview, MarksheetPreview, IDCardPreview, FeeReceiptPreview,
   type MarksheetData, type MarksheetRow,
@@ -203,29 +206,22 @@ export function GenerateTab() {
           }
         >
           {!docType ? (
-            // Selection grid — single emerald accent. Icon differentiates type.
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            // Selection grid — larger DocumentCards (2-col), single emerald accent.
+            // Icon differentiates the type via the doc-type meta; the color stays
+            // consistent. Strong selected state: border-2 + ring-2 + check badge.
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {DOC_TYPES.map((d) => {
-                const a = accentClasses(d.accent) // always emerald now
-                const Icon = d.icon
+                const meta = getDocTypeMeta(d.label)
                 return (
-                  <button
+                  <DocumentCard
                     key={d.label}
+                    docType={d.label}
+                    name={d.short}
+                    description={d.description}
+                    category={meta?.category}
+                    selected={false}
                     onClick={() => setDocType(d.label)}
-                    title={d.description}
-                    className={cn(
-                      'group relative flex flex-col items-start gap-1.5 rounded-lg border p-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
-                      a.cardBg, a.cardBorder,
-                    )}
-                  >
-                    <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg ring-1', a.bg, a.ring)}>
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0 w-full">
-                      <p className="text-[11px] font-semibold leading-tight truncate">{d.short}</p>
-                      <p className="text-[9px] text-muted-foreground leading-tight truncate">{d.description}</p>
-                    </div>
-                  </button>
+                  />
                 )
               })}
             </div>
@@ -440,17 +436,19 @@ function FieldLabel({ label }: { label: string }) {
   return <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
 }
 
-// SelectedDocChip — compact, single emerald chip. No 10×10 icon tile, no
-// description line (the description already shows on the selection grid
-// card the user just clicked). Just label + "Change" affordance.
+// SelectedDocChip — substantial selected-state indicator. Uses the shared
+// DocumentThumbnail (paper silhouette + emerald edge stripe + doc-type glyph)
+// so the user sees a real document thumbnail of what they picked, not a tiny
+// utility chip. The "Change" affordance lives in the parent CertPanel header.
 function SelectedDocChip({ docType }: { docType: DocType }) {
   const d = DOC_TYPE_BY_LABEL[docType]
-  const Icon = d.icon
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2">
-      <Icon className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
-      <span className="text-xs font-semibold">{d.short}</span>
-      <span className="text-[10px] text-muted-foreground truncate">{d.description}</span>
+    <div className="flex items-center gap-3 rounded-xl border-2 border-emerald-500/40 bg-emerald-500/[0.06] ring-2 ring-emerald-500/20 px-3 py-2.5">
+      <DocumentThumbnail docType={docType} size="sm" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold leading-tight truncate">{d.short}</p>
+        <p className="text-[10px] text-muted-foreground leading-tight truncate mt-0.5">{d.description}</p>
+      </div>
     </div>
   )
 }
@@ -519,12 +517,20 @@ function PreviewArea({
   purpose?: string
 }) {
   if (!docType || !template) {
+    // Refined document placeholder — a large DocumentThumbnail (paper
+    // silhouette with emerald edge stripe) on a soft muted canvas. Feels
+    // like a document canvas waiting for input, not a flat empty state.
     return (
-      <CertEmptyState
-        icon={<Info className="h-5 w-5" />}
-        title="Pick a document type"
-        description="The live preview will appear here with real student data."
-      />
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+        <div className="relative">
+          <div className="absolute -inset-4 bg-emerald-500/5 blur-2xl rounded-full pointer-events-none" aria-hidden />
+          <DocumentThumbnail size="xl" tone="emerald" className="relative" />
+        </div>
+        <p className="mt-5 text-sm font-semibold text-foreground">Select a document type</p>
+        <p className="mt-1 text-xs text-muted-foreground max-w-[280px] leading-relaxed">
+          The live preview will appear here with real student data, formatted like an actual document.
+        </p>
+      </div>
     )
   }
   // Certificates

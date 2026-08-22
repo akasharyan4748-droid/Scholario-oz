@@ -21,8 +21,19 @@ import {
 import { toast } from 'sonner'
 import { formatDate, formatRelativeTime } from '@/lib/format'
 import { useDownloadsStore, type DownloadDocument } from '@/lib/store/downloads-store'
-import { useCertificatesStore } from '@/lib/store/certificates-store'
+import { useCertificatesStore, type DocumentTemplate, type GeneratedDocument } from '@/lib/store/certificates-store'
+import { useStudentsStore } from '@/lib/store/students-store'
+import type { StudentRecord } from '@/lib/store/students-store'
+import { useFeeStore } from '@/lib/store/fee-store'
+import type { FeeTransaction } from '@/lib/store/fee-store'
 import { DocIcon, FormatBadge, SourceBadge, CategoryPill } from './downloads-shared'
+import { DocumentThumbnail } from '@/components/shared/document-primitives'
+import type { DocFormat } from '@/components/shared/document-primitives'
+import { Avatar } from '@/components/shared/avatar'
+import {
+  CertificatePreview, MarksheetPreview, IDCardPreview, FeeReceiptPreview,
+  type MarksheetData,
+} from '../certificates/previews'
 
 interface DocumentDetailProps {
   doc: DownloadDocument | null
@@ -32,9 +43,11 @@ interface DocumentDetailProps {
 
 export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
   const download = useDownloadsStore((s) => s.download)
-  const recordPreview = useDownloadsStore((s) => s.recordPreview)
   const downloadsCount = useDownloadsStore((s) => s.downloadsCount)
   const certDocs = useCertificatesStore((s) => s.documents)
+  const certTemplates = useCertificatesStore((s) => s.templates)
+  const students = useStudentsStore((s) => s.students)
+  const transactions = useFeeStore((s) => s.transactions)
 
   if (!doc) return null
 
@@ -64,7 +77,21 @@ export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
     }
   }
 
-  const certDoc = certDocs.find((c) => `doc-gen-${c.id}` === doc.id)
+  // ─── Cert bridge: resolve the underlying generated certificate doc ──
+  // so we can render the actual preview (CertificatePreview / MarksheetPreview
+  // / IDCardPreview / FeeReceiptPreview) instead of a generic placeholder.
+  const certDoc: GeneratedDocument | undefined =
+    certDocs.find((c) => `doc-gen-${c.id}` === doc.id)
+  const certTemplate: DocumentTemplate | undefined =
+    certDoc ? certTemplates.find((t) => t.id === certDoc.templateId) : undefined
+  const certStudent: StudentRecord | undefined =
+    certDoc ? students.find((s) => s.id === certDoc.studentId) : undefined
+  const certTxn: FeeTransaction | undefined =
+    certDoc && certDoc.data?.transactionId
+      ? transactions.find((t) => t.id === certDoc.data?.transactionId)
+      : undefined
+  const certMarksheet: MarksheetData | undefined =
+    certDoc ? certDoc.data?.marksheet as MarksheetData | undefined : undefined
   const count = downloadsCount[doc.id] ?? 0
 
   return (
@@ -105,51 +132,83 @@ export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
 
         {/* Body — scrollable */}
         <div className="flex-1 overflow-y-auto downloads-list-scroll">
-          {/* Preview placeholder (A4-style card) */}
+          {/* Preview area — actual document preview.
+              · Generated cert docs → render the real CertificatePreview /
+                MarksheetPreview / IDCardPreview / FeeReceiptPreview (uses
+                the underlying cert doc's template + student + data).
+              · Non-generated docs (forms, templates, reports) → a refined
+                document placeholder with DocumentThumbnail size xl + the
+                format-specific edge stripe (PDF=rose, XLSX=emerald, …),
+                NOT a generic FileText icon. */}
           <div className="p-4">
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22 }}
-              className="rounded-xl border border-border bg-gradient-to-br from-muted/30 to-background p-6 shadow-sm aspect-[3/4] flex flex-col"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <DocIcon format={doc.format} size="md" />
-                <FormatBadge format={doc.format} />
-              </div>
-
-              <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-                <div className="relative">
-                  <div className="absolute -inset-3 bg-emerald-500/10 blur-2xl rounded-full" aria-hidden />
-                  <FileText className="relative h-10 w-10 text-emerald-600/70 dark:text-emerald-400/70" />
+            {certDoc && certTemplate ? (
+              <DrawerCertPreview
+                doc={doc}
+                certDoc={certDoc}
+                template={certTemplate}
+                student={certStudent}
+                txn={certTxn}
+                marksheet={certMarksheet}
+              />
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22 }}
+                className="rounded-xl border border-border bg-gradient-to-br from-muted/30 to-background p-6 shadow-sm aspect-[3/4] flex flex-col"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <DocumentThumbnail format={doc.format as DocFormat} size="md" />
+                  <FormatBadge format={doc.format} />
                 </div>
-                <p className="mt-4 text-sm font-semibold leading-tight max-w-[220px]">
-                  {doc.name}
-                </p>
-                {doc.docNumber && (
-                  <p className="mt-1 text-[10px] text-muted-foreground font-mono">
-                    {doc.docNumber}
-                  </p>
-                )}
-                <p className="mt-2 text-[10px] text-muted-foreground/70 max-w-[240px] leading-snug">
-                  {doc.studentName
-                    ? `Issued to ${doc.studentName}`
-                    : doc.description}
-                </p>
-              </div>
 
-              <div className="flex items-center justify-between text-[9px] text-muted-foreground/70 pt-3 border-t border-border/40">
-                <span>Generated preview</span>
-                <span className="tabular-nums">{formatDate(doc.updatedDate)}</span>
-              </div>
-            </motion.div>
+                <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
+                  <div className="relative">
+                    <div
+                      className={cn(
+                        'absolute -inset-3 blur-2xl rounded-full',
+                        doc.format === 'PDF' && 'bg-rose-500/10',
+                        doc.format === 'XLSX' && 'bg-emerald-500/10',
+                        doc.format === 'DOCX' && 'bg-sky-500/10',
+                        doc.format === 'CSV' && 'bg-teal-500/10',
+                        doc.format === 'JPG' && 'bg-violet-500/10',
+                      )}
+                      aria-hidden
+                    />
+                    <DocumentThumbnail
+                      format={doc.format as DocFormat}
+                      size="xl"
+                      className="relative"
+                    />
+                  </div>
+                  <p className="mt-4 text-sm font-semibold leading-tight max-w-[220px]">
+                    {doc.name}
+                  </p>
+                  {doc.docNumber && (
+                    <p className="mt-1 text-[10px] text-muted-foreground font-mono">
+                      {doc.docNumber}
+                    </p>
+                  )}
+                  <p className="mt-2 text-[10px] text-muted-foreground/70 max-w-[240px] leading-snug">
+                    {doc.studentName
+                      ? `Issued to ${doc.studentName}`
+                      : doc.description}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between text-[9px] text-muted-foreground/70 pt-3 border-t border-border/40">
+                  <span>Document preview</span>
+                  <span className="tabular-nums">{formatDate(doc.updatedDate)}</span>
+                </div>
+              </motion.div>
+            )}
           </div>
 
           {/* Action buttons row */}
           <div className="px-4 pb-3 flex items-center gap-2 flex-wrap">
             <Button
               size="sm"
-              className="flex-1 min-w-[100px] h-8 text-xs gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
+              className="flex-1 min-w-[100px] h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={() => handleDownload(doc)}
             >
               <Download className="h-3.5 w-3.5" /> Download
@@ -214,13 +273,16 @@ export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
               )}
               {doc.studentName && (
                 <MetaRow icon={<User className="h-3.5 w-3.5" />} label="Issued to">
-                  <div className="text-right">
-                    <p className="text-[11px] text-foreground leading-tight">{doc.studentName}</p>
-                    {doc.studentId && (
-                      <p className="text-[9px] text-muted-foreground font-mono">
-                        {doc.studentId}
-                      </p>
-                    )}
+                  <div className="flex items-center justify-end gap-2 min-w-0">
+                    <div className="text-right min-w-0">
+                      <p className="text-[11px] text-foreground leading-tight truncate">{doc.studentName}</p>
+                      {doc.studentId && (
+                        <p className="text-[9px] text-muted-foreground font-mono truncate">
+                          {doc.studentId}
+                        </p>
+                      )}
+                    </div>
+                    <Avatar name={doc.studentName} size="sm" />
                   </div>
                 </MetaRow>
               )}
@@ -296,5 +358,63 @@ function MetaRow({
       </div>
       <div className="text-right min-w-0">{children}</div>
     </div>
+  )
+}
+
+// ─── DrawerCertPreview ────────────────────────────────────────────────
+//
+// Renders the ACTUAL document preview (CertificatePreview / MarksheetPreview
+// / IDCardPreview / FeeReceiptPreview) for a generated cert doc that has been
+// bridged into the Downloads library. Uses the cert doc's stored template +
+// student + (marksheet | transaction) data — the same data the Cert module's
+// history tab modal uses.
+
+function DrawerCertPreview({
+  doc, certDoc, template, student, txn, marksheet,
+}: {
+  doc: DownloadDocument
+  certDoc: GeneratedDocument
+  template: DocumentTemplate
+  student?: StudentRecord
+  txn?: FeeTransaction
+  marksheet?: MarksheetData
+}) {
+  const dt = certDoc.docType
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22 }}
+      className="rounded-xl border border-border bg-slate-100 p-2 shadow-sm overflow-hidden"
+    >
+      {dt === 'Bonafide' || dt === 'Transfer' || dt === 'Character' || dt === 'Migration' ? (
+        <CertificatePreview
+          docType={dt}
+          template={template}
+          student={student}
+          docNumber={certDoc.docNumber}
+          purpose={certDoc.data?.purpose}
+        />
+      ) : dt === 'Marksheet' ? (
+        <MarksheetPreview
+          template={template}
+          student={student}
+          data={marksheet}
+          docNumber={certDoc.docNumber}
+        />
+      ) : dt === 'ID Card' ? (
+        <IDCardPreview template={template} student={student} />
+      ) : dt === 'Fee Receipt' ? (
+        <FeeReceiptPreview template={template} transaction={txn} docNumber={certDoc.docNumber} />
+      ) : (
+        <div className="py-12 text-center text-xs text-muted-foreground">
+          Preview not available for this document type.
+        </div>
+      )}
+      <div className="flex items-center justify-between px-2 py-1.5 text-[9px] text-muted-foreground/70 bg-slate-50 border-t border-slate-200 mt-1">
+        <span>{dt} · {doc.format}</span>
+        <span className="tabular-nums">{formatDate(certDoc.generatedAt)}</span>
+      </div>
+    </motion.div>
   )
 }

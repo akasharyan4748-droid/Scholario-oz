@@ -7612,3 +7612,1466 @@ Stage Summary:
 - Exams bugs fixed (-316d countdown + duplicated classes).
 - Hydration warning fixed (div inside p in CalPanel).
 - Committed and pushed to main, stable, development.
+
+---
+Task ID: DASH-C
+Agent: Explore (Certificates + Downloads visual audit)
+Task: Audit Certificates + Downloads current visual state for visual richness restoration
+
+Work Log:
+- Read /home/z/my-project/worklog.md Task ID 12 (Certificates rainbow collapse — 7-hue → single emerald) and Task ID 9-D (Operations visual convergence — CertPanel → shared Panel, certificates/index → PageTransition + SegmentedTabs).
+- Read all 10 module files end-to-end:
+  • Certificates: cert-shared.tsx (257 LOC), index.tsx (86), generate-tab.tsx (640), templates-tab.tsx (441), history-tab.tsx (438), previews.tsx (792).
+  • Downloads: downloads-shared.tsx (267), index.tsx (304), document-list.tsx (280), document-detail.tsx (300).
+- Read shared primitives: shared/panel.tsx (Panel + PanelGrid), shared/segmented-tabs.tsx, shared/summary-card.tsx (SummaryCard + SummaryCardGrid, tone palette), shared/entity-card.tsx (EntityCard pattern — useful model for DocumentCard).
+- Cross-referenced line refs in worklog Task 12 vs current code to verify the exact state of each surface the user is complaining about.
+- No files modified — read-only audit.
+
+Stage Summary:
+
+### A. Certificates module — current visual state
+
+**A.1 cert-shared.tsx (257 LOC)** — shared primitives
+- `DOC_TYPES` (lines 38-97): 7 doc types (Bonafide/Transfer/Character/ID Card/Fee Receipt/Migration/Marksheet). Each entry has `{ label, short, icon, accent: 'emerald', needsStudent, needsExam?, needsFeeTxn?, description }`. NO `category` field. Icon differentiates type (FileText/ScrollText/Award/CreditCard/Receipt/GraduationCap/ClipboardList). All `accent: 'emerald'` — single hue collapsed from 7-hue rainbow.
+- `ACCENT_MAP` (lines 109-117): single emerald entry with `bg/ring/text/cardBg/cardBorder`. `accentClasses(_)` ignores arg, returns emerald (line 121-123).
+- `CertKpiCard` (lines 138-170): p-3.5, h-9 w-9 icon tile, h-16 w-16 blur-2xl glow, motion.button. RETAINED but NOT MOUNTED by index.tsx — dead UI code (kept for back-compat).
+- `CertPanel = Panel` (line 179): re-export of shared Panel (flat `rounded-xl border border-border bg-card` + `text-sm font-semibold` title + `text-xs text-muted-foreground` subtitle + `p-4` body).
+- `DocStatusBadge` (lines 183-198): status-semantic palette (slate/amber/cyan/emerald) for Generated/Printed/Downloaded/Issued.
+- `StylePill` (lines 202-211): `inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold` — uses inline `style={{ background: ${accent}15, color: accent }}` per template.accentColor.
+- `CertEmptyState` (lines 215-230): `flex flex-col items-center justify-center py-12` + `h-12 w-12 rounded-full bg-muted/40 text-muted-foreground/60` icon circle + `text-sm font-semibold` title + `text-xs text-muted-foreground/70` description.
+
+**A.2 index.tsx (86 LOC)** — shell
+- Pure Academics pattern: `<PageTransition className="space-y-4 cert-shell">` + `<style dangerouslySetInnerHTML CERT_PRINT_STYLES>` + one row with `<SegmentedTabs tabs={[Generate, Templates, History]} />` (line 63-67) + `<AnimatePresence mode="wait">` motion.div (line 71-83). NO header, NO eyebrow, NO h1, NO summary pills. Keyboard 1/2/3 tab switching (line 44-55).
+
+**A.3 generate-tab.tsx (640 LOC)** — THE PRIMARY COMPLAINT FILE
+- Shell: `grid grid-cols-1 lg:grid-cols-12 gap-4` (line 188). LEFT `lg:col-span-5 space-y-4` workflow (line 190). RIGHT `lg:col-span-7` preview (line 416).
+- **Step 1 — Document type selector** (lines 207-231): `grid grid-cols-2 sm:grid-cols-3 gap-2` — 3-COLUMN GRID on desktop. Each button:
+  ```
+  className="group relative flex flex-col items-start gap-1.5 rounded-lg border p-2.5 text-left
+            transition-all hover:-translate-y-0.5 hover:shadow-md"
+  ```
+  Icon tile: `<span className="flex h-8 w-8 items-center justify-center rounded-lg ring-1 ...">` with `<Icon className="h-4 w-4" />` (line 221-223). Label: `text-[11px] font-semibold leading-tight truncate` (line 225). Description: `text-[9px] text-muted-foreground leading-tight truncate` (line 226). 
+  **This is the user's "small receipts / tiny utility cards" complaint**: cards are `p-2.5` with `h-8 w-8` icon tile, `h-4 w-4` glyph, `text-[11px]` label, `text-[9px]` description, in a 3-column grid (7 types wraps to 3+3+1). Visual identity lost — no category, no selected-state visual presence, no larger preview.
+- **SelectedDocChip** (lines 446-456): after selection, the grid is replaced by this chip:
+  ```
+  <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2">
+    <Icon className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
+    <span className="text-xs font-semibold">{d.short}</span>
+    <span className="text-[10px] text-muted-foreground truncate">{d.description}</span>
+  </div>
+  ```
+  **One-line compact chip** — the previous pass explicitly shrank this from a 10×10 icon-tile card to this single row (worklog Task 12 Fix 3). The selected state no longer feels "important" — it's a flat reminder chip.
+- **Step 3 template grid** (lines 353-388): `grid grid-cols-2 sm:grid-cols-4 gap-2` — 4-col grid of even tinier cards: `relative flex flex-col items-start gap-1.5 rounded-lg border p-2`. Each shows `h-4 w-4` accent swatch (style={{background: t.accentColor}}), `text-[10px] font-semibold` style name, `text-[9px]` template name line-clamp-2, DEFAULT badge `bg-emerald-500/10 text-emerald-700` `text-[8px]`, plus active check-circle `bg-emerald-600 h-4 w-4 -top-1.5 -right-1.5`.
+- **Preview CertPanel** (lines 417-431): `title="Live preview"`, `subtitle={docType ? docType : 'Pick a document type'}`, `className="h-full"`, `bodyClassName="p-2 sm:p-4 bg-slate-50"`. When nothing selected → `PreviewArea` returns `<CertEmptyState icon={<Info className="h-5 w-5" />} title="Pick a document type" description="The live preview will appear here with real student data." />` (line 521-528). **NOT a "giant empty gray box" — it's a small muted icon circle + 2-line text**. Still flat. When type is picked → dispatches to CertificatePreview/MarksheetPreview/IDCardPreview/FeeReceiptPreview.
+- **Generate CTA** (lines 394-401): `bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs` (Task 12 Fix 6 explicitly removed the gradient).
+
+**A.4 templates-tab.tsx (441 LOC)**
+- `FilterChip` (lines 139-166): `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border`. Active = `border-foreground bg-foreground text-background`. Count badge `min-w-[16px] h-4 px-1 rounded text-[9px] font-semibold tabular-nums`. **No per-type icons** (Task 12 Fix 5 removed them).
+- `TemplateGroup` (lines 170-203): `CertPanel title="${docType} templates"` + count action `text-[10px] tabular-nums` "N templates". Grid `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3`.
+- `TemplateCard` (lines 205-299): `relative rounded-xl border border-border bg-card overflow-hidden`. **MiniPreview pane**: `block w-full h-28 p-2 relative bg-muted/30 hover:bg-muted/50` — h-28 = 112px. Default star badge: `inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300` with Star `h-2.5 w-2.5 fill-emerald-500`. Footer p-2.5: `h-2.5 w-2.5 rounded-sm` accent swatch + `text-[11px] font-semibold truncate` name + StylePill + Active/Inactive pill. Row actions: 4 ghost `h-7 w-7 p-0` icon buttons (Eye/Copy/Star-or-Check/X-or-Trash2).
+- `MiniPreview` (lines 303-380): per-doctype abstract preview (Marksheet 9-cell grid, ID Card aspect-ratio box, Fee Receipt dashed divider, Certificate Frame variants Classic/Formal/Modern/Minimal). Uses `template.accentColor` inline. Rich preview logic.
+- `PreviewModal` (lines 384-423): max-w-4xl modal with `ModalPreview` dispatching to real CertificatePreview/MarksheetPreview/IDCardPreview/FeeReceiptPreview.
+
+**A.5 history-tab.tsx (438 LOC)**
+- Filter CertPanel (line 133): search Input h-9 + 2 Selects (docType h-9 w-150, status h-9 w-140) + Clear button h-9.
+- Stats line (lines 182-190): `text-[10px] text-muted-foreground` with `·` separators, status-colored numbers (emerald Issued / amber Printed / cyan Downloaded). Single home for these counts.
+- Table (lines 200-300): `<table className="w-full text-xs">` inside `CertPanel bodyClassName="p-0"` with `overflow-x-auto`. 7 columns: Student | Type | Doc No | Template (md:hidden) | Date (sm:hidden) | Status | Actions.
+- Student cell (lines 220-231): `h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300` icon chip + name + `text-[9px] text-muted-foreground` meta.
+- **Type pill (line 235)**: `bg-muted text-muted-foreground text-[9px] font-semibold` — NEUTRAL (Task 12 Fix 4 explicitly replaced per-accent with neutral). Type is differentiated only by label.
+- Actions (lines 247-294): primary Download ghost `h-7 text-[10px] text-emerald-700 hover:bg-emerald-500/10` + MoreVertical DropdownMenu (Preview/Print/Regenerate/Mark issued/Delete rose). 6 buttons → 2 controls per row.
+- PreviewModal (lines 317-357) + buildDownloadHTML (lines 400-438) Blob HTML builder.
+
+**A.6 previews.tsx (792 LOC)** — RICH document previews (the document identity the user wants)
+- `SchoolCrest` (line 61): `h-14 w-14 rounded-full text-white shadow-sm` with GraduationCap h-5.
+- `SchoolHeader` (line 73): Modern = flex left+right layout; Classic/Formal/Minimal = centered.
+- `Frame` (line 111): 4 styles — Classic (`p-1.5 accent bg + white inner p-3 sm:p-5 + outline`), Formal (`3px double + 1px outline offset 3px`), Modern (`white p-4 sm:p-6 rounded-md border`), Minimal (`white p-6 sm:p-10 + 1px accent border`).
+- `CertificatePreview` (line 161): `print-area w-full bg-slate-100 p-3 sm:p-5` + Frame + SchoolHeader + title `text-base sm:text-xl font-bold` + doc-number strip + body + 2-col signature footer (Clerk | Principal with Stamp `text-rose-700/70 -rotate-12`).
+- `MarksheetPreview` (line 355): `print-area w-full bg-slate-100 p-3 sm:p-5` + grid table with scores.
+- `IDCardPreview` (line 517): `print-area w-full bg-slate-100 p-4 flex justify-center items-center` + ID card surface.
+- `FeeReceiptPreview` (line 624): Compact (thermal 280px monospace) or Standard (max-w-640 + crest + 2-col meta grid + itemized table + signature).
+- **These are the rich previews that constitute "document visual identity" — currently only used by Cert module. Downloads drawer does NOT use them for generated docs (see D.4 below).**
+
+### B. Downloads module — current visual state
+
+**B.1 downloads-shared.tsx (267 LOC)**
+- `DocIcon` (lines 23-72): 
+  - FORMAT_ICON (line 29-35): `PDF: FileText`, `DOCX: FileText` (SAME icon as PDF — visual ambiguity!), `XLSX: FileSpreadsheet`, `CSV: FileSpreadsheet`, `JPG: FileImage`.
+  - FORMAT_TINT (line 37-43): multi-color — `PDF: bg-rose-50 text-rose-600 ring-rose-500/20`, `DOCX: bg-sky-50 text-sky-600 ring-sky-500/20`, `XLSX: bg-emerald-50 text-emerald-600`, `CSV: bg-teal-50 text-teal-600`, `JPG: bg-violet-50 text-violet-600`. **Multi-color palette — but this is the universal file-type coloring convention (rose=PDF, sky=DOCX, emerald=XLSX), not arbitrary rainbow.**
+  - DOCICON_SIZE (line 45-49): `sm: h-8 w-8 rounded-lg`, `md: h-9 w-9 rounded-lg`, `lg: h-11 w-11 rounded-xl`.
+  - DOCICON_GLYPH (line 51-55): `sm: h-4 w-4`, `md: h-4 w-4`, `lg: h-5 w-5`. **Glyph is h-4 even for lg=h-11 container — icon-in-box ratio is small.**
+- `FormatBadge` (lines 76-96): `inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold tracking-wide border tabular-nums` + FORMAT_BADGE color map. Small neutral text badge.
+- `SourceBadge` (lines 100-152): 5 sources ('Official Form': neutral, 'Template': teal, 'Generated': emerald, 'Report': amber, 'Resource': cyan) — colored dot + optional icon + text. `inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium border whitespace-nowrap`.
+- `CategoryPill` (lines 156-184): text-only pill, 7 categories each with their own text color (Admissions: slate, Student Records: cyan, Finance: amber, Academics: emerald, Operations: teal, Health: rose, Transport: violet). `text-[10px] font-medium tracking-tight whitespace-nowrap`.
+- `DownloadsPanel = Panel` (line 193).
+- `DownloadsEmptyState` (lines 197-221): `py-14` + `h-12 w-12 rounded-full bg-muted/40 text-muted-foreground/60` icon.
+
+**B.2 index.tsx (304 LOC)**
+- PageTransition shell + SegmentedTabs (All/Recent/Generated/Forms/Templates/Reports — each with count badge from `getCountsByTab`) on left + search Input h-9 + category Select h-9 w-140 + sort Select h-9 w-140 + Clear button h-9 on right (line 126-195).
+- **QuickAccess section** (lines 242-304): `motion.section className="rounded-xl border border-border bg-card p-4"` with header `<Zap className="h-3.5 w-3.5 text-emerald-600">` + "Quick Access" `text-sm font-semibold` + "· most used documents" muted + "click to open · icon to download" hint. Body: `flex flex-wrap gap-1.5` with motion.div chips:
+  ```
+  className="group inline-flex items-center gap-2 pl-1.5 pr-1 py-1 rounded-full bg-background border border-border hover:border-emerald-500/40 hover:shadow-sm transition-all max-w-full"
+  ```
+  Each chip: `DocIcon format={doc.format} size="sm" className="!h-6 !w-6 !rounded-full"` + `text-xs font-medium truncate max-w-[140px]` name + `FormatBadge className="!text-[8px]"` + `h-6 w-6 rounded-full bg-muted hover:bg-emerald-500 hover:text-white` Download button.
+  **This is the user's "rows of receipts" complaint root cause for Quick Access**: tiny rounded-full pills with `!h-6 !w-6 !rounded-full` icon overrides — they read as chips, NOT as "real documents".
+- Section header (lines 204-216): `text-sm font-semibold tracking-tight text-foreground` "{categoryTab === 'All' ? 'All documents' : categoryTab}" + count + matching-query line.
+
+**B.3 document-list.tsx (280 LOC)**
+- Table (lines 116-262): `rounded-xl border border-border bg-card overflow-hidden` + `overflow-x-auto downloads-list-scroll` + `<table className="w-full text-xs min-w-[720px]">`.
+- Header row (line 122): `border-b border-border bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground`. 6 columns: Document (44%) | Category | Source | Format | Updated | Actions.
+- Document cell (lines 147-165): `<DocIcon format={doc.format} size="md" />` (h-9 w-9 rounded-lg) + name `font-semibold text-foreground leading-tight truncate` + description `text-[10px] text-muted-foreground` + `· size` tabular-nums. **md icon container h-9 w-9 but glyph only h-4 w-4** — small icon-in-box ratio.
+- Row hover: `hover:bg-emerald-50/40 dark:hover:bg-emerald-500/[0.04]` (line 143).
+- Category cell: `<CategoryPill category={doc.category} />` (text-[10px] colored text, no bg).
+- Source cell: `<SourceBadge source={doc.source} />` (colored dot + colored border pill).
+- Format cell: `<FormatBadge format={doc.format} />` (small colored border text badge).
+- Updated cell: `formatRelativeTime` `text-foreground/80 font-medium` + `formatDate` `text-[9px] tabular-nums`.
+- Actions (lines 193-256): Preview Eye `h-7 w-7 p-0` + Download `h-7 w-7 p-0 text-emerald-600` + MoreHorizontal DropdownMenu (Preview/Download/Print/Share/Star/Regenerate/View record).
+- Footer summary line (lines 264-277): `px-3 py-2 border-t border-border/60 bg-muted/20 text-[10px] text-muted-foreground` — "Showing N documents · X generated · Y forms · Z templates".
+- **This is the user's "rows of receipts" complaint root cause for the list**: it's a dense 6-column table with tiny h-9 icons, text-only CategoryPill, FormatBadge that's a 9px text badge — reads like a data table, NOT like a document library.
+
+**B.4 document-detail.tsx (300 LOC)** — slide-from-right drawer
+- `Drawer direction="right"` `sm:max-w-md w-full` (line 71-79).
+- Header (lines 81-104): `DocIcon format={doc.format} size="lg"` (h-11 w-11) + "DOCUMENT DETAILS" eyebrow `text-[10px] uppercase tracking-[0.14em]` + DrawerTitle `text-sm font-bold` name + DrawerDescription `text-[11px]` docNumber/description + close X h-7 w-7.
+- **Preview placeholder** (lines 109-146): `motion.div className="rounded-xl border border-border bg-gradient-to-br from-muted/30 to-background p-6 shadow-sm aspect-[3/4] flex flex-col"` — A4-aspect-ratio card with:
+  - Top row: DocIcon size="md" + FormatBadge
+  - Centered: `<div className="absolute -inset-3 bg-emerald-500/10 blur-2xl rounded-full">` glow + `<FileText className="relative h-10 w-10 text-emerald-600/70" />` (line 124)
+  - doc.name `text-sm font-semibold max-w-[220px]` + docNumber `text-[10px] font-mono` + studentName/description `text-[10px]`
+  - Footer: "Generated preview" + formatDate
+  **This is the user's complaint about the detail drawer**: it's a GENERIC FileText icon on a placeholder card with emerald glow — NO real document preview. For `source === 'Generated'` docs (Bonafide/Transfer/Character/Migration/Marksheet/ID Card/Fee Receipt), the actual `CertificatePreview/MarksheetPreview/IDCardPreview/FeeReceiptPreview` components exist in `certificates/previews.tsx` but this drawer does NOT render them. BIG OPPORTUNITY — the cert bridge already exists (`certDocs.find(c => \`doc-gen-${c.id}\` === d.id)`, line 67), so the docType + templateId + data are already accessible.
+- Action buttons (lines 149-180): Download `bg-gradient-to-r from-emerald-600 to-teal-600` (NOTE: still gradient in this drawer — Task 12 only removed the gradient from the Cert module's CTA) + Print + Share + Star.
+- Metadata grid (lines 182-228): MetaRow Tag/FolderTree/FileText/HardDrive/Calendar/Hash/User with SourceBadge/CategoryPill/FormatBadge/size/updatedDate/docNumber/studentName.
+- Activity section (lines 230-277): download count pill + cert status pill + template name pill + "Generated by {principal} on {date}" info box + Regenerate button.
+
+### C. Shared primitives inventory
+
+**Currently shared (already converged):**
+- `Panel` + `PanelGrid` (shared/panel.tsx, 110 LOC) — Cert re-exports as `CertPanel` (cert-shared.tsx:179); Downloads re-exports as `DownloadsPanel` (downloads-shared.tsx:193). Used at 15+ call sites.
+- `SegmentedTabs` (shared/segmented-tabs.tsx, 91 LOC) — used by both `certificates/index.tsx:63` (3 tabs) and `downloads/index.tsx:127` (6 tabs with badges).
+- `SummaryCard` + `SummaryCardGrid` (shared/summary-card.tsx, 179 LOC) — 8-tone palette, count-up animation. NOT used by Cert or Downloads (Cert has dead `CertKpiCard`, Downloads dropped its summary pill row in Task 14).
+- `EntityCard` (shared/entity-card.tsx, 105 LOC) — `leading/title/secondary/metadata/action` slot pattern, `rounded-lg border border-border/60 bg-card p-3`, hover lift. **GOOD MODEL for the proposed DocumentCard** — same slot grammar.
+
+**Currently module-private (consolidation candidates):**
+- `DocIcon` (downloads-shared.tsx:57) — file-type icon with format-specific tint. NOT used by Cert (which uses `DOC_TYPES[].icon` + `accentClasses(d.accent).bg` chip).
+- `FormatBadge` (downloads-shared.tsx:84) — format pill. Cert has no equivalent (cert types aren't file formats).
+- `SourceBadge` (downloads-shared.tsx:128) — Downloads-only.
+- `CategoryPill` (downloads-shared.tsx:166) — Downloads-only (7 categories with text colors). Cert's DOC_TYPES has NO category field.
+- `DocStatusBadge` (cert-shared.tsx:183) — Cert-only.
+- `StylePill` (cert-shared.tsx:202) — Cert-only.
+- `MiniPreview` (templates-tab.tsx:303) — per-doctype abstract preview, Cert-only.
+- `CertificatePreview/MarksheetPreview/IDCardPreview/FeeReceiptPreview` (previews.tsx) — rich real previews, Cert-only — **NOT rendered by Downloads document-detail.tsx drawer for generated docs**.
+
+### D. Recommended shared primitives (NEW — to be created in shared/)
+
+1. **`DocumentThumbnail`** (NEW) — visual representation of a document silhouette (paper preview shape + file-type/category edge stripe + format glyph). Sizes: `sm` (h-16), `md` (h-24), `lg` (h-40), `xl` (aspect-3/4). Used by:
+   - Cert doc-type selector — LARGE thumbnail per type (replaces the `h-8 w-8` icon tile).
+   - Cert SelectedDocChip — medium thumbnail + meta block.
+   - Cert Templates tab MiniPreview — replace local MiniPreview with shared primitive.
+   - Downloads document-list Document cell — medium thumbnail (replaces h-9 w-9 icon chip).
+   - Downloads Quick Access — small thumbnail (replaces the `!h-6 !w-6 !rounded-full` chip).
+   - Downloads document-detail drawer — XL thumbnail (replaces the generic h-10 FileText placeholder, optionally renders the real CertificatePreview/MarksheetPreview/IDCardPreview/FeeReceiptPreview when source==='Generated').
+
+2. **`DocumentIcon`** (NEW, consolidates) — lucide icon + tint in a sized chip. `tone: 'mono' | 'semantic'`:
+   - `mono` → single emerald tint (for Cert doc-type icon, Cert history Student icon) — preserves Task 12's single-emerald discipline.
+   - `semantic` → universal file-type palette (PDF=rose, DOCX=sky, XLSX=emerald, CSV=teal, JPG=violet) — preserves Downloads' DocIcon.
+   - Sizes `sm/md/lg/xl` with glyph scaling proportionally (current DocIcon keeps glyph at h-4 even for lg=h-11 — fix the ratio).
+   - Also accepts a `category` prop for Cert doc-type icon (replaces `DOC_TYPES[].icon + accentClasses(d.accent)` pattern).
+
+3. **`FileTypeBadge`** (NEW, consolidates FormatBadge + SourceBadge) — small pill with format/source label + optional accent. Single component with `kind: 'format' | 'source' | 'status'` and a unified palette. Currently FormatBadge (downloads), SourceBadge (downloads), DocStatusBadge (cert) are 3 separate components doing the same thing in different shapes.
+
+4. **`DocumentCard`** (NEW, modeled on `EntityCard`) — `leading/title/secondary/metadata/action/trailing` slot pattern, but with a LARGER visual presence than EntityCard's `p-3`:
+   - `p-4 sm:p-5` body, `gap-4` between leading and text, larger title `text-sm sm:text-base font-semibold`, supports a `selected` boolean (ring-2 ring-emerald-500/40 + bg-emerald-500/[0.04]).
+   - Used by Cert generate-tab Step 1 doc-type grid — replaces `grid grid-cols-2 sm:grid-cols-3 gap-2` with `grid grid-cols-1 sm:grid-cols-2 gap-3` (2-COLUMN, LARGER cards). Each card shows the new DocumentThumbnail + name `text-sm font-semibold` + description `text-xs text-muted-foreground` (2 lines, not truncated) + a NEW `category` chip (Certificate / Card / Receipt / Report).
+   - Used by Cert templates-tab template cards — replaces the h-28 MiniPreview pane with a taller preview + clearer Default state.
+   - Optional: Downloads could swap the table for a card grid when `viewMode: 'grid'` is selected (optional follow-up).
+
+5. **`DocumentListItem`** (NEW) — row layout for documents in tables. Replaces:
+   - Cert history-tab Student cell (currently h-7 w-7 icon + name + meta) → larger h-10 w-10 DocumentThumbnail + name + meta + type pill.
+   - Downloads document-list Document cell (currently h-9 w-9 DocIcon + name + description) → larger h-12 w-12 DocumentThumbnail + name + description + format badge inline.
+   - Optional alternative: a card-list hybrid (each row is a flat card with hover lift, not a table row) — better matches "document library" feel.
+
+6. **`DOC_TYPES[].category` field** (EXTEND) — add a `category: 'Certificate' | 'Identity' | 'Receipt' | 'Report'` field to DocTypeMeta. Maps: Bonafide/Transfer/Character/Migration → 'Certificate', ID Card → 'Identity', Fee Receipt → 'Receipt', Marksheet → 'Report'. Surfaced as a CategoryPill-equivalent on the new DocumentCard, restoring a category-level visual identity (without restoring the 7-hue rainbow — the category uses 4 muted tones, not 7 saturated hues).
+
+### E. Prioritized plan for restoring visual richness (no rainbow)
+
+**P0 — Certificates Generate tab (the user's primary complaint):**
+1. Replace `grid grid-cols-2 sm:grid-cols-3 gap-2` (generate-tab.tsx:207) doc-type selector with `grid grid-cols-1 sm:grid-cols-2 gap-3` of `DocumentCard`s. Each card: `p-4 sm:p-5` body, `DocumentThumbnail size="md"` (large doc-type icon + category stripe, not the current h-8 w-8 tile), `text-sm font-semibold` name (was `text-[11px]`), `text-xs text-muted-foreground` description `line-clamp-2` (was `text-[9px] truncate`), `category` pill (NEW), `selected` state visible (ring + bg) on click before commit. Add `category` to DOC_TYPES (cert-shared.tsx:38).
+2. Replace `SelectedDocChip` (generate-tab.tsx:446) — keep the compact single-line variant for the panel header BUT also render a `DocumentThumbnail size="md"` inside the Step 1 panel once a type is selected, so the selected state still feels "important" — not a flat chip. Or keep the chip in the header action and render a larger selected-state card in the body.
+3. Replace PreviewArea empty state (generate-tab.tsx:521-528) — instead of a small muted Info circle + 2-line text, render a larger `DocumentThumbnail size="xl"` placeholder showing the 7 doc-type silhouettes faded out (ghosted gallery), prompting the user to "Pick a document type to begin". When a type IS selected but no student yet, render the doc-type silhouette with the doc title + description in a faint preview, not just `Info h-5`.
+
+**P0 — Downloads Quick Access (the user's "rows of receipts" complaint):**
+4. Replace the QuickAccess chip row (downloads/index.tsx:269-301) — instead of `flex flex-wrap gap-1.5` of `rounded-full` chips with `!h-6 !w-6` icon overrides, render a `grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3` of compact `DocumentCard`-style tiles, each showing `DocumentThumbnail size="sm"` + name + FormatBadge. Reads as a row of real documents, not chips.
+
+**P0 — Downloads document-list (the user's "rows of receipts" complaint):**
+5. Upgrade the Document cell (document-list.tsx:147-165) — bump DocIcon `size="md"` (h-9 w-9) to `size="lg"` (h-11 w-11) or introduce `DocumentThumbnail size="md"` (h-12 w-12 with format edge stripe), giving each row a stronger file identity. Optional alt: offer a "grid" view toggle that switches the table to a card grid of DocumentCards.
+
+**P0 — Downloads document-detail drawer (the user's "giant empty gray box" complaint):**
+6. Replace the generic placeholder card (document-detail.tsx:109-146) — for `source === 'Generated'` docs (when `certDoc` is found at line 67), render the ACTUAL real preview: dispatch to `CertificatePreview/MarksheetPreview/IDCardPreview/FeeReceiptPreview` from `certificates/previews.tsx` using `certDoc.docType + certDoc.templateId + certDoc.data + student`. For non-generated docs, render a `DocumentThumbnail size="xl"` placeholder that shows the format silhouette (PDF page corner / XLSX grid / DOCX paragraph lines) — NOT a generic h-10 FileText.
+
+**P1 — Certificates Templates tab:**
+7. MiniPreview pane (templates-tab.tsx:217-228) `h-28 p-2` — bump to `h-36 p-3` for more preview presence. Move the shared `MiniPreview` (templates-tab.tsx:303-380) into the new `DocumentThumbnail` primitive (currently 80 LOC of per-doctype preview logic — shareable with Downloads doc list).
+
+**P1 — Certificates History tab:**
+8. Student cell icon chip (history-tab.tsx:222) `h-7 w-7` — bump to `h-10 w-10` with the new `DocumentIcon size="md"` showing the doc-type icon (currently uses `bg-emerald-500/10 text-emerald-700` — keep the emerald mono tone). The Type pill (line 235) is currently `bg-muted text-muted-foreground` — restore a subtle per-category tint (NOT per-doctype rainbow, but per-DOCUMENT-CATEGORY: Certificate / Identity / Receipt / Report → 4 muted tones).
+
+**P2 — Shared primitives consolidation:**
+9. Create `shared/document-primitives.tsx` exporting: `DocumentThumbnail`, `DocumentIcon`, `FileTypeBadge`, `DocumentCard`, `DocumentListItem`. Both modules import from there. The format tint palette (PDF/DOCX/XLSX/CSV/JPG) lives here as the single source — Downloads loses `DocIcon` + `FormatBadge` from downloads-shared.tsx (move into shared, keep re-exports for back-compat).
+10. Extend `DocTypeMeta` (cert-shared.tsx:26) with `category: 'Certificate' | 'Identity' | 'Receipt' | 'Report'` — surfaced on the new DocumentCard as a 4-tone muted pill (not the 7-hue rainbow that Task 12 collapsed).
+
+**Constraints to preserve (do NOT regress):**
+- Single-emerald accent for doc-type selection in Cert (Task 12) — category pills use 4 MUTED tones (slate/emerald/amber/sky), NOT 7 saturated hues.
+- SegmentedTabs + PageTransition shell (Task 9-D) — do not re-introduce sticky headers or summary pill rows.
+- `Panel` flat section container (Task 9-D) — DocumentCard is a card INSIDE a Panel, not a replacement for the Panel.
+- No gradient CTAs in the Cert module (Task 12 Fix 6) — note the Downloads detail drawer STILL has `bg-gradient-to-r from-emerald-600 to-teal-600` (document-detail.tsx:152) — that's pre-Task-12 code; collapse to solid `bg-emerald-600` for consistency.
+- `DocStatusBadge` keeps its status-semantic palette (slate/amber/cyan/emerald) — those are STATUS colors, not doc-type accents (Task 12 explicitly preserved these).
+
+### F. Quick quotable line refs for the implementer
+
+- Cert doc-type selector grid (the small cards to replace): `generate-tab.tsx:207-231` — `grid grid-cols-2 sm:grid-cols-3 gap-2`, button `p-2.5`, icon `h-8 w-8`, glyph `h-4 w-4`, label `text-[11px]`, description `text-[9px]`.
+- Cert SelectedDocChip (the chip to enrich): `generate-tab.tsx:446-456` — `flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2`, icon `h-3.5 w-3.5`.
+- Cert PreviewArea empty state (the flat placeholder): `generate-tab.tsx:521-528` — `<CertEmptyState icon={<Info className="h-5 w-5" />} title="Pick a document type" description="The live preview will appear here with real student data." />`.
+- Cert DOC_TYPES (extend with category): `cert-shared.tsx:38-97`.
+- Cert Templates MiniPreview (move to shared): `templates-tab.tsx:303-380`.
+- Cert History type pill (currently neutral): `history-tab.tsx:235` — `bg-muted text-muted-foreground text-[9px] font-semibold`.
+- Cert History Student icon chip (currently h-7): `history-tab.tsx:222` — `flex h-7 w-7 items-center justify-center rounded-lg shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300`.
+- Downloads DocIcon (consolidate, fix glyph ratio): `downloads-shared.tsx:23-72` — `DOCICON_SIZE.lg = h-11 w-11` but `DOCICON_GLYPH.lg = h-5 w-5` (glyph too small for container).
+- Downloads DocIcon FORMAT_ICON (DOCX=FileText = same as PDF — fix): `downloads-shared.tsx:29-35`.
+- Downloads FormatBadge (consolidate): `downloads-shared.tsx:76-96`.
+- Downloads SourceBadge (consolidate): `downloads-shared.tsx:100-152`.
+- Downloads CategoryPill (consolidate or keep): `downloads-shared.tsx:156-184`.
+- Downloads QuickAccess chips (the "receipts" complaint): `downloads/index.tsx:269-301` — `motion.div` chips with `!h-6 !w-6 !rounded-full` DocIcon override.
+- Downloads Document-list Document cell (small icon in table): `downloads/document-list.tsx:147-165` — `<DocIcon format={doc.format} size="md" />` (h-9 w-9, glyph h-4 w-4).
+- Downloads Document-detail preview placeholder (generic FileText, NOT real preview): `downloads/document-detail.tsx:109-146` — `<FileText className="relative h-10 w-10 text-emerald-600/70" />` with `bg-emerald-500/10 blur-2xl` glow. certDoc bridge already at line 67.
+- Downloads Document-detail Download CTA (still gradient — collapse): `downloads/document-detail.tsx:152` — `bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700`.
+- Real rich previews ready to reuse (currently Cert-only): `certificates/previews.tsx` — `CertificatePreview` (line 161), `MarksheetPreview` (line 355), `IDCardPreview` (line 517), `FeeReceiptPreview` (line 624).
+- Shared primitives ready to model on: `shared/panel.tsx` (Panel + PanelGrid), `shared/segmented-tabs.tsx` (SegmentedTabs), `shared/entity-card.tsx` (EntityCard slot pattern — closest existing model for DocumentCard), `shared/summary-card.tsx` (SummaryCard tone palette — closest model for the muted-tone approach to category pills).
+
+---
+Task ID: DASH-B
+Agent: Explore (Shared primitives audit)
+Task: Audit existing Avatar, chart, and document visual primitives for reuse
+
+Work Log:
+- Read `/home/z/my-project/worklog.md` (7,614 lines) — absorbed the existing shared primitives: shared Panel (`src/components/principal/modules/shared/panel.tsx`), SegmentedTabs (`segmented-tabs.tsx`), SummaryCard + SummaryCardGrid (`summary-card.tsx`), and the premium-charts system (`src/components/shared/premium-charts.tsx`). Confirmed all 4 module-specific Panel re-exports (CertPanel/CalPanel/CommPanel/DownloadsPanel) already point at the shared Panel.
+- Read in full (read-only):
+  • `src/components/shared/ui.tsx` (162 LOC) — discovered `GradientAvatar` (lines 117–142) is the de-facto avatar system used everywhere.
+  • `src/components/ui/avatar.tsx` (54 LOC) — the shadcn/Radix Avatar (Avatar/AvatarImage/AvatarFallback). Verified it has ZERO importers across the codebase.
+  • `src/components/shared/premium-charts.tsx` (1,007 LOC) — read AreaTrendChart (641–780), GroupedBarChart (784–851), HorizontalBarChart (855–911), ProgressBar (915–931), BarTrend (945–1006), and the CHART_TOKENS + CHART_PALETTE tokens (36–64).
+  • `src/components/shared/charts/index.tsx` (217 LOC) — the legacy barrel that re-exports all premium-charts under legacy names (Donut / RadialGauge / AreaTrend / DualArea / BarTrend / GroupedBar / ProgressBar) + ChartCard (legacy container with `chart-card-premium` glass styling).
+  • `src/components/shared/charts/legacy-circular.tsx:96-131` — MiniLine sparkline (Recharts AreaChart with type="monotone" bezier, gradient fill, end-dot) used by KpiCard.
+  • `src/components/shared/kpi-card.tsx` (74 LOC) — the OTHER KPI card pattern (KpiCard with MiniLine trend, lucide icon, trend pill). NOT consolidated to SummaryCard.
+  • `src/components/principal/modules/downloads/downloads-shared.tsx` (268 LOC) — full read: DocIcon / FormatBadge / SourceBadge / CategoryPill / DownloadsPanel / DownloadsEmptyState / sort & category option arrays / metadata helpers.
+  • `src/components/principal/modules/certificates/cert-shared.tsx` (258 LOC) — full read: DOC_TYPES array + DOC_TYPE_BY_LABEL map + accentClasses (single-emerald) + CertKpiCard + DocStatusBadge + StylePill + CertEmptyState + CertPanel re-export.
+  • `src/components/principal/modules/downloads/document-list.tsx` (281 LOC) + `document-detail.tsx` (303 LOC) — confirmed the Downloads document-row visual language (DocIcon + name + CategoryPill + SourceBadge + FormatBadge + relative-time + per-row actions).
+  • `src/components/principal/modules/certificates/history-tab.tsx:210-299` — confirmed the Certificates document-row visual language (inline emerald h-7×w-7 icon chip + name/admission/class + muted neutral pill for doc-type + docNumber + templateName + formatDate + DocStatusBadge + Download + More dropdown). This is a DIFFERENT visual language from Downloads.
+  • `src/components/principal/modules/admission/components/DocumentCard.tsx` (257 LOC) — the THIRD document visual primitive (admission wizard). Tinted-by-status icon chip (emerald/amber/muted), mandatory/optional + status badge, file metadata with OCR chip, actions row. Self-contained, not reusable outside the wizard.
+  • `src/components/principal/modules/admission/components/verification/VerificationHeader.tsx:32-34` — a standalone inline-initials avatar block (NOT a component): `flex h-14 w-14 … rounded-xl bg-primary/10 text-primary font-display text-xl font-bold` rendering `app.applicantName.split(' ').map(n => n[0]).join('').slice(0, 2)`. Different visual language from GradientAvatar (square not circle, single primary tint not gradient, large h-14 not 8–16).
+  • `src/components/principal/modules/dashboard/recent-admissions.tsx` (67 LOC) — current Dashboard Recent Admissions: GlassCard + raw `<table className="w-full text-sm">` (NOT using shadcn Table) + `<GradientAvatar name={s.name} size="sm" />` per row + `<StatusBadge>` for fee status. Header row: `text-left text-xs text-muted-foreground border-b border-border`. Rows: `border-b border-border/50 last:border-0 hover:bg-accent/30`. Five columns: Student / Admission No / Class / Guardian / Fee Status.
+  • `src/components/principal/modules/dashboard/events-row.tsx` (122 LOC) — uses `<GradientAvatar name={t.name} size="sm" />` for Class Toppers card, confirming GradientAvatar is the de-facto dashboard avatar.
+  • `src/components/principal/modules/dashboard/charts-row.tsx` (124 LOC) — confirmed ChartsRow1 uses `<AreaTrendChart data={revenueAnalytics.monthly} height={240} formatValue={formatINRCr} labelKey="month" primaryKey="revenue" secondaryKey="expense" primaryLabel="Revenue" secondaryLabel="Expenses" primaryColor="oklch(0.55 0.14 162)" secondaryColor="oklch(0.62 0.2 25)" />` wrapped in `<ChartCard title="Revenue vs Expenses" subtitle="Last 8 months" className="lg:col-span-2" action={<StatusBadge …/>}>`.
+  • `src/components/principal/modules/shared/panel.tsx` (111 LOC) + `segmented-tabs.tsx` (91 LOC) + `summary-card.tsx` (179 LOC) — re-read to confirm the existing shared primitive set (so the audit references exact class strings).
+  • `src/components/ui/table.tsx` (117 LOC) — shadcn Table primitives (Table/TableHeader/TableBody/TableFooter/TableRow/TableHead/TableCell/TableCaption). Default TableRow has `hover:bg-muted/50 … border-b`; default TableHead has `text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap`; default TableCell has `p-2 align-middle whitespace-nowrap`.
+  • `src/components/principal/modules/attendance/history-tab.tsx:300-377` + `staff-tab.tsx:530-566,666-705` — confirmed the Academics canonical table language used by Attendance.
+  • `src/components/principal/modules/exams/tabs/settings-tab.tsx:375-414` — confirmed the Academics table usage in Exams settings (smaller grading-scale table).
+  • `src/components/principal/modules/exams/schedule/schedule-table.tsx:90-128` — the exam schedule grid (sticky-left date column + sticky-top header, `<table className="w-full border-collapse text-xs">`, header `text-[10px] uppercase tracking-wider text-muted-foreground`).
+- Enumerated all importers of `GradientAvatar` (60+ call sites across 48 files: principal/modules/{library, assignments, classes, transport, admission, students, dashboard, finance} + teacher/modules/{communication, resource-library, exam-proctoring, ptm-scheduler, performance-reviews, mentoring, dashboard, analytics, marks, students, student-behavior, parent-connect, homework, attendance} + student/modules/{achievements, announcements, peer-collab, results, dashboard, profile, assignments, bus-tracking, homework}) — every existing avatar in the app IS GradientAvatar.
+- Enumerated all importers of shadcn `Avatar` from `@/components/ui/avatar` → ZERO. Dead code.
+- Enumerated all importers of premium-charts `AreaTrendChart` (3 callers): `dashboard/charts-row.tsx`, `finance-dashboard/finance-charts.tsx` (alias RawAreaTrend), `fees/fees-charts.tsx` (alias RawAreaTrend). Plus the `charts/index.tsx` barrel which aliases it as `PremiumAreaTrend` and re-exports under the legacy names `AreaTrend` and `DualArea`.
+- Enumerated all importers of `DocIcon` / `FormatBadge` / `SourceBadge` / `CategoryPill` → only 3 internal files in the Downloads module (`document-list.tsx`, `document-detail.tsx`, `index.tsx`). NOT used by Certificates, NOT used by Admission wizard.
+- Verified the data model supports photo URLs: `useAuth().user.avatarUrl: string | null` (auth.ts:73,110), but `student.photo: string` (mock/students.ts:28) currently stores INITIALS not URLs (e.g. `photo: 'AS'`).
+
+Stage Summary:
+
+### 1. Avatar inventory — consolidate to ONE shared Avatar
+
+**Current state (2 implementations + 1 inline):**
+
+| Implementation | File:line | Props | Initials logic | Color logic | Photo support | Shape | Sizes | Currently used |
+|---|---|---|---|---|---|---|---|---|
+| **GradientAvatar** (de-facto standard, 60+ callers) | `src/components/shared/ui.tsx:117-142` | `{ name, initials?, size?: 'sm'\|'md'\|'lg'\|'xl', gradient?, className }` | `initials ?? name.split(' ').map(n => n[0]).slice(0,2).join('').toUpperCase()` | **Deterministic** via `name.charCodeAt` hash → 6-stop gradient palette (emerald/amber/rose/violet/cyan/lime) — `from-emerald-400 to-teal-500` etc. | **NO** photo URL support | Circle (`rounded-full`) | sm:h-8 w-8 text-xs · md:h-10 w-10 text-sm · lg:h-12 w-12 text-base · xl:h-16 w-16 text-xl | YES — 48 files, 60+ call sites |
+| **shadcn Avatar** (Radix primitives) | `src/components/ui/avatar.tsx:8-51` | `{ className, ...AvatarPrimitive.Root props }` + AvatarImage + AvatarFallback | None built-in (fallback is plain `bg-muted`) | None built-in (fallback `bg-muted`) | **YES** via `<AvatarImage src={…}>` | Circle (`size-8 rounded-full`) | Single (size-8 default, override via className) | **NO** — zero importers, dead code |
+| **Inline initials block** (VerificationHeader) | `src/components/principal/modules/admission/components/verification/VerificationHeader.tsx:32-34` | inline JSX | `app.applicantName.split(' ').map(n => n[0]).join('').slice(0,2)` | Single primary tint (`bg-primary/10 text-primary`) | NO | **Square** (`rounded-xl`) | h-14 w-14 text-xl | 1 site only |
+
+**Recommendation:** Consolidate to a single shared `Avatar` component in a new `src/components/shared/avatar.tsx`. Spec:
+```ts
+interface AvatarProps {
+  name: string
+  initials?: string                 // override (matches current `initials` prop)
+  src?: string                      // NEW — photo URL support (was missing from GradientAvatar)
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'  // add xs (h-6 w-6) for compact rows
+  shape?: 'circle' | 'square'       // square for admission wizard compat
+  className?: string
+}
+```
+- Keep GradientAvatar's deterministic gradient hash logic (`gradients[Math.abs(hash) % gradients.length]`)
+- Keep the 6-stop gradient palette (emerald/amber/rose/violet/cyan/lime) but consider converging to single emerald accent for visual consistency with the post-convergence Academics design language (this is a design call — not blocking).
+- Add Radix `<AvatarImage>` + `<AvatarFallback>` underneath so photo URLs gracefully fall back to initials when loading/error (use the dead shadcn Avatar as the wrapper).
+- The 60+ existing `<GradientAvatar name=… size=… />` callers migrate with a codemod `GradientAvatar → Avatar` (props are compatible — only `gradient` prop is dropped, no caller actually varies it except `student/profile.tsx:139,146` which explicitly pass `gradient="from-amber-400 to-orange-500"` etc. — those two sites need the gradient preserved OR replaced with the standard emerald palette for visual consistency).
+
+**Files to consolidate:** `src/components/shared/ui.tsx:102-142` (GradientAvatar) + `src/components/ui/avatar.tsx` (shadcn, dead) + `src/components/principal/modules/admission/components/verification/VerificationHeader.tsx:32-34` (inline).
+
+---
+
+### 2. SmoothLineChart — AreaTrendChart already IS the smooth line chart (with caveats)
+
+**File:** `src/components/shared/premium-charts.tsx:641-780` (AreaTrendChart).
+
+**Verdict against the user's spec:**
+
+| User wants | AreaTrendChart reality | Verdict |
+|---|---|---|
+| Smooth Catmull-Rom bezier curves | `smoothPath()` at lines 663–678 uses **exact Catmull-Rom-to-Bezier** formula (`cp1x = p1.x + (p2.x - p0.x) / 6`, `cp2x = p2.x - (p3.x - p1.x) / 6`). | ✅ Already smooth bezier |
+| Thin line | Primary `strokeWidth={1.9}`, secondary `strokeWidth={1.4}` (lines 719, 728). | ✅ Already thin (1.4–1.9 viewBox-units, scales with the responsive viewBox) |
+| Subtle gradient | Primary area gradient stops 0.28 → 0.06 → 0 opacity (lines 699–701); secondary 0.18 → 0. Plus a horizontal `pline` gradient (0.85 → 1.0) for the stroke itself. | ✅ Already subtle & optional (the area is always subtle; the stroke is a gradient by default but resolves to a flat color when the user picks one) |
+| Minimal grid | **NO gridlines drawn at all** — only the X-axis labels row at the bottom (`text-[9px] text-muted-foreground/60`, lines 751–755) and a thin dashed vertical hover-line on hover (line 744). | ✅ Already minimal (zero gridlines) |
+| NOT boxed | The chart is a bare `<div className="relative w-full" style={{ height }}>` (line 695) + SVG inside. **No border, no background, no padding, no ChartCard wrapper.** The wrapping container is supplied by the caller (Dashboard uses `<ChartCard>`, which IS boxed with `chart-card-premium` GlassCard styling). | ✅ Chart itself is NOT boxed — the boxing is opt-in via the caller's wrapper. To use as a thin dashboard trend without a box, just drop `<AreaTrendChart>` directly without `<ChartCard>`. |
+| Tooltip | Floating tooltip at lines 757–777: `absolute z-10 pointer-events-none rounded-md bg-popover border border-border shadow-lg px-2.5 py-1.5 text-[10px] -translate-x-1/2 min-w-[100px]`, shows label + colored dot + series name + tabular value, dual-series support, motion fade-in. | ✅ Already implemented, theme-aware |
+
+**Bottom line:** AreaTrendChart **already serves as the SmoothLineChart** the user wants. To use it as a thin dashboard trend WITHOUT a box:
+```tsx
+<AreaTrendChart
+  data={trend}
+  height={56}                    // compact sparkline height
+  labelKey="month"
+  primaryKey="value"
+  primaryColor="oklch(0.55 0.14 162)"
+  primaryLabel="Value"
+  formatValue={(n) => `${n}`}
+/>
+```
+Drop the `<ChartCard>` wrapper if "not boxed" is required. No code changes to `premium-charts.tsx` are strictly required.
+
+**Optional refinements (NOT required, but worth noting):**
+1. The viewBox width is hardcoded `w = 100` with `preserveAspectRatio="none"` (line 656, 696). This stretches the SVG to fill the container width — fine for area fills, but means stroke widths are also horizontally stretched on wide containers. For a truly thin stroke on a sparkline, consider `preserveAspectRatio="none"` only on Y and use a wider viewBox (e.g. `w = data.length * 40`). This is a known limitation but only visible at extreme aspect ratios.
+2. The X-axis labels row (`text-[9px]`, line 751) is always rendered. For a thin sparkline (height < 80), the labels collide with the chart area. Consider a `showXAxis?: boolean` prop (default `true`) so thin dashboard trends can hide it.
+3. There is no `showArea?: boolean` prop — the area fill is always drawn under the line. For a pure thin-line trend (no area), users would need a separate code path. The user's spec says "subtle gradient" which the current area satisfies, so this is optional.
+
+**Existing importers to preserve:** `dashboard/charts-row.tsx:16,43`, `finance-dashboard/finance-charts.tsx:3,9`, `fees/fees-charts.tsx:4,15`, `charts/index.tsx:35` (barrel alias `PremiumAreaTrend` → re-exported as `AreaTrend` and `DualArea`).
+
+**Also available:** `MiniLine` at `src/components/shared/charts/legacy-circular.tsx:96-131` is a true sparkline (Recharts AreaChart, type="monotone", gradient fill, end-dot at last point). Used by `src/components/shared/kpi-card.tsx:75`. If the user wants a tinier sparkline (height ~32-60px) inside KPI cards, `MiniLine` is the existing primitive — but it's Recharts-based, not the unified premium-charts SVG system. Recommend either (a) leaving MiniLine alone (it works), or (b) replacing it with `<AreaTrendChart height={32} showXAxis={false} />` once the optional `showXAxis` prop is added.
+
+---
+
+### 3. Document visual primitives — TWO divergent systems, NOT consolidated
+
+**Current state:**
+
+| Primitive | File:line | Props / shape | Visual language | Used by |
+|---|---|---|---|---|
+| **DocIcon** (Downloads) | `downloads-shared.tsx:57-72` | `{ format: DocFormat, size?: 'sm'\|'md'\|'lg', className }` | `inline-flex items-center justify-center ring-1 rounded-lg/xl` with per-format tint (PDF=rose, DOCX=sky, XLSX=emerald, CSV=teal, JPG=violet) + per-format Lucide icon (`FileText`/`FileSpreadsheet`/`FileImage`). Sizes sm:h-8 w-8 · md:h-9 w-9 · lg:h-11 w-11. Glyph h-4/h-5. | 3 Downloads files only |
+| **FormatBadge** (Downloads) | `downloads-shared.tsx:84-96` | `{ format, className }` | `inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold tracking-wide border tabular-nums` with per-format tint (PDF=rose, DOCX=sky, XLSX=emerald, CSV=teal, JPG=violet). | 3 Downloads files only |
+| **SourceBadge** (Downloads) | `downloads-shared.tsx:128-152` | `{ source, className, showIcon? }` | `inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium border whitespace-nowrap` + colored dot + optional `FileType2` icon. Source = Official Form/Template/Generated/Report/Resource. | 3 Downloads files only |
+| **CategoryPill** (Downloads) | `downloads-shared.tsx:166-184` | `{ category, className }` | `text-[10px] font-medium tracking-tight whitespace-nowrap` — text-only pill, color via per-category text tint (Admissions=slate, Student Records=cyan, Finance=amber, Academics=emerald, Operations=teal, Health=rose, Transport=violet). | 3 Downloads files only |
+| **DOC_TYPES / DOC_TYPE_BY_LABEL** (Certificates) | `cert-shared.tsx:38-100` | Array of `{ label, short, icon: LucideIcon, accent: 'emerald', needsStudent, needsExam?, needsFeeTxn?, description }` | Maps the 7 cert doc types (Bonafide/Transfer/Character/ID Card/Fee Receipt/Migration/Marksheet) to Lucide icons. **All share single emerald accent** (no rainbow). | `generate-tab.tsx`, `templates-tab.tsx`, `history-tab.tsx` |
+| **Inline icon chip** (Certificates history rows) | `history-tab.tsx:222-224` | inline JSX, not a component | `flex h-7 w-7 items-center justify-center rounded-lg shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300` + `<Icon className="h-3.5 w-3.5" />`. | 1 site (cert history rows) |
+| **DocStatusBadge** (Certificates) | `cert-shared.tsx:183-198` | `{ status: 'Generated'\|'Printed'\|'Downloaded'\|'Issued' }` | `inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold` + colored dot. Status semantics only (not doc-type). | `history-tab.tsx` |
+| **StylePill** (Certificates) | `cert-shared.tsx:202-211` | `{ style: TemplateStyle, accent?: string }` | `inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap` — accent may be a hex color. | `templates-tab.tsx`, `history-tab.tsx` |
+| **DocumentCard** (Admission wizard) | `admission/components/DocumentCard.tsx:29-256` | `{ doc: DocDescriptor, st: DocStatus, verificationEnabled, onUploadClick, onDefer, onVerify }` | Self-contained wizard card: tinted-by-status icon chip (`bg-emerald-500/10 text-emerald-600` or `bg-amber-500/10 text-amber-600` or `bg-muted`), mandatory/optional Badge, verification Badge, Paperclip file metadata, OCR Sparkles chip, DocActionButton row, verifier info, rejection reason. | 1 wizard step only |
+
+**Recommendation:** Consolidate the **visual primitives** (not the wizard card) into a new shared `src/components/shared/document-primitives.tsx`:
+
+```ts
+// Shared across Certificates + Downloads + Admission documents view
+export function DocumentThumbnail({ format, docType, size, className }) { … }   // merges DocIcon + Certificates inline icon chip
+export function FileTypeBadge({ format, className }) { … }                      // alias of existing FormatBadge, lift to shared
+export function DocTypeBadge({ docType, className }) { … }                      // alias of the muted pill from history-tab.tsx
+export function DocumentCard({ doc, actions, className, onClick }) { … }        // the row layout: thumbnail + name + meta + badges + actions (replaces the Downloads document-list row + the Certificates history row)
+```
+
+**Concretely:**
+- `DocumentThumbnail` should accept either `{ format: DocFormat }` (Downloads style → per-format tinted chip with Lucide file icon) OR `{ docType: DocType }` (Certificates style → single emerald-tinted chip with the DOC_TYPES icon). The cert-style is the post-convergence Academics pattern (single emerald), and Downloads's per-format tints (rose/sky/emerald/teal/violet) should be flattened to emerald OR kept as a per-format variant — design call.
+- `FileTypeBadge` is already a perfect shared primitive — just move it from `downloads-shared.tsx:84-96` to the shared file and re-export from `downloads-shared.tsx` for backward compat.
+- `DocTypeBadge` lifts the inline `<span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-muted text-muted-foreground">{doc.docType}</span>` from `history-tab.tsx:235-237` to the shared file. Already a flat Academics-pattern pill (single emerald-neutral).
+- `DocumentCard` merges the Downloads document-list row (DocIcon + name + description + size + CategoryPill + SourceBadge + FormatBadge + Updated + actions) and the Certificates history row (icon chip + studentName + admissionNo + class + docType pill + docNumber + templateName + formatDate + DocStatusBadge + actions). Both are tabular rows; the differences are which badges are shown — make them optional props.
+
+**Visual convergence note:** Certificates history currently uses `bg-emerald-500/10 text-emerald-700 dark:text-emerald-300` for the doc-type icon chip (single emerald — post-convergence Academics pattern). Downloads uses per-format tints (PDF=rose, DOCX=sky, XLSX=emerald, CSV=teal, JPG=violet). These two visual languages are NOT consistent. The post-convergence direction (per Task 9-D) is single-emerald. So the shared `DocumentThumbnail` should default to the emerald-only style and treat Downloads's per-format tints as a deprecated variant.
+
+**Files affected by the consolidation:**
+- New: `src/components/shared/document-primitives.tsx` (~80 LOC)
+- Modified (re-export for backward compat): `downloads-shared.tsx` (DocIcon/FormatBadge/SourceBadge/CategoryPill become re-exports), `cert-shared.tsx` (no change to DOC_TYPES — that's data, not visual; but the inline icon chip in history-tab.tsx becomes a `DocumentThumbnail` call).
+- Modified (caller migration): `history-tab.tsx:222-224`, `document-list.tsx:149,169,174,179`, `document-detail.tsx:83,117,118,189,192,195`, `downloads/index.tsx:284,288`.
+- NOT touched: `admission/components/DocumentCard.tsx` (the wizard DocumentCard is a self-contained upload-verification card with a different mental model — keep it as-is; the new shared DocumentCard is a list-row card, not a wizard card).
+
+---
+
+### 4. Academics table language — for Dashboard Recent Admissions to match
+
+**shadcn Table primitives** (`src/components/ui/table.tsx`):
+- `Table` wraps in `<div data-slot="table-container" className="relative w-full overflow-x-auto">` + `<table className="w-full caption-bottom text-sm">`
+- `TableHeader` adds `[&_tr]:border-b`
+- `TableBody` adds `[&_tr:last-child]:border-0`
+- `TableRow` adds `hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors`
+- `TableHead` adds `text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap`
+- `TableCell` adds `p-2 align-middle whitespace-nowrap`
+
+**Academics canonical table language** (extracted from `attendance/history-tab.tsx:300-377` + `attendance/staff-tab.tsx:530-566,666-705` + `exams/tabs/settings-tab.tsx:375-414`):
+
+Container:
+```tsx
+<div className="rounded-xl border border-border overflow-hidden bg-card">
+  <Table>
+    <TableHeader className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
+      <TableRow className="border-b border-border hover:bg-transparent">
+        <TableHead className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5">
+          Column Label
+        </TableHead>
+        {/* right-aligned numeric columns: add " text-right" */}
+        {/* hidden on small screens: add " hidden sm:table-cell" / " hidden md:table-cell" */}
+      </TableRow>
+    </TableHeader>
+    <TableBody>
+      <AnimatePresence mode="popLayout">
+        {rows.map((r, i) => (
+          <motion.tr
+            key={r.id}
+            layout
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ delay: Math.min(i * 0.01, 0.2), duration: 0.25 }}
+            className="border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors text-xs"
+          >
+            <TableCell className="py-2.5">{…}</TableCell>
+            <TableCell className="py-2.5 font-mono tabular-nums text-muted-foreground text-right">{…}</TableCell>
+            <TableCell className="py-2.5">
+              <StatusBadge status={r.status} />
+            </TableCell>
+            <TableCell className="py-2.5 text-right">
+              {/* row action: small ghost button with icon */}
+              <button
+                className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                title="View details"
+                aria-label="View details"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </button>
+            </TableCell>
+          </motion.tr>
+        ))}
+      </AnimatePresence>
+      {rows.length === 0 && (
+        <TableRow>
+          <TableCell colSpan={N} className="text-center text-xs text-muted-foreground py-8">
+            No records found.
+          </TableCell>
+        </TableRow>
+      )}
+    </TableBody>
+  </Table>
+</div>
+```
+
+**Exact extracted classes (Academics canonical):**
+- Outer wrapper: `rounded-xl border border-border overflow-hidden bg-card`
+- Header row: `sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]` (header) + `border-b border-border hover:bg-transparent` (row)
+- Header cell: `text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5` (+ `text-right` for numeric columns, `hidden sm:table-cell` / `hidden md:table-cell` for responsive)
+- Body row (motion.tr): `border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors text-xs`
+- Body cell: `py-2.5` (default TableCell already adds `p-2 align-middle whitespace-nowrap`; the Academics modules override with `py-2.5` only — they accept the default `p-2` horizontal padding)
+- Numeric cell: `py-2.5 font-mono tabular-nums text-muted-foreground text-right` (or with color: `text-emerald-600 dark:text-emerald-400`, `text-rose-600 dark:text-rose-400`, `text-amber-600 dark:text-amber-400`, `text-sky-600 dark:text-sky-400`)
+- Status badge cell: `py-2.5` + `<StatusBadge status={r.status} />` (from `src/components/shared/ui.tsx:87-100` — pill with bg-{variant}/10 + text-{variant} + dot)
+- Action cell: `py-2.5 text-right` + small icon button: `inline-flex items-center justify-center h-7 w-7 rounded-md border border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors` + `<Eye className="h-3.5 w-3.5" />`
+- Empty-state row: `<TableRow><TableCell colSpan={N} className="text-center text-xs text-muted-foreground py-8">No records found.</TableCell></TableRow>`
+
+**Current Dashboard Recent Admissions (does NOT match Academics):**
+- Uses `<GlassCard className="p-3 sm:p-4 lg:p-5">` (the chart-card-premium GlassCard with `bg-white rounded-xl border border-gray-200 shadow-2xs text-slate-800`) — Academics uses a flat `<div className="rounded-xl border border-border overflow-hidden bg-card">` wrapper.
+- Uses a raw `<table className="w-full text-sm">` — Academics uses the shadcn `<Table>` primitives.
+- Header row: `text-left text-xs text-muted-foreground border-b border-border` — Academics uses `text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5` (smaller, uppercase, more tracking, more vertical padding).
+- Header cell: `px-3 py-2 font-medium` — Academics uses `py-2.5` (no extra `px-3`).
+- Body row (motion.tr): `border-b border-border/50 last:border-0 hover:bg-accent/30 transition-colors` — Academics uses `border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors text-xs`.
+- Body cell: `px-3 py-2.5` — Academics uses `py-2.5`.
+- Avatar cell: `<GradientAvatar name={s.name} size="sm" />` — should become `<Avatar name={s.name} size="sm" />` after consolidation.
+- Fee status cell: `<StatusBadge status={s.feeStatus} variant={…} dot />` — same as Academics.
+- NO row action (no Eye/View button) — Academics always has a row action.
+
+**Migration plan for Recent Admissions to match Academics:**
+1. Wrap in `<Panel>` (flat Academics container) instead of `<GlassCard>`. Use `<Panel title="Recent Admissions" subtitle="Latest students enrolled this term" action={<StatusBadge status={`${studentStats.newThisMonth} this month`} variant="success" dot />} bodyClassName="p-0">` — the `bodyClassName="p-0"` lets the table flush to the panel edges (Panel already has `overflow-hidden`, so the rounded corners clip the table).
+2. Switch from raw `<table>` to shadcn `<Table>` / `<TableHeader>` / `<TableBody>` / `<TableRow>` / `<TableHead>` / `<TableCell>`.
+3. Match the Academics header classes: `text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5`. Make Admission No / Class / Guardian / Fee Status cells `hidden sm:table-cell` / `hidden md:table-cell` for responsive parity.
+4. Match the Academics body row classes: `border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors text-xs`. Drop the per-row entrance animation OR keep it (Academics uses `<AnimatePresence mode="popLayout">` + `motion.tr` with `initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: Math.min(i * 0.01, 0.2), duration: 0.25 }}`).
+5. Add a row-action button (Eye) to match the Academics pattern.
+6. Switch `<GradientAvatar>` → `<Avatar>` (the new shared component).
+
+---
+
+### Deliverable summary
+
+1. **Avatar:** Consolidate `GradientAvatar` (`src/components/shared/ui.tsx:117-142`, 60+ callers) + dead shadcn Avatar (`src/components/ui/avatar.tsx`) + VerificationHeader inline initials (`VerificationHeader.tsx:32-34`) into a new `src/components/shared/avatar.tsx`. Add `src?: string` (photo URL via Radix AvatarImage) + `shape?: 'circle' | 'square'` + `size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'`. Keep the deterministic 6-stop gradient palette. Migrate the 60+ callers via codemod.
+
+2. **SmoothLineChart:** `AreaTrendChart` at `src/components/shared/premium-charts.tsx:641-780` already IS the SmoothLineChart (Catmull-Rom bezier ✅, thin 1.4–1.9 stroke ✅, subtle gradient ✅, zero gridlines ✅, not boxed by default ✅, theme-aware tooltip ✅). Two OPTIONAL refinements: (a) add `showXAxis?: boolean` prop (default `true`) so thin sparklines can hide the X-axis labels; (b) add `showArea?: boolean` prop (default `true`) so users can render a pure thin line without the area fill. Neither is required for the Dashboard's existing `ChartsRow1` usage which is already a polished trend chart.
+
+3. **Document visual primitives:** Consolidate `DocIcon` + `FormatBadge` (Downloads) + the inline icon chip in `certificates/history-tab.tsx:222-224` + the muted doc-type pill in `history-tab.tsx:235-237` into a new `src/components/shared/document-primitives.tsx`. Export `DocumentThumbnail`, `FileTypeBadge`, `DocTypeBadge`, `DocumentCard`. Re-export from `downloads-shared.tsx` and `cert-shared.tsx` for backward compat. Migrate 4 caller files (`history-tab.tsx`, `document-list.tsx`, `document-detail.tsx`, `downloads/index.tsx`). Keep `admission/components/DocumentCard.tsx` as-is (it's a wizard upload card, not a list-row card — different mental model). Converge the per-format Downloads tints (rose/sky/emerald/teal/violet) to single emerald to match the post-convergence Academics visual language.
+
+4. **Academics table language:** Use the shadcn Table primitives from `src/components/ui/table.tsx` with the exact Academics class strings extracted above (`rounded-xl border border-border overflow-hidden bg-card` outer + `sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]` header + `text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5` header cells + `border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors text-xs` body rows + `py-2.5` body cells + `<AnimatePresence mode="popLayout"><motion.tr>` entrance animation + small h-7 w-7 icon action button). Wrap in `<Panel bodyClassName="p-0">` so the table flushes to the Panel's rounded edges. Replace `<GradientAvatar>` with the new `<Avatar>`. Add an Eye row-action button to match Academics. This converges Recent Admissions to the same visual DNA as Attendance history-tab + Exams settings-tab.
+
+No code was modified. All file references above are read-only findings.
+
+---
+Task ID: DASH-A
+Agent: Explore (Dashboard structure audit)
+Task: Audit Principal Dashboard structure, data sources, and visual issues
+
+Work Log:
+- Read /home/z/my-project/worklog.md (7,614 lines) — absorbed the Academics design language spec (Task 1, Appendix A at lines 4240–4871), the Finance/Operations visual convergence work (final entry lines 7600–7614), and the shared component map (SegmentedTabs, SummaryCard, SummaryCardGrid, FeePanel/LibPanel, premium-charts).
+- Listed the dashboard directory: 12 files, 1,410 LOC total.
+- Read every file in src/components/principal/modules/dashboard/: index.tsx (44), shared.tsx (45), kpi-row.tsx (47), live-alerts.tsx (198), live-alerts-content.tsx (226), live-alerts-toolbar.tsx (164), live-alerts-list.tsx (159), data.tsx (117), charts-row.tsx (123), quick-actions.tsx (100), recent-admissions.tsx (66), events-row.tsx (121).
+- Read src/lib/store/live-alerts-store.ts (225 lines) — confirmed initial alerts + simulated pool + activity log are ALL hardcoded mock.
+- Read src/lib/mock/operations.ts (lines 100–146) — confirmed announcements, calendarEvents/upcomingEvents are hardcoded.
+- Read src/lib/mock/students.ts (lines 35–78) — confirmed students array is Class 2-A focused, not "recent admissions".
+- Read src/lib/mock/academics.ts grep — confirmed classToppers is hardcoded.
+- Read src/lib/store/auth-store.ts grep — confirmed principal user is "Dr. Ananya Iyer" (real auth-store data).
+- Read src/components/principal/principal-panel.tsx (lines 1–163) — confirmed the `setActive` navigation pattern Quick Actions SHOULD use (registry maps to 24 module keys: dashboard, admission, teachers, students, timetable, attendance, exams, fees, salary, finance, communication, messaging, calendar, library, transport, inventory, procurement, certificates, downloads, settings).
+- Cross-referenced each dashboard visual primitive against the Academics canonical spec (Appendix A) to identify drift: GlassCard (legacy), StatusBadge (legacy dot+label), ChartCard (legacy boxed), plain HTML <table>, gradient Quick Action tiles, medal emojis, h-11 w-11 Megaphone hero icon — none of these match Academics.
+- NO files were modified. Read-only audit.
+
+Stage Summary:
+
+# DASHBOARD AUDIT REPORT
+
+## A. File Inventory (12 files · 1,410 LOC)
+
+| File | LOC | Role | Real data? |
+|---|---|---|---|
+| `index.tsx` | 44 | Composition root — 7 stacked sections in `space-y-4` | n/a |
+| `shared.tsx` | 45 | WelcomeBanner — greeting + date + Present/Birthdays mini-stats | partial (auth-store + mock) |
+| `kpi-row.tsx` | 47 | 8 SummaryCards in `columns={4}` grid + unused SecondaryKpiRow | mock only |
+| `live-alerts.tsx` | 198 | LiveAlerts root — handlers + countdown timer + GlassCard chrome | mock store |
+| `live-alerts-content.tsx` | 226 | Stats strip + "Today's Alert Activity" bar chart + severity pills + snoozed section | mock store |
+| `live-alerts-toolbar.tsx` | 164 | 7-button toolbar (Resolve All, Snooze All, Simulate, Auto toggle, Reset, Restore, View All) | mock store |
+| `live-alerts-list.tsx` | 159 | Scrollable alert feed + 2 empty states + per-alert snooze/resolve | mock store |
+| `data.tsx` | 117 | Icon map, snooze options, severity color tokens, sparkline + weeklyTrends (unused) | mock |
+| `charts-row.tsx` | 123 | ChartsRow1 (used: 2 charts) + ChartsRow2 (defined, NOT imported) | mock |
+| `quick-actions.tsx` | 100 | Quick Actions (6 gradient tiles, dead) + Notice Board (4 announcements, View all dead) | mock |
+| `recent-admissions.tsx` | 66 | Plain HTML table, 6 rows from `students` mock (Class 2-A, NOT new admissions) | mock |
+| `events-row.tsx` | 121 | Upcoming Events + Class 2-A Top Performers + Pending Reviews (3 cards) | mock + hardcoded |
+
+---
+
+## B. File-by-File Findings
+
+### 1. `index.tsx` — composition root
+**Renders** (lines 28–40): `<div className="space-y-4">` wrapping 7 children in this order:
+1. `<WelcomeBanner />`
+2. `<KpiRow />`
+3. `<LiveAlerts />`
+4. `<ChartsRow1 />`
+5. `<QuickActionsRow />`
+6. `<RecentAdmissions />`
+7. `<EventsRow />`
+
+**Header comment (lines 4–18)** says "Reduced from 11 stacked sections to 7" — prior cleanup already removed QuickStats, ChartsRow2, SecondaryKpiRow, QuickInsights. But the cleanup was incomplete: `ChartsRow2` and `SecondaryKpiRow` are still DEFINED in their files (`charts-row.tsx:76` and `kpi-row.tsx:38`) just not imported — dead code.
+
+**Visual issue**: No `PageTransition` wrapper (Academics canonical pattern), no `ModuleHeader` (would be omitted anyway since sidebar already shows "Dashboard"). The dashboard is the ONE module where a `<div className="space-y-4">` is acceptable, but it should still wrap in `PageTransition` for the mount fade-in.
+
+### 2. `shared.tsx` — WelcomeBanner
+**Renders** (lines 21–44): `rounded-lg border border-border/60 bg-card px-5 py-4` flex row — left side has eyebrow `text-[11px] text-muted-foreground uppercase tracking-wider` with today's date + h1 `text-lg font-semibold tracking-tight` "Good morning, {firstName}" + sub `text-xs text-muted-foreground` "{school.shortName} · Attendance {rate}% · {birthdays} birthdays today". Right side has 2 inline stats (Present / Birthdays) separated by `h-8 w-px bg-border` divider.
+
+**Data sources**:
+- `useAuth()` → `user.name` ("Dr. Ananya Iyer") → `firstName` = first 2 words = "Dr. Ananya" (line 16) — **REAL** (from auth-store)
+- `new Date().toLocaleDateString('en-IN', ...)` — **REAL** (today's date)
+- `attendanceOverview.today.rate`, `attendanceOverview.today.present` (from `@/lib/mock/attendance`) — **MOCK**
+- `studentStats.birthdaysToday` (from `@/lib/mock/students`) — **MOCK** (hardcoded `8` at students.ts:76)
+- `school.shortName` ("Demo School") — **MOCK**
+
+**Visual issues**:
+- This is actually the QUIETEST section and the CLOSEST to Academics language — small card, no gradient, no decorative orbs, no giant colored box. The comment at lines 8–13 confirms it was a deliberate prior replacement for "the heavy emerald gradient hero".
+- Minor: `text-lg` for the greeting is slightly large vs Academics `text-base font-semibold` (Appendix A §8), but acceptable for a personal greeting.
+- The right-side Present/Birthdays mini-stats are a small duplication of KPI #3 (Attendance) and a quieter version of SecondaryKpiRow's "Today's birthdays" — but SecondaryKpiRow is dead code, so this is the only place birthdays appear. KEEP.
+
+**Functionality**: none (no buttons, no clicks). Correct for a welcome banner.
+
+**What to keep**: This card is already canonical Academics-quality. KEEP as-is, or shrink greeting to `text-base`.
+
+### 3. `kpi-row.tsx` — 8 KPI cards
+**Renders** (lines 18–31): `<SummaryCardGrid columns={4}>` wrapping 8 `<SummaryCard>` components — so the grid is 4 cols × 2 rows on desktop. The `SummaryCard` and `SummaryCardGrid` ARE the canonical Academics components (Appendix A §2), so the card visual language is correct.
+
+**The 8 KPIs** (with exact line refs + data source):
+
+| # | Label | Value | Sub | Tone | Icon | Source | Line |
+|---|---|---|---|---|---|---|---|
+| 1 | Students | `studentStats.total` (1842) | "+2.4% vs last term" | emerald | Users | mock/students.ts:62 | 21 |
+| 2 | Teachers | `school.totalTeachers` (96) | "+3 this month" | amber | GraduationCap | mock/school.ts:19 | 22 |
+| 3 | Attendance | `attendanceOverview.today.rate` | `${present} present` | cyan | CalendarCheck | mock/attendance.ts | 23 |
+| 4 | Revenue (mo.) | `formatINR(feeAnalytics.collectedThisMonth, true)` | "+12.5% this month" | emerald | Wallet | mock/finance.ts | 24 |
+| 5 | Pending fees | `formatINR(feeAnalytics.pendingDues, true)` | `${pendingCount} students` | rose | IndianRupee | mock/finance.ts | 25 |
+| 6 | Salary due | `formatINR(salaryAnalytics.totalMonthly, true)` | `${totalStaff} staff` | violet | Clock | mock/finance.ts + mock/school.ts:20 | 26 |
+| 7 | New admissions | `studentStats.newThisMonth` (47) | "+18.4% this month" | amber | UserPlus | mock/students.ts:65 | 27 |
+| 8 | Upcoming exams | `exams.filter(e => e.status === 'Scheduled').length` | "Pre-Board in 12d" | rose | FileText | mock/academics.ts | 28 |
+
+**Critical observation**: ALL 8 metrics come from `@/lib/mock/*` — none from a real API or a real Zustand store (the `useAdmissionStore` is real but KPI #7 uses the static mock `studentStats.newThisMonth`, not the store's pending count). Every "+X%" delta string is a HARDCODED literal (`"+2.4% vs last term"`, `"+3 this month"`, `"+12.5% this month"`, `"+18.4% this month"`, `"Pre-Board in 12d"`) — they are NOT computed from any trend data.
+
+**Most important 4 KPIs for a principal** (the ones that drive action):
+1. **Attendance %** (#3) — daily operational health, links to Attendance module
+2. **Pending fees** (#5) — revenue action, links to Fees → Pending Dues
+3. **New admissions** (#7) — admissions queue, links to Admissions module
+4. **Upcoming exams** (#8) — academic planning, links to Examinations module
+
+The other 4 (#1 Students total, #2 Teachers, #4 Revenue, #6 Salary due) are STATUS metrics (passive glance, no action) — these belong on the WelcomeBanner meta strip OR on the Finance Dashboard, not as 4 of 8 KPI slots on the principal's home screen.
+
+**Visual issues**:
+- 8 cards is TOO MANY. Academics canonical is **4 cards** per page (Appendix A §2 line 4351: "Sub-page / overview tab: 4 cards"). The Dashboard uses 8 (2 rows of 4) which doubles the canonical density and pushes the Live Alerts + charts below the fold.
+- Cards themselves are canonical (SummaryCard with tone bg, count-up, hover lift). The issue is COUNT, not card style.
+- `delay` prop goes up to 0.28s — the count-up animations stagger over nearly 1.5s before the user sees anything below. (Academics default delays are 0 / 0.05 / 0.1 / 0.15 for 4 cards.)
+
+**Functionality**: zero clicks (KpiRow does not accept an `onNavigate` prop, cards are not clickable). Academics SummaryCard supports `onClick` (Appendix A Example B at line 4636 shows `onClick={() => onNavigate('structures')}`) — Dashboard does NOT use this. Each card should deep-link to its module (Students → Students tab, Attendance → Attendance, etc.).
+
+**Dead code** (lines 35–47): `SecondaryKpiRow` is defined (4 more cards: Today's birthdays, Buses running, Library issued, Inventory alerts) but NEVER imported by `index.tsx`. Imports `Cake, Bus, BookMarked, Package` from lucide + `libraryStats` from mock/operations — all only used here. ~13 LOC of dead code.
+
+**What to keep**: 4 primary KPIs (Attendance, Pending fees, New admissions, Upcoming exams) as clickable SummaryCards with `onClick` navigation. Card visual style is correct.
+
+**What to simplify/move**: Drop 4 secondary KPIs (Students total, Teachers, Revenue, Salary due) — they belong on WelcomeBanner meta strip + Finance Dashboard. Delete `SecondaryKpiRow` (dead). Wire `onClick` on the 4 survivors to `setActive('attendance' | 'fees' | 'admission' | 'exams')`.
+
+### 4. `live-alerts.tsx` — Live Operations Alerts root
+**Renders** (lines 122–197): a single `<motion.div>` wrapping `<GlassCard>` with the most visually NOISY chrome on the entire dashboard.
+
+**Giant red container visual treatment** (line 128):
+```tsx
+<GlassCard className="relative overflow-hidden p-4 sm:p-5 lg:p-6 border-l-4 border-l-rose-500">
+  <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-rose-500/10 blur-3xl pointer-events-none" />
+```
+- **4px rose left border** (`border-l-4 border-l-rose-500`) — Academics uses `border-l-{tone}-500/40` only on CollapsibleSection headers (Appendix A §4 line 4416), NOT on whole cards.
+- **176×176px decorative red blob** (`h-44 w-44 rounded-full bg-rose-500/10 blur-3xl`) in top-right corner — pure decoration, Academics forbids "giant color blocks" (Appendix A §10 line 4752: "color appears only as small accent chips... never as large background blocks").
+- **44×44px Megaphone hero icon tile** (line 136): `flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-md shadow-rose-500/25` — Academics forbids oversized icons (Appendix A §12 line 4800: "h-8 w-8 — never used (too big for Academics density)"). h-11 is 44px — 5.5× larger than the canonical `h-3.5 w-3.5` (14px). Plus a `bg-gradient-to-br from-rose-500 to-red-600` — Academics primary CTA uses `bg-emerald-600` (solid, not gradient) per Appendix A §11 line 4781.
+- **Animated pulse badge** (lines 139–142): `animate-ping` ring + `bg-rose-500` dot — animated decorative indicator on top of the icon tile.
+- **"Live" badge** (lines 147–150): `bg-rose-500/10 text-rose-600` with another `animate-pulse` dot — second animated red indicator on the same card.
+- **N active count** chip (lines 151–155): `bg-foreground/5 text-muted-foreground` small chip — third indicator on the same header row.
+- **Title** (line 146): `font-display text-base sm:text-lg font-bold tracking-tight` "Live Operations Alerts" — Academics section heading is `text-sm font-semibold` (Appendix A §8 line 4554). `text-lg` is 2 steps too large.
+- **Subtitle** (lines 157–159): `text-xs text-muted-foreground mt-0.5` "Real-time critical events requiring principal attention · click to investigate, resolve to dismiss" — 12-word storytelling subtitle, Academics removes these (Appendix A §10 line 4745: "No storytelling subtitle").
+
+**Functionality wired** (handlers in lines 36–97):
+- `handleResolve(id)` → calls `resolve(id)` + toast.success ✅ (works, mutates store)
+- `handleResolveAll()` → calls `resolveAll()` + toast ✅
+- `handleSnooze(id, mins)` → calls `snooze()` + toast.info ✅
+- `handleSnoozeAll(mins)` → calls `snoozeAll()` + toast.info ✅
+- `handleSimulateNewAlert()` → calls `addAlert(getNextSimulatedAlert())` + toast ✅ — **DEMO feature** (not a real principal action)
+- `handleUnsnooze(id)` → calls `unsnooze()` + toast ✅
+- `handleRestore()` → calls `restore()` + toast.info ✅
+- `handleAlertClick(alert)` → **toast.info('Navigating…')** only (line 90) — does NOT actually call `setActive(alert.navKey)`. The store has `navKey: 'transport' | 'admission' | 'teachers' | 'fees' | 'library' | 'inventory'` on every alert, but the click handler ignores it. **Fake navigation.**
+- `handleResetAll()` → calls `reset()` + toast ✅ — DEMO feature
+
+**Auto-alert countdown** (lines 99–120): `useEffect` interval ticks every 1s from 30 → 0; on 0, calls `addAlert(getNextSimulatedAlert())` + toast + resets to 30. Tied to `autoAlertsEnabled` toggle. **DEMO simulation** — auto-generates fake alerts every 30s. Useful for a sales demo, NOISY for a real principal.
+
+**Data sources**: 100% mock — see live-alerts-store audit below.
+
+**What to keep**: The alert LIST itself (LiveAlertsList) is genuinely useful — a principal does want a "things needing your attention" feed. The resolve/snooze interactions work. The store is properly persisted.
+
+**What to simplify/move**:
+- Drop the giant red container — replace with a flat `rounded-xl border border-border bg-card p-4` Panel (Academics canonical). Keep ONE small `bg-rose-500/10 text-rose-600` chip in the header that says "N active" with a single tiny `h-1.5 w-1.5 rounded-full bg-rose-500` dot (no ping).
+- Drop the Megaphone h-11 hero icon + animated pulse badge + decorative blur blob.
+- Drop the storytelling subtitle.
+- Shrink title to `text-sm font-semibold`.
+- Remove `Simulate Alert` + `Auto alerts toggle` from the toolbar (DEMO features). Keep `Resolve All` + `Snooze All` + `Restore` (real actions).
+- Wire `handleAlertClick` to actually navigate: pass `onNavigate={setActive}` from `principal-panel.tsx` and call `onNavigate(alert.navKey)`.
+- Delete the "Today's Alert Activity" mini bar chart (see live-alerts-content audit) — it visualizes fake hourly activity.
+- Reduce 4-button stats strip (Active/Snoozed/Resolved/Critical) — Academics puts counts as inline `text-[10px]` chips, not 4 stat tiles.
+
+### 5. `live-alerts-content.tsx` — body of LiveAlerts
+**Renders** (lines 62–225) 4 stacked elements:
+
+**(a) Stats strip** (lines 65–82): `grid grid-cols-4 gap-2 mb-3` of 4 buttons:
+- Active (rose) / Snoozed (amber) / Resolved (emerald) / Critical (rose)
+- Each button: `rounded-lg p-2 text-center` with `bg-{tone}-500/5` background
+- Active/Critical are clickable (filter the list), Snoozed/Resolved are disabled (`cursor-default`)
+- Each shows `font-display text-lg font-bold` value + `text-[9px] font-semibold uppercase tracking-wider` label
+- **Issue**: 4 stat tiles is redundant — the same 4 numbers should be inline chips in the header, not a 4-tile strip. Also uses `text-lg` for the numbers (Academics uses `text-2xl` for KPI cards or `text-xs` for inline chips — `text-lg` is an awkward middle).
+
+**(b) "Today's Alert Activity" mini bar chart** (lines 84–145): the NOISIEST element in the entire dashboard.
+- Container: `rounded-xl border border-border bg-card/30 p-3 mb-3` — a boxed sub-card inside the already-boxed GlassCard (card-in-card, forbidden by Appendix A §4 line 4419: "NO card-in-card").
+- Header (lines 88–96): `BarChart3 h-3.5 w-3.5 text-rose-500` icon + "Today's Alert Activity" `text-[10px] font-bold uppercase` + 3-item legend (Resolved emerald / Snoozed amber / New rose).
+- Chart (lines 98–143): 8 hand-rolled stacked bar columns in `flex items-end gap-1 h-16` (64px height), each column has motion.div animated bars + custom hover tooltip (`absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full` popover with hour + 3-line breakdown).
+- **NOT using premium-charts** — this is a from-scratch `motion.div` implementation that predates the chart upgrade (worklog line 4216 says `charts-row.tsx` was migrated to premium-charts, but `live-alerts-content.tsx` was NOT).
+- **Data source**: `activityLog` from `useLiveAlerts` store — 8 hardcoded entries in `live-alerts-store.ts:54-63`:
+  ```ts
+  { hour: '8 AM', resolved: 2, snoozed: 1, new: 4 },
+  { hour: '9 AM', resolved: 3, snoozed: 0, new: 5 },
+  ... (8 entries ending with `{ hour: 'Now', resolved: 0, snoozed: 0, new: 0 }`)
+  ```
+  Pure fake — these numbers don't reflect any real alert traffic; they're seed data. The store's `resolve`/`snooze`/`addAlert` actions DO bump the "Now" entry's count, but the historical 8 AM–2 PM entries are static.
+- **Verdict**: NOISE. A principal doesn't need a stacked bar chart of "alerts resolved per hour" — they need the actual alert list. This 60px chart + legend + tooltip is ~60 lines of code (lines 84–145) visualizing fake activity. **REMOVE entirely.**
+
+**(c) Severity filter pills** (lines 148–184): `flex flex-wrap items-center gap-1.5 mb-3` of 5 pills (`all`/`critical`/`high`/`info`/`low`) + a "Critical Only" toggle on the right.
+- Each pill: `rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider` with `severityFilterColors[filter]` (rose/amber/emerald/cyan tints).
+- Active pill has `ring-2 ring-offset-1 ring-offset-background ring-current`.
+- Critical Only button: `bg-rose-500 text-white shadow-sm` when active, `border border-rose-500/30` when inactive.
+- **Visual issue**: 5 filter pills + 1 toggle = 6 pill buttons. Academics uses SegmentedTabs (Appendix A §3) for filtering — `inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60`. The current pills are decorative and inconsistent.
+- **Functionality**: works (`setSeverityFilter` updates store, list re-filters). Useful but visually noisy.
+
+**(d) Snoozed section** (lines 187–209): `rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-3` box showing snoozed alerts with `Restore` link per item.
+- Header: `Clock h-3 w-3` + "Snoozed (N)" `text-[10px] font-bold uppercase`.
+- Each item: `flex items-center justify-between text-xs rounded-md px-1.5 py-1 bg-background/50` with title (truncate, opacity-70) + `Restore` button.
+- **Issue**: Dashed border + bg-muted/20 is a third visual container style on the same card (GlassCard → bg-card/30 chart box → dashed snoozed box). Three nested container styles. Flatten.
+- **Functionality**: works (`onUnsnooze` calls unsnooze). KEEP the functionality, simplify the container.
+
+**What to keep**: severity filter (collapsed into SegmentedTabs), snoozed section (flattened, no dashed border).
+
+**What to simplify/move**:
+- DELETE the "Today's Alert Activity" bar chart entirely (lines 84–145). 60 LOC of fake-data visualization.
+- DELETE the 4-button stats strip (lines 65–82). Move the counts inline into the header as small `text-[10px]` chips.
+- Replace the 5 severity filter pills with a single SegmentedTabs row (All / Critical / High / Info / Low).
+- Flatten the snoozed section: use `divide-y divide-border/40` list inside the same card, not a dashed sub-box.
+
+### 6. `live-alerts-toolbar.tsx` — 7 buttons
+**Renders** (lines 33–163): `flex items-center gap-2 flex-wrap` of up to 7 buttons:
+
+| # | Button | Class string (quoted) | Works? | Useful? |
+|---|---|---|---|---|
+| 1 | Resolve All | `rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 ...` (line 39) | ✅ `onResolveAll` | YES — real action |
+| 2 | Snooze All (dropdown) | `rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 ...` (line 52) | ✅ `onSnoozeAll` | YES — real action |
+| 3 | Simulate Alert | `rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-600 ...` (line 97) | ✅ `onSimulateNewAlert` | NO — DEMO feature, fake alert injection |
+| 4 | Auto alerts toggle | `border-rose-500/40 bg-rose-500/15 text-rose-600` when active / `border-border bg-card/60 text-muted-foreground` when off (line 110) | ✅ `onToggleAutoAlerts` | NO — DEMO feature, auto-injects fake alerts every 30s |
+| 5 | Reset All (conditional) | `rounded-lg border border-border bg-card/60 text-muted-foreground` (line 138) | ✅ `onResetAll` | NO — DEMO feature (restores initial mock state) |
+| 6 | Restore (conditional) | `rounded-lg border border-border bg-card/60 text-muted-foreground` (line 150) | ✅ `onRestore` | YES — restores dismissed alerts |
+| 7 | View All | `rounded-lg border border-border bg-card/60 text-xs font-semibold text-foreground` (line 158) | ❌ toast-only (`toast.info('Opening alerts center')`) — NO real navigation | NO — fake button |
+
+**Visual issues**:
+- 7 buttons (5 visible at once when alerts > 0) is way too many. Academics header has 2 buttons max (Appendix A Example A line 4601: one outline + one primary).
+- 4 different colored tints (emerald/amber/violet/rose) — Academics uses solid `bg-emerald-600` for primary, `outline` for secondary, NO tinted variants for tertiary actions (Appendix A §6 line 4480).
+- Each button is `px-3 py-1.5 text-xs` — Academics canonical is `h-8 text-xs gap-1.5` shadcn `<Button>`, not custom tinted button elements.
+
+**What to keep**: Resolve All (primary, emerald solid), Snooze All (secondary outline), Restore (tertiary ghost).
+
+**What to simplify/move**:
+- DELETE Simulate Alert, Auto alerts toggle, Reset All — all DEMO features for a sales demo, not a real principal workflow.
+- Wire View All → either remove or wire to a real "alerts history" view (currently no such view exists, so REMOVE).
+- Use shadcn `<Button>` with `size="sm"` + `h-8 text-xs gap-1.5` instead of custom tinted button elements.
+
+### 7. `live-alerts-list.tsx` — the actual alert feed
+**Renders** (lines 30–158): `space-y-2 max-h-72 overflow-y-auto pr-1 custom-scrollbar` (288px tall scroll area) with 3 states:
+
+**(a) Empty state "All clear!"** (lines 32–48): `flex flex-col items-center justify-center py-10` with `h-14 w-14 rounded-2xl bg-emerald-500/10 text-emerald-600` icon container (Check h-7 w-7) + `font-display text-base font-bold` "All clear!" + sub. Plus conditional `Restore {N} dismissed alert{s}` link.
+
+**(b) Empty state "No {filter} alerts"** (lines 49–63): `py-8` with `h-12 w-12 rounded-2xl bg-muted` Megaphone icon + "No {severityFilter} alerts" + "Show all alerts" clear-filter link.
+
+**(c) Alert feed** (lines 64–155): `AnimatePresence mode="popLayout"` mapping `filtered.map(alert => ...)`. Each row:
+- Container: `group flex items-start gap-3 rounded-xl border p-3 hover:shadow-sm transition-all cursor-pointer relative` + `alertColorMap[alert.color]` (rose/amber/emerald/cyan tints) + `ring-2 ring-violet-500/40 shadow-premium` when `isNew`
+- "New" pulse: 2 elements — `animate-ping` violet ring at top-left (lines 82–86) + "New" badge at top-right (lines 87–91, `bg-violet-500/15 text-violet-600 text-[8px]`)
+- Icon tile (line 92): `flex h-7 w-7 shrink-0 items-center justify-center rounded-lg` with alert color classes (28px tile — canonical Academics size per Appendix A §12 line 4803)
+- Body: title (`font-semibold text-xs text-foreground truncate`) + time (`text-[9px] text-muted-foreground font-mono shrink-0`) + desc (`text-[11px] text-muted-foreground mt-0.5 line-clamp-1`)
+- Actions: snooze button (`h-6 w-6 ... text-amber-600`, opacity-0 → group-hover:opacity-100) + resolve button (`h-6 w-6 ... text-emerald-600`, same opacity pattern)
+- Snooze dropdown (lines 114–143): same 4 snooze options as the toolbar
+- Row onClick: `onAlertClick(alert)` → handler in live-alerts.tsx:90 only toasts "Navigating…" — **fake navigation** (see above)
+
+**Visual issues**:
+- The alert row style is actually closest to Academics language: `rounded-xl border p-3`, small icon tile h-7 w-7, text-xs body, dot+pill colors. KEEP this row style.
+- The `ring-2 ring-violet-500/40 shadow-premium` "isNew" highlight + `animate-ping` violet badge is a bit much — Academics uses a single small `bg-violet-500/15 text-violet-600 text-[8px]` "New" chip, no ping animation, no ring. Simplify.
+- `max-h-72` (288px) is reasonable for a scroll feed, but if we drop the bar chart + 4-stat strip above, this list can grow taller (e.g. `max-h-80` or no cap) to actually surface more alerts without scrolling.
+
+**Functionality**:
+- Snooze per-alert: ✅ works (`onSnooze` calls snooze)
+- Resolve per-alert: ✅ works (`onResolve` calls resolve)
+- Row click: ❌ fake (toast only)
+
+**What to keep**: Row visual style, snooze + resolve per-alert interactions, "All clear!" empty state.
+
+**What to simplify/move**:
+- Drop the `animate-ping` violet ring on "New" alerts — keep only the small "New" chip.
+- Wire `onAlertClick` to actually navigate (pass `setActive` from principal-panel).
+
+### 8. `data.tsx` — shared constants + icon map
+**Exports**:
+- `sparkline` (lines 9–12): 6-month enrolment trend — **DEAD CODE** (not imported anywhere)
+- `weeklyTrends` (lines 25–55): 3 weekly trend objects — **DEAD CODE** (was used by the removed QuickStats widget per index.tsx comment line 16)
+- `LiveAlertWithIcon` type (lines 58–68): used by live-alerts.tsx
+- `alertIcons` map (lines 73–80): 6 icon JSX entries — used by live-alerts.tsx:33
+- `fallbackAlertIcon` (line 82): used
+- `snoozeOptions` (lines 91–96): 4 snooze durations — used by toolbar + list
+- `severityFilterColors` (lines 99–105): 5 color tokens — used by content
+- `alertColorMap` (lines 108–113): 4 color tokens — used by list
+- `severityFilters` + `SeverityFilterValue` (lines 116–117): used by content
+
+**Dead code**: `sparkline` + `weeklyTrends` + `WeeklyTrend` interface (lines 15–23) — ~45 LOC of unused exports. DELETE.
+
+### 9. `charts-row.tsx` — 2 charts (only ChartsRow1 used)
+**Exports**:
+- `ChartsRow1` (lines 34–72) — **USED** by index.tsx:23
+- `ChartsRow2` (lines 76–123) — **DEFINED but NOT imported anywhere** — dead code (the index.tsx comment lines 16 says "ChartsRow2 (attendance trend duplicated the Attendance module's analytics)" was removed, but the function definition was not deleted)
+
+**ChartsRow1** (lines 34–72): `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4` with 2 cards:
+
+| # | Title | Component | Data | Class | Line |
+|---|---|---|---|---|---|
+| 1 | "Revenue vs Expenses" | `AreaTrendChart` (premium-charts) | `revenueAnalytics.monthly` (mock/finance) | `lg:col-span-2`, height 240 | 37–55 |
+| 2 | "Fee Collection" | `DonutChart` (premium-charts) | `feeAnalytics.byCategory` (mock/finance) | (1 col), size 220, thickness 22 | 57–69 |
+
+Both wrapped in `<ChartCard>` from `@/components/shared/charts` (line 21). The chart card is the **LEGACY boxed graph pattern**: title + subtitle in a bordered card header with optional action slot. Academics canonical is `FeePanel` / `LibPanel` (Appendix A §4 line 4417): `rounded-xl border border-border bg-card overflow-hidden` + header `flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/60 bg-muted/20` + body `p-3`.
+
+**Chart 1 "Revenue vs Expenses"**:
+- `action={<StatusBadge status="+72M surplus" variant="success" dot />}` — a static StatusBadge (legacy component, not the Academics dot+pill). The "+72M surplus" text is HARDCODED, not computed from the chart data.
+- 8-month dual area chart, height 240px. Chart visuals ARE premium-charts (good — smooth bezier, gradient fills, hover pop-out).
+
+**Chart 2 "Fee Collection"**:
+- Donut, size 220px, thickness 22px
+- `centerValue={`${feeAnalytics.collectionRate}%`}`, `centerLabel="Collected"`, `centerSub={`${feeAnalytics.pendingCount} pending`}`
+- Wrapped in a `<div className="flex items-center justify-center h-full">` — needed because ChartCard body doesn't auto-center.
+
+**Data sources**: ALL mock (`revenueAnalytics` + `feeAnalytics` from `@/lib/mock/finance`).
+
+**Visual issues**:
+- `ChartCard` is the legacy boxed graph pattern. Should be replaced with a flat `Panel` (FeePanel/LibPanel shape) per Academics canonical.
+- The chart title "Revenue vs Expenses" + subtitle "Last 8 months" is the correct Academics pattern (title `text-xs font-semibold tracking-tight` + subtitle `text-[10px] text-muted-foreground`), but the ChartCard wrapper has the wrong padding (uses `p-4 sm:p-5` rather than the canonical `px-4 py-2.5` header + `p-3` body).
+- The StatusBadge "+72M surplus" action chip is a fake hardcoded summary — should either be removed or computed from the data.
+- 2 charts in a 3-col grid leaves chart 2 (donut) at 1/3 width — visually cramped vs chart 1 at 2/3 width. A principal's primary chart row should be 2 equal charts or 1 dominant chart + 1 small donut.
+
+**ChartsRow2** (lines 76–123, DEAD CODE): contains Attendance Trend bar chart + Today's Attendance radial gauge with 3 tinted tiles (Present/Absent/Late). The radial gauge card (lines 90–120) uses `GlassCard` + inner `rounded-xl bg-emerald-500/10 py-2` tiles — card-in-card pattern. 47 LOC of dead code. DELETE.
+
+**What to keep**: The 2 charts themselves (AreaTrendChart + DonutChart from premium-charts) are visually correct. The data sources are sensible for a principal dashboard (revenue trend + fee collection breakdown).
+
+**What to simplify/move**:
+- Replace `ChartCard` with a flat `Panel` (Academics FeePanel shape).
+- Drop the hardcoded "+72M surplus" StatusBadge action — replace with a real "View Finance →" ghost link that navigates to Finance Dashboard (`setActive('finance')`).
+- DELETE `ChartsRow2` entirely (dead code).
+- Optionally add a 2nd chart row showing the Attendance weekly trend (currently in dead ChartsRow2) — but per the index.tsx comment this was deliberately removed to avoid duplicating the Attendance module. Don't re-add.
+
+### 10. `quick-actions.tsx` — Quick Actions + Notice Board
+**Renders** (lines 93–99): `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4` with 2 cards:
+- `QuickActionsCard` (lg:col-span-1, 1/3 width)
+- `NoticeBoardCard` (lg:col-span-2, 2/3 width)
+
+**QuickActionsCard** (lines 13–45): 6 gradient tiles in `grid grid-cols-2 gap-2.5`. Each tile (lines 27–41):
+```tsx
+<motion.button
+  whileHover={{ y: -2, scale: 1.02 }}
+  whileTap={{ scale: 0.97 }}
+  className="group flex flex-col items-start gap-2 rounded-xl border border-border bg-card/50 p-3 text-left hover:shadow-premium transition-shadow"
+>
+  <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${a.color} text-white shadow-md`}>
+    {a.icon}
+  </div>
+  <span className="text-xs font-medium leading-tight">{a.label}</span>
+</motion.button>
+```
+
+**The 6 Quick Actions** (lines 14–21):
+
+| # | Label | Gradient | Icon | Wired? |
+|---|---|---|---|---|
+| 1 | New Admission | `from-emerald-500 to-teal-600` | UserPlus | ❌ NO onClick |
+| 2 | Mark Attendance | `from-cyan-500 to-sky-600` | CalendarCheck | ❌ NO onClick |
+| 3 | Collect Fees | `from-amber-500 to-orange-600` | IndianRupee | ❌ NO onClick |
+| 4 | Create Exam | `from-violet-500 to-purple-600` | FileText | ❌ NO onClick |
+| 5 | Add Notice | `from-rose-500 to-pink-600` | Megaphone | ❌ NO onClick |
+| 6 | Pay Salary | `from-lime-500 to-green-600` | Wallet | ❌ NO onClick |
+
+**Visual issues**:
+- **6 DIFFERENT multi-color gradients** — emerald→teal, cyan→sky, amber→orange, violet→purple, rose→pink, lime→green. This is the MOST COLORFUL element on the entire dashboard. Academics canonical (Appendix A §11 line 4781): "Primary CTA uses emerald→teal gradient... `bg-gradient-to-r from-emerald-600 to-teal-600`. Forbidden: indigo, blue". The Quick Actions use 6 different gradient families, including violet→purple (purple is not in the allowed palette).
+- `h-9 w-9` (36×36px) icon tiles — Academics canonical is `h-7 w-7` (28px) per Appendix A §12 line 4803.
+- `text-white shadow-md` on each tile — heavy.
+- 6 tiles is too many for a "Quick Actions" widget — Academics header has at most 2 primary actions.
+
+**Functionality**: ZERO onClick handlers — every Quick Action button is completely dead. Clicking does nothing. This is the most egregious fake UI on the dashboard.
+
+**NoticeBoardCard** (lines 49–89): "Notice Board & Announcements" card.
+- Header (lines 52–56): `<h3 className="font-semibold text-sm">` + `<button className="text-xs text-primary font-medium hover:underline flex items-center gap-1">View all <ArrowUpRight className="h-3 w-3" /></button>` — **View all has NO onClick** (line 54).
+- Body (lines 58–86): `space-y-2.5 max-h-72 overflow-y-auto pr-1` (288px scroll) showing `announcements.slice(0, 4)` (4 latest from mock/operations.ts:104-110).
+- Each announcement row (lines 60–85): `flex gap-3 rounded-xl border border-border bg-card/40 p-3 hover:bg-accent/40` with:
+  - Category-coded icon chip (lines 67–73): `flex h-9 w-9 shrink-0 items-center justify-center rounded-lg` with bg by category (Urgent=rose, Event=emerald, Holiday=amber, Academic=violet, default=cyan) — 5 color categories.
+  - Title (line 78): `font-semibold text-sm`
+  - StatusBadge for category (line 79): `variant={a.category === 'Urgent' ? 'danger' : a.category === 'Event' ? 'success' : 'neutral'}` — legacy StatusBadge with dot
+  - Content (line 81): `text-xs text-muted-foreground line-clamp-1`
+  - Meta (line 82): `text-[10px] text-muted-foreground/70` "{postedBy} · {date}"
+
+**Data source**: `announcements` from `@/lib/mock/operations` — 5 hardcoded entries (lines 104–110):
+- AN01: "Annual Sports Day — 15th December" (Event, Dr. Ananya Iyer)
+- AN02: "Pre-Board Examination Schedule Released" (Academic, Pooja Bhatt)
+- AN03: "Parent–Teacher Meeting — Class 1 to 5" (General, Deepa Menon)
+- AN04: "Winter Vacation Notice" (Holiday, Dr. Ananya Iyer)
+- AN05: "Diwali Break — School Closed" (Holiday, Dr. Ananya Iyer)
+
+The data is REAL-ISH (the announcement shape matches a real announcement model with `id`/`title`/`content`/`category`/`date`/`audience`/`postedBy`) but it's hardcoded in the mock file, not pulled from a real announcements store. There IS a `communication-store.ts` in `src/lib/store/` — but the dashboard doesn't use it. The Communication module has an `AnnouncementsSection` (comm-announcements.tsx) — the dashboard should pull from the SAME store the Communication module uses, OR navigate to Communication → Announcements when "View all" is clicked.
+
+**Visual issues**:
+- The Notice Board card is actually CLOSEST to Academics language: small `rounded-xl border p-3` rows, category-coded icon chip, `text-xs` body, `text-[10px]` meta. The wrapper `GlassCard` is the only off-pattern piece.
+- The category icon chip uses `h-9 w-9` (36px) — Academics canonical is `h-7 w-7` (28px). Slightly oversized.
+- 5 color categories is a lot — but they map semantically to the canonical Academics palette (Urgent=rose, Event=emerald, Holiday=amber, Academic=violet, General=cyan) — acceptable.
+
+**Functionality**:
+- View all: ❌ no onClick (dead link)
+- Each announcement: no onClick (no click-through to the announcement)
+- No "New Announcement" button on the dashboard (it lives in the Communication module)
+
+**What to keep**:
+- Notice Board concept (a principal glances at recent announcements). The 4-row layout + category chip + meta line is canonical Academics.
+- The 6 Quick Action LABELS (New Admission, Mark Attendance, Collect Fees, Create Exam, Add Notice, Pay Salary) are the correct principal workflows.
+
+**What to simplify/move**:
+- **Quick Actions**: replace 6 colorful gradient tiles with 6 small flat buttons using the Academics pattern: `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-card hover:bg-muted/60` with a small `h-3.5 w-3.5` tone-tinted icon (no gradient). Wire each to `setActive('admission' | 'attendance' | 'fees' | 'exams' | 'communication' | 'salary')`. Reduce to 4-6 actions max. Or: collapse Quick Actions to a single "Quick Actions" pill row, not a 6-tile grid.
+- **Notice Board**: wire "View all" to `setActive('communication')`. Optionally pull from `communication-store` instead of mock. Drop the GlassCard wrapper, use flat `rounded-xl border border-border bg-card`. Shrink icon chip to h-7 w-7.
+
+### 11. `recent-admissions.tsx` — Recent Admissions table
+**Renders** (lines 11–65): `GlassCard className="p-3 sm:p-4 lg:p-5"` with header + plain HTML table.
+
+**Header** (lines 13–19):
+- Left: `<h3 className="font-semibold text-sm">Recent Admissions</h3>` + `<p className="text-xs text-muted-foreground mt-0.5">Latest students enrolled this term</p>`
+- Right: `<StatusBadge status={`${studentStats.newThisMonth} this month`} variant="success" dot />` (47 this month, from mock)
+
+**Table** (lines 20–62): plain `<table className="w-full text-sm">` with:
+- Header (lines 23–29): `<tr className="text-left text-xs text-muted-foreground border-b border-border">` + `<th className="px-3 py-2 font-medium">` cells. 5 columns: Student / Admission No (sm+) / Class / Guardian (md+) / Fee Status.
+- Body (lines 31–61): `students.slice(0, 6).map(s => <motion.tr>)`. Each row:
+  - `className="border-b border-border/50 last:border-0 hover:bg-accent/30 transition-colors"` — hover but NO onClick (lines 33–38)
+  - Student cell: `GradientAvatar name={s.name} size="sm"` + `<p className="font-medium truncate">{s.name}</p>` + `<p className="text-[11px] text-muted-foreground">{s.fatherName}</p>`
+  - Admission No: `text-muted-foreground font-mono text-xs` (line 49)
+  - Class: `{s.className}-{s.section}` (e.g. "Class 2-A") (line 50)
+  - Guardian: `text-muted-foreground text-xs` (line 51)
+  - Fee Status: `<StatusBadge status={s.feeStatus} variant={...} dot />` (Paid=success, Partial=warning, Pending=danger) (lines 53–57)
+
+**Data source**: `students` from `@/lib/mock/students` (line 5). The `students` array (students.ts:35-54) is 18 entries — **ALL are Class 2-A students** with `admissionDate: '2024-04-01'` / `'2024-04-02'` / `'2024-04-03'`. They are NOT recent admissions — they're a static class roster from April 2024. The card title "Recent Admissions" + subtitle "Latest students enrolled this term" is misleading. The actual "recent admissions" data lives in `useAdmissionStore` (used by principal-panel.tsx:123-127 to compute the sidebar badge count) — the dashboard should pull from there, not from the students mock.
+
+**Visual issues**:
+- Plain `<table>` instead of shadcn `<Table>` — Academics canonical uses shadcn `<Table>` with sticky `bg-muted shadow-[0_1px_0_0_hsl(var(--border))]` header (Appendix A §5 line 4431).
+- Header cells: `text-xs text-muted-foreground font-medium` — Academics canonical is `text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5` (Appendix A §5 line 4436). Current is 2× too large, not uppercase.
+- Body rows: `text-sm` (from `<table className="w-full text-sm">` override) — Academics canonical is `text-xs` (Appendix A §5 line 4441).
+- `GlassCard` wrapper instead of flat `rounded-xl border border-border bg-card overflow-hidden`.
+- No per-row actions (no eye, no menu, no "Open student" button) — rows are dead.
+
+**Functionality**: NONE. Row hover but no click. No actions. The card is purely decorative — it shows 6 names but a principal can't act on any of them.
+
+**What to keep**: The concept of "recent admissions needing attention" is useful — but the data should come from `useAdmissionStore` (real applications with status Submitted/Under Review), not the static students mock.
+
+**What to simplify/move**:
+- Replace plain `<table>` with shadcn `<Table>` and Academics canonical header/body styles.
+- Replace data source: pull from `useAdmissionStore.applications` filtered to recent + pending, not from `students` mock.
+- Make rows clickable: open the Admissions module with that application preselected (`setActive('admission')` + pass the application id via a store or URL state).
+- Add a "View all applications →" ghost link in the header action slot that navigates to Admissions.
+- Drop the GlassCard wrapper.
+
+### 12. `events-row.tsx` — 3 cards (Events + Toppers + Reviews)
+**Renders** (lines 113–120): `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4` with 3 cards.
+
+**UpcomingEventsCard** (lines 12–41): `GlassCard className="p-3 sm:p-4 lg:p-5"`.
+- Header (lines 15–17): `<h3 className="font-semibold text-sm mb-4 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /> Upcoming Events</h3>` — Academics canonical is `text-sm font-semibold` without icon-in-title (Appendix A §4 line 4415: "h3 heading `text-sm font-semibold mb-3`"). The `h-4 w-4 text-primary` icon is acceptable but slightly off-pattern.
+- Body (lines 18–39): `space-y-3` mapping `upcomingEvents.map(e => <motion.div>)`. Each row:
+  - `flex items-center gap-3` row
+  - Date tile (lines 27–30): `flex flex-col items-center justify-center h-12 w-12 shrink-0 rounded-xl bg-primary/10 text-primary` with day (`text-xs font-bold`) + month (`text-[9px] uppercase`) — **48×48px primary-tinted block**, Academics forbids large color blocks (Appendix A §10 line 4752). Should be a small `h-7 w-7` chip.
+  - Body (lines 31–34): title (`text-sm font-medium truncate`) + meta (`text-xs text-muted-foreground` "{type} · {time}")
+  - StatusBadge (line 35): `status={e.type} variant={e.type === 'Exam' ? 'danger' : e.type === 'Holiday' ? 'warning' : 'primary'}` — legacy StatusBadge.
+
+**Data source**: `upcomingEvents` from `@/lib/mock/operations` (line 7). Defined as `calendarEvents.slice(0, 5)` at operations.ts:132 — so just the first 5 of 9 hardcoded calendar events. Dates are Dec 2025 / Jan 2026. Hardcoded.
+
+**Visual issues**:
+- 48×48 date tile with `bg-primary/10 text-primary` is too large.
+- StatusBadge is the legacy component.
+- No onClick on rows (can't open the event in the Calendar module).
+
+**Functionality**: NONE.
+
+**ClassToppersCard** (lines 45–76): "Class 2-A Top Performers".
+- Header (lines 48–50): `<TrendingUp className="h-4 w-4 text-amber-500" /> Class 2-A Top Performers` — class-specific ("Class 2-A") which is too narrow for a school principal's dashboard. A principal doesn't care about Class 2-A specifically — they care about school-wide top performers OR exam-session toppers.
+- Body (lines 51–73): `classToppers.map(t => <motion.div>)`. Each row:
+  - Medal tile (lines 60–64): `flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold` with conditional bg + medal emoji (🥇🥈🥉 or rank number) — **emojis are non-Academics** (Academics uses small chip + tone color, no emojis per Appendix A §11/§12).
+  - `GradientAvatar name={t.name} size="sm"`
+  - Body: name + `Roll #{t.rollNo}`
+  - Right: `font-display font-bold text-sm text-emerald-600` "{t.percentage}%"
+
+**Data source**: `classToppers` from `@/lib/mock/academics` (line 8) — hardcoded names + percentages for Class 2-A.
+
+**Visual issues**:
+- Medal emojis (🥇🥈🥉) — NOT Academics canonical. Should be small `bg-amber-500/15 text-amber-700` chips with "1" / "2" / "3" or just rank text.
+- Class-specific scope ("Class 2-A") is too narrow for a principal dashboard. Either generalize to "Top Performers" (school-wide, from a real exam session) or move this widget to the Class 2-A teacher's dashboard.
+- Two avatars + medal + percentage per row is visually busy.
+
+**Functionality**: NONE.
+
+**PendingReviewsCard** (lines 80–109): "Pending Reviews".
+- Header (lines 86–89): `<ClipboardCheck className="h-4 w-4 text-violet-500" /> Pending Reviews`
+- Body (lines 90–106): 2 hardcoded progress bars + 1 hardcoded number:
+  ```tsx
+  const reviews = [
+    { label: 'Fee Approvals', done: 7, total: 12, color: 'oklch(0.62 0.2 25)', pendingLabel: '7 pending' },
+    { label: 'Leave Requests', done: 3, total: 8, color: 'oklch(0.7 0.15 200)', pendingLabel: '3 pending' },
+  ]
+  // ... then below:
+  <span className="font-display font-bold text-lg">23</span> // Admission Applications
+  ```
+- ProgressBar component (from `@/components/shared/charts` line 6) with `oklch(0.62 0.2 25)` (red-orange) and `oklch(0.7 0.15 200)` (sky) — non-canonical Academics colors (Academics uses `bg-{tone}-500` per Appendix A §11 line 4769).
+- Hardcoded "23" for admission applications at the bottom — but the REAL number is `pendingAdmissions` in principal-panel.tsx:123-127 (computed from `useAdmissionStore`), which is the SAME number used for the sidebar badge. The dashboard card uses a fake `23`, the sidebar uses the real count.
+
+**Visual issues**:
+- 2 progress bars + 1 orphan number is a weird shape — neither a list nor a chart.
+- `oklch()` raw color values inline — Academics uses Tailwind `bg-{tone}-500` classes only.
+- "23" hardcoded number is a duplicate of the real `pendingAdmissions` count from the store.
+
+**Functionality**: NONE. No click-through to the actual review queues (Fees → Approvals, Teachers → Leave, Admissions → Pending).
+
+**What to keep across all 3 events-row cards**:
+- Upcoming Events concept (useful for a principal) — but should pull from a real calendar store and link to Calendar module.
+- Pending Reviews concept (genuinely actionable) — but should pull real counts from `useAdmissionStore` (admissions), `useFeeStore` (pending cash approvals), `useSalaryStore` (pending leave), and link each to its module.
+
+**What to simplify/move**:
+- Upcoming Events: shrink date tile to `h-7 w-7` chip, use SegmentedTabs for event-type filter, wire row click to `setActive('calendar')`. Or move to a single "Upcoming Events" panel inside Calendar module, and on dashboard just show next 3 events.
+- Class 2-A Top Performers: REMOVE from principal dashboard (too narrow scope) — this belongs in the Exams module's "Session Top Performers" section (which already exists per worklog line 4252 — `session-top-performers.tsx`). Don't duplicate.
+- Pending Reviews: replace 2 progress bars + orphan "23" with a flat list of 3-4 rows, each with a real count + "Review →" link. Use real store data:
+  - Admission Applications: `pendingAdmissions` from `useAdmissionStore` (already computed in principal-panel.tsx)
+  - Fee Approvals: pending cash approvals from `useFeeStore`
+  - Leave Requests: pending leave from `useSalaryStore` or a leave store
+  - Salary Approvals: pending payroll approvals from `useSalaryStore`
+
+---
+
+## C. Real vs Fake / Hardcoded Data Map
+
+| Section | Data source | Real? | File:line |
+|---|---|---|---|
+| WelcomeBanner greeting | `useAuth().user.name` ("Dr. Ananya Iyer") | ✅ REAL (auth-store) | shared.tsx:15-16 |
+| WelcomeBanner date | `new Date().toLocaleDateString('en-IN', ...)` | ✅ REAL (today) | shared.tsx:17-19 |
+| WelcomeBanner stats | `attendanceOverview`, `studentStats`, `school` | ❌ MOCK | shared.tsx:3-5, 29, 34, 39 |
+| KPI #1 Students total | `studentStats.total` (1842) | ❌ MOCK | kpi-row.tsx:21, students.ts:62 |
+| KPI #1 sub "+2.4% vs last term" | HARDCODED string literal | ❌ FAKE | kpi-row.tsx:21 |
+| KPI #2 Teachers | `school.totalTeachers` (96) | ❌ MOCK | kpi-row.tsx:22, school.ts:19 |
+| KPI #2 sub "+3 this month" | HARDCODED | ❌ FAKE | kpi-row.tsx:22 |
+| KPI #3 Attendance | `attendanceOverview.today.rate` | ❌ MOCK | kpi-row.tsx:23 |
+| KPI #3 sub `${present} present` | computed from mock | ❌ MOCK | kpi-row.tsx:23 |
+| KPI #4 Revenue | `feeAnalytics.collectedThisMonth` | ❌ MOCK | kpi-row.tsx:24 |
+| KPI #4 sub "+12.5% this month" | HARDCODED | ❌ FAKE | kpi-row.tsx:24 |
+| KPI #5 Pending fees | `feeAnalytics.pendingDues` | ❌ MOCK | kpi-row.tsx:25 |
+| KPI #5 sub `${pendingCount} students` | computed from mock | ❌ MOCK | kpi-row.tsx:25 |
+| KPI #6 Salary due | `salaryAnalytics.totalMonthly` | ❌ MOCK | kpi-row.tsx:26 |
+| KPI #6 sub `${totalStaff} staff` | `school.totalStaff` (124) | ❌ MOCK | kpi-row.tsx:26 |
+| KPI #7 New admissions | `studentStats.newThisMonth` (47) | ❌ MOCK | kpi-row.tsx:27, students.ts:65 |
+| KPI #7 sub "+18.4% this month" | HARDCODED | ❌ FAKE | kpi-row.tsx:27 |
+| KPI #8 Upcoming exams | `exams.filter(e => e.status === 'Scheduled').length` | ❌ MOCK | kpi-row.tsx:28 |
+| KPI #8 sub "Pre-Board in 12d" | HARDCODED | ❌ FAKE | kpi-row.tsx:28 |
+| LiveAlerts (initial 6) | `initialAlerts` array | ❌ MOCK (hardcoded in store) | live-alerts-store.ts:65-72 |
+| LiveAlerts (simulated pool 6) | `simulatedAlertPool` array | ❌ MOCK (hardcoded) | live-alerts-store.ts:75-82 |
+| LiveAlerts activity log (8 hrs) | `initialActivityLog` array | ❌ MOCK (hardcoded) | live-alerts-store.ts:54-63 |
+| LiveAlerts store persistence | Zustand `persist` middleware → localStorage key `scholario-live-alerts` | ✅ REAL persistence (but seeded with mock) | live-alerts-store.ts:213-222 |
+| Chart 1 Revenue vs Expenses | `revenueAnalytics.monthly` | ❌ MOCK | charts-row.tsx:44 |
+| Chart 1 "+72M surplus" badge | HARDCODED string | ❌ FAKE | charts-row.tsx:41 |
+| Chart 2 Fee Collection donut | `feeAnalytics.byCategory` | ❌ MOCK | charts-row.tsx:60 |
+| Quick Action buttons (6) | NONE — pure UI, no data | ❌ NO DATA | quick-actions.tsx:14-21 |
+| Quick Action onClick | NONE — all 6 buttons are dead | ❌ NO HANDLER | quick-actions.tsx:27-41 |
+| Notice Board (4 announcements) | `announcements` from mock/operations | ❌ MOCK (hardcoded 5 entries, dashboard shows 4) | quick-actions.tsx:9, 59; operations.ts:104-110 |
+| Notice Board "View all" onClick | NONE | ❌ NO HANDLER | quick-actions.tsx:54 |
+| Recent Admissions rows | `students.slice(0, 6)` (Class 2-A, not actual admissions) | ❌ MOCK + MISLABELED | recent-admissions.tsx:5, 32 |
+| Recent Admissions row onClick | NONE | ❌ NO HANDLER | recent-admissions.tsx:33-39 |
+| Upcoming Events | `upcomingEvents` = `calendarEvents.slice(0,5)` (mock) | ❌ MOCK (hardcoded 9 events, dashboard shows 5) | events-row.tsx:7, 19; operations.ts:120-132 |
+| Upcoming Events row onClick | NONE | ❌ NO HANDLER | events-row.tsx:20-26 |
+| Class 2-A Top Performers | `classToppers` (mock) | ❌ MOCK (hardcoded) | events-row.tsx:8, 52; academics.ts:53+ |
+| Pending Reviews progress bars | HARDCODED inline `{ done: 7, total: 12 }` etc. | ❌ FAKE | events-row.tsx:81-84 |
+| Pending Reviews "23" admission applications | HARDCODED `23` | ❌ FAKE (real count exists in useAdmissionStore, used in principal-panel.tsx:123-127) | events-row.tsx:103 |
+
+**Verdict**: The ONLY real data on the entire dashboard is the principal's name ("Dr. Ananya Iyer") and today's date (in WelcomeBanner). Everything else is mock or hardcoded. The dashboard has ZERO live API integration. The Zustand stores (`live-alerts-store`, `admission-store`, `fee-store`, `salary-store`, etc.) exist and ARE real, but the Dashboard only consumes `live-alerts-store` (which is itself seeded with mock alerts). It does NOT consume `admission-store` (which has REAL pending applications counted in the sidebar badge), `fee-store`, `salary-store`, etc.
+
+---
+
+## D. Visual Issues Summary — what makes the dashboard "older/separate" from Academics
+
+| # | Issue | Where | Academics canonical |
+|---|---|---|---|
+| 1 | Giant red container (border-l-4 + h-44 blur blob + h-11 gradient Megaphone hero + ping badge) | live-alerts.tsx:128, 129, 136-143 | flat `rounded-xl border border-border bg-card p-4`, no decoration, h-7 icon chip |
+| 2 | Card-in-card (GlassCard → bg-card/30 chart box → dashed snoozed box) | live-alerts.tsx:128 → content.tsx:86, 188 | flat single card, `divide-y` for inner lists |
+| 3 | Hand-rolled bar chart (NOT premium-charts) | live-alerts-content.tsx:84-145 | premium-charts `BarTrend` if needed, or remove |
+| 4 | `ChartCard` legacy boxed graph wrapper | charts-row.tsx:21, 37, 57 | flat `Panel` (FeePanel/LibPanel shape) |
+| 5 | 6 colorful gradient Quick Action tiles (6 different gradient families including violet→purple) | quick-actions.tsx:14-21, 36 | flat `border border-border bg-card` buttons with `h-3.5 w-3.5` tone-tinted icons, emerald primary only |
+| 6 | 6 dead Quick Action buttons (no onClick) | quick-actions.tsx:27-41 | wire to `setActive('module')` |
+| 7 | Plain HTML `<table>` with non-canonical header (text-xs not uppercase) | recent-admissions.tsx:21-30 | shadcn `<Table>` + `text-[10px] uppercase tracking-wider font-semibold py-2.5` |
+| 8 | "Recent Admissions" shows Class 2-A roster (not actual admissions) | recent-admissions.tsx:32 | pull from `useAdmissionStore.applications` filtered to recent + pending |
+| 9 | 48×48 primary-tinted date tile in Upcoming Events | events-row.tsx:27-30 | small `h-7 w-7` chip |
+| 10 | Medal emojis (🥇🥈🥉) in Top Performers | events-row.tsx:63 | small `bg-amber-500/15 text-amber-700` chip with rank number |
+| 11 | Class-specific "Class 2-A Top Performers" on principal dashboard | events-row.tsx:49 | REMOVE — already in Exams module's Session Top Performers |
+| 12 | Hardcoded "23" admission applications (real count exists in store) | events-row.tsx:103 | use `useAdmissionStore` pending count |
+| 13 | Legacy `StatusBadge` (with variant + dot) used in 4 places | charts-row.tsx:14, 41; quick-actions.tsx:8, 18, 79; recent-admissions.tsx:4, 18, 53; events-row.tsx:5, 35 | Academics dot+pill pattern: `bg-{tone}-500/10 text-{tone}-700 dark:text-{tone}-300` with `h-1.5 w-1.5 rounded-full bg-current opacity-80` dot |
+| 14 | Legacy `GlassCard` wrapper (rounded-xl border + hover shadow) used in 7 places | live-alerts.tsx:6,128; charts-row.tsx:14,90; quick-actions.tsx:8,23,51; recent-admissions.tsx:4,12; events-row.tsx:5,14,47,86 | flat `rounded-xl border border-border bg-card` plain card |
+| 15 | 8 KPI cards (2 rows of 4) — too many | kpi-row.tsx:20-29 | 4 cards max per Academics (Appendix A §2 line 4351) |
+| 16 | 16 hardcoded "+X%" / "Pre-Board in 12d" delta strings on KPIs | kpi-row.tsx:21-28 | compute from real trend data or remove |
+| 17 | 7-button Live Alerts toolbar (5 visible, including 3 DEMO features) | live-alerts-toolbar.tsx:33-163 | 2-3 buttons max (Resolve All primary, Snooze All outline, Restore ghost) |
+| 18 | "Today's Alert Activity" chart with fake hourly data | live-alerts-content.tsx:84-145 | REMOVE — fake-data visualization |
+| 19 | `font-display text-base sm:text-lg font-bold` alert title (too large) | live-alerts.tsx:146 | `text-sm font-semibold` |
+| 20 | Storytelling subtitle "Real-time critical events requiring principal attention · click to investigate, resolve to dismiss" | live-alerts.tsx:158 | remove (Appendix A §10 line 4745) |
+| 21 | Dead code: `SecondaryKpiRow` defined but unused | kpi-row.tsx:38-47 | DELETE |
+| 22 | Dead code: `ChartsRow2` defined but unused | charts-row.tsx:76-123 | DELETE |
+| 23 | Dead code: `sparkline` + `weeklyTrends` in data.tsx | data.tsx:9-55 | DELETE |
+| 24 | `handleAlertClick` only toasts "Navigating…" (fake nav) | live-alerts.tsx:89-91 | wire to `setActive(alert.navKey)` |
+| 25 | Notice Board "View all" button has no onClick | quick-actions.tsx:54 | wire to `setActive('communication')` |
+| 26 | Notice Board uses mock `announcements` instead of `communication-store` | quick-actions.tsx:9 | use real store (or leave mock but wire View all) |
+
+---
+
+## E. Prioritized Action List
+
+### KEEP (genuinely useful + canonical)
+1. **WelcomeBanner** (shared.tsx) — already closest to Academics language. Optionally shrink greeting to `text-base`.
+2. **4 primary KPIs** (Attendance, Pending fees, New admissions, Upcoming exams) — but as 4 (not 8) clickable SummaryCards.
+3. **2 charts** (Revenue vs Expenses area + Fee Collection donut) — premium-charts visuals are good, just replace `ChartCard` wrapper with flat `Panel`.
+4. **Live Alerts LIST** (live-alerts-list.tsx rows) — the row visual style (small icon tile + text-xs body + snooze/resolve buttons) is canonical Academics. Keep the row pattern + the resolve/snooze interactions.
+5. **Notice Board rows** (quick-actions.tsx NoticeBoardCard body) — the row pattern (category chip + title + meta) is canonical Academics. Keep the row pattern.
+6. **Recent Admissions table concept** — but rewire to real `useAdmissionStore` data + shadcn `<Table>`.
+
+### SIMPLIFY (reduce visual weight)
+1. **LiveAlerts giant red container** → flat `rounded-xl border border-border bg-card p-4` Panel + single small "N active" chip with `h-1.5 w-1.5` dot. Drop the h-44 blur blob, h-11 Megaphone tile, animated ping badges, storytelling subtitle, `text-lg` title.
+2. **8 KPIs → 4 KPIs** — drop Students total / Teachers / Revenue (mo.) / Salary due (move to WelcomeBanner meta or Finance Dashboard).
+3. **7-button Live Alerts toolbar → 3 buttons** — keep Resolve All (emerald solid), Snooze All (outline), Restore (ghost). Drop Simulate Alert, Auto toggle, Reset All, View All.
+4. **5 severity filter pills → 1 SegmentedTabs row** (All / Critical / High / Info / Low).
+5. **6 colorful Quick Action gradient tiles → 4-6 flat border buttons** with `h-3.5 w-3.5` tone-tinted icons (no gradient, no white text). Use Academics canonical `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-card hover:bg-muted/60`.
+6. **48×48 primary-tinted Upcoming Events date tile → 28×28 chip** with `bg-muted/60 text-foreground`.
+7. **3-card EventsRow → 2 cards** (drop Class 2-A Top Performers — duplicate of Exams module's Session Top Performers).
+8. **Pending Reviews 2 progress bars + orphan "23" → flat list of 3 rows** with real counts + "Review →" links.
+9. **`ChartCard` wrapper → flat `Panel`** (FeePanel/LibPanel shape).
+
+### MOVE (relocate to a better home)
+1. **Students total, Teachers, Revenue (mo.), Salary due KPIs** → WelcomeBanner meta strip + Finance Dashboard (already has these).
+2. **Class 2-A Top Performers** → already exists in Exams module (`session-top-performers.tsx`). Remove from dashboard.
+3. **Attendance Trend chart (dead ChartsRow2)** → already exists in Attendance module. Don't re-add.
+4. **Birthdays mini-stat** → keep on WelcomeBanner (already there), remove from dead `SecondaryKpiRow`.
+
+### REMOVE (dead code or fake features)
+1. **`SecondaryKpiRow`** (kpi-row.tsx:38-47) — 13 LOC dead code.
+2. **`ChartsRow2`** (charts-row.tsx:76-123) — 47 LOC dead code.
+3. **`sparkline` + `weeklyTrends` + `WeeklyTrend` interface** (data.tsx:9-55) — ~45 LOC dead code.
+4. **"Today's Alert Activity" mini bar chart** (live-alerts-content.tsx:84-145) — 60 LOC of fake-data visualization.
+5. **4-button stats strip** (live-alerts-content.tsx:65-82) — redundant with header chip.
+6. **Simulate Alert button** (live-alerts-toolbar.tsx:94-104) — DEMO feature.
+7. **Auto alerts toggle + countdown** (live-alerts-toolbar.tsx:105-133 + live-alerts.tsx:99-120) — DEMO feature.
+8. **Reset All button** (live-alerts-toolbar.tsx:134-146) — DEMO feature.
+9. **View All button** (live-alerts-toolbar.tsx:156-161) — fake (toast only, no destination).
+10. **Snoozed dashed sub-box** (live-alerts-content.tsx:187-209) — flatten into the main list with a section divider.
+11. **"+72M surplus" hardcoded StatusBadge** on Chart 1 (charts-row.tsx:41) — fake.
+12. **Hardcoded "23" admission applications** (events-row.tsx:103) — use real `useAdmissionStore` count.
+13. **Hardcoded "+X%" KPI deltas** (kpi-row.tsx:21-28) — compute from real data or remove.
+
+### WIRE (currently dead — connect to real navigation/data)
+1. **Quick Action 6 buttons → `setActive('admission' | 'attendance' | 'fees' | 'exams' | 'communication' | 'salary')`** (quick-actions.tsx:27-41).
+2. **`handleAlertClick` → `setActive(alert.navKey)`** (live-alerts.tsx:89-91).
+3. **Notice Board "View all" → `setActive('communication')`** (quick-actions.tsx:54).
+4. **Recent Admissions rows → `setActive('admission')` with the application preselected** (recent-admissions.tsx:33-39).
+5. **Upcoming Events rows → `setActive('calendar')`** (events-row.tsx:20-26).
+6. **Pending Reviews rows → `setActive('fees' | 'salary' | 'admission')`** (events-row.tsx:91-105).
+7. **4 primary KPI SummaryCards → `onClick={() => setActive('attendance' | 'fees' | 'admission' | 'exams')}`** (kpi-row.tsx:21-28).
+8. **Recent Admissions data → `useAdmissionStore.applications`** (replace `students.slice(0, 6)` at recent-admissions.tsx:32).
+9. **Pending Reviews "Admission Applications" → `useAdmissionStore` pending count** (replace hardcoded `23` at events-row.tsx:103).
+10. **Notice Board data → optionally `communication-store`** (replace mock `announcements` at quick-actions.tsx:9, 59) — OR leave as mock but wire "View all".
+
+---
+
+## F. Recommended New Information Hierarchy
+
+Per the task brief: "4 primary KPIs + compact attention panel + 2 smooth line charts + cleaner quick actions + quieter notice board + shared table for recent admissions".
+
+### Proposed structure (7 sections, same count, reordered + reweighted):
+
+```
+<div className="space-y-4">
+  1. <WelcomeBanner />                       [KEEP — already canonical]
+  2. <KpiRow />                             [SIMPLIFY 8 → 4 cards, add onClick navigation]
+  3. <AttentionPanel />                     [REPLACE LiveAlerts — flat Panel, drop giant red container,
+                                            drop bar chart, drop stats strip, drop DEMO buttons,
+                                            keep alert list + severity SegmentedTabs + 3 real actions]
+  4. <ChartsRow />                          [SIMPLIFY — 2 premium-charts in flat Panels,
+                                            drop ChartCard wrapper, drop "+72M surplus" fake badge,
+                                            add "View Finance →" link]
+  5. <QuickActions />                       [SIMPLIFY — 4-6 flat border buttons with tone-tinted icons,
+                                            wire each to setActive(module)]
+  6. <NoticeBoard /> + <RecentAdmissions /> [SPLIT into 2-col grid:
+                                              left col = NoticeBoard (flat Panel, 4 rows, View all wired),
+                                              right col = RecentAdmissions (shadcn Table, real
+                                              admission-store data, clickable rows)]
+  7. <EventsRow />                          [SIMPLIFY 3 → 2 cards:
+                                              Upcoming Events (with small date chips),
+                                              Pending Reviews (flat list with real counts + Review → links)]
+</div>
+```
+
+### What disappears from the dashboard:
+- Giant red LiveAlerts container, Megaphone hero, blur blob, ping badges, storytelling subtitle
+- "Today's Alert Activity" bar chart (fake data)
+- 4-button stats strip (redundant)
+- 4 secondary KPI cards (Students total, Teachers, Revenue, Salary due)
+- 3 DEMO toolbar buttons (Simulate, Auto, Reset)
+- 6 colorful Quick Action gradient tiles → 4-6 flat buttons
+- 48×48 primary date tile → 28×28 chip
+- Class 2-A Top Performers (duplicate of Exams module)
+- Medal emojis 🥇🥈🥉
+- Hardcoded "23" admission applications (replaced with real `useAdmissionStore` count)
+- Dead code: SecondaryKpiRow, ChartsRow2, sparkline, weeklyTrends
+
+### What gets wired (was dead):
+- 4 primary KPI cards → click navigates to module
+- 6 Quick Action buttons → click navigates to module
+- Alert row click → navigates to alert's `navKey` module
+- Notice Board "View all" → navigates to Communication
+- Recent Admissions rows → navigates to Admissions with application preselected
+- Upcoming Events rows → navigates to Calendar
+- Pending Reviews rows → navigates to Fees / Salary / Admissions
+
+### Net effect:
+- 8 KPIs → 4 KPIs (50% reduction)
+- 1 giant red container + 3 sub-boxes → 1 flat Panel
+- 60-LOC fake bar chart → removed
+- 7 toolbar buttons → 3 (57% reduction)
+- 6 colorful gradient tiles → 4-6 flat border buttons
+- 3 events-row cards → 2 (33% reduction)
+- 0 wired actions → ~15 wired actions (KPIs, Quick Actions, alert rows, notice board, recent admissions, events, reviews all navigate)
+- ~120 LOC of dead code removed (SecondaryKpiRow + ChartsRow2 + sparkline + weeklyTrends + bar chart + stats strip)
+
+This brings the Dashboard into visual alignment with the Academics modules (Examinations, Attendance) per Appendix A: 4 SummaryCards, flat Panel sections, no card-in-card, dot+pill status badges, h-7 icon chips, `text-sm font-semibold` section headings, `h-8 text-xs gap-1.5` buttons, emerald primary only, no storytelling subtitles, no oversized color blocks, no DEMO features in production UI.
+
+**No files were modified during this audit.**
+
+---
+Task ID: DASH-2
+Agent: full-stack-developer (Certificates + Downloads visual restoration)
+Task: Restore document visual identity in Certificates + Downloads
+
+Work Log:
+
+### Phase 0: Context absorption
+- Read `/home/z/my-project/worklog.md` (8,804 lines) end-to-end — absorbed Task 1 (Academics design language spec), Task 2-A/2-B (visual spec + component divergence), Task 12 (Certificates rainbow collapse), Task 9-D (Operations convergence: CertPanel → shared Panel + PageTransition + SegmentedTabs), Task DASH-C (Certificates + Downloads visual audit — the exact spec this task follows), Task DASH-B (shared primitives audit recommending `document-primitives.tsx`).
+- Read in full the key files: `src/components/shared/document-primitives.tsx`, `src/components/shared/avatar.tsx`, `src/components/principal/modules/shared/panel.tsx`, `src/components/principal/modules/shared/segmented-tabs.tsx`, `src/components/principal/modules/certificates/{cert-shared, generate-tab, templates-tab, history-tab, previews, index}.tsx`, `src/components/principal/modules/downloads/{downloads-shared, document-list, document-detail, index}.tsx`.
+
+### Phase 1: Shared primitives extension (`document-primitives.tsx`)
+- Synced `DOC_TYPE_META` icons to match `cert-shared.tsx` DOC_TYPES: `bonafide → FileText` (was ScrollText), `migration → GraduationCap` (was ClipboardList), `marksheet → ClipboardList` (was GraduationCap). doc-primitives.tsx:91-108.
+- Added title-case aliases for all 7 doc types ('Bonafide', 'ID Card', 'Fee Receipt', etc.) so the Cert store's `DocType` union can be passed directly to `DocumentThumbnail` / `DocumentCard` / `DocumentIcon` without a kebab-case translation step.
+- Added `getDocTypeMeta(docType?: string)` helper (doc-primitives.tsx:111-114) for forward-compat.
+- Fixed `DocumentCard` selected-state bug at doc-primitives.tsx:282 — `ts.border.replace('/20', '/20')` was a no-op; now `ts.border.replace(/^border-/, 'ring')` correctly converts `border-emerald-500/20` → `ring-emerald-500/20` so the selected ring actually renders.
+
+### Phase 2: Certificates — generate-tab.tsx
+- Replaced `accentClasses` import with `DocumentCard, DocumentThumbnail, getDocTypeMeta` from `@/components/shared/document-primitives` (generate-tab.tsx:39-44). Removed `Info` (no longer used after empty-state rewrite).
+- **Doc-type selector** (generate-tab.tsx:207-227): 3-col `grid-cols-3 gap-2` of tiny `p-2.5` cards with `h-8 w-8` icon tiles + `text-[11px]` labels → 2-col `grid-cols-1 sm:grid-cols-2 gap-3` of `DocumentCard`. Each card renders `DocumentThumbnail size="md"` (paper silhouette + emerald edge stripe + doc-type glyph from DOC_TYPE_META), `text-sm font-semibold` name, `text-xs` description, and category badge. Selected state is driven by DocumentCard's built-in `border-2 + ring-2` styling (now fixed). Single emerald accent preserved.
+- **SelectedDocChip** (generate-tab.tsx:443-454): one-line `px-3 py-2` chip with `h-3.5 w-3.5` icon → substantial `rounded-xl border-2 border-emerald-500/40 ring-2 ring-emerald-500/20 px-3 py-2.5` indicator with `DocumentThumbnail docType size="sm"` + name (`text-sm font-semibold`) + description. "Change" affordance remains in the parent CertPanel header.
+- **PreviewArea empty state** (generate-tab.tsx:519-534): flat `CertEmptyState` with `Info` icon → refined document placeholder: `DocumentThumbnail size="xl" tone="emerald"` on a soft blurred emerald canvas + "Select a document type" + supporting text. Feels like a document canvas waiting for input.
+- **PreviewArea when selected** (generate-tab.tsx:536-562): kept the existing rich previews (`CertificatePreview`, `MarksheetPreview`, `IDCardPreview`, `FeeReceiptPreview`) — they were already rendering correctly; the audit only flagged the empty state.
+
+### Phase 3: Certificates — templates-tab.tsx
+- Added `DocumentThumbnail` import (templates-tab.tsx:38).
+- **Template card MiniPreview pane** (templates-tab.tsx:221): bumped `h-28` → `h-36` for more document presence.
+- **Template card footer info** (templates-tab.tsx:233-248): replaced the `h-2.5 w-2.5` accent color swatch with `DocumentThumbnail docType={template.docType} size="sm"` — gives each template card real document identity (paper silhouette + doc-type glyph + emerald edge stripe). The 4 ghost icon buttons (Preview, Duplicate, Set Default, Toggle) and the DEFAULT star are preserved.
+
+### Phase 4: Certificates — history-tab.tsx
+- Added `DocumentIcon` import (history-tab.tsx:44).
+- **History row doc-type indicator** (history-tab.tsx:219-224): `h-7 w-7` rounded-lg chip with `h-3.5 w-3.5` icon → `DocumentIcon docType={doc.docType} size="md"` (h-10 w-10). Single emerald accent preserved (driven by `DOC_TYPE_META[docType].tone === 'emerald'`). Removed the local `Icon` variable since the icon now comes from the shared primitive.
+- Type pill now uses `d.short` (history-tab.tsx:234-236) — same as the cert module's doc-type short label for consistency with the generate-tab cards.
+- Row cells padded to `py-2.5` (was `py-2`) for visual consistency with the taller icon.
+- The Download primary + More dropdown pattern is preserved.
+
+### Phase 5: Downloads — document-list.tsx
+- Removed `DocIcon, FormatBadge` imports from `./downloads-shared`. Added `DocumentThumbnail, FileTypeBadge` from `@/components/shared/document-primitives` + `DocFormat` type import (document-list.tsx:34-37).
+- **Document column** (document-list.tsx:153-171): `DocIcon format size="md"` (h-9 w-9 icon tile, h-4 w-4 glyph only) → `DocumentThumbnail format={doc.format as DocFormat} size="sm"` (paper silhouette h-10 w-8 with format edge stripe: PDF=rose, XLSX=emerald, DOCX=sky). Much more document-like.
+- **Format column** (document-list.tsx:183-186): local `FormatBadge` → shared `FileTypeBadge`. Same semantic role, shared primitive.
+- Table layout, search, filters, sort, row actions all preserved.
+
+### Phase 6: Downloads — index.tsx (Quick Access)
+- Removed `DocIcon, FormatBadge` from imports. Added `DocumentThumbnail, FileTypeBadge` + `DocFormat` type (downloads/index.tsx:48-51).
+- **QuickAccess** (downloads/index.tsx:243-316): replaced the `flex flex-wrap gap-1.5` chip row (with `!h-6 !w-6 !rounded-full` DocIcon overrides — read as pills, not documents) with a `grid grid-cols-2 sm:grid-cols-3 gap-2` of compact document cards. Each item: `DocumentThumbnail format size="sm"` + name (`text-xs font-semibold truncate`) + `FileTypeBadge size="xs"` + small `Download` icon button (h-7 w-7, emerald on hover). Reads like a real document library, not a pill row.
+
+### Phase 7: Downloads — document-detail.tsx (drawer)
+- Added imports: `useStudentsStore`, `useFeeStore`, `DocumentTemplate` + `GeneratedDocument` types from cert store, `DocumentThumbnail` + `DocFormat` from shared primitives, `Avatar` from `@/components/shared/avatar`, and `CertificatePreview` / `MarksheetPreview` / `IDCardPreview` / `FeeReceiptPreview` + `MarksheetData` from `../certificates/previews` (document-detail.tsx:11-36). Restored `FileText` import (still used in the Format MetaRow).
+- Removed unused `recordPreview` declaration (was declared but never called).
+- **Cert bridge resolution** (document-detail.tsx:81-95): resolves `certDoc` + `certTemplate` + `certStudent` + `certTxn` + `certMarksheet` from the underlying cert doc so the drawer can render the actual preview. The cert-doc bridge ID pattern `doc-gen-${cert.id}` is unchanged.
+- **Drawer preview area** (document-detail.tsx:144-205):
+  - **Generated cert docs**: renders `DrawerCertPreview` (new helper at document-detail.tsx:373-421) which delegates to `CertificatePreview` / `MarksheetPreview` / `IDCardPreview` / `FeeReceiptPreview` based on `certDoc.docType`. Wraps the preview in a slate-100 canvas + a footer line with the doc type + format + generation date.
+  - **Non-generated docs** (forms, templates, reports): the old generic `FileText` icon with emerald blur glow is replaced by `DocumentThumbnail size="xl"` with the format-specific edge stripe (PDF=rose, XLSX=emerald, DOCX=sky, CSV=teal, JPG=violet) on a format-tinted blur canvas. A smaller `DocumentThumbnail size="md"` + `FormatBadge` sits in the header row. Reads as a real document placeholder, not a generic icon.
+- **Download CTA** (document-detail.tsx:212): collapsed `bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700` → solid `bg-emerald-600 hover:bg-emerald-700` (Academics canonical pattern — no gradient on primary CTAs).
+- **"Issued to" meta row** (document-detail.tsx:275-289): plain text → text + `Avatar name={doc.studentName} size="sm"` from the shared avatar system, for real visual identity.
+
+### Phase 8: Verification
+- `cd /home/z/my-project && bun run lint` — 0 errors.
+- `curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:3000/` — HTTP 200.
+- `cd /home/z/my-project && bunx tsc --noEmit 2>&1 | grep -E "certificates/|downloads/" | head -20` — empty (no type errors in scope). The remaining tsc errors are in dashboard / exams / finance-store / analytics — out of scope (Dashboard is being redesigned by another agent in parallel; exams/finance errors are pre-existing).
+- Wrote `/home/z/my-project/agent-ctx/DASH-2-certificates-downloads-visual-restoration.md` with the full work record + summary.
+
+Stage Summary:
+- **Certificates** now reads as a premium document-generation workspace: large `DocumentCard`s in a 2-col grid with strong selected state (border-2 + ring-2 + check badge) for the 7 doc types, substantial SelectedDocChip with `DocumentThumbnail sm` + emerald stripe, and a refined document-canvas empty state with `DocumentThumbnail xl`. The rich previews (`CertificatePreview` / `MarksheetPreview` / `IDCardPreview` / `FeeReceiptPreview`) that already existed are now surfaced — the empty state no longer competes with them. Templates tab shows larger h-36 MiniPreview panes + per-card DocumentThumbnail in the footer. History tab uses h-10 w-10 `DocumentIcon` for each row's doc-type indicator.
+- **Downloads** now reads as a real document library: `DocumentThumbnail sm` (paper silhouette + format edge stripe) replaces the plain icon tile in the list, `FileTypeBadge` from the shared primitives replaces the local FormatBadge, Quick Access is a grid of document cards (thumbnail + name + format badge + download icon) instead of a chip row, and the slide-from-right drawer renders the ACTUAL CertificatePreview / MarksheetPreview / IDCardPreview / FeeReceiptPreview for generated cert docs (the cert-doc bridge was always there, but the drawer was rendering a generic FileText icon instead of using it). Non-generated docs get a real `DocumentThumbnail xl` placeholder with format-specific edge stripe. The emerald→teal gradient CTA is collapsed to solid emerald.
+- **Both modules now share the same document visual primitives** from `@/components/shared/document-primitives` (DocumentThumbnail, FileTypeBadge, DocumentIcon, DocumentCard, DOC_TYPE_META, getDocTypeMeta, CategoryPill) and `@/components/shared/avatar` (Avatar for the "Issued to" student meta row in the drawer). Single Scholario accent (emerald) in Certificates; format-specific tints (PDF=rose, XLSX=emerald, DOCX=sky) in Downloads — semantic, not decorative.
+- All functionality preserved: 7 doc types, template CRUD, history with search/filter/sort + Download primary + More dropdown, cert→download bridge, slide-from-right drawer, document list table, all forms + validation + preview rendering. The shared `Panel` (CertPanel + DownloadsPanel re-exports), shared `SegmentedTabs`, shadcn `<Button>` h-8 text-xs pattern, and solid emerald primary CTA are all preserved.
+
+---
+Task ID: DASH-1
+Agent: full-stack-developer (Dashboard redesign)
+Task: Redesign Principal Dashboard to Academics visual language
+
+Work Log:
+
+### 0. Read the spec + canonical primitives
+- Read `/home/z/my-project/worklog.md` to understand the DASH-A audit + DASH-B shared primitives audit.
+- Read canonical Academics shell pattern in `exams/index.tsx:135-211` (PageTransition + SegmentedTabs + AnimatePresence tab switch).
+- Read canonical KPI card + section pattern in `exams/tabs/overview-tab.tsx:42-96` (4 SummaryCards in a 4-col grid).
+- Read shared primitives:
+  - `shared/segmented-tabs.tsx` (not needed — dashboard has no tabs)
+  - `shared/summary-card.tsx:62-178` (SummaryCard + SummaryCardGrid, supports `onClick` for clickable KPIs)
+  - `shared/panel.tsx:59-87` (Panel — flat `rounded-xl border border-border bg-card`, title/subtitle/action header, body p-4)
+  - `shared/avatar.tsx:81-126` (shared Avatar — deterministic gradient, supports `src` photo, sizes xs/sm/md/lg/xl)
+  - `shared/premium-charts.tsx:641-783` (AreaTrendChart — smooth Catmull-Rom bezier, thin line, subtle gradient, hover dots) + `165-170` (DonutChart — animated segments, center value, bidirectional legend)
+- Read existing dashboard module (`principal/modules/dashboard/*.tsx`) — 12 files, ~700 LOC total.
+- Read principal-panel.tsx:120-163 to understand how the Dashboard is rendered (`moduleRegistry['dashboard']` → `<PrincipalDashboard />` with no props).
+- Read admission-store types/seed-data: 7 applications (excluding Draft = 6 real), fields `applicantName`, `className`, `section`, `status`, `formData.fatherName`, `admissionNo`, `submittedDate`.
+- Read fee-store: `cashRequests` with `status: 'Pending Principal Acceptance' | 'Collected by Teacher' | ...`.
+- Read salary-store: `adjustments` with `status: 'Pending' | 'Approved' | 'Rejected' | 'Paid'`.
+- Read communication-store: `announcements` with `title`, `message`, `category`, `author`, `createdAt`.
+
+### 1. Wire onNavigate from principal-panel to PrincipalDashboard
+- `principal-panel.tsx:158-160` — added an `active === 'dashboard' ?` branch that renders `<PrincipalDashboard onNavigate={setActive} />` (preserves the existing `<ActiveModule />` fallback for every other module).
+
+### 2. Rewrite `index.tsx` (composition root)
+- `index.tsx:35-49` — wrapped in `<PageTransition className="space-y-4">` (was a plain `<div className="space-y-4">`).
+- Accept `onNavigate?: (module: string) => void` prop, default to no-op.
+- Render the 7 sections in the spec order: WelcomeBanner → KpiRow → LiveAlerts → ChartsRow1 → QuickActionsRow → RecentAdmissions → EventsRow.
+
+### 3. Polish `shared.tsx` WelcomeBanner (keep calm, add Students/Teachers meta)
+- `shared.tsx:1-78` — kept the calm flat card (rounded-xl border border-border bg-card), real auth user name + today's date.
+- Removed the old "Present / Birthdays" stat chips.
+- Added two clickable compact chips on the right (Students → 'students', Teachers → 'teachers') with deterministic tone-tinted `h-7 w-7` icon tiles — these were 2 of the dropped KPIs (passive status, not actionable), now relocated to the meta strip.
+
+### 4. Rewrite `kpi-row.tsx` (8 → 4 SummaryCards with onClick)
+- `kpi-row.tsx:1-83` — reduced from 8 to 4 SummaryCards per the spec:
+  - Attendance (emerald) → `onNavigate('attendance')`
+  - Pending Fees (rose) → `onNavigate('fees')`
+  - New Admissions (sky) → `onNavigate('admission')`
+  - Upcoming Exams (amber) → `onNavigate('exams')`
+- Wrapped in `<SummaryCardGrid columns={4}>` (matches Academics overview-tab pattern).
+- Removed `SecondaryKpiRow` (was 13 LOC of dead code at the original lines 38-47 — Students/Teachers/Revenue/Salary/Buses/Library/Inventory cards, none consumed by the dashboard).
+- Removed the dead `import { Cake, Bus, BookMarked, Package }` + `libraryStats` import that were only used by the dead `SecondaryKpiRow`.
+
+### 5. Rewrite `live-alerts.tsx` (giant red container → flat Panel "Principal Attention")
+- `live-alerts.tsx:1-197` — replaced the giant red `GlassCard` with `border-l-4 border-l-rose-500` + `h-44 w-44 bg-rose-500/10 blur-3xl` decorative blob + `h-11 w-11 bg-gradient-to-br from-rose-500 to-red-600` Megaphone hero + `animate-ping`/`animate-pulse` badges + storytelling subtitle with a flat `<Panel title="Principal Attention">`.
+- Title + a small subtitle meta showing "N active · M critical" with `h-1.5 w-1.5 rounded-full` dots (canonical Academics dot+pill pattern).
+- Action slot holds the new compact `<LiveAlertsToolbar>` (3 actions + More dropdown).
+- Body holds the new compact `<LiveAlertsContent>` (severity filter pills + snoozed section + alert list).
+- Wired `handleAlertClick` to `onNavigate(alert.navKey)` (was: just toasting "Navigating…").
+- Kept the Zustand `useLiveAlerts` store unchanged (resolve/snooze/snoozeAll/etc.) + the auto-alerts countdown useEffect.
+- Removed `activityLog` from the destructured store state (no longer consumed after dropping the bar chart).
+
+### 6. Rewrite `live-alerts-content.tsx` (drop bar chart + stats strip)
+- `live-alerts-content.tsx:1-133` — removed the 4-button stats strip (lines 65-82 in the original — redundant with the header meta) and the "Today's Alert Activity" mini bar chart (lines 84-145 in the original — fake hourly data visualization, ~60 LOC).
+- Removed `activityLog` from the props interface (no longer needed).
+- Kept the severity filter pills row (matches Academics canonical filter pattern — `text-[10px] font-semibold uppercase tracking-wider`, `rounded-full px-2.5 py-1`).
+- Snoozed alerts flattened into a compact bordered row above the active list (no longer a `border-dashed` sub-box — now a `border border-border bg-muted/20` flat strip).
+- Removed the `ShieldAlert` "Critical Only" toggle button (the severity pills already cover this).
+- Removed the `motion` import for the dropped bar chart (kept for the dismissed-restore link).
+
+### 7. Rewrite `live-alerts-toolbar.tsx` (7 buttons → 3 actions + More)
+- `live-alerts-toolbar.tsx:1-155` — reduced from 7 buttons (Resolve All, Snooze All, Simulate Alert, Auto toggle, Reset All, Restore, View All) to 3 visible actions:
+  - **Resolve All** — emerald solid `bg-emerald-600 hover:bg-emerald-700 text-white`, h-8 text-xs.
+  - **Snooze All** — outline button with a shadcn `<DropdownMenu>` containing the 4 snooze durations (15min/1h/4h/24h).
+  - **More** — ghost button with a shadcn `<DropdownMenu>` containing the demo / less-used actions:
+    - Simulate new alert (Zap icon)
+    - Stop/Enable auto-alerts (Radio icon, red when active)
+    - Reset to initial state (RotateCcw icon)
+    - Restore dismissed (CheckCheck icon)
+- Removed the fake "View All" button (was: only toasting "Opening alerts center").
+- The visible toolbar follows the Academics h-8 text-xs button language; the More menu keeps the demo features accessible without cluttering the UI.
+
+### 8. Rewrite `live-alerts-list.tsx` (Academics-style flat rows, no ping)
+- `live-alerts-list.tsx:1-176` — flattened the alert rows from boxed `rounded-xl border p-3` cards (with `alertColorMap[alert.color]` background) to flat `rounded-md px-2.5 py-2 hover:bg-muted/40` rows.
+- Removed the `alertColorMap[alert.color]` row background (semantic colors now only on the `h-7 w-7` icon tile, not the whole row).
+- Removed the `animate-ping` ring + the `ring-2 ring-violet-500/40 shadow-premium` "New" animation — replaced with a small `h-1.5 w-1.5 rounded-full bg-violet-500` dot on the left edge + a subtle `bg-violet-500/5` row tint when `isNew`.
+- Removed the `New` uppercase badge in the top-right corner.
+- Snooze/resolve buttons kept as `h-6 w-6` ghost buttons that appear on hover (h-amber/h-emerald tint).
+- Snooze dropdown menu simplified: `rounded-md` (was `rounded-xl`), `shadow-md` (was `shadow-premium-lg`).
+- Empty state shrunk to `h-10 w-10` icon tile (was `h-14 w-14`), `text-sm` heading (was `text-base font-bold`).
+
+### 9. Rewrite `charts-row.tsx` (boxed ChartCard → flat Panel + smooth line charts)
+- `charts-row.tsx:1-103` — replaced the legacy `ChartCard` wrapper (boxed graph pattern) with the shared flat `<Panel>`:
+  - Revenue vs Expenses: `<Panel title="Revenue vs Expenses" subtitle="Last 8 months" className="lg:col-span-2">` containing `<AreaTrendChart height={200} />` (smooth Catmull-Rom bezier, thin 1.9px line, subtle 0.28→0 gradient, minimal grid — exactly the Academics canonical smooth line chart).
+  - Fee Collection: `<Panel title="Fee Collection" subtitle="By category">` containing `<DonutChart size={180} thickness={20} />` with center value `88.6%` + "Collected" label + "142 pending" sub.
+- Removed the fake "+72M surplus" `<StatusBadge status="+72M surplus" variant="success" dot />` action chip (was a hardcoded fake summary).
+- Added real "View Finance →" and "View Fees →" ghost link buttons (`h-7 px-2 text-[11px]`) in the Panel action slot — both navigate via `onNavigate`.
+- Removed `ChartsRow2` (was 47 LOC of dead code at the original lines 76-123 — Attendance Trend bar chart + Today's Attendance radial gauge with 3 tinted tiles, all duplicated the Attendance module's analytics).
+- Removed the dead `import { BarTrend, RadialProgress } from '@/components/shared/premium-charts'`, `import { ChartCard } from '@/components/shared/charts'`, `import { GlassCard, StatusBadge } from '@/components/shared/ui'`, `import { attendanceOverview } from '@/lib/mock/attendance'`, `import { formatNumber } from '@/lib/format'`.
+
+### 10. Rewrite `quick-actions.tsx` (gradient tiles → flat action rows + Notice Board with shared Panel)
+- `quick-actions.tsx:1-176` — replaced the 6 colorful gradient Quick Action tiles (with NO onClick handlers — all dead) with a flat `<Panel title="Quick Actions">` containing a wrap of compact `h-8 px-3 rounded-md text-xs` buttons:
+  - **New Admission** (primary emerald solid `bg-emerald-600 hover:bg-emerald-700 text-white`) → `onNavigate('admission')`
+  - **Mark Attendance** (outline) → `onNavigate('attendance')`
+  - **Collect Fees** (outline) → `onNavigate('fees')`
+  - **Create Exam** (outline) → `onNavigate('exams')`
+  - **Add Notice** (outline) → `onNavigate('communication')`
+  - **Pay Salary** (outline) → `onNavigate('salary')`
+  - Each button has a small `h-3.5 w-3.5` icon with emerald tint (semantic colors only on primary).
+- Notice Board card: replaced the legacy `GlassCard` + `h-9 w-9` category chips with the shared flat `<Panel title="Notice Board">`. Each notice row uses the Academics pattern:
+  - Small `h-6 w-6` rounded-md category chip with tone-tinted bg (Urgent=rose, Event=emerald, Holiday=amber, Academic=violet, General=cyan), showing the first 3 letters of the category.
+  - `text-xs font-medium` title + `text-[11px]` content line-clamp-1 + `text-[10px]` meta (author + date).
+  - Row click + "View all" link both wired to `onNavigate('communication')`.
+- Notice Board data: pulled from `useCommunicationStore.announcements` (real store with current announcements), with a fallback to the mock `announcements` array if the store is empty.
+
+### 11. Rewrite `recent-admissions.tsx` (plain table → shadcn Table + shared Avatar + real admission store)
+- `recent-admissions.tsx:1-180` — replaced the plain HTML `<table>` (showing 6 Class 2-A roster rows mislabeled as "Recent Admissions") with the shared flat `<Panel bodyClassName="p-0">` containing a shadcn `<Table>`.
+- Table header follows the Academics canonical language: `text-[10px] uppercase tracking-wider font-semibold text-muted-foreground py-2.5`.
+- Table body rows use `motion.tr` with staggered fade-in, `border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors text-xs cursor-pointer`.
+- Uses the shared `<Avatar name={a.applicantName} size="sm">` for the student avatar (was the legacy `GradientAvatar`).
+- Columns: Student (avatar + name + guardian sub-line), Admission No (mono font), Class (className-section), Guardian (hidden on mobile), Status (Academics canonical dot+pill StatusPill with semantic colors per AdmissionStatus), Action (Eye button → navigate to admission).
+- Data source: `useAdmissionStore.applications`, filtered to exclude Draft, sorted by `submittedDate` desc, sliced to 5.
+- Row click + Eye button click both wired to `onNavigate('admission')`.
+- "View all" link in the Panel action slot also wired to `onNavigate('admission')`.
+- Status column replaced the "Fee Status" column from the spec — the real admission data has an application status, not a fee status. Used the canonical dot+pill pattern (small dot + label, tone-mapped per AdmissionStatus: Draft=muted, Submitted=sky, Under Review=amber, Need Correction=orange, Resubmitted=sky, Approved=emerald, Rejected=rose, Completed=emerald-strong, Archived=slate).
+
+### 12. Rewrite `events-row.tsx` (3 cards → 2 cards, drop Top Performers, real store counts)
+- `events-row.tsx:1-180` — reduced from 3 cards to 2 (dropped the Class 2-A Top Performers card, was a duplicate of the Exams module's Session Top Performers):
+  - **Upcoming Events** (Panel, smaller 28×28 date chips): calendar events from `upcomingEvents` mock, each row click wired to `onNavigate('calendar')`. Date chip changed from `h-12 w-12 bg-primary/10 text-primary` to `h-7 w-7 bg-muted/60 text-foreground`.
+  - **Pending Reviews** (Panel, flat list of 3 rows with REAL counts):
+    - Admission Applications → `useAdmissionStore` count of `status === 'Submitted' || 'Under Review' || 'Need Correction'` → row click → `onNavigate('admission')` (replaces the hardcoded "23" count).
+    - Fee Cash Approvals → `useFeeStore.cashRequests` count of `status === 'Pending Principal Acceptance' || 'Collected by Teacher'` → row click → `onNavigate('fees')`.
+    - Salary Adjustments → `useSalaryStore.adjustments` count of `status === 'Pending'` → row click → `onNavigate('salary')`.
+    Each row: small `h-7 w-7` tone-tinted icon tile + `text-xs font-medium` label + `text-[11px]` "N pending review" sub + big tabular-nums count + ArrowRight icon that translates-x on hover.
+- Removed the legacy `classToppers` import (was from `@/lib/mock/academics`, only consumed by the dropped Top Performers card).
+- Removed the legacy `ProgressBar` import (was only used by the dead progress-bar reviews).
+- Removed the legacy `GlassCard`, `GradientAvatar`, `StatusBadge` imports (all replaced by shared `Panel` + `Avatar` + canonical dot+pill patterns).
+
+### 13. Clean up `data.tsx` (remove dead code)
+- `data.tsx:1-83` — removed the dead `sparkline` array (8 lines), `WeeklyTrend` interface (8 lines), and `weeklyTrends` array (35 lines). None of these were consumed by any component (verified with a `grep` — only the dashboard `data.tsx` itself referenced them).
+- Kept the alert icon map, snooze options, severity tokens, and `LiveAlertWithIcon` type (all still consumed by the alert panel).
+- Removed the dead `CalendarCheck`, `IndianRupee`, `Clock` icon imports that were only used by the dropped `weeklyTrends`.
+
+### 14. Verification
+- `bun run lint` → 0 errors (only the legacy `.eslintignore` ESLintIgnoreWarning unrelated to this work).
+- `curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:3000/` → HTTP 200.
+- `bunx tsc --noEmit 2>&1 | grep -E "principal/modules/dashboard/|principal/principal-panel"` → empty (no type errors introduced by the dashboard work).
+- `tail /home/z/my-project/dev.log` → clean compiles, no runtime errors after the rewrite.
+
+Stage Summary:
+
+**What changed**:
+- 12 files in `src/components/principal/modules/dashboard/` + 1 file (`principal-panel.tsx`) — all rewritten to use the Academics canonical primitives.
+- 8 KPIs → 4 (50% reduction).
+- 1 giant red LiveAlerts container → 1 flat Panel "Principal Attention".
+- 1 fake "Today's Alert Activity" bar chart + 4-button stats strip → removed.
+- 7 toolbar buttons → 3 + More dropdown (57% visible reduction).
+- 6 colorful gradient Quick Action tiles → 6 flat h-8 buttons wired to navigation.
+- 1 plain HTML `<table>` of mislabeled Class 2-A roster → 1 shadcn `<Table>` of real `useAdmissionStore.applications` with shared `<Avatar>`.
+- 3 events-row cards → 2 (dropped the duplicate Top Performers card).
+- 1 hardcoded "23" admission count → real `useAdmissionStore` count.
+- 1 hardcoded "Fee Approvals: 7/12" progress bar → real `useFeeStore` count.
+- 1 hardcoded "Leave Requests: 3/8" progress bar → real `useSalaryStore` count.
+- ~120 LOC of dead code removed (SecondaryKpiRow, ChartsRow2, sparkline, weeklyTrends, bar chart, stats strip, "Class 2-A Top Performers", "+72M surplus" badge).
+- 0 wired actions → ~15 wired actions (KPIs, Quick Actions, alert rows, Notice Board, Recent Admissions, Events, Reviews, Charts all navigate).
+
+**What was kept**:
+- All real data (auth user, attendance overview, fee data, admission store, calendar events, communication store).
+- All Zustand stores (`live-alerts-store`, `admission-store`, `fee-store`, `salary-store`, `communication-store`) — preserved unchanged.
+- The WelcomeBanner (only added the Students/Teachers meta chips, kept the calm design).
+- The alert severity system + the resolve/snooze interactions (just made the container compact).
+- The auto-alerts countdown useEffect (kept; the toggle moved into the More menu).
+
+**What disappeared**:
+- Giant red LiveAlerts container + Megaphone hero + blur blob + ping/pulse animations + storytelling subtitle.
+- "Today's Alert Activity" fake bar chart + 4-button stats strip.
+- 4 secondary KPI cards (Students total, Teachers, Revenue, Salary due).
+- 6 colorful gradient Quick Action tiles.
+- 48×48 primary date tile → 28×28 muted chip.
+- Class 2-A Top Performers card (duplicate of Exams module's Session Top Performers).
+- Medal emojis 🥇🥈🥉.
+- Hardcoded "23" admission applications count.
+- "+72M surplus" fake StatusBadge on chart 1.
+- Legacy `ChartCard` wrapper + `GlassCard` + `StatusBadge` + `GradientAvatar` (all replaced by shared `Panel` + `Avatar` + canonical dot+pill patterns).
+
+**Net effect**:
+- The Dashboard now feels like the same product as Examinations and Attendance: same `PageTransition` shell, same 4-`SummaryCard` KPI row, same flat `Panel` sections, same smooth `AreaTrendChart` + `DonutChart` in flat panels (no boxed `ChartCard`), same h-8 text-xs button language with emerald primary, same shadcn `<Table>` with `text-[10px] uppercase tracking-wider` header, same shared `<Avatar>` for student rows, same dot+pill status badges, same hover:bg-muted/40 row hover, same "View X →" ghost links navigating to the relevant module.
+
+---
+Task ID: FINAL-3
+Agent: main
+Task: Dashboard + visual identity refinement — Dashboard matches Academics, Certificates/Downloads restored document identity
+
+Work Log:
+- Launched 3 parallel audits (DASH-A Dashboard structure, DASH-B shared primitives, DASH-C Certificates/Downloads visual).
+- Created shared Avatar component (src/components/shared/avatar.tsx) — deterministic gradient + photo support + xs/sm/md/lg/xl sizes + circle/square + ring option. GradientAvatar re-exported for backward compat (60+ callers).
+- Created shared document primitives (src/components/shared/document-primitives.tsx) — DocumentThumbnail (paper silhouette + format edge stripe + glyph), FileTypeBadge, DocumentIcon, DocumentCard (with selected state), DOC_TYPE_META (7 cert doc types + format metadata), CategoryPill. Single emerald accent for certs, semantic format tints for file types.
+- Launched 2 parallel refinement agents:
+  • DASH-1 Dashboard redesign: 8→4 KPIs (SummaryCard), giant red LiveAlerts→compact Principal Attention Panel, 7→3 toolbar buttons + More dropdown, dropped fake alert activity bar chart, charts in flat Panel + smooth AreaTrendChart, 6 gradient Quick Action tiles→6 flat h-8 buttons all wired to navigation, Notice Board wired to communication-store + View all, Recent Admissions→shadcn Table + shared Avatar + real admission store data, Events Row 3→2 cards (dropped duplicate Top Performers), ~120 LOC dead code removed, ~15 navigation actions wired.
+  • DASH-2 Certificates + Downloads restoration: Certificates generate-tab tiny 3-col cards→larger 2-col DocumentCards with strong selected state, SelectedDocChip upgraded with DocumentThumbnail, preview empty state→document canvas, history doc-type indicator bumped, Downloads document list→DocumentThumbnail with format edge stripes, Quick Access chips→document card grid, detail drawer renders actual CertificatePreview/MarksheetPreview/IDCardPreview for generated docs, gradient CTA→solid emerald.
+- VLM-verified: Dashboard no giant red container, 4 KPIs, compact Principal Attention, smooth line charts in flat containers. Certificates larger document cards with thumbnails + category badges. Downloads document thumbnails with format edge stripes. Dashboard vs Examinations rated 9/10 visual consistency.
+- Browser console: clean (no errors, no hydration warnings).
+- ESLint: 0 errors. Server: HTTP 200, up 3h12m. Memory: 1345MB / 4GB.
+
+Stage Summary:
+- Dashboard refinement COMPLETE. The Dashboard now matches Academics visual DNA: same PageTransition shell, same 4 SummaryCard KPIs, same flat Panel sections, same smooth AreaTrendChart + DonutChart, same h-8 button language, same shadcn Table + shared Avatar.
+- Shared primitives created: Avatar (deterministic initials + photo), document primitives (DocumentThumbnail, FileTypeBadge, DocumentIcon, DocumentCard).
+- Certificates restored document workspace identity (larger cards, strong selected state, real previews). Downloads restored document library identity (thumbnails, format edge stripes, real cert previews in drawer).
+- All functionality preserved: real data (auth, admission store, fee store, salary store, calendar events), all navigation wired, all stores intact.
+- Committed and pushed to main, stable, development.

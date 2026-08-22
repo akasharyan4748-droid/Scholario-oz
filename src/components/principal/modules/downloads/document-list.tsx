@@ -28,9 +28,13 @@ import {
   type DownloadDocument,
 } from '@/lib/store/downloads-store'
 import {
-  DocIcon, FormatBadge, SourceBadge, CategoryPill,
+  SourceBadge, CategoryPill,
   DownloadsEmptyState, docDescriptionLabel,
 } from './downloads-shared'
+import {
+  DocumentThumbnail, FileTypeBadge,
+} from '@/components/shared/document-primitives'
+import type { DocFormat } from '@/components/shared/document-primitives'
 
 interface DocumentListProps {
   onSelectDoc: (doc: DownloadDocument) => void
@@ -143,10 +147,12 @@ export function DocumentList({ onSelectDoc }: DocumentListProps) {
                     'hover:bg-emerald-50/40 dark:hover:bg-emerald-500/[0.04]',
                   )}
                 >
-                  {/* Document cell — icon + name + description */}
+                  {/* Document cell — DocumentThumbnail (paper silhouette +
+                      format edge stripe) + name + description. Reads like
+                      a real document, not an icon tile. */}
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <DocIcon format={doc.format} size="md" />
+                      <DocumentThumbnail format={doc.format as DocFormat} size="sm" />
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-foreground leading-tight truncate">
                           {doc.name}
@@ -174,9 +180,9 @@ export function DocumentList({ onSelectDoc }: DocumentListProps) {
                     <SourceBadge source={doc.source} />
                   </td>
 
-                  {/* Format */}
+                  {/* Format — FileTypeBadge from shared primitives */}
                   <td className="px-3 py-2.5">
-                    <FormatBadge format={doc.format} />
+                    <FileTypeBadge format={doc.format as DocFormat} />
                   </td>
 
                   {/* Updated date */}

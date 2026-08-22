@@ -41,6 +41,7 @@ import {
   CertificatePreview, MarksheetPreview, IDCardPreview, FeeReceiptPreview,
   type MarksheetData,
 } from './previews'
+import { DocumentIcon } from '@/components/shared/document-primitives'
 import { useStudentsStore } from '@/lib/store/students-store'
 import type { StudentRecord } from '@/lib/store/students-store'
 import { useFeeStore } from '@/lib/store/fee-store'
@@ -213,15 +214,13 @@ export function HistoryTab() {
               <tbody>
                 {filtered.map((doc) => {
                   const d = DOC_TYPE_BY_LABEL[doc.docType]
-                  const Icon = d.icon
                   return (
                     <tr key={doc.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          {/* Small neutral icon chip — single emerald accent (consistent with doc-type grid) */}
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                            <Icon className="h-3.5 w-3.5" />
-                          </span>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          {/* Larger doc-type indicator — DocumentIcon size md (h-10 w-10)
+                              with the doc-type's emerald-tinted icon. Single emerald accent. */}
+                          <DocumentIcon docType={doc.docType} size="md" />
                           <div className="min-w-0">
                             <p className="font-medium truncate">{doc.studentName || '—'}</p>
                             <p className="text-[9px] text-muted-foreground truncate">
@@ -230,19 +229,19 @@ export function HistoryTab() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2.5">
                         {/* Neutral muted pill — color no longer differentiates types; the label does. */}
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-muted text-muted-foreground">
-                          {doc.docType}
+                          {d.short}
                         </span>
                       </td>
-                      <td className="px-3 py-2 font-mono text-[11px] font-semibold text-foreground">{doc.docNumber}</td>
-                      <td className="px-3 py-2 hidden md:table-cell text-[10px] text-muted-foreground">{doc.templateName}</td>
-                      <td className="px-3 py-2 hidden sm:table-cell text-[10px] text-muted-foreground">
+                      <td className="px-3 py-2.5 font-mono text-[11px] font-semibold text-foreground">{doc.docNumber}</td>
+                      <td className="px-3 py-2.5 hidden md:table-cell text-[10px] text-muted-foreground">{doc.templateName}</td>
+                      <td className="px-3 py-2.5 hidden sm:table-cell text-[10px] text-muted-foreground">
                         {formatDate(doc.generatedAt)}
                       </td>
-                      <td className="px-3 py-2"><DocStatusBadge status={doc.status} /></td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2.5"><DocStatusBadge status={doc.status} /></td>
+                      <td className="px-3 py-2.5">
                         {/* Primary Download action + More dropdown for the rest */}
                         <div className="flex items-center justify-end gap-1">
                           <Button

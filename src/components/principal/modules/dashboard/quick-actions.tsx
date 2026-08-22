@@ -1,100 +1,173 @@
 'use client'
 
+/**
+ * QuickActionsRow — compact flat action buttons + Notice Board.
+ *
+ * Redesigned (DASH-1) from 6 colorful gradient tiles (with NO onClick
+ * handlers — all dead) into:
+ *   - "Quick Actions" Panel with a compact row of flat h-8 buttons:
+ *       New Admission (primary emerald) → admission
+ *       Mark Attendance → attendance
+ *       Collect Fees → fees
+ *       Create Examination → exams
+ *       Add Notice (secondary) → communication
+ *       Pay Salary (secondary) → salary
+ *     All wired to `onNavigate(moduleKey)`.
+ *   - "Notice Board" Panel with 4 latest announcements from the shared
+ *     communication store (with fallback to mock). Each row uses the
+ *     Academics pattern: small category chip + title + meta. "View all"
+ *     is wired to `onNavigate('communication')`.
+ *
+ * Removed: 6 colorful gradient tiles + their h-9 w-9 icon tiles.
+ */
+
 import { motion } from 'framer-motion'
 import {
   UserPlus, CalendarCheck, IndianRupee, FileText, Megaphone, Wallet,
   ArrowUpRight,
 } from 'lucide-react'
-import { GlassCard, StatusBadge } from '@/components/shared/ui'
-import { announcements } from '@/lib/mock/operations'
+import { Panel } from '../shared/panel'
+import { useCommunicationStore } from '@/lib/store/communication-store'
+import { announcements as mockAnnouncements } from '@/lib/mock/operations'
+import { cn } from '@/lib/utils'
 
-// Quick Actions card — 6 gradient-tile shortcut buttons for the most common
-// principal workflows (New Admission, Mark Attendance, Collect Fees, etc.).
-function QuickActionsCard() {
-  const actions = [
-    { label: 'New Admission', icon: <UserPlus className="h-4 w-4" />, color: 'from-emerald-500 to-teal-600' },
-    { label: 'Mark Attendance', icon: <CalendarCheck className="h-4 w-4" />, color: 'from-cyan-500 to-sky-600' },
-    { label: 'Collect Fees', icon: <IndianRupee className="h-4 w-4" />, color: 'from-amber-500 to-orange-600' },
-    { label: 'Create Exam', icon: <FileText className="h-4 w-4" />, color: 'from-violet-500 to-purple-600' },
-    { label: 'Add Notice', icon: <Megaphone className="h-4 w-4" />, color: 'from-rose-500 to-pink-600' },
-    { label: 'Pay Salary', icon: <Wallet className="h-4 w-4" />, color: 'from-lime-500 to-green-600' },
+export interface QuickActionsRowProps {
+  onNavigate?: (module: string) => void
+}
+
+// ─── Quick Actions ───────────────────────────────────────────────────
+
+interface ActionDef {
+  label: string
+  icon: React.ReactNode
+  navKey: string
+  /** 'primary' = emerald solid, 'secondary' = subtle outline. */
+  variant: 'primary' | 'secondary'
+}
+
+function QuickActionsCard({ onNavigate }: { onNavigate?: (m: string) => void }) {
+  const actions: ActionDef[] = [
+    { label: 'New Admission', icon: <UserPlus className="h-3.5 w-3.5" />, navKey: 'admission', variant: 'primary' },
+    { label: 'Mark Attendance', icon: <CalendarCheck className="h-3.5 w-3.5" />, navKey: 'attendance', variant: 'secondary' },
+    { label: 'Collect Fees', icon: <IndianRupee className="h-3.5 w-3.5" />, navKey: 'fees', variant: 'secondary' },
+    { label: 'Create Exam', icon: <FileText className="h-3.5 w-3.5" />, navKey: 'exams', variant: 'secondary' },
+    { label: 'Add Notice', icon: <Megaphone className="h-3.5 w-3.5" />, navKey: 'communication', variant: 'secondary' },
+    { label: 'Pay Salary', icon: <Wallet className="h-3.5 w-3.5" />, navKey: 'salary', variant: 'secondary' },
   ]
+
   return (
-    <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-1">
-      <h3 className="font-semibold text-sm mb-4">Quick Actions</h3>
-      <div className="grid grid-cols-2 gap-2.5">
-        {actions.map((a, i) => (
-          <motion.button
+    <Panel title="Quick Actions" subtitle="Frequent principal workflows">
+      <div className="flex flex-wrap gap-2">
+        {actions.map((a) => (
+          <button
             key={a.label}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: i * 0.05 }}
-            whileHover={{ y: -2, scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            className="group flex flex-col items-start gap-2 rounded-xl border border-border bg-card/50 p-3 text-left hover:shadow-premium transition-shadow"
+            onClick={() => onNavigate?.(a.navKey)}
+            className={cn(
+              'inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition-colors',
+              a.variant === 'primary'
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                : 'border border-border bg-card hover:bg-muted/60 text-foreground',
+            )}
           >
-            <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${a.color} text-white shadow-md`}>
+            <span className={cn(a.variant === 'primary' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400')}>
               {a.icon}
-            </div>
-            <span className="text-xs font-medium leading-tight">{a.label}</span>
-          </motion.button>
+            </span>
+            {a.label}
+          </button>
         ))}
       </div>
-    </GlassCard>
+    </Panel>
   )
 }
 
-// Notice Board card — surfaces the latest 4 announcements with category-coded
-// icon chips and a "View all" link.
-function NoticeBoardCard() {
+// ─── Notice Board ─────────────────────────────────────────────────────
+
+const CATEGORY_TONES: Record<string, string> = {
+  Urgent: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+  Event: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  Holiday: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  Academic: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  General: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
+}
+
+function NoticeBoardCard({ onNavigate }: { onNavigate?: (m: string) => void }) {
+  // Prefer the real communication-store announcements (which has the latest
+  // created/scheduled/pinned notices); fall back to mock if the store is empty.
+  const storeAnnouncements = useCommunicationStore((s) => s.announcements)
+  const notices = storeAnnouncements.length > 0
+    ? storeAnnouncements.slice(0, 4).map((a) => ({
+        id: a.id,
+        title: a.title,
+        content: a.message,
+        category: a.category,
+        postedBy: a.author,
+        date: a.createdAt,
+      }))
+    : mockAnnouncements.slice(0, 4).map((a) => ({
+        id: a.id,
+        title: a.title,
+        content: a.content,
+        category: a.category,
+        postedBy: a.postedBy,
+        date: a.date,
+      }))
+
   return (
-    <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-sm">Notice Board & Announcements</h3>
-        <button className="text-xs text-primary font-medium hover:underline flex items-center gap-1">
-          View all <ArrowUpRight className="h-3 w-3" />
+    <Panel
+      title="Notice Board"
+      subtitle="Latest announcements"
+      action={
+        <button
+          onClick={() => onNavigate?.('communication')}
+          className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-[11px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+          title="Open Communication"
+        >
+          View all
+          <ArrowUpRight className="h-3 w-3" />
         </button>
-      </div>
-      <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-        {announcements.slice(0, 4).map((a, i) => (
+      }
+    >
+      <div className="space-y-2 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+        {notices.map((a, i) => (
           <motion.div
             key={a.id}
-            initial={{ opacity: 0, x: -12 }}
+            initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.08 }}
-            className="flex gap-3 rounded-xl border border-border bg-card/40 p-3 hover:bg-accent/40 transition-colors"
+            transition={{ delay: i * 0.06 }}
+            className="flex items-start gap-2.5 rounded-md px-2.5 py-2 hover:bg-muted/40 transition-colors cursor-pointer"
+            onClick={() => onNavigate?.('communication')}
           >
-            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-              a.category === 'Urgent' ? 'bg-rose-500/10 text-rose-600' :
-              a.category === 'Event' ? 'bg-emerald-500/10 text-emerald-600' :
-              a.category === 'Holiday' ? 'bg-amber-500/10 text-amber-600' :
-              a.category === 'Academic' ? 'bg-violet-500/10 text-violet-600' :
-              'bg-cyan-500/10 text-cyan-600'
-            }`}>
-              <Megaphone className="h-4 w-4" />
-            </div>
+            <span className={cn(
+              'inline-flex items-center justify-center h-6 w-6 shrink-0 rounded-md text-[9px] font-bold uppercase tracking-wider',
+              CATEGORY_TONES[a.category] ?? CATEGORY_TONES.General,
+            )}>
+              {a.category.slice(0, 3)}
+            </span>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-semibold text-sm">{a.title}</p>
-                <StatusBadge status={a.category} variant={a.category === 'Urgent' ? 'danger' : a.category === 'Event' ? 'success' : 'neutral'} />
-              </div>
-              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{a.content}</p>
-              <p className="text-[10px] text-muted-foreground/70 mt-1">{a.postedBy} · {new Date(a.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+              <p className="text-xs font-medium text-foreground truncate">{a.title}</p>
+              <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{a.content}</p>
+              <p className="text-[10px] text-muted-foreground/70 mt-1">
+                {a.postedBy} · {new Date(a.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+              </p>
             </div>
           </motion.div>
         ))}
       </div>
-    </GlassCard>
+    </Panel>
   )
 }
 
-// QuickActionsRow — composes the Quick Actions + Notice Board cards in a
-// single responsive grid row.
-export function QuickActionsRow() {
+// ─── Composition ─────────────────────────────────────────────────────
+
+export function QuickActionsRow({ onNavigate }: QuickActionsRowProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-      <QuickActionsCard />
-      <NoticeBoardCard />
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="lg:col-span-1">
+        <QuickActionsCard onNavigate={onNavigate} />
+      </div>
+      <div className="lg:col-span-2">
+        <NoticeBoardCard onNavigate={onNavigate} />
+      </div>
     </div>
   )
 }

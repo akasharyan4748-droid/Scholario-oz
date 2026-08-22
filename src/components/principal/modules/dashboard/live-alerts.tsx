@@ -1,9 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Megaphone } from 'lucide-react'
-import { GlassCard } from '@/components/shared/ui'
 import { useLiveAlerts, getNextSimulatedAlert } from '@/lib/store/live-alerts-store'
 import { toast } from 'sonner'
 import {
@@ -11,15 +8,35 @@ import {
 } from './data'
 import { LiveAlertsToolbar } from './live-alerts-toolbar'
 import { LiveAlertsContent } from './live-alerts-content'
+import { Panel } from '../shared/panel'
 
-// Live Operations Alerts — the principal's real-time critical event feed.
-// Holds the shared state (snooze menus, auto-alert countdown) + the action
-// toolbar. The list itself + stats strip + filters live in
-// `live-alerts-content.tsx`; the toolbar lives in `live-alerts-toolbar.tsx`
-// so each file stays well under 300 lines.
-export function LiveAlerts() {
+export interface LiveAlertsProps {
+  onNavigate?: (module: string) => void
+}
+
+/**
+ * LiveAlerts — compact "Principal Attention" panel.
+ *
+ * Redesigned (DASH-1) from a giant red container with:
+ *   - h-44 blur blob, h-11 gradient Megaphone hero, ping/pulse badges
+ *   - 7 toolbar buttons including 3 demo features (Simulate, Auto, Reset)
+ *   - 4-button stats strip (redundant with the list itself)
+ *   - "Today's Alert Activity" fake bar chart
+ *   - storytelling subtitle
+ *
+ * Into a flat `Panel` with:
+ *   - "Principal Attention" title + small "N active · M critical" meta
+ *   - 3 real actions (Resolve All, Snooze All, More) using the shared
+ *     `LiveAlertsToolbar` (More hides Simulate/Auto/Reset/Restore)
+ *   - the alert list itself (kept) wired so clicking a row navigates to
+ *     the alert's `navKey` module via `onNavigate`
+ *
+ * The Zustand store (`live-alerts-store`) is preserved unchanged — only the
+ * visual presentation was rebuilt.
+ */
+export function LiveAlerts({ onNavigate }: LiveAlertsProps) {
   const {
-    alerts: storeAlerts, dismissed, snoozed, severityFilter, activityLog,
+    alerts: storeAlerts, dismissed, snoozed, severityFilter,
     autoAlertsEnabled, toggleAutoAlerts, resolve, resolveAll, restore, reset,
     snooze, snoozeAll, unsnooze, addAlert, clearNewFlag, setSeverityFilter,
   } = useLiveAlerts()
@@ -87,7 +104,11 @@ export function LiveAlerts() {
   }
 
   const handleAlertClick = (alert: LiveAlertWithIcon) => {
-    toast.info('Navigating…', { description: `Opening ${alert.navKey} module for: ${alert.title}` })
+    if (onNavigate) {
+      onNavigate(alert.navKey)
+    } else {
+      toast.info('Navigating…', { description: `Opening ${alert.navKey} module for: ${alert.title}` })
+    }
   }
 
   const handleResetAll = () => {
@@ -96,7 +117,7 @@ export function LiveAlerts() {
     toast.info('Alerts reset', { description: 'All alerts restored to initial state' })
   }
 
-  // Auto-arriving alerts with countdown
+  // Auto-arriving alerts with countdown (kept — same store behaviour)
   const [countdown, setCountdown] = useState(30)
   useEffect(() => {
     if (!autoAlertsEnabled) {
@@ -119,80 +140,58 @@ export function LiveAlerts() {
     return () => clearInterval(tickInterval)
   }, [autoAlertsEnabled, addAlert, clearNewFlag])
 
+  const criticalCount = alerts.filter((a) => a.severity === 'critical').length
+  const activeCount = alerts.length
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.28, ease: [0.22, 1, 0.36, 1] }}
-    >
-      <GlassCard className="relative overflow-hidden p-4 sm:p-5 lg:p-6 border-l-4 border-l-rose-500">
-        <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-rose-500/10 blur-3xl pointer-events-none" />
-        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <div className="flex items-start gap-3.5">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.35, type: 'spring', stiffness: 200 }}
-              className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-md shadow-rose-500/25"
-            >
-              <Megaphone className="h-5 w-5" />
-              <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500" />
-              </span>
-            </motion.div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-display text-base sm:text-lg font-bold tracking-tight">Live Operations Alerts</h3>
-                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                  <span className="flex h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
-                  Live
-                </span>
-                {alerts.length > 0 && (
-                  <span className="rounded-full bg-foreground/5 px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
-                    {alerts.length} active
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Real-time critical events requiring principal attention · click to investigate, resolve to dismiss
-              </p>
-            </div>
-          </div>
-
-          <LiveAlertsToolbar
-            alertsLength={alerts.length}
-            dismissedCount={dismissed.length}
-            snoozedCount={snoozed.length}
-            autoAlertsEnabled={autoAlertsEnabled}
-            countdown={countdown}
-            snoozeAllMenuOpen={snoozeAllMenuOpen}
-            setSnoozeAllMenuOpen={setSnoozeAllMenuOpen}
-            onResolveAll={handleResolveAll}
-            onSnoozeAll={handleSnoozeAll}
-            onSimulateNewAlert={handleSimulateNewAlert}
-            onToggleAutoAlerts={toggleAutoAlerts}
-            onResetAll={handleResetAll}
-            onRestore={handleRestore}
-          />
-        </div>
-
-        <LiveAlertsContent
-          alerts={alerts}
-          dismissed={dismissed}
-          snoozed={snoozed}
-          severityFilter={severityFilter}
-          activityLog={activityLog}
-          snoozeMenuFor={snoozeMenuFor}
-          setSnoozeMenuFor={setSnoozeMenuFor}
-          setSeverityFilter={setSeverityFilter}
-          onResolve={handleResolve}
-          onSnooze={handleSnooze}
-          onUnsnooze={handleUnsnooze}
+    <Panel
+      title="Principal Attention"
+      action={
+        <LiveAlertsToolbar
+          alertsLength={alerts.length}
+          dismissedCount={dismissed.length}
+          snoozedCount={snoozed.length}
+          autoAlertsEnabled={autoAlertsEnabled}
+          countdown={countdown}
+          snoozeAllMenuOpen={snoozeAllMenuOpen}
+          setSnoozeAllMenuOpen={setSnoozeAllMenuOpen}
+          onResolveAll={handleResolveAll}
+          onSnoozeAll={handleSnoozeAll}
+          onSimulateNewAlert={handleSimulateNewAlert}
+          onToggleAutoAlerts={toggleAutoAlerts}
+          onResetAll={handleResetAll}
           onRestore={handleRestore}
-          onAlertClick={handleAlertClick}
         />
-      </GlassCard>
-    </motion.div>
+      }
+      subtitle={
+        <span className="inline-flex items-center gap-2">
+          <span className="inline-flex items-center gap-1">
+            <span className={`h-1.5 w-1.5 rounded-full ${activeCount > 0 ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+            <span>{activeCount} active</span>
+          </span>
+          {criticalCount > 0 && (
+            <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+              <span>{criticalCount} critical</span>
+            </span>
+          )}
+        </span>
+      }
+    >
+      <LiveAlertsContent
+        alerts={alerts}
+        dismissed={dismissed}
+        snoozed={snoozed}
+        severityFilter={severityFilter}
+        snoozeMenuFor={snoozeMenuFor}
+        setSnoozeMenuFor={setSnoozeMenuFor}
+        setSeverityFilter={setSeverityFilter}
+        onResolve={handleResolve}
+        onSnooze={handleSnooze}
+        onUnsnooze={handleUnsnooze}
+        onRestore={handleRestore}
+        onAlertClick={handleAlertClick}
+      />
+    </Panel>
   )
 }

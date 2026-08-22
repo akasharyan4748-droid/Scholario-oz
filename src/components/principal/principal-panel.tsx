@@ -155,6 +155,8 @@ export function PrincipalPanel() {
     >
       {isStudentModule ? (
         <StudentsClassesModule initialTab={initialTab} />
+      ) : active === 'dashboard' ? (
+        <PrincipalDashboard onNavigate={setActive} />
       ) : (
         <ActiveModule />
       )}

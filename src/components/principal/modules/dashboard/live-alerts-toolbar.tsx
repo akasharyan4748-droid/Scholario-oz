@@ -1,14 +1,29 @@
 'use client'
 
-import type { Dispatch, SetStateAction } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { CheckCheck, Clock, Zap, Radio, RotateCcw } from 'lucide-react'
-import { toast } from 'sonner'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { CheckCheck, Clock, MoreHorizontal, RotateCcw, Zap, Radio } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { snoozeOptions } from './data'
 
-// Props for the Live Alerts action toolbar. The toolbar is split out of
-// `live-alerts.tsx` so the main component stays under 300 lines.
+/**
+ * LiveAlertsToolbar — the 3 real actions + a "More" dropdown menu.
+ *
+ * Redesigned (DASH-1) from the previous 7-button bar:
+ *   - Resolve All (emerald solid, primary action)
+ *   - Snooze All (outline, opens a small dropdown of durations)
+ *   - More (ghost, dropdown menu hiding the demo / less-used actions:
+ *     Simulate Alert, Auto-toggle, Reset All, Restore)
+ *
+ * The "View All" fake button is removed (the panel itself shows all alerts).
+ *
+ * Buttons follow the Academics h-8 text-xs language.
+ */
 export interface LiveAlertsToolbarProps {
   alertsLength: number
   dismissedCount: number
@@ -16,7 +31,7 @@ export interface LiveAlertsToolbarProps {
   autoAlertsEnabled: boolean
   countdown: number
   snoozeAllMenuOpen: boolean
-  setSnoozeAllMenuOpen: Dispatch<SetStateAction<boolean>>
+  setSnoozeAllMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void
   onResolveAll: () => void
   onSnoozeAll: (minutes: number) => void
   onSimulateNewAlert: () => void
@@ -31,134 +46,109 @@ export function LiveAlertsToolbar({
   onSimulateNewAlert, onToggleAutoAlerts, onResetAll, onRestore,
 }: LiveAlertsToolbarProps) {
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-1.5">
       {alertsLength > 0 && (
         <>
+          {/* Resolve All — primary emerald solid */}
           <button
             onClick={onResolveAll}
-            className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium transition-colors"
             title="Resolve all active alerts"
           >
-            <span className="flex items-center gap-1">
-              <CheckCheck className="h-3.5 w-3.5" />
-              Resolve All
-            </span>
+            <CheckCheck className="h-3.5 w-3.5" />
+            Resolve All
           </button>
-          {/* Snooze All dropdown */}
-          <div className="relative shrink-0">
-            <button
-              onClick={() => setSnoozeAllMenuOpen((o) => !o)}
-              className={cn(
-                'rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors',
-                snoozeAllMenuOpen && 'ring-2 ring-amber-500/30'
-              )}
-              title="Snooze all alerts"
-            >
-              <span className="flex items-center gap-1">
+
+          {/* Snooze All — outline with nested duration dropdown */}
+          <DropdownMenu
+            open={snoozeAllMenuOpen}
+            onOpenChange={setSnoozeAllMenuOpen}
+          >
+            <DropdownMenuTrigger asChild>
+              <button
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-card hover:bg-muted/60 text-foreground text-xs font-medium transition-colors"
+                title="Snooze all alerts"
+              >
                 <Clock className="h-3.5 w-3.5" />
                 Snooze All
-              </span>
-            </button>
-            <AnimatePresence>
-              {snoozeAllMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setSnoozeAllMenuOpen(false)} />
-                  <motion.div
-                    initial={{ opacity: 0, y: -4, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -4, scale: 0.95 }}
-                    transition={{ duration: 0.12 }}
-                    className="absolute right-0 top-9 z-50 w-44 rounded-xl border border-border bg-card shadow-premium-lg p-1.5"
-                  >
-                    <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Snooze all for…</p>
-                    {snoozeOptions.map((opt) => (
-                      <button
-                        key={opt.minutes}
-                        onClick={() => onSnoozeAll(opt.minutes)}
-                        className="w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-accent transition-colors text-left"
-                      >
-                        <div>
-                          <p className="font-semibold text-foreground">{opt.label}</p>
-                          <p className="text-[10px] text-muted-foreground">{opt.desc}</p>
-                        </div>
-                        <Clock className="h-3 w-3 text-amber-500 shrink-0" />
-                      </button>
-                    ))}
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-          </div>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Snooze all for…
+              </div>
+              {snoozeOptions.map((opt) => (
+                <DropdownMenuItem
+                  key={opt.minutes}
+                  onClick={() => onSnoozeAll(opt.minutes)}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">{opt.label}</span>
+                    <span className="text-[10px] text-muted-foreground">{opt.desc}</span>
+                  </div>
+                  <Clock className="h-3 w-3 text-amber-500 shrink-0" />
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
       )}
-      {/* Simulate New Alert — demo feature */}
-      <button
-        onClick={onSimulateNewAlert}
-        className="shrink-0 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-600 dark:text-violet-400 hover:bg-violet-500/20 transition-colors"
-        title="Simulate a new real-time alert"
-      >
-        <span className="flex items-center gap-1">
-          <Zap className="h-3.5 w-3.5" />
-          Simulate Alert
-        </span>
-      </button>
-      {/* Auto-arriving alerts toggle with countdown */}
-      <button
-        onClick={onToggleAutoAlerts}
-        className={cn(
-          'shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
-          autoAlertsEnabled
-            ? 'border-rose-500/40 bg-rose-500/15 text-rose-600 dark:text-rose-400'
-            : 'border-border bg-card/60 text-muted-foreground hover:bg-accent hover:text-foreground'
-        )}
-        title={autoAlertsEnabled ? `Auto-alerts ON — next in ${countdown}s. Click to stop.` : 'Enable auto-arriving alerts (every 30s)'}
-      >
-        <span className="flex items-center gap-1.5">
-          <Radio className={cn('h-3.5 w-3.5', autoAlertsEnabled && 'animate-pulse')} />
-          {autoAlertsEnabled ? (
-            <span className="flex items-center gap-1">
-              <span>Next in</span>
-              <span className="font-mono font-bold tabular-nums">{countdown}s</span>
-            </span>
-          ) : (
-            <span>Auto</span>
+
+      {/* More — ghost dropdown with the demo / less-used actions */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground text-xs font-medium transition-colors"
+            title="More actions"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+            More
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuItem onClick={onSimulateNewAlert}>
+            <Zap className="h-3.5 w-3.5" />
+            <div className="flex flex-col">
+              <span>Simulate new alert</span>
+              <span className="text-[10px] text-muted-foreground">Push a fresh test alert</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onToggleAutoAlerts}>
+            <Radio className={cn('h-3.5 w-3.5', autoAlertsEnabled && 'text-rose-500')} />
+            <div className="flex flex-col">
+              <span>{autoAlertsEnabled ? 'Stop auto-alerts' : 'Enable auto-alerts'}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {autoAlertsEnabled ? `Next in ${countdown}s · click to stop` : 'Auto-arrive every 30s'}
+              </span>
+            </div>
+          </DropdownMenuItem>
+          {(dismissedCount > 0 || snoozedCount > 0) && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={onResetAll}
+                disabled={dismissedCount === 0 && snoozedCount === 0}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <div className="flex flex-col">
+                  <span>Reset to initial state</span>
+                  <span className="text-[10px] text-muted-foreground">Restore all alerts</span>
+                </div>
+              </DropdownMenuItem>
+            </>
           )}
-          {autoAlertsEnabled && (
-            <span className="flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-rose-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500" />
-            </span>
+          {dismissedCount > 0 && (
+            <DropdownMenuItem onClick={onRestore}>
+              <CheckCheck className="h-3.5 w-3.5" />
+              <div className="flex flex-col">
+                <span>Restore dismissed</span>
+                <span className="text-[10px] text-muted-foreground">{dismissedCount} dismissed alert{dismissedCount > 1 ? 's' : ''}</span>
+              </div>
+            </DropdownMenuItem>
           )}
-        </span>
-      </button>
-      {/* Reset All — restore alerts to initial state */}
-      {(dismissedCount > 0 || snoozedCount > 0) && (
-        <button
-          onClick={onResetAll}
-          className="shrink-0 rounded-lg border border-border bg-card/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          title="Reset all alerts to initial state"
-        >
-          <span className="flex items-center gap-1">
-            <RotateCcw className="h-3.5 w-3.5" />
-            Reset All
-          </span>
-        </button>
-      )}
-      {dismissedCount > 0 && (
-        <button
-          onClick={onRestore}
-          className="shrink-0 rounded-lg border border-border bg-card/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          title="Restore dismissed alerts"
-        >
-          Restore ({dismissedCount})
-        </button>
-      )}
-      <button
-        onClick={() => alertsLength > 0 && toast.info('Opening alerts center', { description: 'Full alert history & filters' })}
-        className="shrink-0 rounded-lg border border-border bg-card/60 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition-colors"
-      >
-        View All
-      </button>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
