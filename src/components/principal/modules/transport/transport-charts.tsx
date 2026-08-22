@@ -84,3 +84,13 @@ export function CapacityUtilizationChart() {
     </TptPanel>
   )
 }
+
+// Combined Transport Reports view (Route Distribution + Capacity Utilization)
+export function TransportReports() {
+  return (
+    <div className="space-y-3">
+      <RouteDistributionChart />
+      <CapacityUtilizationChart />
+    </div>
+  )
+}
