@@ -76,7 +76,6 @@ export function AssignmentsTable({
   onRemove,
 }: AssignmentsTableProps) {
   const assignments = useTransportStore((s) => s.assignments)
-  const routes = useTransportStore((s) => s.routes)
   const internalSearch = useTransportStore((s) => s.search)
   const setSearch = useTransportStore((s) => s.setSearch)
 
@@ -216,16 +215,6 @@ export function AssignmentsTable({
           </Table>
         </div>
       )}
-
-      {/* Footer hint with route capacity context */}
-      <div className="px-3 py-2 border-t border-border/40 text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
-        <Users className="h-3 w-3" />
-        <span>{assignments.length} students assigned</span>
-        <span className="text-muted-foreground/40">·</span>
-        <span className="text-amber-600 font-semibold">
-          {routes.filter((r) => r.enrolled >= r.capacity - 4).length} routes near full
-        </span>
-      </div>
     </TptPanel>
   )
 }

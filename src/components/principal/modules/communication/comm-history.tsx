@@ -10,12 +10,14 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
-  History as HistoryIcon, Search, Send, Clock, CheckCircle2, XCircle,
-  Archive, Eye, Pin, PinOff, RotateCcw,
+  History as HistoryIcon, Search, Archive, Eye, Pin, PinOff, RotateCcw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useCommunicationStore, type Announcement, type Channel } from '@/lib/store/communication-store'
-import { formatDate, formatRelativeTime } from '@/lib/format'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useCommunicationStore, type Announcement } from '@/lib/store/communication-store'
+import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
   CategoryBadge, StatusBadge, AudienceBadge, ChannelBadge,
@@ -24,6 +26,17 @@ import {
 import { toast } from 'sonner'
 
 type FilterType = 'all' | 'push' | 'sms' | 'email' | 'scheduled' | 'sent' | 'failed' | 'archived'
+
+const FILTER_OPTIONS: Array<{ value: FilterType; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'sent', label: 'Sent' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'push', label: 'Push' },
+  { value: 'sms', label: 'SMS' },
+  { value: 'email', label: 'Email' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'archived', label: 'Archived' },
+]
 
 export function HistorySection() {
   const announcements = useCommunicationStore((s) => s.announcements)
@@ -50,7 +63,7 @@ export function HistorySection() {
 
   return (
     <div className="space-y-3 max-w-7xl mx-auto">
-      {/* Search + filters */}
+      {/* Search + filter Select */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -61,29 +74,16 @@ export function HistorySection() {
             className="w-full h-8 pl-8 pr-3 text-xs rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
-        <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5 flex-wrap">
-          {([
-            { value: 'all', label: 'All' },
-            { value: 'sent', label: 'Sent' },
-            { value: 'scheduled', label: 'Scheduled' },
-            { value: 'push', label: 'Push' },
-            { value: 'sms', label: 'SMS' },
-            { value: 'email', label: 'Email' },
-            { value: 'failed', label: 'Failed' },
-            { value: 'archived', label: 'Archived' },
-          ] as const).map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFilter(f.value)}
-              className={cn(
-                'px-2.5 py-1 text-[11px] font-medium rounded transition-colors',
-                filter === f.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+          <SelectTrigger size="sm" className="h-8 text-xs w-[150px]" aria-label="Filter history">
+            <SelectValue placeholder="Filter" />
+          </SelectTrigger>
+          <SelectContent>
+            {FILTER_OPTIONS.map((f) => (
+              <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* History list */}

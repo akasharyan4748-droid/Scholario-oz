@@ -71,6 +71,11 @@ export function FeesTransactionsSection({ data, onCollect }: Props) {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
+      {/* Purpose eyebrow — distinguishes this full ledger from Collections' Recent Payments snapshot */}
+      <p className="text-[11px] text-muted-foreground">
+        <span className="font-semibold text-foreground">Full transaction ledger</span> — filter by class, mode, status or fee head, then print, download, or reprint any receipt.
+      </p>
+
       {/* Summary strip */}
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg border border-border bg-card p-2.5">

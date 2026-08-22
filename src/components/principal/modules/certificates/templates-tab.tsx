@@ -5,6 +5,13 @@
  *
  * Filter templates by document type, preview them in miniature, set a
  * default template per doc type, duplicate templates.
+ *
+ * Design language:
+ *   - Filter chips are text-only pills with a count badge — no per-type
+ *     colored icons. With the single-emerald accent, the doc-type
+ *     distinction lives in the label, not the color.
+ *   - Template cards use a neutral mini-preview pane. The DEFAULT star
+ *     is small (text-[9px] pill). Row actions are ghost h-7 icon buttons.
  */
 
 import { useState, useMemo } from 'react'
@@ -13,9 +20,6 @@ import {
   Copy, Star, Eye, X, Check, Sparkles, Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { school } from '@/lib/mock/school'
@@ -24,7 +28,7 @@ import {
   type DocType, type DocumentTemplate,
 } from '@/lib/store/certificates-store'
 import {
-  DOC_TYPES, DOC_TYPE_BY_LABEL, accentClasses, CertPanel, CertEmptyState, StylePill,
+  DOC_TYPES, CertPanel, CertEmptyState, StylePill,
 } from './cert-shared'
 import {
   CertificatePreview, MarksheetPreview, IDCardPreview, FeeReceiptPreview,
@@ -57,39 +61,23 @@ export function TemplatesTab() {
 
   return (
     <div className="space-y-4">
-      {/* Filter row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] text-muted-foreground font-semibold">Filter by type:</span>
-        <button
+      {/* Filter row — text-only pills with count badge, no per-type icons. */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <FilterChip
+          label="All"
+          count={templates.length}
+          active={filterType === 'all'}
           onClick={() => setFilterType('all')}
-          className={cn(
-            'px-2 py-1 rounded-md text-[10px] font-medium border transition-colors',
-            filterType === 'all'
-              ? 'border-foreground bg-foreground text-background'
-              : 'border-border bg-card text-muted-foreground hover:text-foreground',
-          )}
-        >
-          All ({templates.length})
-        </button>
-        {DOC_TYPES.map((d) => {
-          const count = templates.filter((t) => t.docType === d.label).length
-          const a = accentClasses(d.accent)
-          return (
-            <button
-              key={d.label}
-              onClick={() => setFilterType(d.label)}
-              className={cn(
-                'px-2 py-1 rounded-md text-[10px] font-medium border transition-colors flex items-center gap-1',
-                filterType === d.label
-                  ? 'border-foreground bg-foreground text-background'
-                  : `border-border bg-card text-muted-foreground hover:text-foreground ${a.bg}`,
-              )}
-            >
-              <d.icon className="h-3 w-3" />
-              {d.short} ({count})
-            </button>
-          )
-        })}
+        />
+        {DOC_TYPES.map((d) => (
+          <FilterChip
+            key={d.label}
+            label={d.short}
+            count={templates.filter((t) => t.docType === d.label).length}
+            active={filterType === d.label}
+            onClick={() => setFilterType(d.label)}
+          />
+        ))}
       </div>
 
       {/* Grouped grid */}
@@ -105,7 +93,6 @@ export function TemplatesTab() {
             <CertEmptyState
               icon={<Sparkles className="h-5 w-5" />}
               title="No templates match the filter"
-              description="Try a different document type filter."
             />
           )}
           {Array.from(grouped.entries()).map(([docType, tpls]) => (
@@ -147,6 +134,37 @@ export function TemplatesTab() {
   )
 }
 
+// ─── Filter chip (text-only, Academics-style) ─────────────────────────
+
+function FilterChip({ label, count, active, onClick }: {
+  label: string
+  count: number
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors',
+        active
+          ? 'border-foreground bg-foreground text-background'
+          : 'border-border bg-card text-muted-foreground hover:text-foreground',
+      )}
+    >
+      <span>{label}</span>
+      <span className={cn(
+        'inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded text-[9px] font-semibold tabular-nums',
+        active
+          ? 'bg-background/20 text-background'
+          : 'bg-muted text-muted-foreground',
+      )}>
+        {count}
+      </span>
+    </button>
+  )
+}
+
 // ─── Template group ──────────────────────────────────────────────────
 
 function TemplateGroup({
@@ -159,14 +177,14 @@ function TemplateGroup({
   onDuplicate: (t: DocumentTemplate) => void
   onToggle: (t: DocumentTemplate) => void
 }) {
-  const d = DOC_TYPE_BY_LABEL[docType]
-  const a = accentClasses(d.accent)
-  const Icon = d.icon
   return (
     <CertPanel
-      title={`${d.short} templates`}
-      subtitle={`${templates.length} templates · default used in generate flow`}
-      action={<Icon className={cn('h-4 w-4', a.text)} />}
+      title={`${docType} templates`}
+      action={
+        <span className="text-[10px] text-muted-foreground tabular-nums">
+          {templates.length} {templates.length === 1 ? 'template' : 'templates'}
+        </span>
+      }
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {templates.map((t) => (
@@ -193,28 +211,24 @@ function TemplateCard({
   onDuplicate: () => void
   onToggle: () => void
 }) {
-  const d = DOC_TYPE_BY_LABEL[template.docType]
-  const a = accentClasses(d.accent)
   return (
-    <div className={cn('relative rounded-xl border overflow-hidden', a.cardBorder, 'bg-card')}>
-      {/* Mini preview */}
+    <div className="relative rounded-xl border border-border bg-card overflow-hidden">
+      {/* Mini preview — neutral background, not per-accent tinted */}
       <button
         onClick={onPreview}
-        className={cn('block w-full h-28 p-2 relative', a.cardBg, 'hover:opacity-90 transition-opacity')}
+        className="block w-full h-28 p-2 relative bg-muted/30 hover:bg-muted/50 transition-colors"
       >
         <MiniPreview template={template} />
-        <span className="absolute top-1 right-1">
-          {template.isDefault && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[8px] font-bold bg-amber-500/20 text-amber-800 dark:text-amber-300">
-              <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
-              DEFAULT
-            </span>
-          )}
-        </span>
+        {template.isDefault && (
+          <span className="absolute top-1.5 right-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+            <Star className="h-2.5 w-2.5 fill-emerald-500 text-emerald-600 dark:text-emerald-400" />
+            Default
+          </span>
+        )}
       </button>
       {/* Footer info */}
       <div className="p-2.5">
-        <div className="flex items-center gap-1.5 mb-1">
+        <div className="flex items-center gap-1.5 mb-1.5">
           <span
             className="h-2.5 w-2.5 rounded-sm shrink-0"
             style={{ background: template.accentColor }}
@@ -224,7 +238,7 @@ function TemplateCard({
         <div className="flex items-center gap-1 mb-2">
           <StylePill style={template.style} accent={template.accentColor} />
           <span className={cn(
-            'inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold',
+            'inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold',
             template.active
               ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
               : 'bg-slate-500/10 text-slate-500 line-through',
@@ -232,49 +246,51 @@ function TemplateCard({
             {template.active ? 'Active' : 'Inactive'}
           </span>
         </div>
+        {/* Row actions — ghost h-7 icon buttons, Academics pattern */}
         <div className="flex items-center gap-0.5">
           <Button
-            variant="outline" size="sm"
-            className="h-7 flex-1 text-[10px] gap-1"
+            variant="ghost" size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
             onClick={onPreview}
+            title="Preview"
           >
-            <Eye className="h-3 w-3" /> Preview
+            <Eye className="h-3.5 w-3.5" />
           </Button>
           <Button
-            variant="outline" size="sm"
-            className="h-7 px-2 text-[10px]"
+            variant="ghost" size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
             onClick={onDuplicate}
             title="Duplicate"
           >
-            <Copy className="h-3 w-3" />
+            <Copy className="h-3.5 w-3.5" />
           </Button>
           {!template.isDefault ? (
             <Button
-              variant="outline" size="sm"
-              className="h-7 px-2 text-[10px]"
+              variant="ghost" size="sm"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
               onClick={onSetDefault}
-              title="Set as default"
               disabled={!template.active}
+              title="Set as default"
             >
-              <Star className="h-3 w-3" />
+              <Star className="h-3.5 w-3.5" />
             </Button>
           ) : (
             <Button
-              variant="outline" size="sm"
-              className="h-7 px-2 text-[10px] text-amber-600"
+              variant="ghost" size="sm"
+              className="h-7 w-7 p-0 text-emerald-600 dark:text-emerald-400"
               disabled
               title="Default"
             >
-              <Check className="h-3 w-3" />
+              <Check className="h-3.5 w-3.5" />
             </Button>
           )}
           <Button
-            variant="outline" size="sm"
-            className="h-7 px-2 text-[10px]"
+            variant="ghost" size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
             onClick={onToggle}
             title={template.active ? 'Deactivate' : 'Activate'}
           >
-            {template.active ? <X className="h-3 w-3" /> : <Trash2 className="h-3 w-3" />}
+            {template.active ? <X className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
           </Button>
         </div>
       </div>

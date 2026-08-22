@@ -4,25 +4,31 @@
  * comm-announcements — primary view with recent announcements + Notice Board.
  *
  * Layout:
- *   - Compact summary chips (Active, Scheduled, Sent this month)
+ *   - Compact control row: search + single filter Select
  *   - Announcement list (left, 2/3 width)
- *   - Notice Board (right, 1/3 width) — only pinned/important/upcoming
+ *   - Notice Board (right, 1/3 width) — only pinned/important + upcoming
  *
  * Each announcement card:
  *   icon · title · category badge · audience badge · message · author + date · status · actions
  *
  * Actions: View · Pin/Unpin · Duplicate · Archive
+ *
+ * Counts (Active / Scheduled / Drafts) are shown ONCE in the comm-shell
+ * header summary pills — NOT duplicated as chips here.
  */
 
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Megaphone, Pin, PinOff, Copy, Archive, Eye, MoreHorizontal, Bell,
-  Clock, Calendar, CheckCircle2, AlertCircle,
+  Clock, Calendar, AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { useCommunicationStore, type Announcement } from '@/lib/store/communication-store'
-import { school } from '@/lib/mock/school'
+import { upcomingEvents } from '@/lib/mock/operations'
 import { formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
@@ -36,6 +42,8 @@ interface Props {
   onNavigate: (tab: CommTab) => void
 }
 
+type AnnouncementFilter = 'all' | 'active' | 'scheduled' | 'draft'
+
 export function AnnouncementsSection({ onNavigate }: Props) {
   const announcements = useCommunicationStore((s) => s.announcements)
   const pinAnnouncement = useCommunicationStore((s) => s.pinAnnouncement)
@@ -43,20 +51,13 @@ export function AnnouncementsSection({ onNavigate }: Props) {
   const duplicateAnnouncement = useCommunicationStore((s) => s.duplicateAnnouncement)
 
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<'all' | 'active' | 'scheduled' | 'draft'>('all')
+  const [filter, setFilter] = useState<AnnouncementFilter>('all')
   const [moreMenuOpen, setMoreMenuOpen] = useState<string | null>(null)
   const [viewing, setViewing] = useState<Announcement | null>(null)
 
   // Active announcements (not archived)
   const active = useMemo(() => announcements.filter((a) => !a.archived), [announcements])
   const pinned = useMemo(() => active.filter((a) => a.pinned), [active])
-  const scheduled = useMemo(() => active.filter((a) => a.status === 'Scheduled'), [active])
-  const drafts = useMemo(() => active.filter((a) => a.status === 'Draft'), [active])
-  const sentThisMonth = useMemo(() => active.filter((a) => {
-    const d = new Date(a.sentAt ?? a.createdAt)
-    const now = new Date()
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-  }), [active])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -76,7 +77,7 @@ export function AnnouncementsSection({ onNavigate }: Props) {
 
   return (
     <div className="space-y-3 max-w-7xl mx-auto">
-      {/* Compact summary chips */}
+      {/* Compact control row: search + filter Select */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <input
@@ -86,36 +87,17 @@ export function AnnouncementsSection({ onNavigate }: Props) {
             className="w-full h-8 pl-3 pr-3 text-xs rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
-        <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5">
-          {[
-            { value: 'all', label: 'All' },
-            { value: 'active', label: 'Active' },
-            { value: 'scheduled', label: 'Scheduled' },
-            { value: 'draft', label: 'Drafts' },
-          ].map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFilter(f.value as any)}
-              className={cn(
-                'px-2.5 py-1 text-[11px] font-medium rounded transition-colors',
-                filter === f.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold tabular-nums">
-            <CheckCircle2 className="h-2.5 w-2.5" /> {sentThisMonth.length} sent this month
-          </span>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold tabular-nums">
-            <Clock className="h-2.5 w-2.5" /> {scheduled.length} scheduled
-          </span>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-semibold tabular-nums">
-            {active.length} active
-          </span>
-        </div>
+        <Select value={filter} onValueChange={(v) => setFilter(v as AnnouncementFilter)}>
+          <SelectTrigger size="sm" className="h-8 text-xs w-[140px]" aria-label="Filter announcements">
+            <SelectValue placeholder="Filter" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="scheduled">Scheduled</SelectItem>
+            <SelectItem value="draft">Drafts</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Main grid: announcements + notice board */}
@@ -182,16 +164,13 @@ export function AnnouncementsSection({ onNavigate }: Props) {
               )}
             </div>
 
-            {/* Upcoming from related calendar events */}
+            {/* Upcoming from canonical calendar events */}
             {pinned.length > 0 && pinned.length < 4 && (
               <div className="mt-3 pt-3 border-t border-border/40">
                 <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Upcoming</p>
                 <div className="space-y-1">
-                  {[
-                    { title: 'Inter-House Quiz', date: '2025-12-05', tag: 'Competition' },
-                    { title: 'Science Exhibition', date: '2025-12-12', tag: 'Exhibition' },
-                  ].map((e) => (
-                    <div key={e.title} className="flex items-center justify-between text-[10px] rounded-md px-1.5 py-1 hover:bg-muted/30">
+                  {upcomingEvents.slice(0, 3).map((e) => (
+                    <div key={e.id} className="flex items-center justify-between text-[10px] rounded-md px-1.5 py-1 hover:bg-muted/30">
                       <span className="font-medium truncate">{e.title}</span>
                       <span className="text-muted-foreground tabular-nums shrink-0">{formatDate(e.date)}</span>
                     </div>

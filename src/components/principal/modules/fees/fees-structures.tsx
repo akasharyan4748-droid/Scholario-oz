@@ -12,7 +12,7 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Layers, Pencil, Copy, Users, History, Plus, Archive, Check, X, ShieldCheck,
+  Layers, Copy, Users, History, Plus, Check, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,14 +54,10 @@ export function FeesStructuresSection({ data }: { data: ReturnType<typeof useFee
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* Version safety banner */}
-      <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 p-2.5 flex items-start gap-2">
-        <ShieldCheck className="h-3.5 w-3.5 text-sky-600 shrink-0 mt-0.5" />
-        <div className="text-[11px] text-muted-foreground">
-          <p className="font-semibold text-sky-700 dark:text-sky-300">Fee Structure History</p>
-          <p className="mt-0.5">New fee plans will use the updated structure. Previous payments remain unchanged.</p>
-        </div>
-      </div>
+      {/* Versioning note: the "Fee Structure History" banner is intentionally
+          omitted here — it lives once in Settings (Fees → Settings) to avoid
+          a 4-file verbatim duplication. The structure cards below carry their
+          own v{n} badge which conveys the same versioning information. */}
 
       {/* Structure grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

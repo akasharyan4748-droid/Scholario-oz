@@ -29,7 +29,7 @@ import type { InventoryItem, MovementType } from '@/lib/store/inventory-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { InvPanel, InvEmptyState, ItemStatusBadge, MovementTypeBadge, InvPill } from './inventory-shared'
+import { InvPanel, InvEmptyState, ItemStatusBadge, MovementTypeBadge } from './inventory-shared'
 import { DonutChart } from "@/components/shared/premium-charts"
 
 // ─── Movement icon + sign helper ────────────────────────────────────
@@ -278,8 +278,7 @@ export function CategoryValueDistribution() {
 
 // ─── InventoryReports (combined for the Reports tab) ────────────────
 
-export function InventoryReports({ onAddStock }: { onAddStock: (item: InventoryItem) => void }) {
-  const data = useInventoryData()
+export function InventoryReports() {
   const movements = useInventoryStore((s) => s.movements)
 
   // Movement type breakdown
@@ -330,10 +329,6 @@ export function InventoryReports({ onAddStock }: { onAddStock: (item: InventoryI
           )}
         </InvPanel>
       </div>
-
-      <LowStockAlerts onAddStock={onAddStock} />
-
-      <StockMovementLog />
     </div>
   )
 }

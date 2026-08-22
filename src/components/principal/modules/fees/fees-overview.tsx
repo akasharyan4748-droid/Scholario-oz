@@ -40,7 +40,7 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
           label="Total Expected"
           value={formatINR(analytics.totalExpected, true)}
           sub={`${data.accounts.length} students`}
-          accent="emerald"
+          accent="slate"
           delay={0}
           onClick={() => onNavigate('structures')}
         />
@@ -156,7 +156,7 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
               secondary: c.collected,
               color: c.collectionRate >= 75 ? 'oklch(0.55 0.14 162)' : c.collectionRate >= 50 ? 'oklch(0.65 0.16 75)' : 'oklch(0.62 0.2 25)',
             }))}
-            format={(n) => formatINR(n, true)}
+            formatValue={(n) => formatINR(n, true)}
             height={140}
             showSecondary
           />

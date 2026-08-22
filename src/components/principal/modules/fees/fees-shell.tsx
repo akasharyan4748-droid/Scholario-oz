@@ -71,7 +71,6 @@ export function FeesShell() {
   const [preselectStudentId, setPreselectStudentId] = useState<string | undefined>(undefined)
   const data = useFeeData(school.session)
 
-  const pendingCount = data.analytics.pendingCount + data.analytics.pendingCashRequests
   const tabBadges: Partial<Record<FeeTab, number>> = {
     dues: data.analytics.pendingCount,
     approvals: data.analytics.pendingCashRequests,
@@ -108,8 +107,9 @@ export function FeesShell() {
         <div className="px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]">Academic Year {school.academicYear}</p>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight">Financial Control Center</h1>
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]">Academic Year {school.academicYear} · {data.accounts.length} students</p>
+              <h1 className="text-base sm:text-lg font-bold tracking-tight">Fee Collections &amp; Dues</h1>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Collect payments, follow up on dues, verify cash, and audit fee transactions.</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button
@@ -128,24 +128,6 @@ export function FeesShell() {
                 <Plus className="h-3.5 w-3.5" /> Collect Payment
               </Button>
             </div>
-          </div>
-          {/* Summary pill line */}
-          <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground flex-wrap">
-            <span className="tabular-nums">Expected <span className="font-bold text-foreground">{formatINRCompact(data.analytics.totalExpected)}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">Collected <span className="font-bold text-emerald-600">{formatINRCompact(data.analytics.totalCollected)}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">Outstanding <span className="font-bold text-rose-600">{formatINRCompact(data.analytics.totalOutstanding)}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">Collection Rate <span className="font-bold text-foreground">{data.analytics.collectionRate}%</span></span>
-            {pendingCount > 0 && (
-              <>
-                <span className="text-muted-foreground/40">·</span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold tabular-nums">
-                  <AlertCircle className="h-2.5 w-2.5" /> {pendingCount} pending
-                </span>
-              </>
-            )}
           </div>
         </div>
 
@@ -222,9 +204,4 @@ export function FeesShell() {
   )
 }
 
-function formatINRCompact(n: number): string {
-  if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`
-  if (n >= 100000) return `₹${(n / 100000).toFixed(2)} L`
-  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`
-  return `₹${n}`
-}
+

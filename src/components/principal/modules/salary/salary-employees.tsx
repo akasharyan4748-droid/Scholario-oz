@@ -17,10 +17,11 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useSalaryData, useSalaryStore, calculatePayrollForEmployee, type Employee } from '@/lib/store/salary-store'
+import { useSalaryData, useSalaryStore, calculatePayrollForEmployee, type Employee, type Payslip } from '@/lib/store/salary-store'
 import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { SalaryPanel, SalaryStat, EmployeeStatusBadge, SalaryEmptyState } from './salary-shared'
+import { PayslipModal } from './salary-payslips'
 import { toast } from 'sonner'
 
 interface Props {
@@ -137,6 +138,7 @@ export function SalaryEmployeesSection({ data }: Props) {
 
 function EmployeePayrollDrawer({ employee, data, onClose }: { employee: Employee; data: ReturnType<typeof useSalaryData>; onClose: () => void }) {
   const [tab, setTab] = useState<DrawerTab>('overview')
+  const [payslipPreview, setPayslipPreview] = useState<Payslip | null>(null)
   const reviseSalary = useSalaryStore((s) => s.reviseSalary)
   const [showRevise, setShowRevise] = useState(false)
   const [newSalary, setNewSalary] = useState(employee.salary)
@@ -337,7 +339,7 @@ function EmployeePayrollDrawer({ employee, data, onClose }: { employee: Employee
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden"
                   >
-                    <SalaryPanel title="Revise Salary" subtitle="Future payroll will use the new structure. Previous payroll remains unchanged.">
+                    <SalaryPanel title="Revise Salary" subtitle="Future payroll uses the new amount.">
                       <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-2">
                           <div>
@@ -402,7 +404,7 @@ function EmployeePayrollDrawer({ employee, data, onClose }: { employee: Employee
                         <p className="text-[11px] font-medium">{p.period}</p>
                         <p className="text-[9px] text-muted-foreground font-mono">{formatINR(p.netPay, true)} · {formatDate(p.payDate)}</p>
                       </div>
-                      <Button size="sm" variant="ghost" className="h-7 text-[10px]">View</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => setPayslipPreview(p)}>View</Button>
                     </div>
                   ))}
                 </div>
@@ -441,6 +443,12 @@ function EmployeePayrollDrawer({ employee, data, onClose }: { employee: Employee
           )}
         </div>
       </motion.div>
+      {/* Payslip preview modal — renders on top of the drawer (later in DOM order, same z-50) so the user can preview a payslip without closing the drawer */}
+      <AnimatePresence>
+        {payslipPreview && (
+          <PayslipModal payslip={payslipPreview} onClose={() => setPayslipPreview(null)} />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

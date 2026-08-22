@@ -9,7 +9,7 @@
  *   - TptPanel: rounded card container with optional header + action
  *   - TptKpiCard: soft tinted background KPI card (5 accents)
  *   - TptPill: compact semantic pill
- *   - RouteStatusBadge / VehicleStatusBadge / DriverStatusBadge /
+ *   - RouteStatusBadge / VehicleStatusBadge /
  *     MaintenanceStatusBadge
  *   - GpsBadge (Active / Off)
  *   - TptEmptyState
@@ -285,25 +285,6 @@ export function MaintenanceStatusBadge({ status }: { status: MaintenanceStatus }
       className={cn(
         'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold',
         MAINT_MAP[status]
-      )}
-    >
-      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
-      {status}
-    </span>
-  )
-}
-
-export function DriverStatusBadge({ status }: { status: 'Active' | 'On Leave' | 'Inactive' }) {
-  const map: Record<string, string> = {
-    Active: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-    'On Leave': 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-    Inactive: 'bg-muted text-muted-foreground',
-  }
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold',
-        map[status]
       )}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />

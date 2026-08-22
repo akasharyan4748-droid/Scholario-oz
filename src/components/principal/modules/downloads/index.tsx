@@ -4,22 +4,24 @@
  * DownloadsModule — Document Library.
  *
  * Refined document library (NOT a card grid):
- *   · Sticky header "Document Library" + summary pills
+ *   · Sticky header "Document Library"
  *   · Search bar + category filter + sort dropdown
- *   · Category tabs: All · Recent · Generated · Forms · Templates · Reports
+ *   · Category tabs (with count badges) — counts are shown ONCE here
  *   · Quick Access row (compact, 4-5 most-used chips)
  *   · Document list (table) — rows with file-type icon, name, badges,
  *     updated date and Preview / Download / More actions
  *   · Slide-from-right detail drawer
  *
  * NO duplicate title (the sidebar already says "Downloads").
+ * NO summary pill row — the category tabs already show Total/Generated/
+ * Forms/Templates/Reports counts as badges.
  */
 
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Library, Search, Filter, ArrowUpDown, Sparkles, FileText, FileCheck2,
-  X, FileStack, Zap, Download as DownloadIcon,
+  Library, Search, Filter, ArrowUpDown, Zap,
+  X, Download as DownloadIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -120,34 +122,6 @@ export function DownloadsModule() {
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 School documents, templates &amp; generated files
               </p>
-            </div>
-
-            {/* Summary pills */}
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
-              <span className="tabular-nums inline-flex items-center gap-1">
-                <FileText className="h-2.5 w-2.5" /> Total
-                <span className="font-bold text-foreground">{counts.All}</span>
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="tabular-nums inline-flex items-center gap-1">
-                <Sparkles className="h-2.5 w-2.5" /> Generated
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">{counts.Generated}</span>
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="tabular-nums inline-flex items-center gap-1">
-                <FileCheck2 className="h-2.5 w-2.5" /> Forms
-                <span className="font-bold text-foreground">{counts.Forms}</span>
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="tabular-nums inline-flex items-center gap-1">
-                <FileStack className="h-2.5 w-2.5" /> Templates
-                <span className="font-bold text-teal-600 dark:text-teal-400">{counts.Templates}</span>
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="tabular-nums inline-flex items-center gap-1">
-                <Zap className="h-2.5 w-2.5" /> Reports
-                <span className="font-bold text-amber-600 dark:text-amber-400">{counts.Reports}</span>
-              </span>
             </div>
           </div>
 

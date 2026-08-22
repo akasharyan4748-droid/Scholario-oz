@@ -6,7 +6,7 @@
  * - Conversation header: avatar, name, role/relationship (NO fake "online" status)
  * - Message bubbles: incoming (white/light) + outgoing (Scholario green)
  * - Reply composer: textarea with Enter→send, Shift+Enter→newline
- * - Actions: Star, Archive, More (Mark unread, Urgent)
+ * - Single "More" dropdown menu containing Star, Archive, Mark unread, Urgent
  *
  * NO Call/Video buttons (not supported).
  * NO fake typing indicators.
@@ -15,7 +15,14 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Star, Archive, MoreHorizontal, AlertCircle, ArrowLeft, Check, CheckCheck } from 'lucide-react'
+import {
+  Send, Star, Archive, MoreHorizontal, AlertCircle, ArrowLeft,
+  Check, CheckCheck, MailX,
+} from 'lucide-react'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { useMessagingStore, formatMessageTime, type Message } from '@/lib/store/messaging-store'
 import { toast } from 'sonner'
@@ -33,7 +40,6 @@ export function ThreadView({ onBack, onCompose }: { onBack: () => void; onCompos
   const drafts = useMessagingStore((s) => s.drafts)
 
   const [text, setText] = useState('')
-  const [showMore, setShowMore] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const convo = conversations.find((c) => c.id === activeId)
@@ -118,61 +124,56 @@ export function ThreadView({ onBack, onCompose }: { onBack: () => void; onCompos
           <p className="text-[10px] text-muted-foreground truncate">{convo.role}</p>
         </div>
 
-        {/* Actions */}
+        {/* Actions — single More dropdown (Star + Archive + Mark unread + Urgent) */}
         <div className="flex items-center gap-0.5 shrink-0">
-          <button
-            onClick={() => { starConversation(convo.id); toast.success(convo.starred ? 'Unstarred' : 'Starred') }}
-            className="p-1.5 rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-            title={convo.starred ? 'Unstar' : 'Star'}
-          >
-            <Star className={cn('h-4 w-4', convo.starred && 'fill-amber-500 text-amber-500')} />
-          </button>
-          <button
-            onClick={() => { archiveConversation(convo.id); toast.success('Archived') }}
-            className="p-1.5 rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="Archive"
-          >
-            <Archive className="h-4 w-4" />
-          </button>
-          <div className="relative">
-            <button
-              onClick={() => setShowMore(!showMore)}
-              className="p-1.5 rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="More"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-            {showMore && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowMore(false)} />
-                <div className="absolute right-0 mt-1 w-40 rounded-md border border-border bg-card shadow-md z-20 py-1">
-                  <button
-                    onClick={() => {
-                      // Mark unread by setting unread count back
-                      const store = useMessagingStore.getState()
-                      if (store.conversations.find((c) => c.id === convo.id)) {
-                        useMessagingStore.setState({
-                          conversations: store.conversations.map((c) => c.id === convo.id ? { ...c, unread: 1 } : c),
-                        })
-                      }
-                      toast.success('Marked as unread')
-                      setShowMore(false)
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted/40 flex items-center gap-1.5"
-                  >
-                    Mark as unread
-                  </button>
-                  <button
-                    onClick={() => { markUrgent(convo.id); toast.success(convo.urgent ? 'Marked as normal' : 'Marked as urgent'); setShowMore(false) }}
-                    className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted/40 flex items-center gap-1.5 text-rose-600"
-                  >
-                    <AlertCircle className="h-3 w-3" />
-                    {convo.urgent ? 'Remove urgent' : 'Mark as urgent'}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="p-1.5 rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="More actions"
+                aria-label="More actions"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                onClick={() => { starConversation(convo.id); toast.success(convo.starred ? 'Unstarred' : 'Starred') }}
+              >
+                <Star className={cn('h-3.5 w-3.5', convo.starred && 'fill-amber-500 text-amber-500')} />
+                {convo.starred ? 'Unstar' : 'Star'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => { archiveConversation(convo.id); toast.success('Archived') }}
+              >
+                <Archive className="h-3.5 w-3.5" />
+                Archive
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  // Mark unread by setting unread count back
+                  const store = useMessagingStore.getState()
+                  if (store.conversations.find((c) => c.id === convo.id)) {
+                    useMessagingStore.setState({
+                      conversations: store.conversations.map((c) => c.id === convo.id ? { ...c, unread: 1 } : c),
+                    })
+                  }
+                  toast.success('Marked as unread')
+                }}
+              >
+                <MailX className="h-3.5 w-3.5" />
+                Mark as unread
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-rose-600 focus:text-rose-600"
+                onClick={() => { markUrgent(convo.id); toast.success(convo.urgent ? 'Marked as normal' : 'Marked as urgent') }}
+              >
+                <AlertCircle className="h-3.5 w-3.5" />
+                {convo.urgent ? 'Remove urgent' : 'Mark as urgent'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

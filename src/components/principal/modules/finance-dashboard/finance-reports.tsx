@@ -1,19 +1,20 @@
 'use client'
 
 /**
- * FinanceReportsSection — centralized Finance reports with filters + export.
+ * FinanceReportsSection — Finance reports that provide a unique cut of the
+ * data (not duplicated by the Statements tab, which owns P&L / Balance
+ * Sheet / Cash Flow).
  *
- * 12 report types:
- *   Financial Summary · P&L · Balance Sheet · Cash Flow · Fee Revenue ·
- *   Payroll Expense · Budget vs Actual · Expense Report · Income Report ·
- *   Receivables · Payables · Tax Summary
+ * 9 report types:
+ *   Financial Summary · Fee Revenue · Payroll Expense · Budget vs Actual ·
+ *   Expense Report · Income Report · Receivables · Payables · Tax Summary
  */
 
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
-  FileBarChart2, Download, TrendingUp, Wallet, Receipt, Banknote,
-  ArrowDownRight, ArrowUpRight, IndianRupee, ShieldCheck, Calendar, Users,
+  FileBarChart2, Download, TrendingUp, Receipt,
+  ArrowDownRight, ArrowUpRight, IndianRupee, Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFinanceData } from '@/lib/store/finance-store'
@@ -23,8 +24,7 @@ import { FinancePanel, FinanceEmptyState } from './finance-shared'
 import { toast } from 'sonner'
 
 type ReportType =
-  | 'summary' | 'pnl' | 'balance' | 'cashflow'
-  | 'fee-revenue' | 'payroll-expense' | 'budget' | 'expense'
+  | 'summary' | 'fee-revenue' | 'payroll-expense' | 'budget' | 'expense'
   | 'income' | 'receivables' | 'payables' | 'tax'
 
 interface ReportMeta {
@@ -37,9 +37,6 @@ interface ReportMeta {
 
 const REPORTS: ReportMeta[] = [
   { id: 'summary', label: 'Financial Summary', description: 'Overview of all key metrics', icon: <TrendingUp className="h-4 w-4" />, accent: 'bg-emerald-500/10 text-emerald-600' },
-  { id: 'pnl', label: 'Profit & Loss', description: 'Income and expenses', icon: <FileBarChart2 className="h-4 w-4" />, accent: 'bg-sky-500/10 text-sky-600' },
-  { id: 'balance', label: 'Balance Sheet', description: 'Assets and liabilities', icon: <Wallet className="h-4 w-4" />, accent: 'bg-violet-500/10 text-violet-600' },
-  { id: 'cashflow', label: 'Cash Flow', description: 'Cash movement', icon: <Banknote className="h-4 w-4" />, accent: 'bg-cyan-500/10 text-cyan-600' },
   { id: 'fee-revenue', label: 'Fee Revenue', description: 'Fees collected', icon: <Receipt className="h-4 w-4" />, accent: 'bg-emerald-500/10 text-emerald-600' },
   { id: 'payroll-expense', label: 'Payroll Expense', description: 'Staff cost breakdown', icon: <Users className="h-4 w-4" />, accent: 'bg-amber-500/10 text-amber-600' },
   { id: 'budget', label: 'Budget vs Actual', description: 'Variance analysis', icon: <FileBarChart2 className="h-4 w-4" />, accent: 'bg-violet-500/10 text-violet-600' },
@@ -111,41 +108,6 @@ function ReportBody({ type, data }: { type: ReportType; data: ReturnType<typeof 
           ['Reserve Coverage', `${data.reserveCoverage} months`],
           ['Collection Rate', `${data.feeCollectionRate}%`],
         ]}
-      />
-    )
-  }
-
-  if (type === 'pnl') {
-    const incomeItems = data.pnlData.filter((p) => p.type === 'income')
-    const expenseItems = data.pnlData.filter((p) => p.type === 'expense')
-    return (
-      <ReportTable
-        headers={['Category', 'Type', 'Amount', 'YoY Change']}
-        rows={[
-          ...incomeItems.map((i) => [i.category, 'Income', formatINR(i.amount, true), `+${i.yoyChange}%`]),
-          ...expenseItems.map((e) => [e.category, 'Expense', formatINR(e.amount, true), `+${e.yoyChange}%`]),
-        ]}
-        totals={['Total', '', `Revenue: ${formatINR(data.totalRevenue, true)} · Expenses: ${formatINR(data.totalExpenses, true)}`, `Surplus: ${formatINR(data.netSurplus, true)}`]}
-      />
-    )
-  }
-
-  if (type === 'balance') {
-    return (
-      <ReportTable
-        headers={['Account', 'Category', 'Type', 'Amount']}
-        rows={data.balanceSheet.map((b) => [b.account, b.category, b.type.charAt(0).toUpperCase() + b.type.slice(1), formatINR(b.amount, true)])}
-        totals={['Total', '', '', `Assets: ${formatINR(data.totalAssets, true)} · Liabilities: ${formatINR(data.totalLiabilities, true)}`]}
-      />
-    )
-  }
-
-  if (type === 'cashflow') {
-    return (
-      <ReportTable
-        headers={['Description', 'Activity', 'Inflow', 'Outflow', 'Net']}
-        rows={data.cashflow.map((c) => [c.description, c.activity.charAt(0).toUpperCase() + c.activity.slice(1), c.inflow > 0 ? formatINR(c.inflow, true) : '—', c.outflow > 0 ? formatINR(c.outflow, true) : '—', formatINR(c.inflow - c.outflow, true)])}
-        totals={['Total', '', formatINR(data.cashflow.reduce((s, c) => s + c.inflow, 0), true), formatINR(data.cashflow.reduce((s, c) => s + c.outflow, 0), true), formatINR(data.netCashChange, true)]}
       />
     )
   }

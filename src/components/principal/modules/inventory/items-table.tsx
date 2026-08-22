@@ -188,16 +188,6 @@ export function ItemsTable({ onAction }: ItemsTableProps) {
                     <TableCell><ItemStatusBadge status={it.status} /></TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={outOfStock}
-                          onClick={() => onAction('issue', it)}
-                          className="gap-1.5 text-[11px] h-7 hidden sm:inline-flex"
-                          title="Issue / Assign"
-                        >
-                          <ArrowUpCircle className="h-3 w-3" /> Issue
-                        </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="sm" variant="ghost" className="h-7 w-7 p-0">

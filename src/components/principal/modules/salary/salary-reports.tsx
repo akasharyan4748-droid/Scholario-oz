@@ -54,6 +54,16 @@ export function SalaryReportsSection({ data }: { data: ReturnType<typeof useSala
   const [activeReport, setActiveReport] = useState<ReportType>('monthly')
   const report = REPORTS.find((r) => r.id === activeReport)!
 
+  const handleExportCSV = () => {
+    const rd = getReportData(activeReport, data)
+    if (!rd) {
+      toast.error('Nothing to export', { description: 'This report has no rows yet.' })
+      return
+    }
+    downloadCSV(`${report.label}.csv`, rd.headers, rd.rows, rd.totals)
+    toast.success('Report exported', { description: `${report.label}.csv` })
+  }
+
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
       {/* Report picker */}
@@ -83,7 +93,7 @@ export function SalaryReportsSection({ data }: { data: ReturnType<typeof useSala
       <SalaryPanel
         title={report.label}
         subtitle={report.description}
-        action={<Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={() => toast.success('Report exported', { description: `${report.label}.csv downloaded` })}>
+        action={<Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={handleExportCSV}>
           <Download className="h-3 w-3" /> Export CSV
         </Button>}
         bodyClassName="p-0"
@@ -95,55 +105,54 @@ export function SalaryReportsSection({ data }: { data: ReturnType<typeof useSala
 }
 
 function ReportBody({ type, data }: { type: ReportType; data: ReturnType<typeof useSalaryData> }) {
-  const calculatedRecords = useMemo(() => {
-    return data.employees.map((e) => {
-      const structure = data.structures.find((s) => s.applicableTo === e.employeeType) ?? data.structures[0]
-      const calc = calculatePayrollForEmployee(e, structure, data.adjustments)
-      return { employee: e, ...calc }
-    })
-  }, [data.employees, data.structures, data.adjustments])
+  const rd = useMemo(() => getReportData(type, data), [type, data])
+  if (!rd) return <SalaryEmptyState icon={<FileBarChart2 className="h-6 w-6" />} title="Report not available" />
+  return <ReportTable headers={rd.headers} rows={rd.rows} totals={rd.totals} />
+}
+
+// ─── Report data factory — single source of truth used by ReportBody (display) and the Export CSV button (download) ──
+
+function getReportData(type: ReportType, data: ReturnType<typeof useSalaryData>): { headers: string[]; rows: string[][]; totals?: string[] } | null {
+  const calculatedRecords = data.employees.map((e) => {
+    const structure = data.structures.find((s) => s.applicableTo === e.employeeType) ?? data.structures[0]
+    const calc = calculatePayrollForEmployee(e, structure, data.adjustments)
+    return { employee: e, ...calc }
+  })
 
   if (type === 'monthly') {
-    const rows = data.periods.map((p) => [p.period, String(p.employeeCount), formatINR(p.totalGross, true), formatINR(p.totalDeductions, true), formatINR(p.totalNetPay, true)])
-    return (
-      <ReportTable
-        headers={['Month', 'Employees', 'Gross', 'Deductions', 'Net Paid']}
-        rows={rows}
-        totals={['Total', String(data.periods.reduce((s, p) => s + p.employeeCount, 0)), formatINR(data.periods.reduce((s, p) => s + p.totalGross, 0), true), formatINR(data.periods.reduce((s, p) => s + p.totalDeductions, 0), true), formatINR(data.periods.reduce((s, p) => s + p.totalNetPay, 0), true)]}
-      />
-    )
+    return {
+      headers: ['Month', 'Employees', 'Gross', 'Deductions', 'Net Paid'],
+      rows: data.periods.map((p) => [p.period, String(p.employeeCount), formatINR(p.totalGross, true), formatINR(p.totalDeductions, true), formatINR(p.totalNetPay, true)]),
+      totals: ['Total', String(data.periods.reduce((s, p) => s + p.employeeCount, 0)), formatINR(data.periods.reduce((s, p) => s + p.totalGross, 0), true), formatINR(data.periods.reduce((s, p) => s + p.totalDeductions, 0), true), formatINR(data.periods.reduce((s, p) => s + p.totalNetPay, 0), true)],
+    }
   }
 
   if (type === 'department') {
-    const rows = data.analytics.departmentWise.map((d) => [d.department, String(d.count), formatINR(d.payroll, true), `${((d.payroll / data.analytics.monthlyPayroll) * 100).toFixed(1)}%`])
-    return (
-      <ReportTable
-        headers={['Department', 'Employees', 'Payroll', 'Share']}
-        rows={rows}
-        totals={['Total', String(data.analytics.employeeCount), formatINR(data.analytics.monthlyPayroll, true), '100%']}
-      />
-    )
+    return {
+      headers: ['Department', 'Employees', 'Payroll', 'Share'],
+      rows: data.analytics.departmentWise.map((d) => [d.department, String(d.count), formatINR(d.payroll, true), `${((d.payroll / data.analytics.monthlyPayroll) * 100).toFixed(1)}%`]),
+      totals: ['Total', String(data.analytics.employeeCount), formatINR(data.analytics.monthlyPayroll, true), '100%'],
+    }
   }
 
   if (type === 'earnings-deductions') {
     const earnings = calculatedRecords[0]?.earnings ?? []
     const deductions = calculatedRecords[0]?.deductions ?? []
-    const rows = [
-      ...earnings.map((e) => [e.name, 'Earning', formatINR(e.amount * data.employees.length, true)]),
-      ...deductions.map((d) => [d.name, 'Deduction', formatINR(d.amount * data.employees.length, true)]),
-    ]
-    return <ReportTable headers={['Component', 'Type', 'Total']} rows={rows} />
+    return {
+      headers: ['Component', 'Type', 'Total'],
+      rows: [
+        ...earnings.map((e) => [e.name, 'Earning', formatINR(e.amount * data.employees.length, true)]),
+        ...deductions.map((d) => [d.name, 'Deduction', formatINR(d.amount * data.employees.length, true)]),
+      ],
+    }
   }
 
   if (type === 'employee') {
-    const rows = calculatedRecords.map((r) => [r.employee.name, r.employee.employeeId, r.employee.designation, r.employee.department, formatINR(r.gross, true), formatINR(r.netPay, true)])
-    return (
-      <ReportTable
-        headers={['Employee', 'ID', 'Designation', 'Department', 'Gross', 'Net Pay']}
-        rows={rows}
-        totals={['Total', String(calculatedRecords.length), '', '', formatINR(calculatedRecords.reduce((s, r) => s + r.gross, 0), true), formatINR(calculatedRecords.reduce((s, r) => s + r.netPay, 0), true)]}
-      />
-    )
+    return {
+      headers: ['Employee', 'ID', 'Designation', 'Department', 'Gross', 'Net Pay'],
+      rows: calculatedRecords.map((r) => [r.employee.name, r.employee.employeeId, r.employee.designation, r.employee.department, formatINR(r.gross, true), formatINR(r.netPay, true)]),
+      totals: ['Total', String(calculatedRecords.length), '', '', formatINR(calculatedRecords.reduce((s, r) => s + r.gross, 0), true), formatINR(calculatedRecords.reduce((s, r) => s + r.netPay, 0), true)],
+    }
   }
 
   if (type === 'bank') {
@@ -155,36 +164,70 @@ function ReportBody({ type, data }: { type: ReportType; data: ReturnType<typeof 
       e.count++
       e.amount += r.netPay
     })
-    const rows = Array.from(bankMap.entries()).map(([bank, v]) => [bank, String(v.count), formatINR(v.amount, true)])
-    return <ReportTable headers={['Bank', 'Employees', 'Net Pay']} rows={rows} totals={['Total', String(calculatedRecords.length), formatINR(calculatedRecords.reduce((s, r) => s + r.netPay, 0), true)]} />
+    return {
+      headers: ['Bank', 'Employees', 'Net Pay'],
+      rows: Array.from(bankMap.entries()).map(([bank, v]) => [bank, String(v.count), formatINR(v.amount, true)]),
+      totals: ['Total', String(calculatedRecords.length), formatINR(calculatedRecords.reduce((s, r) => s + r.netPay, 0), true)],
+    }
   }
 
   if (type === 'bonus' || type === 'reimbursement') {
     const filtered = data.adjustments.filter((a) => type === 'bonus' ? a.type === 'Bonus' || a.type === 'Incentive' : a.type === 'Reimbursement')
-    const rows = filtered.map((a) => [a.employeeName, a.type, formatINR(a.amount, true), a.reason, a.effectivePeriod, a.status])
-    return <ReportTable headers={['Employee', 'Type', 'Amount', 'Reason', 'Period', 'Status']} rows={rows} />
+    return {
+      headers: ['Employee', 'Type', 'Amount', 'Reason', 'Period', 'Status'],
+      rows: filtered.map((a) => [a.employeeName, a.type, formatINR(a.amount, true), a.reason, a.effectivePeriod, a.status]),
+    }
   }
 
   if (type === 'register') {
-    const rows = calculatedRecords.map((r) => [r.employee.name, r.employee.employeeId, r.employee.designation, formatINR(r.gross, true), formatINR(r.totalDeductions, true), formatINR(r.totalAdjustments, true), formatINR(r.netPay, true)])
-    return <ReportTable headers={['Employee', 'ID', 'Designation', 'Gross', 'Deductions', 'Adjustments', 'Net Pay']} rows={rows} />
+    return {
+      headers: ['Employee', 'ID', 'Designation', 'Gross', 'Deductions', 'Adjustments', 'Net Pay'],
+      rows: calculatedRecords.map((r) => [r.employee.name, r.employee.employeeId, r.employee.designation, formatINR(r.gross, true), formatINR(r.totalDeductions, true), formatINR(r.totalAdjustments, true), formatINR(r.netPay, true)]),
+    }
   }
 
   if (type === 'pf' || type === 'tax') {
     const componentName = type === 'pf' ? 'Provident Fund' : 'TDS'
-    const rows = calculatedRecords.map((r) => {
-      const comp = r.deductions.find((d) => d.name.includes(componentName) || d.name.includes(type === 'pf' ? 'PF' : 'Tax')) ?? { name: componentName, amount: 0 }
-      return [r.employee.name, r.employee.employeeId, r.employee.designation, formatINR(comp.amount)]
-    })
-    return <ReportTable headers={['Employee', 'ID', 'Designation', `${componentName} Deduction`]} rows={rows} />
+    return {
+      headers: ['Employee', 'ID', 'Designation', `${componentName} Deduction`],
+      rows: calculatedRecords.map((r) => {
+        const comp = r.deductions.find((d) => d.name.includes(componentName) || d.name.includes(type === 'pf' ? 'PF' : 'Tax')) ?? { name: componentName, amount: 0 }
+        return [r.employee.name, r.employee.employeeId, r.employee.designation, formatINR(comp.amount)]
+      }),
+    }
   }
 
   if (type === 'cost') {
-    const rows = data.analytics.monthly.map((m) => [m.month, formatINR(m.amount, true)])
-    return <ReportTable headers={['Month', 'Payroll Cost']} rows={rows} totals={['Total', formatINR(data.analytics.monthly.reduce((s, m) => s + m.amount, 0), true)]} />
+    return {
+      headers: ['Month', 'Payroll Cost'],
+      rows: data.analytics.monthly.map((m) => [m.month, formatINR(m.amount, true)]),
+      totals: ['Total', formatINR(data.analytics.monthly.reduce((s, m) => s + m.amount, 0), true)],
+    }
   }
 
-  return <SalaryEmptyState icon={<FileBarChart2 className="h-6 w-6" />} title="Report not available" />
+  return null
+}
+
+// ─── CSV download helper — generates a CSV file from headers + rows + optional totals and triggers a browser download ──
+
+function downloadCSV(filename: string, headers: string[], rows: string[][], totals?: string[]) {
+  const allRows = [headers, ...rows]
+  if (totals && rows.length > 0) allRows.push(totals)
+  const csv = allRows
+    .map((row) => row.map((cell) => {
+      const needsQuote = /["\n,]/.test(cell)
+      return needsQuote ? `"${cell.replace(/"/g, '""')}"` : cell
+    }).join(','))
+    .join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 function ReportTable({ headers, rows, totals }: { headers: string[]; rows: string[][]; totals?: string[] }) {

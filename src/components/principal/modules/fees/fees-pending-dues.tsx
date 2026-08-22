@@ -13,7 +13,7 @@ import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Filter, Wallet, Eye, Send, AlertCircle, CheckCircle2, X,
-  ChevronDown, Users, Mail,
+  ChevronDown, Mail,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

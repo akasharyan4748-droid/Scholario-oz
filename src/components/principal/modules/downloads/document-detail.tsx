@@ -120,8 +120,8 @@ export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
 
               <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
                 <div className="relative">
-                  <div className="absolute -inset-4 bg-emerald-500/10 blur-2xl rounded-full" aria-hidden />
-                  <FileText className="relative h-14 w-14 text-emerald-600/70 dark:text-emerald-400/70" />
+                  <div className="absolute -inset-3 bg-emerald-500/10 blur-2xl rounded-full" aria-hidden />
+                  <FileText className="relative h-10 w-10 text-emerald-600/70 dark:text-emerald-400/70" />
                 </div>
                 <p className="mt-4 text-sm font-semibold leading-tight max-w-[220px]">
                   {doc.name}

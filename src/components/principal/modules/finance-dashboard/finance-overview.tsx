@@ -18,12 +18,13 @@
 import { motion } from 'framer-motion'
 import {
   Wallet, TrendingUp, TrendingDown, Banknote, ShieldCheck, ArrowRight,
-  AlertCircle, Clock, Receipt, Calendar, FileText, ArrowDownRight, ArrowUpRight,
+  AlertCircle, Receipt, ArrowDownRight, ArrowUpRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFinanceData, formatINRCompact } from '@/lib/store/finance-store'
 import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { CHART_PALETTE } from '@/components/shared/premium-charts'
 import {
   FinanceKpiCard, FinancePanel, FinanceStat, HealthStatusBadge,
   FinanceEmptyState, severityAccent, severityColor,
@@ -49,25 +50,21 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
           value={formatINRCompact(data.totalRevenue)}
           sub={`${data.period.label}`}
           accent="emerald"
-          trend={{ value: '+12.4% YoY', direction: 'up' }}
           delay={0}
         />
         <FinanceKpiCard
           icon={<TrendingDown className="h-4 w-4" />}
           label="Total Expenses"
           value={formatINRCompact(data.totalExpenses)}
-          sub="operating cost"
           accent="rose"
-          trend={{ value: '+6.8% YoY', direction: 'up' }}
           delay={0.05}
         />
         <FinanceKpiCard
           icon={<Wallet className="h-4 w-4" />}
           label="Net Surplus"
           value={formatINRCompact(data.netSurplus)}
-          sub={`${data.surplusMargin}% surplus margin`}
-          accent="emerald"
-          trend={{ value: '+18.2% YoY', direction: 'up' }}
+          sub={`${data.surplusMargin}% margin`}
+          accent="cyan"
           delay={0.1}
         />
         <FinanceKpiCard
@@ -85,20 +82,18 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
         <FinancePanel
           className="lg:col-span-2"
           title="Revenue vs Expenses"
-          subtitle="monthly trend this fiscal year"
           action={
             <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: 'oklch(0.55 0.14 162)' }} /> Revenue</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: 'oklch(0.62 0.2 25)' }} /> Expenses</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: CHART_PALETTE[0] }} /> Revenue</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: CHART_PALETTE[1] }} /> Expenses</span>
             </div>
           }
         >
-          <DualAreaChart data={data.monthlyTrend} height={180} />
+          <DualAreaChart data={data.monthlyTrend} height={180} primaryColor={CHART_PALETTE[0]} secondaryColor={CHART_PALETTE[1]} />
         </FinancePanel>
 
         <FinancePanel
           title="Expense Breakdown"
-          subtitle="by category"
           action={<Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => onNavigate('reports')}>Reports <ArrowRight className="h-3 w-3" /></Button>}
         >
           <HorizontalBars
@@ -107,7 +102,7 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
               value: e.value,
               color: e.color,
             }))}
-            format={(n) => formatINR(n, true)}
+            formatValue={(n) => formatINR(n, true)}
           />
         </FinancePanel>
       </div>
@@ -155,7 +150,6 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
 
         <FinancePanel
           title="Financial Health"
-          subtitle="key ratios"
           action={<HealthStatusBadge status={data.overallHealth as 'Healthy' | 'Watch' | 'Attention'} />}
         >
           <div className="space-y-1.5">
@@ -182,7 +176,6 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <FinancePanel
           title="Cash Position"
-          subtitle="monthly cash flow"
           action={<Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => onNavigate('statements')}>Statement <ArrowRight className="h-3 w-3" /></Button>}
         >
           <div className="space-y-2">
@@ -208,7 +201,6 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
         <FinancePanel
           className="lg:col-span-2"
           title="Quarterly Performance"
-          subtitle="revenue vs expenses by quarter"
           action={
             <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
               <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500/80" /> Revenue</span>
@@ -225,7 +217,6 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
         {/* Receivables */}
         <FinancePanel
           title="Receivables"
-          subtitle="money expected"
           action={<Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => toast.info('Navigate to Fee Management', { description: 'Pending Dues' })}>View <ArrowRight className="h-3 w-3" /></Button>}
         >
           <div className="space-y-2">
@@ -244,7 +235,6 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
         {/* Payables */}
         <FinancePanel
           title="Upcoming Obligations"
-          subtitle="what the school owes"
         >
           <div className="space-y-1.5">
             {data.upcomingObligations.map((o) => (
@@ -302,7 +292,6 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
       {/* Recent Financial Activity */}
       <FinancePanel
         title="Recent Financial Activity"
-        subtitle="latest transactions"
         action={<Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => onNavigate('reports')}>Reports <ArrowRight className="h-3 w-3" /></Button>}
       >
         <div className="space-y-1.5">

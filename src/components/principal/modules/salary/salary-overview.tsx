@@ -40,7 +40,7 @@ export function SalaryOverviewSection({ data, onNavigate }: Props) {
           label="Monthly Payroll"
           value={formatINR(analytics.monthlyPayroll, true)}
           sub={`${analytics.employeeCount} employees`}
-          accent="emerald"
+          accent="sky"
           delay={0}
           onClick={() => onNavigate('payroll')}
         />
@@ -66,7 +66,7 @@ export function SalaryOverviewSection({ data, onNavigate }: Props) {
           icon={<Clock className="h-4 w-4" />}
           label="Needs Attention"
           value={String(analytics.exceptions.length + analytics.pendingAdjustments)}
-          sub={`${analytics.pendingAdjustments} adjustments pending`}
+          sub={`${analytics.pendingAdjustments} pending`}
           accent="amber"
           delay={0.15}
           onClick={() => onNavigate('adjustments')}
@@ -79,7 +79,6 @@ export function SalaryOverviewSection({ data, onNavigate }: Props) {
         <SalaryPanel
           className="lg:col-span-2"
           title="Payroll Trend"
-          subtitle="monthly net payroll this academic year"
           action={<Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => onNavigate('history')}>History <ArrowRight className="h-3 w-3" /></Button>}
         >
           {analytics.monthly.some((m) => m.amount > 0) ? (
@@ -96,7 +95,7 @@ export function SalaryOverviewSection({ data, onNavigate }: Props) {
         {/* Earnings vs Deductions donut */}
         <SalaryPanel
           title="Earnings vs Deductions"
-          subtitle="current month split"
+          subtitle="this month"
         >
           <MiniDonut
             data={analytics.earningsVsDeductions}
@@ -112,7 +111,6 @@ export function SalaryOverviewSection({ data, onNavigate }: Props) {
         <SalaryPanel
           className="lg:col-span-2"
           title="Department Payroll Cost"
-          subtitle="monthly cost by department"
           action={<Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => onNavigate('reports')}>Reports <ArrowRight className="h-3 w-3" /></Button>}
         >
           <MiniBars
@@ -121,7 +119,7 @@ export function SalaryOverviewSection({ data, onNavigate }: Props) {
               value: d.payroll,
               color: 'oklch(0.55 0.14 162)',
             }))}
-            format={(n) => formatINR(n, true)}
+            formatValue={(n) => formatINR(n, true)}
             height={140}
           />
         </SalaryPanel>
@@ -165,7 +163,6 @@ export function SalaryOverviewSection({ data, onNavigate }: Props) {
       {/* Recent activity */}
       <SalaryPanel
         title="Recent Activity"
-        subtitle="recent payroll actions"
         action={<Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => onNavigate('history')}>All <ArrowRight className="h-3 w-3" /></Button>}
       >
         <div className="space-y-1.5">

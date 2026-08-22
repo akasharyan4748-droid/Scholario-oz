@@ -12,7 +12,7 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Search, X, Wallet, IndianRupee, ChevronRight, CheckCircle2, ArrowLeft,
+  Search, X, Wallet, IndianRupee, ChevronRight, ArrowLeft,
   Receipt, AlertCircle, FileText, History, ShieldCheck, User,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -281,16 +281,9 @@ function StudentFeeAccountDrawer({ account, onClose, onCollect }: { account: Stu
 function AccountOverview({ account }: { account: StudentFeeAccount }) {
   return (
     <div className="space-y-3">
-      <FeePanel title="Account Summary">
-        <div className="grid grid-cols-2 gap-2">
-          <FeeStat label="Total Applicable" value={formatINR(account.totalApplicable)} />
-          <FeeStat label="Concession Granted" value={account.concession > 0 ? formatINR(account.concession) : '—'} accent="emerald" />
-          <FeeStat label="Net Payable" value={formatINR(account.netPayable)} />
-          <FeeStat label="Total Paid" value={formatINR(account.paid)} accent="emerald" />
-          <FeeStat label="Outstanding" value={formatINR(account.outstanding)} accent="rose" />
-          <FeeStat label="Late Fee" value={account.lateFee > 0 ? formatINR(account.lateFee) : '—'} accent="amber" />
-        </div>
-      </FeePanel>
+      {/* Per-student 6 stats live in the drawer header above; this tab focuses on activity.
+          The Account Summary panel that previously repeated the 6 stats here was removed
+          to consolidate the canonical home for per-student stats to the drawer header. */}
       <FeePanel title="Status Timeline" subtitle="recent financial events">
         <div className="space-y-2">
           {account.transactions.slice(0, 5).map((t) => (

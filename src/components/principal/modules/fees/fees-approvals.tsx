@@ -20,7 +20,7 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ShieldCheck, Check, X, AlertCircle, MessageSquare, Banknote, History, User, Clock,
+  ShieldCheck, Check, X, AlertCircle, MessageSquare, Banknote, History,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

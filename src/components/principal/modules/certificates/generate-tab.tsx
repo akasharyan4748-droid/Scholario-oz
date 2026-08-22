@@ -4,7 +4,7 @@
  * generate-tab — the document generation workflow.
  *
  * Steps:
- *   1. Pick a document type (icon grid).
+ *   1. Pick a document type (icon grid — single emerald accent).
  *   2. For Marksheets: pick exam → class → student.
  *      For Fee Receipts: pick student → pick fee transaction.
  *      For everything else: pick student.
@@ -15,7 +15,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import {
-  Search, Sparkles, Check, RotateCw, ChevronRight, Info,
+  Search, Sparkles, Check, RotateCw, Info,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -191,7 +191,6 @@ export function GenerateTab() {
         {/* Step 1 — Doc type grid */}
         <CertPanel
           title="1. Document type"
-          subtitle="Choose what to issue"
           action={
             docType && (
               <button
@@ -204,14 +203,16 @@ export function GenerateTab() {
           }
         >
           {!docType ? (
+            // Selection grid — single emerald accent. Icon differentiates type.
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {DOC_TYPES.map((d) => {
-                const a = accentClasses(d.accent)
+                const a = accentClasses(d.accent) // always emerald now
                 const Icon = d.icon
                 return (
                   <button
                     key={d.label}
                     onClick={() => setDocType(d.label)}
+                    title={d.description}
                     className={cn(
                       'group relative flex flex-col items-start gap-1.5 rounded-lg border p-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
                       a.cardBg, a.cardBorder,
@@ -343,7 +344,6 @@ export function GenerateTab() {
         {docType && docTemplates.length > 0 && (
           <CertPanel
             title="3. Template"
-            subtitle="Pick a layout style"
             action={selectedTemplate && (
               <span className="text-[10px] text-muted-foreground">
                 Style: <strong className="text-foreground">{selectedTemplate.style}</strong>
@@ -395,7 +395,7 @@ export function GenerateTab() {
               size="sm"
               disabled={!canGenerate}
               onClick={handleGenerate}
-              className="flex-1 h-9 text-xs gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
+              className="flex-1 h-9 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               <Sparkles className="h-3.5 w-3.5" /> Generate {docType}
             </Button>
@@ -416,7 +416,7 @@ export function GenerateTab() {
       <div className="lg:col-span-7">
         <CertPanel
           title="Live preview"
-          subtitle={docType ? `Actual document with real data — ${docType}` : 'Pick a document type'}
+          subtitle={docType ? docType : 'Pick a document type'}
           className="h-full"
           bodyClassName="p-2 sm:p-4 bg-slate-50"
         >
@@ -440,20 +440,17 @@ function FieldLabel({ label }: { label: string }) {
   return <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
 }
 
+// SelectedDocChip — compact, single emerald chip. No 10×10 icon tile, no
+// description line (the description already shows on the selection grid
+// card the user just clicked). Just label + "Change" affordance.
 function SelectedDocChip({ docType }: { docType: DocType }) {
   const d = DOC_TYPE_BY_LABEL[docType]
-  const a = accentClasses(d.accent)
   const Icon = d.icon
   return (
-    <div className={cn('flex items-center gap-3 rounded-lg border p-3', a.cardBg, a.cardBorder)}>
-      <span className={cn('flex h-10 w-10 items-center justify-center rounded-lg ring-1', a.bg, a.ring)}>
-        <Icon className="h-5 w-5" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-sm font-semibold leading-tight">{d.short}</p>
-        <p className="text-[10px] text-muted-foreground leading-tight truncate">{d.description}</p>
-      </div>
-      <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
+    <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2">
+      <Icon className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
+      <span className="text-xs font-semibold">{d.short}</span>
+      <span className="text-[10px] text-muted-foreground truncate">{d.description}</span>
     </div>
   )
 }

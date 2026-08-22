@@ -71,7 +71,7 @@ interface KpiProps {
   label: string
   value: string | number
   sub?: string
-  accent: 'emerald' | 'rose' | 'amber' | 'sky' | 'violet' | 'cyan'
+  accent: 'emerald' | 'rose' | 'amber' | 'sky' | 'violet' | 'cyan' | 'slate'
   onClick?: () => void
   delay?: number
 }
@@ -85,6 +85,7 @@ const ACCENT_MAP: Record<KpiProps['accent'], { bg: string; ring: string; hover: 
   sky: { bg: 'bg-sky-500/15 text-sky-700 dark:text-sky-300', ring: 'ring-sky-500/20', hover: 'hover:shadow-sky-500/20', cardBg: 'bg-sky-500/[0.04] dark:bg-sky-500/[0.06]', cardBorder: 'border-sky-500/20' },
   violet: { bg: 'bg-violet-500/15 text-violet-700 dark:text-violet-300', ring: 'ring-violet-500/20', hover: 'hover:shadow-violet-500/20', cardBg: 'bg-violet-500/[0.04] dark:bg-violet-500/[0.06]', cardBorder: 'border-violet-500/20' },
   cyan: { bg: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300', ring: 'ring-cyan-500/20', hover: 'hover:shadow-cyan-500/20', cardBg: 'bg-cyan-500/[0.04] dark:bg-cyan-500/[0.06]', cardBorder: 'border-cyan-500/20' },
+  slate: { bg: 'bg-slate-500/15 text-slate-700 dark:text-slate-300', ring: 'ring-slate-500/20', hover: 'hover:shadow-slate-500/20', cardBg: 'bg-slate-500/[0.04] dark:bg-slate-500/[0.06]', cardBorder: 'border-slate-500/20' },
 }
 
 export function FeeKpiCard({ icon, label, value, sub, accent, onClick, delay = 0 }: KpiProps) {

@@ -11,7 +11,7 @@
 
 import { motion } from 'framer-motion'
 import {
-  Calendar, CalendarDays, CalendarRange, CalendarClock, Banknote, Plus, ArrowRight,
+  Calendar, CalendarDays, CalendarRange, CalendarClock, Banknote, Plus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFeeData, type PaymentMode } from '@/lib/store/fee-store'
@@ -129,7 +129,7 @@ export function FeesCollectionsSection({ data, onCollect }: Props) {
 
         <FeePanel title="Daily Collection (last 15 days)" subtitle="successful payments per day">
           {dayBars.length > 0 ? (
-            <MiniBars data={dayBars} format={(n) => formatINR(n, true)} height={140} />
+            <MiniBars data={dayBars} formatValue={(n) => formatINR(n, true)} height={140} />
           ) : (
             <FeeEmptyState icon={<Calendar className="h-5 w-5" />} title="No recent collections" />
           )}
@@ -139,8 +139,7 @@ export function FeesCollectionsSection({ data, onCollect }: Props) {
       {/* Recent payments table */}
       <FeePanel
         title="Recent Payments"
-        subtitle={`${transactions.filter((t) => t.status === 'Success').length} successful payments this academic year`}
-        action={<Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1">View All <ArrowRight className="h-3 w-3" /></Button>}
+        subtitle={`last 15 — full ledger in Transactions tab`}
         bodyClassName="p-0"
       >
         <div className="overflow-x-auto max-h-[28rem]">

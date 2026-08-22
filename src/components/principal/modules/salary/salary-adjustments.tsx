@@ -12,8 +12,8 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Plus, Gift, Wallet, ArrowDownRight, ArrowUpRight, Check, X, MessageSquare,
-  IndianRupee, Search, ShieldCheck,
+  Plus, Gift, Wallet, ArrowDownRight, ArrowUpRight, Check, X,
+  IndianRupee, Search,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

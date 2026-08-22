@@ -96,7 +96,7 @@ export function SalaryHistorySection({ data }: { data: ReturnType<typeof useSala
       )}
 
       {/* Audit log */}
-      <SalaryPanel title="Activity Log" subtitle="recent payroll actions">
+      <SalaryPanel title="Activity Log">
         <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
           {audit.slice(0, 15).map((a) => (
             <div key={a.id} className="flex items-start gap-2 rounded-md border border-border/40 px-2 py-1.5">

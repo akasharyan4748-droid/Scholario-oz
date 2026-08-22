@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  TrendingUp, TrendingDown, Wallet, Banknote, FileText, Download,
+  Wallet, Banknote, FileText, Download,
   ArrowUpRight, ArrowDownRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'

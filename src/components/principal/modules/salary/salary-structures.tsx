@@ -11,14 +11,13 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Layers, IndianRupee, ArrowDownRight, ArrowUpRight, History, ShieldCheck,
+  Layers, IndianRupee, ArrowDownRight, ArrowUpRight, History,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSalaryData } from '@/lib/store/salary-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { SalaryPanel, SalaryEmptyState } from './salary-shared'
-import { toast } from 'sonner'
 
 const TYPE_COLORS: Record<string, string> = {
   'Teaching': 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
@@ -33,15 +32,6 @@ export function SalaryStructuresSection({ data }: { data: ReturnType<typeof useS
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* Version safety banner */}
-      <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 p-2.5 flex items-start gap-2">
-        <ShieldCheck className="h-3.5 w-3.5 text-sky-600 shrink-0 mt-0.5" />
-        <div className="text-[11px] text-muted-foreground">
-          <p className="font-semibold text-sky-700 dark:text-sky-300">Salary Structure History</p>
-          <p className="mt-0.5">New payroll will use the updated structure. Previous payroll remains unchanged.</p>
-        </div>
-      </div>
-
       {/* Structure grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {structures.map((s, i) => {
@@ -103,9 +93,6 @@ export function SalaryStructuresSection({ data }: { data: ReturnType<typeof useS
 
               <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-border/40 text-[10px]">
                 <span className="text-muted-foreground">{employeesCount} employees</span>
-                <Button size="sm" variant="ghost" className="h-6 text-[9px] gap-1" onClick={() => toast.info('Edit structure', { description: `${s.name} edit mode coming soon` })}>
-                  <Layers className="h-2.5 w-2.5" /> Edit
-                </Button>
               </div>
             </motion.div>
           )

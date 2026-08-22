@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * FeesModule — Principal Fee Management & Financial Control Center.
+ * FeesModule — Principal Fee Management & Collections workspace.
  *
  * This file is a thin re-export of FeesShell. The shell orchestrates
  * the entire workspace with 9 tabs:

@@ -8,11 +8,9 @@
  * Management" title.
  *
  * Layout:
- *   - Header: contextual title + Assign Student + Reports action buttons
- *   - Summary pill line: vehicles · routes · drivers · students · on road · in maintenance
+ *   - Header: contextual title + Assign Student action button
+ *   - Summary pill line: vehicles · routes · drivers · students · on road · maintenance (incl. due)
  *   - Tab navigation: Routes · Vehicles · Users · Maintenance · Reports
- *   - KPI cards row (4 soft tinted cards — Vehicles, Routes, Drivers,
- *     Students Using Transport) — always visible, each clickable → tab
  *   - Active tab panel:
  *       * routes      → RoutesTable
  *       * vehicles    → VehiclesTable
@@ -42,7 +40,6 @@ import type { TransportAssignment } from '@/lib/store/transport-store'
 import { toast } from 'sonner'
 import {
   TPT_GLOBAL_STYLES,
-  TptKpiCard,
   type TptTab,
 } from './transport-shared'
 import { RoutesTable } from './routes-table'
@@ -190,12 +187,10 @@ export function TransportModule() {
             <span className="text-muted-foreground/40">·</span>
             <span className="tabular-nums inline-flex items-center gap-1">
               <Wrench className="h-2.5 w-2.5" /> Maintenance{' '}
-              <span className="font-bold text-rose-600">{analytics.inMaintenance}</span>
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <AlertTriangle className="h-2.5 w-2.5" /> Maintenance Due{' '}
-              <span className="font-bold text-rose-600">{analytics.maintenanceDue.length}</span>
+              <span className="font-bold text-amber-600">{analytics.inMaintenance}</span>
+              <span className="text-muted-foreground/60">·</span>
+              <AlertTriangle className="h-2.5 w-2.5" />
+              <span className="font-bold text-rose-600">{analytics.maintenanceDue.length} due</span>
             </span>
           </div>
         </div>
@@ -245,50 +240,6 @@ export function TransportModule() {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        {/* KPI cards row — always visible */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          <TptKpiCard
-            icon={<Bus className="h-4 w-4" />}
-            label="Total Vehicles"
-            value={analytics.totalVehicles}
-            sub={`${analytics.inMaintenance} in maintenance`}
-            accent="emerald"
-            delay={0}
-            onClick={() => setTab('vehicles')}
-          />
-          <TptKpiCard
-            icon={<RouteIcon className="h-4 w-4" />}
-            label="Active Routes"
-            value={analytics.totalRoutes}
-            sub={`${analytics.onRoad} on road now`}
-            accent="cyan"
-            delay={0.05}
-            onClick={() => setTab('routes')}
-          />
-          <TptKpiCard
-            icon={<Users className="h-4 w-4" />}
-            label="Drivers"
-            value={analytics.totalDrivers}
-            sub={`Operating ${analytics.totalVehicles} vehicles`}
-            accent="amber"
-            delay={0.1}
-            onClick={() => setTab('vehicles')}
-          />
-          <TptKpiCard
-            icon={<Users className="h-4 w-4" />}
-            label="Students Using Transport"
-            value={analytics.studentsUsingTransport}
-            sub={
-              analytics.unassignedStudents > 0
-                ? `${analytics.unassignedStudents} awaiting assignment`
-                : 'All assigned to routes'
-            }
-            accent="violet"
-            delay={0.15}
-            onClick={() => setTab('users')}
-          />
-        </div>
-
         {/* Active tab panel */}
         <AnimatePresence mode="wait">
           <motion.div

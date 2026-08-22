@@ -21,7 +21,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Wallet, ShieldCheck, CheckCircle2, AlertCircle, ArrowRight,
-  ArrowLeft, X, IndianRupee, Sparkles, Loader2,
+  ArrowLeft, IndianRupee, Sparkles, Loader2,
 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,

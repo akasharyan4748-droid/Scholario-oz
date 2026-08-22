@@ -11,11 +11,10 @@
  *   - Header: contextual title + Issue Book button
  *   - Summary pill line: books · issued · available · overdue · fines
  *   - Tab navigation: Catalogue · Issued · Overdue · Fines · Reports
- *   - KPI cards row (5 soft tinted cards)
  *   - Active tab panel:
  *       * catalogue: BooksCatalogue
  *       * issues:    IssuedBooksTable (all issued)
- *       * overdue:   IssuedBooksTable (overdue filter) + FinesSummary
+ *       * overdue:   IssuedBooksTable (overdue filter)
  *       * fines:     FinesSummary
  *       * reports:   LibraryReports
  *   - Issue Book dialog (preselects book when triggered from catalogue)
@@ -35,7 +34,7 @@ import { useLibraryStore, useLibraryData } from '@/lib/store/library-store'
 import { formatINR } from '@/lib/format'
 import { toast } from 'sonner'
 import type { Book } from '@/lib/store/library-store'
-import { LIB_GLOBAL_STYLES, LibKpiCard, LibPill, type LibTab } from './library-shared'
+import { LIB_GLOBAL_STYLES, LibPill, type LibTab } from './library-shared'
 import { BooksCatalogue, IssuedBooksTable } from './books-tables'
 import { IssueBookDialog } from './issue-book-dialog'
 import { FinesSummary, LibraryReports } from './fines-summary'
@@ -121,14 +120,6 @@ export function LibraryModule() {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={() => setTab('reports')}
-              >
-                <FileBarChart2 className="h-3.5 w-3.5" /> Reports
-              </Button>
-              <Button
                 size="sm"
                 className="h-8 text-xs gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
                 onClick={() => openIssueDialog()}
@@ -202,55 +193,6 @@ export function LibraryModule() {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        {/* KPI cards row — always visible */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-          <LibKpiCard
-            icon={<LibraryIcon className="h-4 w-4" />}
-            label="Total Books"
-            value={analytics.totalBooks}
-            sub={`${data.books.length} titles`}
-            accent="emerald"
-            delay={0}
-            onClick={() => setTab('catalogue')}
-          />
-          <LibKpiCard
-            icon={<BookOpen className="h-4 w-4" />}
-            label="Issued"
-            value={analytics.totalIssued}
-            sub="Currently issued"
-            accent="amber"
-            delay={0.05}
-            onClick={() => setTab('issues')}
-          />
-          <LibKpiCard
-            icon={<BookCopy className="h-4 w-4" />}
-            label="Available"
-            value={analytics.totalAvailable}
-            sub="Ready to issue"
-            accent="cyan"
-            delay={0.1}
-            onClick={() => setTab('catalogue')}
-          />
-          <LibKpiCard
-            icon={<AlertTriangle className="h-4 w-4" />}
-            label="Overdue"
-            value={analytics.overdueCount}
-            sub="Past due date"
-            accent="rose"
-            delay={0.15}
-            onClick={() => setTab('overdue')}
-          />
-          <LibKpiCard
-            icon={<IndianRupee className="h-4 w-4" />}
-            label="Total Fines"
-            value={formatINR(analytics.totalFines, true)}
-            sub="Pending collection"
-            accent="violet"
-            delay={0.2}
-            onClick={() => setTab('fines')}
-          />
-        </div>
-
         {/* Active tab panel */}
         <AnimatePresence mode="wait">
           <motion.div
@@ -282,10 +224,7 @@ export function LibraryModule() {
               </>
             )}
             {tab === 'overdue' && (
-              <>
-                <IssuedBooksTable filter="overdue" onReturn={handleReturn} onSendReminder={handleSendReminder} />
-                <FinesSummary />
-              </>
+              <IssuedBooksTable filter="overdue" onReturn={handleReturn} onSendReminder={handleSendReminder} />
             )}
             {tab === 'fines' && <FinesSummary />}
             {tab === 'reports' && <LibraryReports />}

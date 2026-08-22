@@ -13,7 +13,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, CalendarClock, Users, Layers, Plus,
-  Receipt, History, FileBarChart2, AlertCircle, ChevronLeft, ChevronRight,
+  Receipt, History, FileBarChart2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -29,7 +29,6 @@ import { SalaryPayslipsSection } from './salary-payslips'
 import { SalaryHistorySection } from './salary-history'
 import { SalaryReportsSection } from './salary-reports'
 import { SALARY_GLOBAL_STYLES } from './salary-shared'
-import { formatINR } from '@/lib/format'
 
 const TAB_GROUPS: Array<{ label: string; items: Array<{ value: SalaryTab; label: string; icon: React.ReactNode }> }> = [
   {
@@ -59,19 +58,11 @@ const TAB_GROUPS: Array<{ label: string; items: Array<{ value: SalaryTab; label:
 
 const TABS = TAB_GROUPS.flatMap((g) => g.items)
 
-function formatINRCompact(n: number): string {
-  if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)} Cr`
-  if (n >= 100000) return `₹${(n / 100000).toFixed(2)} L`
-  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`
-  return `₹${n}`
-}
-
 export function SalaryShell() {
   const [tab, setTab] = useState<SalaryTab>('overview')
   const data = useSalaryData()
   const { analytics } = data
 
-  const pendingCount = analytics.exceptions.length + analytics.pendingAdjustments
   const tabBadges: Partial<Record<SalaryTab, number>> = {
     adjustments: analytics.pendingAdjustments,
     payroll: analytics.exceptions.length,
@@ -115,24 +106,10 @@ export function SalaryShell() {
               </Button>
             </div>
           </div>
-          {/* Summary pill line */}
-          <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground flex-wrap">
-            <span className="tabular-nums">Monthly Payroll <span className="font-bold text-foreground">{formatINRCompact(analytics.monthlyPayroll)}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">Net Payable <span className="font-bold text-emerald-600">{formatINRCompact(analytics.netPayable)}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">Deductions <span className="font-bold text-rose-600">{formatINRCompact(analytics.totalDeductions)}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">{analytics.employeeCount} employees</span>
-            {pendingCount > 0 && (
-              <>
-                <span className="text-muted-foreground/40">·</span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold tabular-nums">
-                  <AlertCircle className="h-2.5 w-2.5" /> {pendingCount} pending
-                </span>
-              </>
-            )}
-          </div>
+          {/* Concise meta strip — concrete counts, no storytelling subtitle, no duplicate KPIs (those live on Overview) */}
+          <p className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
+            {analytics.employeeCount} employees · {data.periods.length} periods on file
+          </p>
         </div>
 
         {/* Tab navigation */}

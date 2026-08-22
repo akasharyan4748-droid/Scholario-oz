@@ -14,14 +14,14 @@ import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronLeft, ChevronRight, Play, CheckCircle2, ShieldCheck, Banknote,
-  Lock, AlertCircle, Loader2, FileText, Download, X, ArrowRight, ArrowLeft,
-  Users, Wallet, ArrowDownRight, Clock,
+  Lock, AlertCircle, Loader2, FileText, X, ArrowRight, ArrowLeft,
+  Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSalaryData, useSalaryStore, calculatePayrollForEmployee } from '@/lib/store/salary-store'
-import { formatINR, formatDate } from '@/lib/format'
+import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { SalaryPanel, SalaryKpiCard, PayrollStatusBadge, SalaryEmptyState } from './salary-shared'
+import { SalaryPanel, PayrollStatusBadge, SalaryEmptyState } from './salary-shared'
 import { toast } from 'sonner'
 
 type WizardStage = 'closed' | 'period' | 'employees' | 'attendance' | 'earnings' | 'deductions' | 'adjustments' | 'exceptions' | 'approve' | 'processing' | 'success'
@@ -38,7 +38,7 @@ const STAGES: Array<{ value: WizardStage; label: string }> = [
 ]
 
 export function SalaryPayrollSection({ data }: { data: ReturnType<typeof useSalaryData> }) {
-  const { analytics, currentPeriod } = data
+  const { currentPeriod } = data
   const [period, setPeriod] = useState(currentPeriod)
   const [wizardStage, setWizardStage] = useState<WizardStage>('closed')
 
@@ -59,7 +59,6 @@ export function SalaryPayrollSection({ data }: { data: ReturnType<typeof useSala
   // Get payroll status for the selected period
   const selectedPeriod = data.periods.find((p) => p.period === period)
   const periodStatus = selectedPeriod?.status ?? 'Draft'
-  const periodRecords = data.records.filter((r) => r.period === period)
 
   // Calculate what the payroll would be for this period
   const calculatedRecords = data.employees.map((e) => {
@@ -121,39 +120,7 @@ export function SalaryPayrollSection({ data }: { data: ReturnType<typeof useSala
         </div>
       </SalaryPanel>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SalaryKpiCard
-          icon={<Users className="h-4 w-4" />}
-          label="Employees"
-          value={String(calculatedRecords.length)}
-          sub="eligible for payroll"
-          accent="emerald"
-        />
-        <SalaryKpiCard
-          icon={<Wallet className="h-4 w-4" />}
-          label="Gross Earnings"
-          value={formatINR(periodGross, true)}
-          sub="basic + allowances"
-          accent="sky"
-        />
-        <SalaryKpiCard
-          icon={<ArrowDownRight className="h-4 w-4" />}
-          label="Deductions"
-          value={formatINR(periodDeductions, true)}
-          sub="PF · Tax · Insurance"
-          accent="rose"
-        />
-        <SalaryKpiCard
-          icon={<CheckCircle2 className="h-4 w-4" />}
-          label="Net Payable"
-          value={formatINR(periodNet, true)}
-          sub={`+ ${formatINR(periodAdjustments, true)} adjustments`}
-          accent="emerald"
-        />
-      </div>
-
-      {/* Payroll table */}
+      {/* Payroll table — totals are in the tfoot row, and the wizard's Approve stage shows the same 4 numbers, so we don't duplicate them as KPI cards here */}
       <SalaryPanel
         title="Payroll Records"
         subtitle={`${calculatedRecords.length} employees · ${period}`}
@@ -372,7 +339,7 @@ function ProcessPayrollWizard({ stage, setStage, period, onClose }: {
               </WizardBody>
             )}
             {stage === 'attendance' && (
-              <WizardBody key="attendance" title="Attendance & Leave Impact" description="Attendance is read from the Attendance module. LOP will reduce earnings proportionally.">
+              <WizardBody key="attendance" title="Attendance & Leave Impact" description="LOP reduces earnings proportionally; attendance is read from the Attendance module.">
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-lg bg-muted/30 p-2.5 text-center">
                     <p className="text-[9px] uppercase text-muted-foreground">Working Days</p>
@@ -386,9 +353,6 @@ function ProcessPayrollWizard({ stage, setStage, period, onClose }: {
                     <p className="text-[9px] uppercase text-muted-foreground">LOP Days</p>
                     <p className="text-base font-bold tabular-nums text-amber-600 mt-0.5">~1</p>
                   </div>
-                </div>
-                <div className="mt-3 rounded-lg bg-sky-500/5 border border-sky-500/20 p-2.5 text-[11px] text-muted-foreground">
-                  Attendance not finalized — employees marked "On Leave" will have their earnings reduced proportionally.
                 </div>
               </WizardBody>
             )}
@@ -493,10 +457,6 @@ function ProcessPayrollWizard({ stage, setStage, period, onClose }: {
                     <span className="font-bold tabular-nums text-emerald-600">{formatINR(totalNet, true)}</span>
                   </div>
                 </div>
-                <div className="mt-3 flex items-center gap-2 rounded-lg bg-muted/30 border border-border p-2.5 text-[11px] text-muted-foreground">
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  Clicking Approve & Disburse will process payroll, generate payslips, and lock the period.
-                </div>
               </WizardBody>
             )}
             {stage === 'processing' && (
@@ -536,7 +496,6 @@ function ProcessPayrollWizard({ stage, setStage, period, onClose }: {
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
                   <div className="text-[10px] text-muted-foreground">
                     <p className="font-semibold text-emerald-700 dark:text-emerald-400">Payroll completed</p>
-                    <p>Payroll approved, disbursed, and payslips generated.</p>
                   </div>
                 </div>
               </motion.div>
@@ -556,10 +515,6 @@ function ProcessPayrollWizard({ stage, setStage, period, onClose }: {
               {stage === 'approve' ? (
                 <Button size="sm" className="h-8 text-xs gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white" onClick={handleApprove}>
                   <ShieldCheck className="h-3.5 w-3.5" /> Approve & Disburse
-                </Button>
-              ) : stage === 'success' ? (
-                <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onClose}>
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Done
                 </Button>
               ) : (
                 <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setStage(STAGES[Math.min(stageIdx + 1, STAGES.length - 1)].value)}>

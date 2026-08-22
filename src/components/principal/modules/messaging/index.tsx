@@ -5,7 +5,8 @@
  *
  * Layout: Folders sidebar · (Conversation list OR Groups panel) · Active conversation · Reply composer
  *
- * Compact summary row (Unread + Starred + Drafts + Groups counts) — NOT giant KPI cards.
+ * Folder counts (Unread/Starred/Sent/Groups/Drafts/Archive) live in the
+ * FoldersSidebar — NOT duplicated in the header here.
  *
  * NO fake "online" status, NO fake "typing" indicators, NO fake "read" receipts.
  * NO dead Call/Video buttons.
@@ -24,7 +25,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { MessageSquare, Send, Mail, FileText, Star, Users } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { useMessagingStore } from '@/lib/store/messaging-store'
 import { FoldersSidebar } from './folders-sidebar'
 import { ConversationList } from './conversation-list'
@@ -34,20 +35,11 @@ import { GroupsPanel } from './groups-panel'
 import { cn } from '@/lib/utils'
 
 export function MessagingModule() {
-  const conversations = useMessagingStore((s) => s.conversations)
-  const drafts = useMessagingStore((s) => s.drafts)
   const activeConversationId = useMessagingStore((s) => s.activeConversationId)
   const activeFolder = useMessagingStore((s) => s.activeFolder)
-  const groups = useMessagingStore((s) => s.groups)
   const [composeOpen, setComposeOpen] = useState(false)
   const [composeRecipient, setComposeRecipient] = useState<string | null>(null)
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list')
-
-  // Real unread count from store
-  const unreadCount = conversations.filter((c) => !c.archived && c.unread > 0).length
-  const draftCount = drafts.length
-  const starredCount = conversations.filter((c) => c.starred && !c.archived).length
-  const groupCount = groups.length
 
   // Switch to thread view on mobile when conversation opened
   useEffect(() => {
@@ -63,7 +55,8 @@ export function MessagingModule() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header — compact, no giant KPI cards */}
+      {/* Header — compact, no giant KPI cards.
+          Folder counts live in the FoldersSidebar (one source of truth). */}
       <div className="border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
         <div className="px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -76,23 +69,6 @@ export function MessagingModule() {
             >
               <Send className="h-3.5 w-3.5" /> Compose
             </button>
-          </div>
-          {/* Compact summary row */}
-          <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground flex-wrap">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold tabular-nums">
-              <Mail className="h-2.5 w-2.5" /> {unreadCount} unread
-            </span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold tabular-nums">
-              <Star className="h-2.5 w-2.5" /> {starredCount} starred
-            </span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-violet-500/10 text-violet-700 dark:text-violet-300 font-semibold tabular-nums">
-              <Users className="h-2.5 w-2.5" /> {groupCount} groups
-            </span>
-            {draftCount > 0 && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-semibold tabular-nums">
-                <FileText className="h-2.5 w-2.5" /> {draftCount} drafts
-              </span>
-            )}
           </div>
         </div>
       </div>

@@ -11,12 +11,11 @@
  *   - Header: contextual title + Add Item button
  *   - Summary pill line: items · total value · low stock · out of stock · categories
  *   - Tab navigation: Items · Movements · Low Stock · Reports
- *   - KPI cards row (4 soft tinted cards — Total Items, Total Value, Low Stock, Categories)
  *   - Active tab panel:
  *       * items:    ItemsTable
  *       * movements: StockMovementLog (full)
  *       * lowstock:  LowStockAlerts
- *       * reports:   InventoryReports (CategoryValueDistribution + Movements by Type + Low Stock + Movement Log)
+ *       * reports:   InventoryReports (CategoryValueDistribution + Movements by Type)
  *   - Add Item dialog
  *   - Item Action dialog (single dialog handling all 4 stock actions)
  *
@@ -27,7 +26,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Package, Plus, AlertTriangle, IndianRupee, Layers,
-  FileBarChart2, History, PackageSearch, Boxes,
+  FileBarChart2, History, PackageSearch,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -35,7 +34,7 @@ import { useInventoryStore, useInventoryData } from '@/lib/store/inventory-store
 import type { InventoryItem } from '@/lib/store/inventory-store'
 import { formatINR } from '@/lib/format'
 import { toast } from 'sonner'
-import { INV_GLOBAL_STYLES, InvKpiCard, type InvTab } from './inventory-shared'
+import { INV_GLOBAL_STYLES, type InvTab } from './inventory-shared'
 import { ItemsTable } from './items-table'
 import { AddItemDialog } from './add-item-dialog'
 import { ItemActionDialog, type ActionKind } from './item-action-dialog'
@@ -186,46 +185,6 @@ export function InventoryModule() {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        {/* KPI cards row — always visible */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          <InvKpiCard
-            icon={<Boxes className="h-4 w-4" />}
-            label="Total Items"
-            value={analytics.totalItems}
-            sub={`${analytics.categoryCount} categories tracked`}
-            accent="emerald"
-            delay={0}
-            onClick={() => setTab('items')}
-          />
-          <InvKpiCard
-            icon={<IndianRupee className="h-4 w-4" />}
-            label="Total Value"
-            value={formatINR(analytics.totalValue, true)}
-            sub="Current stock value"
-            accent="amber"
-            delay={0.05}
-            onClick={() => setTab('reports')}
-          />
-          <InvKpiCard
-            icon={<AlertTriangle className="h-4 w-4" />}
-            label="Low Stock"
-            value={analytics.lowStockCount}
-            sub={`${analytics.outOfStockCount} out of stock`}
-            accent="rose"
-            delay={0.1}
-            onClick={() => setTab('lowstock')}
-          />
-          <InvKpiCard
-            icon={<Layers className="h-4 w-4" />}
-            label="Categories"
-            value={analytics.categoryCount}
-            sub="Across all locations"
-            accent="violet"
-            delay={0.15}
-            onClick={() => setTab('reports')}
-          />
-        </div>
-
         {/* Active tab panel */}
         <AnimatePresence mode="wait">
           <motion.div
@@ -240,29 +199,13 @@ export function InventoryModule() {
               <ItemsTable onAction={handleAction} />
             )}
             {tab === 'movements' && (
-              <>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06] border border-emerald-500/20">
-                  <History className="h-4 w-4 text-emerald-600" />
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">{movementsCount}</span> recorded movements
-                    ·{' '}
-                    <span className="font-semibold text-emerald-600">Stock In · Returned</span>
-                    ·{' '}
-                    <span className="font-semibold text-amber-600">Issued</span>
-                    ·{' '}
-                    <span className="font-semibold text-rose-600">Stock Out · Damaged · Lost</span>
-                    ·{' '}
-                    <span className="font-semibold text-cyan-600">Adjustment</span>
-                  </p>
-                </div>
-                <StockMovementLog />
-              </>
+              <StockMovementLog />
             )}
             {tab === 'lowstock' && (
               <LowStockAlerts onAddStock={(it) => handleAction('add', it)} />
             )}
             {tab === 'reports' && (
-              <InventoryReports onAddStock={(it) => handleAction('add', it)} />
+              <InventoryReports />
             )}
           </motion.div>
         </AnimatePresence>

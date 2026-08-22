@@ -13,7 +13,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Settings as SettingsIcon, IndianRupee, Smartphone, AlertTriangle, Gift,
+  IndianRupee, Smartphone, AlertTriangle, Gift,
   Receipt, ShieldCheck, Check, Plus, Archive,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'

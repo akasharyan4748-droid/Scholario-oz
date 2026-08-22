@@ -6,21 +6,21 @@
  * Tabs:
  *   Overview · Statements · Reports
  *
- * The global header already says "Finance Dashboard" so this shell does NOT
- * repeat the title. Content starts with the period selector + financial summary.
+ * The global header already says "Finance Dashboard" so this shell uses a
+ * distinct, contextual title ("Financial Overview") to avoid colliding
+ * with the Fees module's "Financial Control Center" shell title.
  */
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, FileText, FileBarChart2, Download, Calendar,
-  AlertCircle, ChevronDown,
+  ChevronDown,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useFinanceData, FINANCE_PERIODS } from '@/lib/store/finance-store'
 import { school } from '@/lib/mock/school'
-import { formatINRCompact } from '@/lib/store/finance-store'
 import { FinanceOverviewSection } from './finance-overview'
 import { FinanceStatementsSection } from './finance-statements'
 import { FinanceReportsSection } from './finance-reports'
@@ -70,7 +70,8 @@ export function FinanceShell() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]">Academic Year {school.academicYear}</p>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight">School Financial Control Center</h1>
+              <h1 className="text-base sm:text-lg font-bold tracking-tight">Financial Overview</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">Revenue, expenses, and financial statements across all modules.</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {/* Period selector */}
@@ -112,24 +113,6 @@ export function FinanceShell() {
                 <Download className="h-3.5 w-3.5" /> Export
               </Button>
             </div>
-          </div>
-          {/* Summary pill line */}
-          <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground flex-wrap">
-            <span className="tabular-nums">Revenue <span className="font-bold text-foreground">{formatINRCompact(data.totalRevenue)}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">Expenses <span className="font-bold text-rose-600">{formatINRCompact(data.totalExpenses)}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">Net Surplus <span className="font-bold text-emerald-600">{formatINRCompact(data.netSurplus)}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">Cash <span className="font-bold text-foreground">{formatINRCompact(data.cashAvailable)}</span></span>
-            {pendingAlerts > 0 && (
-              <>
-                <span className="text-muted-foreground/40">·</span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold tabular-nums">
-                  <AlertCircle className="h-2.5 w-2.5" /> {pendingAlerts} alert{pendingAlerts > 1 ? 's' : ''}
-                </span>
-              </>
-            )}
           </div>
         </div>
 

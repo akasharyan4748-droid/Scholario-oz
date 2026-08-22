@@ -15,9 +15,8 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Megaphone, FileText, Plus, History as HistoryIcon, AlertCircle,
+  Megaphone, FileText, Plus, History as HistoryIcon,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { school } from '@/lib/mock/school'
 import { useCommunicationStore } from '@/lib/store/communication-store'
@@ -76,31 +75,14 @@ export function CommShell() {
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]">Academic Year {school.academicYear}</p>
               <h1 className="text-base sm:text-lg font-bold tracking-tight">Announcements, Circulars & Messaging</h1>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
-                onClick={() => setTab('compose')}
-              >
-                <Plus className="h-3.5 w-3.5" /> New Announcement
-              </Button>
-            </div>
           </div>
-          {/* Summary pill line */}
+          {/* Summary pill line — counts shown once here, not duplicated elsewhere */}
           <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground flex-wrap">
             <span className="tabular-nums">Active <span className="font-bold text-foreground">{activeCount}</span></span>
             <span className="text-muted-foreground/40">·</span>
             <span className="tabular-nums">Scheduled <span className="font-bold text-amber-600">{scheduledCount}</span></span>
             <span className="text-muted-foreground/40">·</span>
             <span className="tabular-nums">Drafts <span className="font-bold text-muted-foreground">{draftCount}</span></span>
-            {(scheduledCount + draftCount) > 0 && (
-              <>
-                <span className="text-muted-foreground/40">·</span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold tabular-nums">
-                  <AlertCircle className="h-2.5 w-2.5" /> {scheduledCount + draftCount} pending
-                </span>
-              </>
-            )}
           </div>
         </div>
 

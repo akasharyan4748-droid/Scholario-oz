@@ -47,7 +47,7 @@ export function employeeStatusAccent(status: EmployeeStatus): string {
   switch (status) {
     case 'Active': return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
     case 'On Leave': return 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-    case 'Suspended': case 'Resigned': case 'Terminated': return 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+    case 'Suspended': case 'Resigned': return 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
     case 'Retired': case 'Inactive': return 'bg-muted text-muted-foreground'
   }
 }

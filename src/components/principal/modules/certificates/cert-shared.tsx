@@ -3,8 +3,13 @@
 /**
  * cert-shared — shared primitives for the Document Generation module.
  *
- * Visual language follows the rest of the SCHOLARIO Principal panel:
- * emerald/teal primary, rounded cards, soft tinted backgrounds, NO indigo.
+ * Design language (per Academics spec):
+ *   - ONE primary hue (emerald) for all doc-type accents. The icon
+ *     differentiates the type; the color stays consistent.
+ *   - Color appears only as small chips/pills/dots, never as large color
+ *     blocks. No indigo or blue.
+ *   - Section containers use CertPanel (flat, no card-in-card).
+ *   - Icons default to h-3.5/h-4; h-5 max for doc-type selection tiles.
  */
 
 import { motion } from 'framer-motion'
@@ -15,13 +20,14 @@ import {
 import { cn } from '@/lib/utils'
 import type { DocType, DocStatus, TemplateStyle } from '@/lib/store/certificates-store'
 
-// ─── Doc-type metadata (icons + accents) ──────────────────────────────
+// ─── Doc-type metadata (icons only — all share emerald accent) ────────
 
 export interface DocTypeMeta {
   label: DocType
   short: string
   icon: LucideIcon
-  accent: 'emerald' | 'amber' | 'teal' | 'cyan' | 'rose' | 'violet' | 'slate'
+  /** Always 'emerald' — kept on the interface for backward compatibility. */
+  accent: 'emerald'
   needsStudent: boolean
   needsExam?: boolean
   needsFeeTxn?: boolean
@@ -41,7 +47,7 @@ export const DOC_TYPES: DocTypeMeta[] = [
     label: 'Transfer',
     short: 'Transfer',
     icon: ScrollText,
-    accent: 'amber',
+    accent: 'emerald',
     needsStudent: true,
     description: 'Issue transfer certificate (TC) on exit.',
   },
@@ -49,7 +55,7 @@ export const DOC_TYPES: DocTypeMeta[] = [
     label: 'Character',
     short: 'Character',
     icon: Award,
-    accent: 'violet',
+    accent: 'emerald',
     needsStudent: true,
     description: 'Attest good moral conduct of student.',
   },
@@ -57,7 +63,7 @@ export const DOC_TYPES: DocTypeMeta[] = [
     label: 'ID Card',
     short: 'ID Card',
     icon: CreditCard,
-    accent: 'cyan',
+    accent: 'emerald',
     needsStudent: true,
     description: 'Print student identity card for the year.',
   },
@@ -65,7 +71,7 @@ export const DOC_TYPES: DocTypeMeta[] = [
     label: 'Fee Receipt',
     short: 'Fee Receipt',
     icon: Receipt,
-    accent: 'teal',
+    accent: 'emerald',
     needsStudent: true,
     needsFeeTxn: true,
     description: 'Reprint official fee payment receipt.',
@@ -74,7 +80,7 @@ export const DOC_TYPES: DocTypeMeta[] = [
     label: 'Migration',
     short: 'Migration',
     icon: GraduationCap,
-    accent: 'rose',
+    accent: 'emerald',
     needsStudent: true,
     description: 'Migration certificate for board/college.',
   },
@@ -92,38 +98,44 @@ export const DOC_TYPES: DocTypeMeta[] = [
 export const DOC_TYPE_BY_LABEL: Record<DocType, DocTypeMeta> =
   DOC_TYPES.reduce((acc, d) => { acc[d.label] = d; return acc }, {} as Record<DocType, DocTypeMeta>)
 
-// ─── Accent map (soft tinted) ─────────────────────────────────────────
+// ─── Accent map (single emerald hue only) ─────────────────────────────
+//
+// All doc-type accents resolve to emerald so the module reads as ONE
+// family instead of a 7-hue rainbow. The DOC_TYPES array keeps an
+// `accent` field for backward-compat with any external callers, but
+// it is always 'emerald'.
 
-const ACCENT_MAP: Record<string, { bg: string; ring: string; text: string; cardBg: string; cardBorder: string }> = {
-  emerald: { bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300', ring: 'ring-emerald-500/20', text: 'text-emerald-700 dark:text-emerald-300', cardBg: 'bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06]', cardBorder: 'border-emerald-500/20' },
-  teal: { bg: 'bg-teal-500/15 text-teal-700 dark:text-teal-300', ring: 'ring-teal-500/20', text: 'text-teal-700 dark:text-teal-300', cardBg: 'bg-teal-500/[0.04] dark:bg-teal-500/[0.06]', cardBorder: 'border-teal-500/20' },
-  amber: { bg: 'bg-amber-500/15 text-amber-700 dark:text-amber-300', ring: 'ring-amber-500/20', text: 'text-amber-700 dark:text-amber-300', cardBg: 'bg-amber-500/[0.04] dark:bg-amber-500/[0.06]', cardBorder: 'border-amber-500/20' },
-  cyan: { bg: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300', ring: 'ring-cyan-500/20', text: 'text-cyan-700 dark:text-cyan-300', cardBg: 'bg-cyan-500/[0.04] dark:bg-cyan-500/[0.06]', cardBorder: 'border-cyan-500/20' },
-  rose: { bg: 'bg-rose-500/15 text-rose-700 dark:text-rose-300', ring: 'ring-rose-500/20', text: 'text-rose-700 dark:text-rose-300', cardBg: 'bg-rose-500/[0.04] dark:bg-rose-500/[0.06]', cardBorder: 'border-rose-500/20' },
-  violet: { bg: 'bg-violet-500/15 text-violet-700 dark:text-violet-300', ring: 'ring-violet-500/20', text: 'text-violet-700 dark:text-violet-300', cardBg: 'bg-violet-500/[0.04] dark:bg-violet-500/[0.06]', cardBorder: 'border-violet-500/20' },
-  slate: { bg: 'bg-slate-500/15 text-slate-700 dark:text-slate-300', ring: 'ring-slate-500/20', text: 'text-slate-700 dark:text-slate-300', cardBg: 'bg-slate-500/[0.04] dark:bg-slate-500/[0.06]', cardBorder: 'border-slate-500/20' },
-}
+const ACCENT_MAP = {
+  emerald: {
+    bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+    ring: 'ring-emerald-500/20',
+    text: 'text-emerald-700 dark:text-emerald-300',
+    cardBg: 'bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06]',
+    cardBorder: 'border-emerald-500/20',
+  },
+} as const
 
 export type CertAccent = keyof typeof ACCENT_MAP
 
-export function accentClasses(accent: CertAccent) {
-  return ACCENT_MAP[accent]
+export function accentClasses(_accent: CertAccent = 'emerald') {
+  return ACCENT_MAP.emerald
 }
 
-// ─── CertKpiCard (soft tinted KPI) ────────────────────────────────────
+// ─── CertKpiCard (retained for callers, but no longer used by the
+//     Certificates shell — header uses meta strip + tab counts only). ───
 
 interface KpiProps {
   icon: React.ReactNode
   label: string
   value: string | number
   sub?: string
-  accent: CertAccent
+  accent?: CertAccent
   onClick?: () => void
   delay?: number
 }
 
 export function CertKpiCard({ icon, label, value, sub, accent, onClick, delay = 0 }: KpiProps) {
-  const a = ACCENT_MAP[accent]
+  const a = ACCENT_MAP.emerald
   return (
     <motion.button
       initial={{ opacity: 0, y: 8 }}
@@ -187,6 +199,8 @@ export function CertPanel({ title, subtitle, action, children, className, bodyCl
 // ─── Status badge ─────────────────────────────────────────────────────
 
 export function DocStatusBadge({ status }: { status: DocStatus }) {
+  // Status colours only — these are status semantics, not doc-type accents,
+  // so they intentionally use the canonical Academics status palette.
   const map: Record<DocStatus, string> = {
     'Generated': 'bg-slate-500/10 text-slate-700 dark:text-slate-300',
     'Printed': 'bg-amber-500/10 text-amber-700 dark:text-amber-300',

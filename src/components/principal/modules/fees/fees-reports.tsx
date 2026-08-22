@@ -3,36 +3,37 @@
 /**
  * FeesReportsSection — filterable & exportable financial reports.
  *
- * Each report is generated on demand from real underlying data:
- *   - Daily Collection
- *   - Monthly Collection
- *   - Class-wise Collection
- *   - Student Outstanding
- *   - Fee Head Collection
- *   - Payment Mode Report
- *   - Overdue Report
- *   - Concession Report
- *   - Cash Collection Report
- *   - Transaction Report (raw export)
+ * Only the 4 genuinely unique reports are listed here; other aggregations
+ * (monthly trend, class-wise, outstanding, overdue, cash, raw transactions)
+ * are surfaced in their dedicated tabs to avoid metric duplication:
+ *   - Daily Collection      — day-wise collected amount (unique breakdown)
+ *   - Fee Head Collection   — revenue by fee head (unique byCategory aggregation)
+ *   - Payment Mode Report   — distribution by payment method (unique)
+ *   - Concession Report     — approved concessions (unique — not in any tab)
+ *
+ * Reports removed (duplicates of other tabs):
+ *   - Monthly Collection    → Overview's Collection Trend chart
+ *   - Class-wise Collection → Overview's Class-wise Collection bar chart
+ *   - Student Outstanding   → Pending Dues tab
+ *   - Overdue Report        → Pending Dues tab filtered to status='Overdue'
+ *   - Cash Collection       → Approvals tab
+ *   - Transaction Report    → Transactions tab + Collections Recent Payments
  */
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  FileBarChart2, Download, Calendar, CalendarDays, Users, IndianRupee,
-  Smartphone, AlertCircle, Gift, Banknote, List, TrendingUp,
+  FileBarChart2, Download, Calendar, IndianRupee,
+  Smartphone, Gift,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useFeeData, type FeeTransaction } from '@/lib/store/fee-store'
+import { useFeeData } from '@/lib/store/fee-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { FeePanel, FeeEmptyState, ModeIcon, modeAccent, FeeStatusBadge } from './fees-shared'
+import { FeePanel, FeeEmptyState } from './fees-shared'
 import { toast } from 'sonner'
 
-type ReportType =
-  | 'daily' | 'monthly' | 'class-wise' | 'outstanding'
-  | 'fee-head' | 'payment-mode' | 'overdue' | 'concession'
-  | 'cash' | 'transactions'
+type ReportType = 'daily' | 'fee-head' | 'payment-mode' | 'concession'
 
 interface ReportMeta {
   id: ReportType
@@ -44,15 +45,9 @@ interface ReportMeta {
 
 const REPORTS: ReportMeta[] = [
   { id: 'daily', label: 'Daily Collection', description: 'Day-wise collected amount', icon: <Calendar className="h-4 w-4" />, accent: 'bg-emerald-500/10 text-emerald-600' },
-  { id: 'monthly', label: 'Monthly Collection', description: 'Month-wise collection trend', icon: <CalendarDays className="h-4 w-4" />, accent: 'bg-emerald-500/10 text-emerald-600' },
-  { id: 'class-wise', label: 'Class-wise Collection', description: 'Collection by class', icon: <Users className="h-4 w-4" />, accent: 'bg-sky-500/10 text-sky-600' },
-  { id: 'outstanding', label: 'Student Outstanding', description: 'Students with outstanding balance', icon: <AlertCircle className="h-4 w-4" />, accent: 'bg-rose-500/10 text-rose-600' },
   { id: 'fee-head', label: 'Fee Head Collection', description: 'Revenue by fee head', icon: <IndianRupee className="h-4 w-4" />, accent: 'bg-amber-500/10 text-amber-600' },
   { id: 'payment-mode', label: 'Payment Mode Report', description: 'Distribution by payment method', icon: <Smartphone className="h-4 w-4" />, accent: 'bg-cyan-500/10 text-cyan-600' },
-  { id: 'overdue', label: 'Overdue Report', description: 'Students with overdue payments', icon: <AlertCircle className="h-4 w-4" />, accent: 'bg-rose-500/10 text-rose-600' },
   { id: 'concession', label: 'Concession Report', description: 'Approved concessions', icon: <Gift className="h-4 w-4" />, accent: 'bg-violet-500/10 text-violet-600' },
-  { id: 'cash', label: 'Cash Collection Report', description: 'Cash payments and approvals', icon: <Banknote className="h-4 w-4" />, accent: 'bg-amber-500/10 text-amber-600' },
-  { id: 'transactions', label: 'Transaction Report', description: 'All transactions', icon: <List className="h-4 w-4" />, accent: 'bg-sky-500/10 text-sky-600' },
 ]
 
 export function FeesReportsSection({ data }: { data: ReturnType<typeof useFeeData> }) {
@@ -62,7 +57,7 @@ export function FeesReportsSection({ data }: { data: ReturnType<typeof useFeeDat
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
       {/* Report picker */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {REPORTS.map((r, i) => (
           <motion.button
             key={r.id}
@@ -97,12 +92,17 @@ export function FeesReportsSection({ data }: { data: ReturnType<typeof useFeeDat
       >
         <ReportBody type={activeReport} data={data} />
       </FeePanel>
+
+      {/* Hint about removed reports */}
+      <p className="text-[10px] text-muted-foreground/70 text-center">
+        Monthly trend, class-wise, outstanding, overdue, cash, and transaction reports live in their dedicated tabs.
+      </p>
     </div>
   )
 }
 
 function ReportBody({ type, data }: { type: ReportType; data: ReturnType<typeof useFeeData> }) {
-  const { transactions, accounts, analytics, cashRequests, audit } = data
+  const { transactions, accounts, analytics } = data
 
   if (type === 'daily') {
     const dayMap = new Map<string, { count: number; amount: number }>()
@@ -118,37 +118,6 @@ function ReportBody({ type, data }: { type: ReportType; data: ReturnType<typeof 
         headers={['Date', 'Payments', 'Amount']}
         rows={rows.map(([date, e]) => [formatDate(date), String(e.count), formatINR(e.amount)])}
         totals={['Total', String(rows.reduce((s, [, e]) => s + e.count, 0)), formatINR(rows.reduce((s, [, e]) => s + e.amount, 0))]}
-      />
-    )
-  }
-
-  if (type === 'monthly') {
-    return (
-      <ReportTable
-        headers={['Month', 'Collected', 'Pending']}
-        rows={analytics.monthly.map((m) => [m.month, formatINR(m.collected), formatINR(m.pending)])}
-        totals={['Total', formatINR(analytics.monthly.reduce((s, m) => s + m.collected, 0)), formatINR(analytics.monthly.reduce((s, m) => s + m.pending, 0))]}
-      />
-    )
-  }
-
-  if (type === 'class-wise') {
-    return (
-      <ReportTable
-        headers={['Class', 'Students', 'Expected', 'Collected', 'Outstanding', 'Collection %']}
-        rows={analytics.classWise.map((c) => [c.className, String(c.students), formatINR(c.expected), formatINR(c.collected), formatINR(c.outstanding), `${c.collectionRate}%`])}
-        totals={['Total', String(analytics.classWise.reduce((s, c) => s + c.students, 0)), formatINR(analytics.totalExpected), formatINR(analytics.totalCollected), formatINR(analytics.totalOutstanding), `${analytics.collectionRate}%`]}
-      />
-    )
-  }
-
-  if (type === 'outstanding') {
-    const rows = accounts.filter((a) => a.outstanding > 0).sort((a, b) => b.outstanding - a.outstanding)
-    return (
-      <ReportTable
-        headers={['Student', 'ID', 'Class', 'Outstanding', 'Late Fee', 'Total Due', 'Status']}
-        rows={rows.map((a) => [a.studentName, a.admissionNo, `${a.className}-${a.section}`, formatINR(a.outstanding), a.lateFee > 0 ? formatINR(a.lateFee) : '—', formatINR(a.totalDue), a.status])}
-        totals={['Total', String(rows.length), '', formatINR(rows.reduce((s, a) => s + a.outstanding, 0)), formatINR(rows.reduce((s, a) => s + a.lateFee, 0)), formatINR(rows.reduce((s, a) => s + a.totalDue, 0)), '']}
       />
     )
   }
@@ -187,17 +156,6 @@ function ReportBody({ type, data }: { type: ReportType; data: ReturnType<typeof 
     )
   }
 
-  if (type === 'overdue') {
-    const rows = accounts.filter((a) => a.status === 'Overdue').sort((a, b) => b.daysOverdue - a.daysOverdue)
-    return (
-      <ReportTable
-        headers={['Student', 'Class', 'Outstanding', 'Days Overdue', 'Late Fee']}
-        rows={rows.map((a) => [a.studentName, `${a.className}-${a.section}`, formatINR(a.outstanding), `${a.daysOverdue}d`, formatINR(a.lateFee)])}
-        totals={['Total', String(rows.length), formatINR(rows.reduce((s, a) => s + a.outstanding, 0)), '', formatINR(rows.reduce((s, a) => s + a.lateFee, 0))]}
-      />
-    )
-  }
-
   if (type === 'concession') {
     const rows = accounts.filter((a) => a.concession > 0)
     return (
@@ -206,77 +164,6 @@ function ReportBody({ type, data }: { type: ReportType; data: ReturnType<typeof 
         rows={rows.map((a) => [a.studentName, `${a.className}-${a.section}`, formatINR(a.totalApplicable), formatINR(a.concession), formatINR(a.netPayable), 'Principal', '2025-04-02'])}
         totals={['Total', String(rows.length), formatINR(rows.reduce((s, a) => s + a.totalApplicable, 0)), formatINR(rows.reduce((s, a) => s + a.concession, 0)), formatINR(rows.reduce((s, a) => s + a.netPayable, 0)), '', '']}
       />
-    )
-  }
-
-  if (type === 'cash') {
-    return (
-      <div className="overflow-x-auto max-h-[32rem]">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
-            <tr>
-              <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Student</th>
-              <th className="text-right px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Amount</th>
-              <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Collected By</th>
-              <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Submitted</th>
-              <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cashRequests.map((r) => (
-              <tr key={r.id} className="border-t border-border/30 hover:bg-muted/20 even:bg-muted/10">
-                <td className="px-3 py-2">
-                  <p className="font-medium text-[11px]">{r.studentName}</p>
-                  <p className="text-[9px] text-muted-foreground font-mono">{r.admissionNo}</p>
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatINR(r.amount)}</td>
-                <td className="px-3 py-2 text-[10px]">{r.collectedBy}</td>
-                <td className="px-3 py-2 text-muted-foreground text-[10px]">{formatDate(r.submittedAt)}</td>
-                <td className="px-3 py-2 text-center"><FeeStatusBadge status={r.status} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
-
-  if (type === 'transactions') {
-    return (
-      <div className="overflow-x-auto max-h-[32rem]">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
-            <tr>
-              <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Receipt</th>
-              <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Student</th>
-              <th className="text-right px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Amount</th>
-              <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Mode</th>
-              <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
-              <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transactions.map((t) => (
-              <tr key={t.id} className="border-t border-border/30 hover:bg-muted/20 even:bg-muted/10">
-                <td className="px-3 py-2 font-mono text-[10px]">{t.receiptNo}</td>
-                <td className="px-3 py-2">
-                  <p className="font-medium text-[11px]">{t.studentName}</p>
-                  <p className="text-[9px] text-muted-foreground font-mono">{t.admissionNo}</p>
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatINR(t.amount)}</td>
-                <td className="px-3 py-2 text-center">
-                  <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ring-1', modeAccent(t.mode))}>
-                    <ModeIcon mode={t.mode} className="h-2.5 w-2.5" />
-                    {t.mode}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-center"><FeeStatusBadge status={t.status} /></td>
-                <td className="px-3 py-2 text-muted-foreground text-[10px] whitespace-nowrap">{formatDate(t.date)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     )
   }
 

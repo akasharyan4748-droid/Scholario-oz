@@ -12,7 +12,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Search, FileText, Printer, Download, X, Eye, Receipt as ReceiptIcon,
+  Search, Printer, Download, X, Eye, Receipt as ReceiptIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -62,7 +62,7 @@ export function SalaryPayslipsSection({ data }: { data: ReturnType<typeof useSal
           <SalaryEmptyState
             icon={<ReceiptIcon className="h-6 w-6" />}
             title="No payslips yet"
-            description="Payslips are generated when payroll is processed. Run payroll from the Payroll tab."
+            description="Run payroll from the Payroll tab to generate payslips."
           />
         </SalaryPanel>
       ) : (
@@ -93,12 +93,6 @@ export function SalaryPayslipsSection({ data }: { data: ReturnType<typeof useSal
                         <button onClick={() => setSelected(p)} className="inline-flex items-center justify-center h-6 w-6 rounded text-primary hover:bg-primary/10 transition-colors" title="View">
                           <Eye className="h-3 w-3" />
                         </button>
-                        <button onClick={() => toast.success('Print dialog opened', { description: p.id })} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Print">
-                          <Printer className="h-3 w-3" />
-                        </button>
-                        <button onClick={() => toast.success('Payslip downloaded', { description: `${p.id}.pdf` })} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Download">
-                          <Download className="h-3 w-3" />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -122,7 +116,7 @@ export function SalaryPayslipsSection({ data }: { data: ReturnType<typeof useSal
   )
 }
 
-function PayslipModal({ payslip, onClose }: { payslip: Payslip; onClose: () => void }) {
+export function PayslipModal({ payslip, onClose }: { payslip: Payslip; onClose: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -142,10 +136,10 @@ function PayslipModal({ payslip, onClose }: { payslip: Payslip; onClose: () => v
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-border sticky top-0 bg-card z-10">
           <p className="text-xs font-semibold">Payslip Preview</p>
           <div className="flex items-center gap-1">
-            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => toast.success('Print dialog opened', { description: payslip.id })}>
+            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => window.print()}>
               <Printer className="h-3 w-3" /> Print
             </Button>
-            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => toast.success('Payslip downloaded', { description: `${payslip.id}.pdf` })}>
+            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => downloadPayslip(payslip)}>
               <Download className="h-3 w-3" /> Download
             </Button>
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onClose}>
@@ -279,4 +273,37 @@ export function PayslipContent({ payslip }: { payslip: Payslip }) {
       <p className="text-center text-[9px] text-gray-500 mt-4">This is a computer-generated payslip. · Generated on {formatDate(payslip.generatedAt)}</p>
     </div>
   )
+}
+
+// ─── Download helper — generates a plain-text payslip file and triggers a browser download ──
+
+function downloadPayslip(p: Payslip) {
+  const lines = [
+    `${school.name} — Payslip`,
+    `ID: ${p.id}`,
+    `Employee: ${p.employeeName} (${p.designation})`,
+    `Department: ${p.department}`,
+    `Period: ${p.period}`,
+    `Pay Date: ${formatDate(p.payDate)}`,
+    ``,
+    `Earnings:`,
+    ...p.earnings.map((e) => `  ${e.name}: ${formatINR(e.amount)}`),
+    `  Gross Earnings: ${formatINR(p.grossEarnings)}`,
+    ``,
+    `Deductions:`,
+    ...p.deductions.map((d) => `  ${d.name}: ${formatINR(d.amount)}`),
+    `  Total Deductions: ${formatINR(p.totalDeductions)}`,
+    ``,
+    `Net Pay: ${formatINR(p.netPay)}`,
+  ]
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${p.id}.txt`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  toast.success('Payslip downloaded', { description: `${p.id}.txt` })
 }

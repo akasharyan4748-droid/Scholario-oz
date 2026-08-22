@@ -4,19 +4,29 @@
  * history-tab — searchable document history with actions.
  *
  * Search by student name, admission no, or doc number. Filter by doc type
- * and status. Actions per row: Preview, Download, Print, Regenerate.
+ * and status. Each row: primary Download action + "More" dropdown for the
+ * remaining actions (Preview, Print, Regenerate, Mark issued, Delete).
+ *
+ * Design language: single emerald accent on doc-type icon (size h-7,
+ * tinted chip). Doc-type pill is a neutral muted pill (color no longer
+ * differentiates types — the label does).
  */
 
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Eye, Printer, Download, RotateCw, X, Filter,
+  MoreVertical, Trash2, CheckCircle2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/format'
@@ -25,7 +35,7 @@ import {
   type DocType, type DocStatus, type GeneratedDocument, type DocumentTemplate,
 } from '@/lib/store/certificates-store'
 import {
-  DOC_TYPES, DOC_TYPE_BY_LABEL, accentClasses, CertPanel, DocStatusBadge, CertEmptyState,
+  DOC_TYPES, DOC_TYPE_BY_LABEL, CertPanel, DocStatusBadge, CertEmptyState,
 } from './cert-shared'
 import {
   CertificatePreview, MarksheetPreview, IDCardPreview, FeeReceiptPreview,
@@ -55,6 +65,11 @@ export function HistoryTab() {
     () => getDocumentHistory({ search, docType, status }),
     [getDocumentHistory, search, docType, status],
   )
+
+  // Stats line — single home for these counts (not duplicated elsewhere).
+  const issuedCount = filtered.filter((d) => d.status === 'Issued').length
+  const printedCount = filtered.filter((d) => d.status === 'Printed').length
+  const downloadedCount = filtered.filter((d) => d.status === 'Downloaded').length
 
   function handlePrint(doc: GeneratedDocument) {
     setPreviewDoc(doc)
@@ -107,6 +122,10 @@ export function HistoryTab() {
     updateDocStatus(doc.id, 'Issued')
     toast.success('Marked as issued', { description: doc.docNumber })
   }
+  function handleDelete(doc: GeneratedDocument) {
+    deleteDocument(doc.id)
+    toast.success('Deleted', { description: doc.docNumber })
+  }
 
   return (
     <div className="space-y-4">
@@ -158,15 +177,16 @@ export function HistoryTab() {
         </div>
       </CertPanel>
 
-      {/* Stats line */}
+      {/* Stats line — single home for these counts (Academics pattern:
+          muted text · separators, status-coloured numbers as small accents). */}
       <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
-        <span>Showing <strong className="text-foreground">{filtered.length}</strong> of <strong className="text-foreground">{documents.length}</strong> documents</span>
+        <span>Showing <strong className="text-foreground tabular-nums">{filtered.length}</strong> of <strong className="text-foreground tabular-nums">{documents.length}</strong> documents</span>
         <span className="text-muted-foreground/40">·</span>
-        <span>Issued: <strong className="text-emerald-600">{filtered.filter((d) => d.status === 'Issued').length}</strong></span>
+        <span>Issued: <strong className="text-emerald-600 tabular-nums">{issuedCount}</strong></span>
         <span className="text-muted-foreground/40">·</span>
-        <span>Printed: <strong className="text-amber-600">{filtered.filter((d) => d.status === 'Printed').length}</strong></span>
+        <span>Printed: <strong className="text-amber-600 tabular-nums">{printedCount}</strong></span>
         <span className="text-muted-foreground/40">·</span>
-        <span>Downloaded: <strong className="text-cyan-600">{filtered.filter((d) => d.status === 'Downloaded').length}</strong></span>
+        <span>Downloaded: <strong className="text-cyan-600 tabular-nums">{downloadedCount}</strong></span>
       </div>
 
       {/* Table */}
@@ -175,7 +195,6 @@ export function HistoryTab() {
           <CertEmptyState
             icon={<Search className="h-5 w-5" />}
             title="No documents match the filters"
-            description="Try changing the search or filter criteria."
           />
         ) : (
           <div className="overflow-x-auto">
@@ -194,13 +213,13 @@ export function HistoryTab() {
               <tbody>
                 {filtered.map((doc) => {
                   const d = DOC_TYPE_BY_LABEL[doc.docType]
-                  const a = accentClasses(d.accent)
                   const Icon = d.icon
                   return (
                     <tr key={doc.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
-                          <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg shrink-0', a.bg)}>
+                          {/* Small neutral icon chip — single emerald accent (consistent with doc-type grid) */}
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg shrink-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
                             <Icon className="h-3.5 w-3.5" />
                           </span>
                           <div className="min-w-0">
@@ -212,7 +231,8 @@ export function HistoryTab() {
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold', a.bg)}>
+                        {/* Neutral muted pill — color no longer differentiates types; the label does. */}
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-muted text-muted-foreground">
                           {doc.docType}
                         </span>
                       </td>
@@ -223,59 +243,54 @@ export function HistoryTab() {
                       </td>
                       <td className="px-3 py-2"><DocStatusBadge status={doc.status} /></td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center justify-end gap-0.5">
+                        {/* Primary Download action + More dropdown for the rest */}
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost" size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => setPreviewDoc(doc)}
-                            title="Preview"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost" size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => handlePrint(doc)}
-                            title="Print"
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost" size="sm"
-                            className="h-7 w-7 p-0"
+                            className="h-7 text-[10px] gap-1 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
                             onClick={() => handleDownload(doc)}
                             title="Download"
                           >
                             <Download className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Download</span>
                           </Button>
-                          <Button
-                            variant="ghost" size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => handleRegenerate(doc)}
-                            title="Regenerate"
-                          >
-                            <RotateCw className="h-3.5 w-3.5" />
-                          </Button>
-                          {doc.status !== 'Issued' && (
-                            <Button
-                              variant="outline" size="sm"
-                              className="h-7 text-[10px] px-2 ml-1"
-                              onClick={() => handleMarkIssued(doc)}
-                            >
-                              Mark issued
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost" size="sm"
-                            className="h-7 w-7 p-0 text-rose-500 hover:text-rose-600"
-                            onClick={() => {
-                              deleteDocument(doc.id)
-                              toast.success('Deleted', { description: doc.docNumber })
-                            }}
-                            title="Delete record"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost" size="sm"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                title="More actions"
+                              >
+                                <MoreVertical className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem onClick={() => setPreviewDoc(doc)}>
+                                <Eye className="h-3.5 w-3.5 mr-1.5" /> Preview
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handlePrint(doc)}>
+                                <Printer className="h-3.5 w-3.5 mr-1.5" /> Print
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleRegenerate(doc)}>
+                                <RotateCw className="h-3.5 w-3.5 mr-1.5" /> Regenerate
+                              </DropdownMenuItem>
+                              {doc.status !== 'Issued' && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => handleMarkIssued(doc)}>
+                                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Mark issued
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-rose-600 dark:text-rose-400 focus:text-rose-600 focus:bg-rose-500/10"
+                                onClick={() => handleDelete(doc)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete record
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </td>
                     </tr>
