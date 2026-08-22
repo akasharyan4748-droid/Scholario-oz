@@ -30,6 +30,7 @@ import { formatINR, formatDate } from '@/lib/format'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { InvPanel, InvEmptyState, ItemStatusBadge, MovementTypeBadge, InvPill } from './inventory-shared'
+import { DonutChart } from "@/components/shared/premium-charts"
 
 // ─── Movement icon + sign helper ────────────────────────────────────
 
@@ -263,41 +264,14 @@ export function CategoryValueDistribution() {
       subtitle={`${cats.length} categories · ${formatINR(total, true)} total`}
       bodyClassName="p-4 space-y-3"
     >
-      {sorted.map((c, i) => {
-        const pct = total > 0 ? (c.value / total) * 100 : 0
-        const widthPct = (c.value / max) * 100
-        return (
-          <motion.div
-            key={c.name}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.04 }}
-            className="space-y-1.5"
-          >
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className="h-2.5 w-2.5 rounded-sm shrink-0"
-                  style={{ background: c.color }}
-                  aria-hidden
-                />
-                <span className="font-medium truncate">{c.name}</span>
-                <InvPill accent="bg-muted text-muted-foreground">{pct.toFixed(1)}%</InvPill>
-              </div>
-              <span className="font-bold tabular-nums text-foreground">{formatINR(c.value, true)}</span>
-            </div>
-            <div className="h-2 rounded-full bg-muted/50 overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${widthPct}%` }}
-                transition={{ duration: 0.6, delay: i * 0.04, ease: [0.22, 1, 0.36, 1] }}
-                className="h-full rounded-full"
-                style={{ background: `linear-gradient(90deg, ${c.color}, ${c.color})` }}
-              />
-            </div>
-          </motion.div>
-        )
-      })}
+      <DonutChart
+        data={sorted.map((c) => ({ name: c.name, value: c.value, color: c.color }))}
+        centerLabel="Total Value"
+        centerValue={formatINR(total, true)}
+        formatValue={(n) => formatINR(n, true)}
+        size={180}
+        thickness={20}
+      />
     </InvPanel>
   )
 }

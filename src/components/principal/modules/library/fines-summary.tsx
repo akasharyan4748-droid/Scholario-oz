@@ -36,6 +36,7 @@ import { GradientAvatar } from '@/components/shared/ui'
 import { toast } from 'sonner'
 import { LibPanel, LibEmptyState, FineStatusBadge, BorrowerTypePill, LibPill } from './library-shared'
 import { useState } from 'react'
+import { DonutChart as MiniDonut } from "@/components/shared/premium-charts"
 
 // ─── FinesSummary ───────────────────────────────────────────────────
 
@@ -344,41 +345,20 @@ export function LibraryReports() {
         </LibPanel>
       </div>
 
-      {/* Category Distribution — full-width horizontal bars */}
+      {/* Category Distribution — premium donut chart */}
       <LibPanel
         title="Category Distribution"
         subtitle="book copies by category"
         action={<LibPill accent="bg-muted text-muted-foreground">{totalBooksForBars} copies total</LibPill>}
       >
-        <div className="space-y-2.5">
-          {analytics.byCategory.map((c, i) => {
-            const pct = Math.round((c.value / maxCategory) * 100)
-            return (
-              <motion.div
-                key={c.name}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.03 }}
-                className="flex items-center gap-2.5"
-              >
-                <div className="w-24 shrink-0">
-                  <p className="text-[11px] font-medium truncate">{c.name}</p>
-                </div>
-                <div className="flex-1">
-                  <div className="h-3 rounded-full bg-muted/40 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{ width: `${pct}%`, background: c.color }}
-                    />
-                  </div>
-                </div>
-                <div className="w-12 shrink-0 text-right">
-                  <span className="text-[11px] font-bold tabular-nums">{c.value}</span>
-                </div>
-              </motion.div>
-            )
-          })}
-        </div>
+        <MiniDonut
+          data={analytics.byCategory.map((c) => ({ name: c.name, value: c.value, color: c.color }))}
+          centerLabel="Total"
+          centerValue={String(totalBooksForBars)}
+          formatValue={(n) => n.toLocaleString('en-IN')}
+          size={180}
+          thickness={20}
+        />
       </LibPanel>
     </div>
   )
