@@ -17,6 +17,7 @@
 
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { Panel } from '../shared/panel'
 import { TYPE_COLORS } from './data'
 import type { CalendarEvent } from '@/lib/store/calendar-store'
 
@@ -65,33 +66,14 @@ const ACCENT_MAP: Record<
 
 export type CalAccent = keyof typeof ACCENT_MAP
 
-// ─── CalPanel (rounded card container) ───────────────────────────────
+// ─── CalPanel (flat section container — re-exports shared Panel) ─────
+//
+// Converged to the shared Academics-pattern Panel: flat rounded card with
+// title + optional subtitle + optional action on a header row, then body
+// content below. NO `border-b bg-muted/20` header strip — the Academics
+// visual language uses a single flat surface for all section containers.
 
-interface PanelProps {
-  title?: React.ReactNode
-  subtitle?: React.ReactNode
-  action?: React.ReactNode
-  children: React.ReactNode
-  className?: string
-  bodyClassName?: string
-}
-
-export function CalPanel({ title, subtitle, action, children, className, bodyClassName }: PanelProps) {
-  return (
-    <div className={cn('rounded-xl border border-border bg-card overflow-hidden', className)}>
-      {(title || action) && (
-        <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/60 bg-muted/20">
-          <div className="min-w-0">
-            {title && <p className="text-xs font-semibold tracking-tight">{title}</p>}
-            {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{subtitle}</p>}
-          </div>
-          {action && <div className="shrink-0">{action}</div>}
-        </div>
-      )}
-      <div className={cn('p-3', bodyClassName)}>{children}</div>
-    </div>
-  )
-}
+export const CalPanel = Panel
 
 // ─── CalPill ─────────────────────────────────────────────────────────
 

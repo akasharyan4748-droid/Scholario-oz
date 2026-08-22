@@ -336,7 +336,7 @@ function ArchivedExamRow({
         <div className="min-w-0">
           <p className="text-sm font-semibold truncate">{exam.name}</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            {exam.type} · {exam.classes.map((c) => c.className).join(', ')}
+            {exam.type} · {[...new Set(exam.classes.map((c) => c.className))].join(', ')}
           </p>
         </div>
         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300 shrink-0">
@@ -422,7 +422,7 @@ function SearchResults({ results }: { results: ArchiveSearchResult[] }) {
             <div className="min-w-0">
               <p className="font-medium truncate">{r.exam.name}</p>
               <p className="text-[10px] text-muted-foreground truncate">
-                {r.exam.type} · {r.exam.classes.map((c) => c.className).join(', ')}
+                {r.exam.type} · {[...new Set(r.exam.classes.map((c) => c.className))].join(', ')}
               </p>
             </div>
             <div className="text-[11px] text-muted-foreground tabular-nums">{r.sessionLabel}</div>

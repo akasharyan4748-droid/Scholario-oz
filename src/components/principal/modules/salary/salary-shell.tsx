@@ -3,22 +3,26 @@
 /**
  * SalaryShell — Principal Salary & Payroll workspace orchestrator.
  *
- * 8-tab navigation grouped by concern:
- *   Operate: Overview · Payroll
- *   Manage: Employees · Salary Structures · Adjustments
- *   Records: Payslips · History · Reports
+ * Visually converged to the Academics (Examinations + Attendance) canonical
+ * pattern: a single PageTransition wrapper with one row of SegmentedTabs on
+ * the left + action buttons on the right, then AnimatePresence tab content.
+ *
+ * The AppShell provides the scroll container + outer padding — this shell
+ * does NOT add its own scroll wrapper (which previously caused double
+ * scroll + double padding).
+ *
+ * Tabs:
+ *   Overview · Payroll · Employees · Salary Structures · Adjustments ·
+ *   Payslips · History · Reports
  */
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  LayoutDashboard, CalendarClock, Users, Layers, Plus,
-  Receipt, History, FileBarChart2,
-} from 'lucide-react'
+import { Users, CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { PageTransition } from '@/components/shared/ui'
+import { SegmentedTabs, type SegmentedTab } from '../shared/segmented-tabs'
 import { useSalaryData } from '@/lib/store/salary-store'
-import { school } from '@/lib/mock/school'
 import type { SalaryTab } from './salary-shared'
 import { SalaryOverviewSection } from './salary-overview'
 import { SalaryPayrollSection } from './salary-payroll'
@@ -28,45 +32,29 @@ import { SalaryAdjustmentsSection } from './salary-adjustments'
 import { SalaryPayslipsSection } from './salary-payslips'
 import { SalaryHistorySection } from './salary-history'
 import { SalaryReportsSection } from './salary-reports'
-import { SALARY_GLOBAL_STYLES } from './salary-shared'
 
-const TAB_GROUPS: Array<{ label: string; items: Array<{ value: SalaryTab; label: string; icon: React.ReactNode }> }> = [
-  {
-    label: 'Operate',
-    items: [
-      { value: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-3.5 w-3.5" /> },
-      { value: 'payroll', label: 'Payroll', icon: <CalendarClock className="h-3.5 w-3.5" /> },
-    ],
-  },
-  {
-    label: 'Manage',
-    items: [
-      { value: 'employees', label: 'Employees', icon: <Users className="h-3.5 w-3.5" /> },
-      { value: 'structures', label: 'Salary Structures', icon: <Layers className="h-3.5 w-3.5" /> },
-      { value: 'adjustments', label: 'Adjustments', icon: <Plus className="h-3.5 w-3.5" /> },
-    ],
-  },
-  {
-    label: 'Records',
-    items: [
-      { value: 'payslips', label: 'Payslips', icon: <Receipt className="h-3.5 w-3.5" /> },
-      { value: 'history', label: 'History', icon: <History className="h-3.5 w-3.5" /> },
-      { value: 'reports', label: 'Reports', icon: <FileBarChart2 className="h-3.5 w-3.5" /> },
-    ],
-  },
+// Static tab values used for keyboard-shortcut mapping (1–8 → tab index).
+const TAB_VALUES: SalaryTab[] = [
+  'overview', 'payroll', 'employees', 'structures',
+  'adjustments', 'payslips', 'history', 'reports',
 ]
-
-const TABS = TAB_GROUPS.flatMap((g) => g.items)
 
 export function SalaryShell() {
   const [tab, setTab] = useState<SalaryTab>('overview')
   const data = useSalaryData()
   const { analytics } = data
 
-  const tabBadges: Partial<Record<SalaryTab, number>> = {
-    adjustments: analytics.pendingAdjustments,
-    payroll: analytics.exceptions.length,
-  }
+  // Build tab list with optional badges for adjustments + payroll exceptions.
+  const tabs: SegmentedTab[] = [
+    { value: 'overview', label: 'Overview' },
+    { value: 'payroll', label: 'Payroll', badge: analytics.exceptions.length },
+    { value: 'employees', label: 'Employees' },
+    { value: 'structures', label: 'Salary Structures' },
+    { value: 'adjustments', label: 'Adjustments', badge: analytics.pendingAdjustments },
+    { value: 'payslips', label: 'Payslips' },
+    { value: 'history', label: 'History' },
+    { value: 'reports', label: 'Reports' },
+  ]
 
   // Keyboard shortcuts: 1-8 switch tabs.
   useEffect(() => {
@@ -76,9 +64,9 @@ export function SalaryShell() {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key >= '1' && e.key <= '8') {
         const idx = Number(e.key) - 1
-        if (idx < TABS.length) {
+        if (idx < TAB_VALUES.length) {
           e.preventDefault()
-          setTab(TABS[idx].value)
+          setTab(TAB_VALUES[idx])
         }
       }
     }
@@ -87,93 +75,53 @@ export function SalaryShell() {
   }, [])
 
   return (
-    <div className="flex flex-col h-full salary-shell">
-      <style dangerouslySetInnerHTML={{ __html: SALARY_GLOBAL_STYLES }} />
-      {/* Header — contextual content (NOT a duplicate "Salary & Payroll" title) */}
-      <div className="border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
-        <div className="px-4 sm:px-6 py-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]">Academic Year {school.academicYear}</p>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight">Monthly Payroll & Disbursement</h1>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setTab('employees')}>
-                <Users className="h-3.5 w-3.5" /> View Staff
-              </Button>
-              <Button size="sm" className="h-8 text-xs gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white" onClick={() => setTab('payroll')}>
-                <CalendarClock className="h-3.5 w-3.5" /> Process Payroll
-              </Button>
-            </div>
-          </div>
-          {/* Concise meta strip — concrete counts, no storytelling subtitle, no duplicate KPIs (those live on Overview) */}
-          <p className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
-            {analytics.employeeCount} employees · {data.periods.length} periods on file
-          </p>
+    <PageTransition className="space-y-4">
+      {/* Tab row + right-side action buttons (Academics canonical layout) */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="overflow-x-auto -mx-1 px-1 pb-1 max-w-full">
+          <SegmentedTabs
+            tabs={tabs}
+            value={tab}
+            onValueChange={(v) => setTab(v as SalaryTab)}
+          />
         </div>
-
-        {/* Tab navigation */}
-        <div className="px-4 sm:px-6 pb-2 overflow-x-auto">
-          <div className="flex items-center gap-2">
-            {TAB_GROUPS.map((group, gi) => (
-              <div key={group.label} className="flex items-center gap-2">
-                {gi > 0 && <span className="text-muted-foreground/40 text-xs select-none" aria-hidden>•</span>}
-                <div className="flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5">
-                  {group.items.map((t) => {
-                    const badge = tabBadges[t.value]
-                    return (
-                      <button
-                        key={t.value}
-                        onClick={() => setTab(t.value)}
-                        aria-current={tab === t.value ? 'page' : undefined}
-                        className={cn(
-                          'px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5',
-                          tab === t.value
-                            ? 'bg-card text-foreground shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground',
-                        )}
-                      >
-                        {t.icon}
-                        <span>{t.label}</span>
-                        {badge !== undefined && badge > 0 && (
-                          <span className={cn(
-                            'inline-flex items-center justify-center h-3.5 px-1 rounded-full text-[8px] font-bold tabular-nums',
-                            tab === t.value ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-muted text-muted-foreground',
-                          )}>
-                            {badge}
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={tab}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => setTab('employees')}
           >
-            {tab === 'overview' && <SalaryOverviewSection data={data} onNavigate={setTab} />}
-            {tab === 'payroll' && <SalaryPayrollSection data={data} />}
-            {tab === 'employees' && <SalaryEmployeesSection data={data} />}
-            {tab === 'structures' && <SalaryStructuresSection data={data} />}
-            {tab === 'adjustments' && <SalaryAdjustmentsSection data={data} />}
-            {tab === 'payslips' && <SalaryPayslipsSection data={data} />}
-            {tab === 'history' && <SalaryHistorySection data={data} />}
-            {tab === 'reports' && <SalaryReportsSection data={data} />}
-          </motion.div>
-        </AnimatePresence>
+            <Users className="h-3.5 w-3.5" /> View Staff
+          </Button>
+          <Button
+            size="sm"
+            className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => setTab('payroll')}
+          >
+            <CalendarClock className="h-3.5 w-3.5" /> Process Payroll
+          </Button>
+        </div>
       </div>
-    </div>
+
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.2 }}
+        >
+          {tab === 'overview' && <SalaryOverviewSection data={data} onNavigate={setTab} />}
+          {tab === 'payroll' && <SalaryPayrollSection data={data} />}
+          {tab === 'employees' && <SalaryEmployeesSection data={data} />}
+          {tab === 'structures' && <SalaryStructuresSection data={data} />}
+          {tab === 'adjustments' && <SalaryAdjustmentsSection data={data} />}
+          {tab === 'payslips' && <SalaryPayslipsSection data={data} />}
+          {tab === 'history' && <SalaryHistorySection data={data} />}
+          {tab === 'reports' && <SalaryReportsSection data={data} />}
+        </motion.div>
+      </AnimatePresence>
+    </PageTransition>
   )
 }

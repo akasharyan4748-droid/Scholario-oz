@@ -26,9 +26,10 @@ import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CHART_PALETTE } from '@/components/shared/premium-charts'
 import {
-  FinanceKpiCard, FinancePanel, FinanceStat, HealthStatusBadge,
+  FinancePanel, FinanceStat, HealthStatusBadge,
   FinanceEmptyState, severityAccent, severityColor,
 } from './finance-shared'
+import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
 import {
   DualAreaChart, HorizontalBars, GroupedBars, ProgressBar,
 } from './finance-charts'
@@ -41,41 +42,41 @@ interface Props {
 
 export function FinanceOverviewSection({ data, onNavigate }: Props) {
   return (
-    <div className="space-y-4 max-w-7xl mx-auto">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <FinanceKpiCard
+    <div className="space-y-4">
+      {/* KPI Cards — Academics canonical SummaryCard pattern */}
+      <SummaryCardGrid columns={4}>
+        <SummaryCard
           icon={<TrendingUp className="h-4 w-4" />}
           label="Total Revenue"
           value={formatINRCompact(data.totalRevenue)}
           sub={`${data.period.label}`}
-          accent="emerald"
+          tone="emerald"
           delay={0}
         />
-        <FinanceKpiCard
+        <SummaryCard
           icon={<TrendingDown className="h-4 w-4" />}
           label="Total Expenses"
           value={formatINRCompact(data.totalExpenses)}
-          accent="rose"
+          tone="rose"
           delay={0.05}
         />
-        <FinanceKpiCard
+        <SummaryCard
           icon={<Wallet className="h-4 w-4" />}
           label="Net Surplus"
           value={formatINRCompact(data.netSurplus)}
           sub={`${data.surplusMargin}% margin`}
-          accent="cyan"
+          tone="cyan"
           delay={0.1}
         />
-        <FinanceKpiCard
+        <SummaryCard
           icon={<Banknote className="h-4 w-4" />}
           label="Cash Available"
           value={formatINRCompact(data.cashAvailable)}
           sub={`${data.reserveCoverage} months reserve`}
-          accent="violet"
+          tone="violet"
           delay={0.15}
         />
-      </div>
+      </SummaryCardGrid>
 
       {/* Revenue vs Expenses + Expense Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">

@@ -3,14 +3,26 @@
 /**
  * TransportModule — Principal Transport workspace orchestrator.
  *
- * The global sidebar already says "Transport", so the header here uses a
- * contextual title ("Transport Operations") — NO duplicate "Transport
- * Management" title.
+ * Visual shell follows the Academics (Examinations + Attendance) canonical
+ * pattern:
+ *   <PageTransition className="space-y-4">
+ *     <div className="flex items-center justify-between gap-3 flex-wrap">
+ *       <SegmentedTabs ... />            ← left
+ *       <Button>Assign Student</Button>  ← right (primary, solid emerald)
+ *     </div>
+ *     <AnimatePresence mode="wait">
+ *       {tab === 'routes' && <motion.div key="routes" ...><RoutesTable /></motion.div>}
+ *       ...
+ *     </AnimatePresence>
+ *   </PageTransition>
+ *
+ * NO sticky header, NO eyebrow, NO h1, NO summary pill line — the sidebar
+ * already names the module, and the per-tab content (panel subtitles, tab
+ * badges) is the single home for each metric.
  *
  * Layout:
- *   - Header: contextual title + Assign Student action button
- *   - Summary pill line: vehicles · routes · drivers · students · on road · maintenance (incl. due)
- *   - Tab navigation: Routes · Vehicles · Users · Maintenance · Reports
+ *   - Tab row: Routes · Vehicles · Users · Maintenance · Reports (left)
+ *              + Assign Student button (right)
  *   - Active tab panel:
  *       * routes      → RoutesTable
  *       * vehicles    → VehiclesTable
@@ -21,23 +33,22 @@
  *
  * State from `useTransportStore` + `useTransportData` hooks. Students come
  * from the canonical `useStudentsStore` — no duplicate student data lives
- * in the transport store.
+ * in the transport store. Keyboard shortcuts 1-5.
  */
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bus, Route as RouteIcon, Users, Wrench, FileBarChart2, UserPlus,
-  Navigation, AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { PageTransition } from '@/components/shared/ui'
+import { SegmentedTabs } from '../shared/segmented-tabs'
 import {
   useTransportStore,
   useTransportData,
 } from '@/lib/store/transport-store'
 import type { TransportAssignment } from '@/lib/store/transport-store'
-import { toast } from 'sonner'
 import {
   TPT_GLOBAL_STYLES,
   type TptTab,
@@ -54,21 +65,11 @@ import {
 import { MaintenancePanel } from './maintenance-panel'
 import { TransportReports } from './transport-charts'
 
-const TABS: Array<{
-  value: TptTab
-  label: string
-  icon: React.ReactNode
-  badge?: number
-  badgeTone?: 'rose' | 'amber' | 'default'
-}> = [
+const TABS: Array<{ value: TptTab; label: string; icon: React.ReactNode; badge?: number }> = [
   { value: 'routes', label: 'Routes', icon: <RouteIcon className="h-3.5 w-3.5" /> },
   { value: 'vehicles', label: 'Vehicles', icon: <Bus className="h-3.5 w-3.5" /> },
   { value: 'users', label: 'Users', icon: <Users className="h-3.5 w-3.5" /> },
-  {
-    value: 'maintenance',
-    label: 'Maintenance',
-    icon: <Wrench className="h-3.5 w-3.5" />,
-  },
+  { value: 'maintenance', label: 'Maintenance', icon: <Wrench className="h-3.5 w-3.5" /> },
   { value: 'reports', label: 'Reports', icon: <FileBarChart2 className="h-3.5 w-3.5" /> },
 ]
 
@@ -83,17 +84,15 @@ export function TransportModule() {
   const data = useTransportData()
   const { analytics } = data
 
-  // Build tab badges — maintenance shows due+overdue count in rose.
-  const tabBadges: Partial<Record<TptTab, { count: number; tone: 'rose' | 'amber' | 'default' }>> = {
-    maintenance: {
-      count: analytics.maintenanceDue.length,
-      tone: 'rose',
-    },
-    users: {
-      count: analytics.unassignedStudents,
-      tone: 'amber',
-    },
-  }
+  // Tab badges — maintenance shows due+overdue count, users shows unassigned.
+  // SegmentedTabs suppresses rendering when 0.
+  const tabsWithBadges = TABS.map((t) => {
+    const badgeMap: Partial<Record<TptTab, number>> = {
+      maintenance: analytics.maintenanceDue.length,
+      users: analytics.unassignedStudents,
+    }
+    return { ...t, badge: badgeMap[t.value] }
+  })
 
   // Keyboard shortcuts: 1-5 switch tabs.
   useEffect(() => {
@@ -124,156 +123,58 @@ export function TransportModule() {
   }
 
   return (
-    <div className="flex flex-col h-full transport-shell">
+    <>
       <style dangerouslySetInnerHTML={{ __html: TPT_GLOBAL_STYLES }} />
-
-      {/* Header */}
-      <div className="border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
-        <div className="px-4 sm:px-6 py-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]">
-                School Transport
-              </p>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight">
-                Transport Operations
-              </h1>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={() => setTab('reports')}
-              >
-                <FileBarChart2 className="h-3.5 w-3.5" /> Reports
-              </Button>
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
-                onClick={() => setAssignOpen(true)}
-              >
-                <UserPlus className="h-3.5 w-3.5" /> Assign Student
-              </Button>
-            </div>
-          </div>
-
-          {/* Summary pill line */}
-          <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground flex-wrap">
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <Bus className="h-2.5 w-2.5" /> Vehicles{' '}
-              <span className="font-bold text-foreground">{analytics.totalVehicles}</span>
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <RouteIcon className="h-2.5 w-2.5" /> Routes{' '}
-              <span className="font-bold text-foreground">{analytics.totalRoutes}</span>
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <Users className="h-2.5 w-2.5" /> Drivers{' '}
-              <span className="font-bold text-foreground">{analytics.totalDrivers}</span>
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <Users className="h-2.5 w-2.5" /> Students{' '}
-              <span className="font-bold text-violet-600">{analytics.studentsUsingTransport}</span>
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <Navigation className="h-2.5 w-2.5" /> On Road{' '}
-              <span className="font-bold text-emerald-600">{analytics.onRoad}</span>
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <Wrench className="h-2.5 w-2.5" /> Maintenance{' '}
-              <span className="font-bold text-amber-600">{analytics.inMaintenance}</span>
-              <span className="text-muted-foreground/60">·</span>
-              <AlertTriangle className="h-2.5 w-2.5" />
-              <span className="font-bold text-rose-600">{analytics.maintenanceDue.length} due</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Tab navigation */}
-        <div className="px-4 sm:px-6 pb-2 overflow-x-auto">
-          <div className="flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 w-fit">
-            {TABS.map((t) => {
-              const badge = tabBadges[t.value]
-              const isActive = tab === t.value
-              return (
-                <button
-                  key={t.value}
-                  onClick={() => setTab(t.value)}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={cn(
-                    'px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5',
-                    isActive
-                      ? 'bg-card text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {t.icon}
-                  <span>{t.label}</span>
-                  {badge && badge.count > 0 && (
-                    <span
-                      className={cn(
-                        'inline-flex items-center justify-center h-3.5 px-1 rounded-full text-[8px] font-bold tabular-nums',
-                        badge.tone === 'rose'
-                          ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
-                          : badge.tone === 'amber'
-                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                            : isActive
-                              ? 'bg-muted/80 text-muted-foreground'
-                              : 'bg-muted/60 text-muted-foreground'
-                      )}
-                    >
-                      {badge.count}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+      <PageTransition className="space-y-4 transport-shell">
+      {/* Tab row + Assign Student action on the right */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <SegmentedTabs
+          tabs={tabsWithBadges}
+          value={tab}
+          onValueChange={(v) => setTab(v as TptTab)}
+        />
+        <Button
+          size="sm"
+          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+          onClick={() => setAssignOpen(true)}
+        >
+          <UserPlus className="h-3.5 w-3.5" /> Assign Student
+        </Button>
       </div>
 
-      {/* Main content */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        {/* Active tab panel */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={tab}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
-            className="space-y-4"
-          >
-            {tab === 'routes' && <RoutesTable />}
-            {tab === 'vehicles' && <VehiclesTable />}
-            {tab === 'users' && (
-              <>
-                <UnassignedStudentsBanner
-                  unassignedCount={analytics.unassignedStudents}
-                  onAssign={() => setAssignOpen(true)}
-                />
-                <AssignmentsTable
-                  onAssign={() => setAssignOpen(true)}
-                  onChangeRoute={openChangeRoute}
-                  onRemove={openRemove}
-                />
-              </>
-            )}
-            {tab === 'maintenance' && (
-              <MaintenancePanel
-                onComplete={() => setTab('vehicles')}
+      {/* Active tab content with AnimatePresence transitions */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.15 }}
+          className="space-y-4"
+        >
+          {tab === 'routes' && <RoutesTable />}
+          {tab === 'vehicles' && <VehiclesTable />}
+          {tab === 'users' && (
+            <>
+              <UnassignedStudentsBanner
+                unassignedCount={analytics.unassignedStudents}
+                onAssign={() => setAssignOpen(true)}
               />
-            )}
-            {tab === 'reports' && <TransportReports />}
-          </motion.div>
-        </AnimatePresence>
-      </div>
+              <AssignmentsTable
+                onAssign={() => setAssignOpen(true)}
+                onChangeRoute={openChangeRoute}
+                onRemove={openRemove}
+              />
+            </>
+          )}
+          {tab === 'maintenance' && (
+            <MaintenancePanel
+              onComplete={() => setTab('vehicles')}
+            />
+          )}
+          {tab === 'reports' && <TransportReports />}
+        </motion.div>
+      </AnimatePresence>
 
       {/* Dialogs */}
       <AssignStudentDialog open={assignOpen} onOpenChange={setAssignOpen} />
@@ -287,6 +188,7 @@ export function TransportModule() {
         onOpenChange={setRemoveOpen}
         assignment={removeTarget}
       />
-    </div>
+      </PageTransition>
+    </>
   )
 }

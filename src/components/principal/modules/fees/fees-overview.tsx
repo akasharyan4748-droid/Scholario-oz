@@ -19,7 +19,8 @@ import { Button } from '@/components/ui/button'
 import { useFeeData } from '@/lib/store/fee-store'
 import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { FeeKpiCard, FeePanel, FeeStatusBadge, FeeEmptyState, ModeIcon, modeAccent } from './fees-shared'
+import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
+import { FeePanel, FeeStatusBadge, FeeEmptyState, ModeIcon, modeAccent } from './fees-shared'
 import { MiniAreaChart, MiniDonut, MiniBars } from './fees-charts'
 import type { FeeTab } from './fees-shared'
 
@@ -33,45 +34,45 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <FeeKpiCard
+      {/* KPI Cards — Academics canonical SummaryCard pattern */}
+      <SummaryCardGrid columns={4}>
+        <SummaryCard
           icon={<Wallet className="h-4 w-4" />}
           label="Total Expected"
           value={formatINR(analytics.totalExpected, true)}
           sub={`${data.accounts.length} students`}
-          accent="slate"
+          tone="slate"
           delay={0}
           onClick={() => onNavigate('structures')}
         />
-        <FeeKpiCard
+        <SummaryCard
           icon={<CheckCircle2 className="h-4 w-4" />}
           label="Collected"
           value={formatINR(analytics.totalCollected, true)}
           sub={`${analytics.collectionRate}% collected`}
-          accent="emerald"
+          tone="emerald"
           delay={0.05}
           onClick={() => onNavigate('collections')}
         />
-        <FeeKpiCard
+        <SummaryCard
           icon={<AlertCircle className="h-4 w-4" />}
           label="Outstanding"
           value={formatINR(analytics.totalOutstanding, true)}
           sub={`${analytics.pendingCount} students with dues`}
-          accent="rose"
+          tone="rose"
           delay={0.1}
           onClick={() => onNavigate('dues')}
         />
-        <FeeKpiCard
+        <SummaryCard
           icon={<Clock className="h-4 w-4" />}
           label="Pending Verification"
           value={String(analytics.pendingCashRequests + analytics.pendingVerification)}
           sub={`${analytics.pendingCashRequests} cash · ${analytics.pendingVerification} payments`}
-          accent="amber"
+          tone="amber"
           delay={0.15}
           onClick={() => onNavigate('approvals')}
         />
-      </div>
+      </SummaryCardGrid>
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">

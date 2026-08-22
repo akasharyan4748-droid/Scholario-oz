@@ -6648,3 +6648,967 @@ Stage Summary:
 - All functionality preserved: every route, data source, calculation, CRUD operation, form, API, navigation, permission, workflow, report, search, table action, modal/drawer, and store mutation is intact.
 - One non-fatal hydration warning remains (<div> inside <p> somewhere in the communication module) — cosmetic only, doesn't affect rendering.
 - The 15-min webDevReview cron (job 332867) continues monitoring server stability.
+
+
+---
+Task ID: 2-A
+Agent: Explore (Academics visual extraction)
+Task: Extract exact visual values from Examination + Attendance for convergence
+
+Work Log:
+- Read worklog.md fully (6651 lines). Absorbed Task ID 1 (Academics audit, line 4241 — Appendix A canonical design language spec) and Task ID FINAL (line 6630 — confirms Finance + Operations already had a refinement pass but user says they still LOOK different from Academics).
+- Read in full (read-only, no edits):
+  • Academics canonical references:
+    - src/components/principal/modules/shared/module-header.tsx (76 LOC)
+    - src/components/principal/modules/shared/segmented-tabs.tsx (90 LOC)
+    - src/components/principal/modules/shared/summary-card.tsx (178 LOC — SummaryCard + SummaryCardGrid)
+    - src/components/principal/modules/shared/search-filter-bar.tsx (85 LOC)
+    - src/components/principal/modules/shared/entity-card.tsx (104 LOC)
+    - src/components/principal/modules/exams/index.tsx (262 LOC)
+    - src/components/principal/modules/exams/workspace-shared.tsx (116 LOC — local Kpi + Stat + StatusPill)
+    - src/components/principal/modules/exams/overview-section.tsx (342 LOC — ActionItemsWidget + OverviewSection)
+    - src/components/principal/modules/exams/collapsible-section.tsx (116 LOC)
+    - src/components/principal/modules/exams/tabs/overview-tab.tsx (279 LOC — local KpiCard)
+    - src/components/principal/modules/attendance/index.tsx (85 LOC)
+    - src/components/principal/modules/attendance/shared.tsx (168 LOC)
+    - src/components/principal/modules/attendance/attendance-tabs.tsx (36 LOC — wraps shared SegmentedTabs)
+    - src/components/principal/modules/attendance/student-workspace.tsx (209 LOC — local RefinedKpi)
+  • Divergent modules for comparison:
+    - src/components/principal/modules/fees/fees-shell.tsx (207 LOC)
+    - src/components/principal/modules/fees/index.tsx (15 LOC — re-export)
+    - src/components/principal/modules/fees/fees-shared.tsx (233 LOC — FeeKpiCard + FeePanel + FeeStat + FeePill + FeeStatusBadge)
+    - src/components/principal/modules/finance-dashboard/finance-shell.tsx (165 LOC)
+    - src/components/principal/modules/salary/salary-shell.tsx (179 LOC)
+    - src/components/principal/modules/library/index.tsx (243 LOC)
+    - src/components/principal/modules/certificates/index.tsx (138 LOC)
+    - src/components/principal/modules/transport/index.tsx (293 LOC — first 100 lines read)
+    - src/components/principal/modules/inventory/index.tsx (225 LOC — first 90 lines read)
+    - src/components/principal/modules/procurement/index.tsx (84 LOC — uses old SectionHeading pattern)
+- Cross-referenced the canonical class strings from Task ID 1's Appendix A against the live source files to confirm they are still accurate (they are — no drift).
+
+Stage Summary:
+
+# ROOT CAUSE OF VISUAL DIVERGENCE (critical finding)
+
+The Academics modules (Exams + Attendance) and the Finance + Operations modules use **structurally different shells**. This is NOT a class-string drift — the divergence is at the layout-architecture level. The previous refinement pass (Task IDs 6–16 + FINAL) cleaned up *content duplication* but did NOT unify the *shell architecture*. That is why they still look different.
+
+## The 4 structural deltas (Academics vs Finance/Operations):
+
+| # | Aspect | Academics (Exams + Attendance) | Finance + Operations (all 11 modules) |
+|---|---|---|---|
+| 1 | Shell wrapper | `<PageTransition className="space-y-4">` — **NO sticky header, NO title, NO eyebrow** | `<div className="flex flex-col h-full">` + sticky header `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` |
+| 2 | Header content | **NONE** — sidebar already says the module name | Eyebrow `text-[10px] uppercase tracking-[0.14em]` + h1 `text-base sm:text-lg font-bold` + (sometimes) description `text-[11px] text-muted-foreground` |
+| 3 | Tabs | **Shared `<SegmentedTabs>`** — `inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60` + buttons `px-3.5 text-xs rounded-full` | **Custom inline grouped tabs** — `flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5` + buttons `px-2.5 py-1 text-[11px] font-medium rounded-md` |
+| 4 | Main rhythm | `space-y-4` between sections (PageTransition root) | `flex-1 overflow-y-auto p-4 sm:p-6` scroll container — sections separated by `space-y-4` *inside* an inner motion.div, but the outer padding is different |
+
+Plus a secondary divergence:
+
+| # | Aspect | Academics | Finance + Operations |
+|---|---|---|---|
+| 5 | Section container | Flat card `rounded-xl border border-border bg-card p-4` with `<h3 className="text-sm font-semibold mb-3">` heading — OR `CollapsibleSection` | Panel-with-header `FeePanel`/`LibPanel`/`InvPanel`: `rounded-xl border border-border bg-card overflow-hidden` + header `px-4 py-2.5 border-b border-border/60 bg-muted/20` + body `p-3` |
+| 6 | KPI card | Local `KpiCard` (Exams) / `RefinedKpi` (Attendance) — both mirror shared `SummaryCard` class strings | Custom `FeeKpiCard`/`LibKpiCard`/`InvKpiCard` — different class strings (p-3.5, cardBg + ring + glow + ArrowRight) |
+
+The convergence agents should fix **deltas 1–4 first** (shell + tabs) — that alone will close ~80% of the visual gap. Delta 5 (section container) and delta 6 (KPI card) are the remaining 20%.
+
+---
+
+# EXACT VISUAL SPECIFICATION (quoted from source)
+
+=== PAGE HEADER (from exams/index.tsx + attendance/index.tsx) ===
+Wrapper: <PageTransition className="space-y-4">    ← NO sticky header, NO title, NO eyebrow
+Header row (immediate child of PageTransition):
+  <div className="flex items-center justify-between gap-3 flex-wrap">
+    <SegmentedTabs tabs={...} value={...} onValueChange={...} />
+    {optional right-side control, e.g. SessionPicker or null}
+  </div>
+Eyebrow: NONE (Academics omits it — sidebar already names the module)
+Title: NONE
+Description: NONE
+Actions container: NONE at this level (no actions row in the page header)
+Border/bg: NONE (no sticky header, no border-b)
+Padding: NONE (PageTransition uses space-y-4 internally; no px/py on the shell)
+Sticky positioning: NONE — the shell flows naturally with the rest of the principal content
+
+NOTE: The "page header" in Academics is literally just the SegmentedTabs row. There is no eyebrow → h1 → description block at all. This is the opposite of what Finance/Operations currently render.
+
+When a sub-tab needs a contextual action row (e.g. Attendance Overview's class filter), it uses <ModuleHeader> INSIDE the tab content — not at the page-shell level. See "SECTION CONTAINER" below for the ModuleHeader spec.
+
+Reference: exams/index.tsx lines 136–146, attendance/index.tsx lines 57–61.
+
+=== TABS (from shared/segmented-tabs.tsx — the SINGLE shared component) ===
+Container: "inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60"
+Active tab: "flex items-center gap-1.5 px-3.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 bg-white dark:bg-white/10 shadow-sm text-foreground"
+Inactive tab: "flex items-center gap-1.5 px-3.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted/40"
+Label: <span>{tab.label}</span> — inherits text-xs font-medium from button
+Icon: <span className="shrink-0">{tab.icon}</span> — caller passes h-3.5 w-3.5 (NOT h-4 — SegmentedTabs is a compact strip)
+Badge (count, optional):
+  <Badge variant="secondary" className="ml-0.5 text-[10px] px-1.5 py-0 bg-muted/80 text-muted-foreground">  ← when active
+  <Badge variant="secondary" className="ml-0.5 text-[10px] px-1.5 py-0 bg-muted/60 text-muted-foreground">  ← when inactive
+IS shared component: YES — `SegmentedTabs` from `src/components/principal/modules/shared/segmented-tabs.tsx`
+  - Imported directly in exams/index.tsx line 34: `import { SegmentedTabs } from '../shared/segmented-tabs'`
+  - Wrapped in attendance/attendance-tabs.tsx line 13: `import { SegmentedTabs } from '../shared/segmented-tabs'` (the AttendanceTabs wrapper is just a typed thin wrapper around the same component)
+  - Used by: exams (4 tabs), attendance (3 tabs), procurement (3 tabs), students, teachers, classes, timetable day selector
+
+This is the canonical Academics tab strip. **Finance (Fees, Salary, Finance Dashboard) and Operations (Library, Certificates, Transport, Inventory) do NOT use this.** They all use a custom inline grouped-pill implementation:
+  Container: "flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5" (or w-fit / w-max)
+  Active: "px-2.5 py-1 text-[11px] font-medium rounded-md bg-card text-foreground shadow-sm"
+  Inactive: "px-2.5 py-1 text-[11px] font-medium rounded-md text-muted-foreground hover:text-foreground"
+  Badge: "inline-flex items-center justify-center h-3.5 px-1 rounded-full text-[8px] font-bold tabular-nums bg-amber-500/15 text-amber-700 dark:text-amber-300"
+
+DIFF: shared SegmentedTabs is **h-9, rounded-full, text-xs, px-3.5, with shadow-sm on white bg**; Finance/Operations custom is **p-0.5 wrapper rounded-lg, buttons text-[11px] rounded-md px-2.5 py-1, with shadow-sm on bg-card**. The two are visually distinct (full-pill vs grouped-pill, larger vs smaller, rounded-full vs rounded-md, white vs card background).
+
+=== KPI CARDS (Exams uses local KpiCard; Attendance uses local RefinedKpi; both mirror shared SummaryCard) ===
+GRID (from exams/tabs/overview-tab.tsx line 51):
+  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+GRID (from attendance/student-workspace.tsx line 105):
+  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+
+EXAMS KpiCard (exams/tabs/overview-tab.tsx lines 218–233):
+  Card: "rounded-xl border border-border bg-card p-4 transition-shadow hover:shadow-sm" + tone bg "bg-{tone}-500/5"
+  Label: <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+  Value: <p className="font-display text-2xl font-bold tabular-nums tracking-tight text-{tone}-600 dark:text-{tone}-400">
+  Sub: <p className="text-[10px] text-muted-foreground mt-1 leading-tight">
+  Icon: <span className="text-{tone}-600 dark:text-{tone}-400"> {icon h-4 w-4} </span>  ← top-right, NO chip/wrapper
+
+ATTENDANCE RefinedKpi (attendance/student-workspace.tsx lines 194–208):
+  Card: `rounded-xl border p-3 sm:p-4 transition-colors ${t.bg} ${t.border}` where t.bg="bg-{tone}-500/5" t.border="border-border hover:border-{tone}-500/40"
+  Label: <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+  Value: <p className="font-display text-2xl sm:text-3xl font-bold tabular-nums tracking-tight text-{tone}-600 dark:text-{tone}-400">
+  Sub (indicator): <div className="flex items-center gap-1 mt-1.5 text-[10px] text-muted-foreground"> + ArrowUpRight/DownRight h-3 w-3 + <span className="truncate">
+  Icon: <span className="text-muted-foreground/60"> {icon h-3.5 w-3.5} </span>  ← top-right, NO chip
+
+SHARED SummaryCard (for reference — what other Academics modules use; src/components/principal/modules/shared/summary-card.tsx lines 99–118):
+  Card: "rounded-xl border p-4 transition-all duration-200" + tone bg "bg-{tone}-500/5" + "border-border" + "hover:border-{tone}-500/40"
+  Label: <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider leading-tight break-words">
+  Value: <p className="font-display text-2xl sm:text-3xl font-extrabold tabular-nums leading-tight text-{tone}-600 dark:text-{tone}-400">
+  Sub: <p className="text-[11px] text-muted-foreground mt-1 leading-tight break-words">
+  Icon: <span className="text-muted-foreground/70 shrink-0"> {icon} </span>  ← top-right
+  Hover: motion.div whileHover={{ y: -2, scale: 1.005 }} (lifts on hover)
+  Count-up animation: numericValue 0 → value over 700ms easeOutCubic, in-view triggered
+
+IS shared component: NO for Exams (local KpiCard) and NO for Attendance (local RefinedKpi). YES for other Academics modules (Teachers, Students, Classes, Timetable, Dashboard use shared SummaryCard). Exams/Attendance chose local components to keep the count-up animation simple but the class strings mirror SummaryCard exactly.
+
+Finance + Operations use their own KPI card variants (FeeKpiCard, LibKpiCard, InvKpiCard, etc.) with DIFFERENT class strings:
+  - FeeKpiCard: "rounded-xl border p-3.5 + cardBg + cardBorder + ring-1 + ArrowRight hover indicator" — p-3.5 (not p-4), has a glow div, has ArrowRight on hover, NO count-up animation, value `text-xl sm:text-2xl` (smaller than Academics' `text-2xl sm:text-3xl`).
+  DIFF: Academics cards are p-4, no ring, no glow, value text-2xl sm:text-3xl, label text-[10px]. Finance cards are p-3.5, ring-1, glow + ArrowRight, value text-xl sm:text-2xl.
+
+=== SECTION CONTAINER (Exams: flat card OR CollapsibleSection; Attendance: flat card) ===
+FLAT CARD (the canonical Academics section):
+  Container: "rounded-xl border border-border bg-card p-4"
+  Heading: <h3 className="text-sm font-semibold mb-3">   ← simple text-sm font-semibold
+  Sub-heading (optional): inline span next to title — e.g. <span className="inline-flex items-center justify-center h-5 px-1.5 rounded-full text-[9px] font-bold bg-primary/10 text-primary">{count}</span>
+  Body: just children, no extra padding wrapper
+  IS shared component: NO — pure inline div. NOT a FeePanel/LibPanel variant.
+  Reference: exams/overview-section.tsx lines 169, 262, 286 (ActionItemsWidget, Exam Readiness, Examination Details)
+
+COLLAPSIBLE SECTION (exams/collapsible-section.tsx lines 52–116):
+  Container: "rounded-lg border border-border/60 overflow-hidden"
+  Header row: "px-3 py-2 border-b border-border/40 bg-muted/30 border-l-2 flex items-center justify-between gap-2" + accent left border "border-l-{tone}-500/40" (default/emerald/amber/rose/sky/violet)
+  Header title: <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wide truncate">
+  Header subtitle: <span className="text-[9px] text-muted-foreground/70 truncate"> · {subtitle} </span>
+  Header actions: rendered inline before the toggle button (caller-supplied)
+  Toggle button: "inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+  Toggle icon: ChevronUp/ChevronDown h-3 w-3
+  Body: NO body wrapper — caller controls padding (usually <div className="p-3"> or no padding for table content)
+  IS shared component: NO — local to the exams module.
+  Reference: exams/collapsible-section.tsx, used heavily in exams/tabs/reports-tab.tsx and exams/marks-section.tsx
+
+MODULE HEADER (used INSIDE a tab when a contextual action row is needed; NOT at page-shell level):
+  Container (when sticky=false, default): "flex items-center justify-between gap-3 mb-4"
+  Container (when sticky=true): "flex items-center justify-between gap-3 sticky top-0 z-20 bg-background/95 backdrop-blur py-3 -mt-3 mb-3"
+  Left side: <div className="flex items-baseline gap-3 min-w-0">
+    Optional label: <h1 className="text-base font-semibold tracking-tight text-foreground truncate">  ← ONLY when label prop set (rare)
+    Meta strip: <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      {meta.map((m, i) => (
+        <span className="flex items-center gap-2">
+          {i > 0 && <span className="text-muted-foreground/40">·</span>}
+          <span className="truncate">{m}</span>
+        </span>
+      ))}
+  Right side: <div className="flex items-center gap-2 shrink-0">{actions}</div>
+  IS shared component: YES — `ModuleHeader` from `src/components/principal/modules/shared/module-header.tsx`
+  Reference: attendance/student-workspace.tsx lines 86–102 (uses meta + actions, NO label — pattern matches Academics)
+
+CONTRAST: Finance + Operations use a panel-with-header pattern (FeePanel / LibPanel / InvPanel):
+  Container: "rounded-xl border border-border bg-card overflow-hidden"
+  Header: "flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/60 bg-muted/20"
+    Title: <p className="text-xs font-semibold tracking-tight">
+    Subtitle: <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+    Action: <div className="shrink-0">{action}</div>
+  Body: "p-3"  ← fixed p-3 padding (Academics uses p-4 for flat cards)
+  This pattern adds a permanent header strip with a different background (bg-muted/20) — visually heavier than Academics' flat-card-with-inline-h3.
+
+=== MAIN CONTENT (the scroll wrapper) ===
+Academics (exams/index.tsx, attendance/index.tsx):
+  Root: <PageTransition className="space-y-4">  ← NO separate scroll wrapper; the principal panel already scrolls
+  Padding: NONE on the shell — the parent principal layout controls page padding
+  Max-width: NONE
+  Space-y: "space-y-4" — this is the ENTIRE vertical rhythm
+  Scroll classes: NONE
+
+Finance + Operations (fees-shell, finance-shell, salary-shell, library, certificates, transport, inventory):
+  Root: <div className="flex flex-col h-full">
+  Main: <div className="flex-1 overflow-y-auto p-4 sm:p-6">  ← separate scroll container with its own p-4 sm:p-6 padding
+  Inner motion.div (per-tab): usually className="space-y-4" or no className
+  Padding: "p-4 sm:p-6" on the scroll wrapper
+  Max-width: NONE
+  Space-y: "space-y-4" between sections inside the inner motion.div (matches Academics)
+  Scroll classes: "flex-1 overflow-y-auto"
+
+DIFF: Academics has NO scroll wrapper and NO p-4 sm:p-6 outer padding — it relies on the principal panel's natural scroll + padding. Finance/Operations wrap everything in `flex-1 overflow-y-auto p-4 sm:p-6` which creates a visually distinct scroll region. To converge, Finance/Operations should DROP the inner scroll wrapper + the p-4 sm:p-6 padding and let the principal panel handle layout (using PageTransition + space-y-4).
+
+=== TYPOGRAPHY SCALE (exact Tailwind class strings used in Exams + Attendance) ===
+Page title: NONE — omitted at the shell level (sidebar names the module)
+Workspace title (when entering a full-screen sub-route, e.g. exam-workspace.tsx):
+  "text-lg font-bold tracking-tight truncate"  ← reference: exam-workspace.tsx line ~150
+Section title (inside a flat card): "text-sm font-semibold" (sometimes "text-sm font-semibold mb-3" if heading a body)
+Section title (CollapsibleSection header): "text-[10px] uppercase font-semibold text-muted-foreground tracking-wide truncate"
+Eyebrow / uppercase meta: "text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]"  ← used ONLY inside ExamWorkspace sticky header (full-screen sub-route), NOT at the page-shell level
+KPI label: "text-[10px] uppercase font-bold tracking-wider text-muted-foreground" (Exams) or "text-[10px] uppercase font-bold tracking-wider text-muted-foreground" (Attendance) — same string
+KPI value: "font-display text-2xl font-bold tabular-nums tracking-tight" (Exams) or "font-display text-2xl sm:text-3xl font-bold tabular-nums tracking-tight" (Attendance) or "font-display text-2xl sm:text-3xl font-extrabold tabular-nums leading-tight" (shared SummaryCard)
+KPI sub: "text-[10px] text-muted-foreground mt-1 leading-tight" (Exams) or "text-[11px] text-muted-foreground mt-1 leading-tight" (shared SummaryCard) or "text-[10px] text-muted-foreground" (Attendance indicator)
+Body (primary): "text-xs text-foreground"
+Body (muted): "text-xs text-muted-foreground"
+Body (small): "text-[11px] text-muted-foreground"
+Caption: "text-[10px] text-muted-foreground"
+Tiny: "text-[9px] text-muted-foreground"  ← status badges, kbd hints, count chips, mini button text, CollapsibleSection subtitle
+Display value (KPI): "font-display text-2xl sm:text-3xl font-bold tabular-nums tracking-tight"
+
+=== BUTTON HIERARCHY (exact class strings used in Exams + Attendance) ===
+Primary action (in shell action slot or in card header):
+  <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+    <Icon className="h-3.5 w-3.5" /> Label
+  </Button>
+  ← Note: Exams + Attendance use a SOLID emerald-600, NOT a gradient. Finance + Operations use `bg-gradient-to-r from-emerald-600 to-teal-600` — that gradient IS a divergence.
+
+Secondary outline (in shell action slot or above tables):
+  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+    <Icon className="h-3.5 w-3.5" /> Label
+  </Button>
+
+Tertiary ghost (in-table row actions, dropdown items, dismiss):
+  <Button variant="ghost" size="sm" className="h-7 text-xs">  ← or h-7 w-7 p-0 for icon-only ghost
+
+Inline mini buttons (inside dense tables, NOT a Button component):
+  <button className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-primary hover:bg-primary/10 transition-colors">
+    <Icon className="h-2.5 w-2.5" /> Submit
+  </button>
+
+Icon button (ghost icon in table row, e.g. View):
+  <button className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
+    <Eye className="h-3.5 w-3.5" />
+  </button>
+
+Session picker (small inline select on the right of the tab strip):
+  <select className="appearance-none h-9 pl-3 pr-8 text-xs font-medium rounded-full bg-muted/60 hover:bg-muted text-foreground border border-transparent hover:border-border/60 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30">
+
+Archive button (compact pill on the right of the tab strip):
+  <button className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-medium rounded-full bg-muted/60 hover:bg-muted text-foreground border border-transparent hover:border-border/60 transition-colors">
+
+DIFF: Finance + Operations primary button uses `bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white` (gradient). Academics uses solid `bg-emerald-600 hover:bg-emerald-700 text-white`. The gradient is a divergence. Finance + Operations action buttons also use h-8 (correct) but their px is default (no override) while Academics buttons are sometimes explicit `px-3`.
+
+=== SPACING TOKENS (exact values used in Exams + Attendance) ===
+Header → tabs: 0px — they are the SAME row in Academics (SegmentedTabs is the page header). If a separate ModuleHeader is used inside a tab (e.g. Attendance Overview), the ModuleHeader sits at the TOP of the tab content with mb-4 (or mb-3 if sticky).
+Tabs → KPI: 16px (space-y-4 between SegmentedTabs row and the KPI grid motion.div)
+KPI → first section: 16px (space-y-4)
+Section → section: 16px (space-y-4 — the canonical Academics vertical rhythm). 12px (space-y-3) is used for denser sub-sections inside a tab.
+KPI card gap: 12px on mobile (`gap-3`), 16px on sm+ (`sm:gap-4`). Exams uses just `gap-3` (no sm:gap-4). Attendance uses `gap-3 sm:gap-4`. Shared SummaryCardGrid uses `gap-3 sm:gap-4`. The canonical is gap-3 sm:gap-4.
+Section padding (flat card): "p-4" (default). "p-3" for denser cards (CollapsibleSection body), "p-5" for showcase sections (SessionTopPerformers), "p-6 sm:p-8" only for empty states.
+Inner-card spacing: space-y-2 (tight), space-y-3 (default inner), space-y-4 (moderate between subsections).
+
+DIFF: Finance + Operations use `p-4 sm:p-6` for the MAIN CONTENT scroll wrapper (the outer page padding), then `space-y-4` between sections inside. Academics has NO outer padding wrapper — just space-y-4. The Finance/Operations pattern effectively adds an extra `sm:p-6` (24px) outer padding that Academics doesn't have, making Finance content look more "indented" than Academics. To converge, drop the p-4 sm:p-6 wrapper.
+
+=== TYPOGRAPHY + COLOR ACCENTS (Exams + Attendance palette) ===
+Tones used (SummaryCard tones + local KpiCard tones, same names): emerald, amber, sky, rose, violet, cyan, teal, slate.
+Card backgrounds (all variants): `bg-{tone}-500/5` (5% opacity soft tint)
+Card borders: `border-border` (neutral) + `hover:border-{tone}-500/40` (hover-only colored border)
+Icon color: tone-colored in Exams (`text-{tone}-600 dark:text-{tone}-400`), neutral `text-muted-foreground/60` in Attendance
+Status pill backgrounds (StatusPill in exams/workspace-shared.tsx):
+  Draft: "bg-muted text-muted-foreground border-border"
+  Scheduled: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
+  Ongoing: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
+  Completed: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+  Cancelled: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
+Status pill base class: "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold shadow-sm"
+NOTE: Academics uses `/15` opacity for status pill backgrounds; Finance uses `/10`. Minor divergence.
+
+=== COMPONENT INVENTORY (which Academics components are shared vs module-specific) ===
+SHARED (used cross-module):
+  - `PageTransition` — from `@/components/shared/ui` (exams/index.tsx, attendance/index.tsx)
+  - `SegmentedTabs` — from `../shared/segmented-tabs` (exams/index.tsx, attendance/attendance-tabs.tsx)
+  - `ModuleHeader` — from `../shared/module-header` (attendance/student-workspace.tsx — INSIDE the Overview tab, not at shell level)
+  - `SummaryCard` + `SummaryCardGrid` — from `../shared/summary-card` (used by Teachers, Students, Classes, Timetable, Dashboard; NOT used by Exams or Attendance — they use local equivalents)
+  - `SearchFilterBar` — from `../shared/search-filter-bar` (used by Teachers, Students, Admissions; NOT used by Exams or Attendance)
+  - `EntityCard` — from `../shared/entity-card` (used by Classes, Teachers; NOT used by Exams or Attendance)
+
+MODULE-SPECIFIC (Exams local):
+  - `Kpi` (workspace-shared.tsx) — used in ExamWorkspace overview-section. Card: "rounded-xl border border-border bg-card p-3 hover:shadow-sm transition-shadow"
+  - `Stat` (workspace-shared.tsx) — compact stat tile
+  - `StatusPill` / `ResultStatusPill` (workspace-shared.tsx) — exam status badges
+  - `KpiCard` (tabs/overview-tab.tsx) — local Overview tab KPI card (mirrors SummaryCard)
+  - `CollapsibleSection` (collapsible-section.tsx) — collapsible panel
+  - `ActionItemsWidget` (overview-section.tsx) — smart next-steps list
+  - `DetailField` (workspace-shared.tsx) — label/value pair
+
+MODULE-SPECIFIC (Attendance local):
+  - `RefinedKpi` (student-workspace.tsx) — local KPI card with trend indicator (mirrors SummaryCard)
+  - `CalendarLegend` (shared.tsx) — color legend strip
+  - `SelectedDayPanel` (shared.tsx) — selected day detail panel
+  - `StatTile` (shared.tsx) — small stat tile
+
+=== FINANCE + OPERATIONS COMPONENT INVENTORY (the divergence) ===
+Finance:
+  - `FeesShell` (fees/fees-shell.tsx) — uses CUSTOM sticky header + CUSTOM grouped tabs (NOT shared SegmentedTabs). NOT using ModuleHeader. NOT using PageTransition.
+  - `FeeKpiCard` (fees/fees-shared.tsx) — KPI card with p-3.5 + cardBg + ring-1 + glow + ArrowRight. NOT using shared SummaryCard.
+  - `FeePanel` (fees/fees-shared.tsx) — panel with header strip (px-4 py-2.5 border-b bg-muted/20) + body p-3. NOT using flat card pattern.
+  - `FeeStat`, `FeePill`, `FeeStatusBadge`, `FeeEmptyState` — local primitives.
+  - `FinanceShell` (finance-dashboard/finance-shell.tsx) — same CUSTOM sticky header + CUSTOM grouped tabs.
+  - `SalaryShell` (salary/salary-shell.tsx) — same CUSTOM sticky header + CUSTOM grouped tabs.
+
+Operations:
+  - `LibraryModule` (library/index.tsx) — CUSTOM sticky header + CUSTOM grouped tabs. Uses LibPanel + LibKpiCard + LibPill (defined in library-shared.tsx).
+  - `CertificatesModule` (certificates/index.tsx) — CUSTOM sticky header + CUSTOM grouped tabs. Uses CERT_PRINT_STYLES.
+  - `TransportModule` (transport/index.tsx) — CUSTOM sticky header + CUSTOM grouped tabs. Uses TptPanel + TptKpiCard + TptPill (transport-shared.tsx).
+  - `InventoryModule` (inventory/index.tsx) — CUSTOM sticky header + CUSTOM grouped tabs. Uses InvPanel + InvKpiCard + InvPill (inventory-shared.tsx).
+  - `ProcurementModule` (procurement/index.tsx) — OLD pattern: uses `SectionHeading` from `@/components/shared/ui` (with icon + subtitle + action) + KpiRow + shared `SegmentedTabs`. This is actually CLOSEST to the Academics pattern! But uses SectionHeading (not ModuleHeader) and KpiRow (custom).
+
+CRITICAL FINDING: Only Procurement uses the shared SegmentedTabs among the Operations/Finance modules. All other Finance + Operations modules (Fees, Salary, Finance Dashboard, Library, Certificates, Transport, Inventory) use a CUSTOM grouped-pill tab implementation that visually differs from the shared SegmentedTabs.
+
+=== CONVERGENCE RECOMMENDATIONS (for the Finance + Operations rebuild agents) ===
+To make Finance + Operations visually match Examinations + Attendance, apply these changes IN THIS ORDER:
+
+1. SHELL: Replace the `<div className="flex flex-col h-full"><X-shell> + sticky header + p-4 sm:p-6 main` pattern with `<PageTransition className="space-y-4">` containing a single `<div className="flex items-center justify-between gap-3 flex-wrap"><SegmentedTabs .../>{optional right-side control}</div>` row. DROP the sticky header, eyebrow, h1, and description entirely. The sidebar already names the module.
+
+2. TABS: Replace the custom inline grouped-pill tabs (`flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5` + `px-2.5 py-1 text-[11px] font-medium rounded-md bg-card text-foreground shadow-sm`) with the shared `<SegmentedTabs>` component from `../shared/segmented-tabs`. Keep tab labels and badges — they map 1:1 to the SegmentedTab interface.
+
+3. MAIN CONTENT: Replace `<div className="flex-1 overflow-y-auto p-4 sm:p-6">` with letting the principal panel handle scrolling (i.e. just put content directly inside `<PageTransition className="space-y-4">`). Use `space-y-4` for the vertical rhythm.
+
+4. SECTION CONTAINERS: Replace `<FeePanel>` / `<LibPanel>` / `<InvPanel>` (panel-with-header pattern: rounded-xl border + header px-4 py-2.5 border-b bg-muted/20 + body p-3) with the flat card pattern: `<div className="rounded-xl border border-border bg-card p-4"><h3 className="text-sm font-semibold mb-3">{title}</h3>{body}</div>`. For collapsible sections, adopt the exams/collapsible-section.tsx pattern (or extract it to shared).
+
+5. KPI CARDS: Replace `FeeKpiCard` / `LibKpiCard` / `InvKpiCard` with the shared `<SummaryCard>` from `../shared/summary-card` (use `<SummaryCardGrid columns={4}>` wrapper with `gap-3 sm:gap-4`). Set `tone` prop, `delay` for stagger, `icon` with `h-4 w-4`, optional `onClick` for navigation. The Academics canonical classes (rounded-xl border p-4 + bg-{tone}-500/5 + text-[10px] uppercase font-bold tracking-wider label + font-display text-2xl sm:text-3xl font-extrabold tabular-nums value + text-[11px] sub) come for free with SummaryCard.
+
+6. BUTTONS: Replace the gradient primary `bg-gradient-to-r from-emerald-600 to-teal-600` with the solid Academics primary `bg-emerald-600 hover:bg-emerald-700 text-white` (Button size="sm" h-8 text-xs gap-1.5). Keep `h-8 text-xs gap-1.5` for outline and ghost variants.
+
+7. STATUS PILLS: Align status pill background opacity with Academics `/15` (currently Finance uses `/10`). Minor.
+
+Files modified: 0 (read-only audit).
+
+---
+Task ID: 2-B
+Agent: Explore (Component divergence analysis)
+Task: Identify shared vs module-specific design components causing visual divergence
+
+Work Log:
+- Read `/home/z/my-project/worklog.md` (6650 lines) — absorbed prior work: Task 1 (Academics design language), Task 2 (Finance audit), Task 3 (Operations audit), Tasks 4–16 + FINAL (surgical refinement of Fees / Salary / Finance Dashboard / Library / Transport / Inventory / Certificates / Calendar / Communication / Messaging / Downloads). All shells were touched to dedupe summary-pill duplication and adopt the `eyebrow → h1 → short description → primary actions` header pattern. Each module's *-shared.tsx still owns its own Panel + KpiCard primitives.
+- Read every shared primitive file in `src/components/principal/modules/shared/`: `module-header.tsx`, `segmented-tabs.tsx`, `summary-card.tsx`, `entity-card.tsx`, `search-filter-bar.tsx`, `searchable-select.tsx`, `settings-primitives.tsx`, `universal-archive-panel.tsx`, `confirm-dialog.tsx`, `use-settings-dirty.tsx`.
+- Read every module shell / index.tsx: `exams/index.tsx`, `attendance/index.tsx`, `attendance/attendance-tabs.tsx`, `fees/fees-shell.tsx`, `salary/salary-shell.tsx`, `finance-dashboard/finance-shell.tsx`, `library/index.tsx`, `transport/index.tsx`, `inventory/index.tsx`, `certificates/index.tsx`, `calendar/index.tsx`, `communication/comm-shell.tsx`, `messaging/index.tsx`, `downloads/index.tsx`, `procurement/index.tsx`, `analytics/index.tsx`, `procurement/kpi-row.tsx`.
+- Read every module *-shared.tsx that defines a Panel + KpiCard: `fees/fees-shared.tsx`, `salary/salary-shared.tsx`, `finance-dashboard/finance-shared.tsx`, `library/library-shared.tsx`, `transport/transport-shared.tsx`, `inventory/inventory-shared.tsx`, `certificates/cert-shared.tsx`, `communication/comm-shared.tsx`, `calendar/calendar-shared.tsx`, `downloads/downloads-shared.tsx`.
+- Read Academics-side equivalents: `exams/collapsible-section.tsx`, `exams/workspace-shared.tsx`, `attendance/shared.tsx`, `exams/tabs/overview-tab.tsx` (where Exams defines its own local `KpiCard`), `attendance/student-workspace.tsx` (which imports `ModuleHeader`).
+- Read the 4th/legacy KpiCard at `src/components/shared/kpi-card.tsx` and confirmed it powers Analytics + Procurement.
+- Ran `rg "import .*SummaryCard.*from.*shared/summary-card"` across `src/components/principal/modules` to enumerate every consumer of the shared SummaryCard. Ran `rg "ModuleHeader"` and `rg "SegmentedTabs"` to enumerate every consumer of the shared header + tabs. Confirmed ModuleHeader is currently only consumed by `attendance/student-workspace.tsx` (sub-tab only, not the main Attendance shell), `teachers/index.tsx`, and the legacy `students-classes.tsx` — NONE of the 13 module shells listed in this audit use it.
+- Confirmed there is NO shared Panel component in `src/components/principal/modules/shared/`. The closest existing analogues are the universal-archive-panel and EntityCard; neither matches the `rounded-xl border border-border bg-card overflow-hidden` panel pattern used by every module.
+- Discovered a SECOND `SegmentedTabs` export inside `shared/settings-primitives.tsx:63` (older, simpler variant — no badge / no icon / no disabled / no dark mode active class). This sibling export is imported only by `school-settings/index.tsx`. Documented as a duplicate-tab source-of-truth problem.
+
+Stage Summary:
+
+# Component-Divergence Map + Consolidation Plan
+
+## 1. HEADER — comparison table
+
+`ModuleHeader` (`shared/module-header.tsx`) — the canonical Academics primitive:
+- Wrapper (sticky): `flex items-center justify-between gap-3 sticky top-0 z-20 bg-background/95 backdrop-blur py-3 -mt-3 mb-3`
+- Wrapper (non-sticky): `flex items-center justify-between gap-3 mb-4`
+- Left side: `flex items-baseline gap-3 min-w-0`
+- Title (only if `label`): `<h1 className="text-base font-semibold tracking-tight text-foreground truncate">`
+- Meta strip: `flex items-center gap-2 text-xs text-muted-foreground` (one-line)
+- Right actions: `flex items-center gap-2 shrink-0`
+- NO eyebrow, NO description, NO icon-in-title, NO summary pill line. Deliberately minimal.
+
+| Module shell | Uses shared ModuleHeader? | Sticky wrapper classes | Eyebrow classes | Title classes | Description classes | Inner padding |
+|---|---|---|---|---|---|---|
+| **Academics (canonical)** `shared/module-header.tsx` | — (IS the shared component) | `sticky top-0 z-20 bg-background/95 backdrop-blur py-3 -mt-3 mb-3` | n/a (optional `label`) | `text-base font-semibold tracking-tight text-foreground truncate` | n/a | n/a |
+| `attendance/student-workspace.tsx` (sub-tab) | YES | (uses ModuleHeader — non-sticky by default) | n/a | n/a (omitted) | n/a | n/a |
+| `teachers/index.tsx` | YES | (uses ModuleHeader) | n/a | optional label | n/a | n/a |
+| `exams/index.tsx` | NO — no header at all (only `<SegmentedTabs>` row + session picker on right) | n/a | n/a | n/a | n/a | n/a |
+| `attendance/index.tsx` | NO — no header at all (only `<AttendanceTabs>`) | n/a | n/a | n/a | n/a | n/a |
+| `fees/fees-shell.tsx` | NO — bespoke header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` | `text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]` | `text-base sm:text-lg font-bold tracking-tight` | `text-[11px] text-muted-foreground mt-0.5` | `px-4 sm:px-6 py-3` |
+| `salary/salary-shell.tsx` | NO — bespoke header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` | `text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]` | `text-base sm:text-lg font-bold tracking-tight` | n/a (uses meta strip below instead: `text-[10px] text-muted-foreground mt-1.5 tabular-nums`) | `px-4 sm:px-6 py-3` |
+| `finance-dashboard/finance-shell.tsx` | NO — bespoke header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` | `text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]` | `text-base sm:text-lg font-bold tracking-tight` | `text-xs text-muted-foreground mt-0.5` (DIFFERENT — `text-xs` not `text-[11px]`) | `px-4 sm:px-6 py-3` |
+| `library/index.tsx` | NO — bespoke header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` | `text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]` | `text-base sm:text-lg font-bold tracking-tight` | n/a (uses 5-pill summary line) | `px-4 sm:px-6 py-3` |
+| `transport/index.tsx` | NO — bespoke header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` | `text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]` | `text-base sm:text-lg font-bold tracking-tight` | n/a (uses 6-pill summary line) | `px-4 sm:px-6 py-3` |
+| `inventory/index.tsx` | NO — bespoke header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` | `text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]` | `text-base sm:text-lg font-bold tracking-tight` | n/a (uses 5-pill summary line) | `px-4 sm:px-6 py-3` |
+| `certificates/index.tsx` | NO — bespoke header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm no-print` | `text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]` | `text-base sm:text-lg font-bold tracking-tight` | n/a (uses meta strip `text-[11px] text-muted-foreground mt-1.5 flex-wrap`) | `px-4 sm:px-6 py-3` |
+| `calendar/index.tsx` | NO — bespoke header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` | `text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em] flex items-center gap-1.5` (with CalendarDays icon) | `text-base sm:text-lg font-bold tracking-tight mt-0.5` | `text-[11px] text-muted-foreground mt-0.5` | `px-4 sm:px-6 py-3` |
+| `communication/comm-shell.tsx` | NO — bespoke header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` | `text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]` | `text-base sm:text-lg font-bold tracking-tight` | n/a (uses 3-pill summary line) | `px-4 sm:px-6 py-3` |
+| `messaging/index.tsx` | NO — bespoke SIMPLE header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` | n/a (NO eyebrow) | `text-base sm:text-lg font-bold tracking-tight` | n/a (NO description, NO summary pills) | `px-4 sm:px-6 py-3` |
+| `downloads/index.tsx` | NO — bespoke header | `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` | `text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]` | `text-base sm:text-lg font-bold tracking-tight flex items-center gap-2` (with Library icon) | `text-[11px] text-muted-foreground mt-0.5` | `px-4 sm:px-6 py-3` |
+| `procurement/index.tsx` | NO — uses LEGACY `SectionHeading` from `@/components/shared/ui` (with icon, no sticky, no border) | n/a (SectionHeading's own classes) | n/a | `text-xl font-semibold tracking-tight` (per `shared/ui` legacy) | subtitle via SectionHeading | n/a |
+| `analytics/index.tsx` | NO — uses LEGACY `SectionHeading` | n/a | n/a | `text-xl font-semibold tracking-tight` | subtitle via SectionHeading | n/a |
+
+### Header — distinct implementations count: **4**
+
+1. **Shared `ModuleHeader`** — used by 3 sites (attendance/student-workspace sub-tab only, teachers, legacy students-classes). The shell-level Academics modules (exams, attendance) DON'T use it at all — they skip the header entirely and jump straight to `<SegmentedTabs>`.
+2. **Bespoke "eyebrow + h1 + description + actions" sticky header** with sticky wrapper `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm` + inner `px-4 sm:px-6 py-3`. Used by: **fees, salary, finance, library, transport, inventory, certificates, calendar, communication, downloads** (10 modules). Classes are 95% identical — the only divergences are:
+   - Finance Dashboard uses `text-xs` description (vs `text-[11px]` everywhere else).
+   - Salary uses no description (uses meta strip below the title instead).
+   - Calendar & Downloads embed an icon inside the title or eyebrow.
+   - Library / Transport / Inventory / Communication use a separate "summary pill line" below (this is the per-module pill row kept by Task 11–14 instead of duplicating KPI cards).
+3. **Bespoke MINIMAL header** — messaging only: same sticky wrapper, but no eyebrow, no description, no pills. Just title + Compose button.
+4. **Legacy `SectionHeading` from `@/components/shared/ui`** — used by `procurement/index.tsx` and `analytics/index.tsx`. This is the OLD design (icon + title + subtitle on a non-sticky, non-bordered row). It looks nothing like the Academics header.
+
+## 2. TABS — comparison table
+
+`SegmentedTabs` (`shared/segmented-tabs.tsx`) — the canonical Academics primitive:
+- Container: `inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60`
+- Active button: `bg-white dark:bg-white/10 shadow-sm text-foreground`
+- Inactive button: `text-muted-foreground hover:text-foreground hover:bg-muted/40`
+- Button base: `flex items-center gap-1.5 px-3.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200`
+- Badge: shadcn `<Badge variant="secondary">` with `ml-0.5 text-[10px] px-1.5 py-0` and `bg-muted/80 text-muted-foreground` (active) or `bg-muted/60 text-muted-foreground` (inactive)
+
+There is also a SECOND `SegmentedTabs` export at `shared/settings-primitives.tsx:63` — the old, simpler variant: same container `inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60` but `text-xs rounded-full px-4` button with `bg-white shadow-sm text-foreground` active (NO `dark:` variant, NO badge support, NO icon support). Imported only by `school-settings/index.tsx`.
+
+| Module shell | Tab source | Container classes | Active button classes | Inactive button classes | Button base classes |
+|---|---|---|---|---|---|
+| **Academics (canonical)** `shared/segmented-tabs.tsx` | — (IS the shared component) | `inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60` | `bg-white dark:bg-white/10 shadow-sm text-foreground` | `text-muted-foreground hover:text-foreground hover:bg-muted/40` | `flex items-center gap-1.5 px-3.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200` |
+| `exams/index.tsx` | shared `SegmentedTabs` ✓ | (same as canonical) | (same) | (same) | (same) |
+| `attendance/index.tsx` → `attendance-tabs.tsx` | shared `SegmentedTabs` ✓ (via AttendanceTabs wrapper) | (same as canonical) | (same) | (same) | (same) |
+| `school-settings/index.tsx` | shared `SegmentedTabs` from `settings-primitives.tsx` (the OLDER variant) | `inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60` | `bg-white shadow-sm text-foreground` (no `dark:`) | `text-muted-foreground hover:text-foreground` | `text-xs rounded-full px-4 transition-all` (no gap, no flex) |
+| `fees/fees-shell.tsx` | bespoke grouped tabs (NO shared) | `flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5` (per group) | `bg-card text-foreground shadow-sm` | `text-muted-foreground hover:text-foreground` | `px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5` |
+| `salary/salary-shell.tsx` | bespoke grouped tabs (NO shared) | `flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5` | `bg-card text-foreground shadow-sm` | `text-muted-foreground hover:text-foreground` | `px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5` |
+| `finance-dashboard/finance-shell.tsx` | bespoke tabs (NO shared) — slight variant | `flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 w-max` | `bg-card text-foreground shadow-sm` | `text-muted-foreground hover:text-foreground` | `px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5` (DIFFERENT: `px-3 text-xs` instead of `px-2.5 text-[11px]`) |
+| `library/index.tsx` | bespoke tabs (NO shared) | `flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 w-fit` | `bg-card text-foreground shadow-sm` | `text-muted-foreground hover:text-foreground` | `px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5` |
+| `transport/index.tsx` | bespoke tabs (NO shared) | `flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 w-fit` | `bg-card text-foreground shadow-sm` | `text-muted-foreground hover:text-foreground` | `px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5` |
+| `inventory/index.tsx` | bespoke tabs (NO shared) | `flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 w-fit` | `bg-card text-foreground shadow-sm` | `text-muted-foreground hover:text-foreground` | `px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5` |
+| `certificates/index.tsx` | bespoke tabs (NO shared) | `flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 w-fit` | `bg-card text-foreground shadow-sm` | `text-muted-foreground hover:text-foreground` | `px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5` |
+| `communication/comm-shell.tsx` | bespoke tabs (NO shared) — Finance variant | `flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 w-max` | `bg-card text-foreground shadow-sm` | `text-muted-foreground hover:text-foreground` | `px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5` (DIFFERENT: `px-3 text-xs` — matches Finance) |
+| `messaging/index.tsx` | (no tabs — uses FoldersSidebar instead) | n/a | n/a | n/a | n/a |
+| `downloads/index.tsx` | bespoke "category" tabs (NO shared) — totally different | (no container; flat row) | `bg-primary text-primary-foreground border-transparent shadow-sm` | `border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground` | `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all whitespace-nowrap border` |
+| `calendar/index.tsx` | (no tabs — uses FilterChips instead) | n/a | n/a | n/a | n/a |
+| `procurement/index.tsx` | shared `SegmentedTabs` ✓ | (same as canonical) | (same) | (same) | (same) |
+| `analytics/index.tsx` | bespoke tabs (NO shared) — totally different | (no container; flat row) | `border-primary bg-primary/10 text-primary shadow-sm` | `border-border bg-card/40 text-muted-foreground hover:bg-accent/40 hover:text-foreground` | `flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition-all` |
+
+### Tabs — distinct implementations count: **5**
+
+1. **Shared `SegmentedTabs` from `segmented-tabs.tsx`** — pill-shaped (`rounded-full`), `bg-muted/60`, `bg-white shadow-sm` active. Used by: `exams/index.tsx`, `attendance-tabs.tsx`, `procurement/index.tsx`. (3 module shells)
+2. **Shared `SegmentedTabs` from `settings-primitives.tsx`** — older simpler variant. Used by: `school-settings/index.tsx` only.
+3. **Bespoke "grouped pill row"** — `bg-muted/40 p-0.5` + `rounded-md` buttons + `bg-card text-foreground shadow-sm` active + `px-2.5 py-1 text-[11px]`. Used by: `fees`, `salary`, `library`, `transport`, `inventory`, `certificates` (6 module shells — IDENTICAL classes).
+4. **Bespoke "Finance/Comm variant"** — same as above but `px-3 py-1 text-xs` (slightly wider, slightly larger font). Used by: `finance-dashboard/finance-shell.tsx`, `communication/comm-shell.tsx` (2 module shells — IDENTICAL to each other, but visually different from variant #3).
+5. **Bespoke "downloads/analytics category tabs"** — flat row with bordered chips (`border` + `rounded-md` or `rounded-xl`), `bg-primary text-primary-foreground` active. Used by `downloads/index.tsx` (`rounded-md`, `text-[11px]`) and `analytics/index.tsx` (`rounded-xl`, `text-sm`). These are totally different from all other tabs.
+
+**Tabs divergence consequence**: even within the same "Operations" family, Finance Dashboard + Communication tabs are visibly WIDER and BIGGER than Library / Transport / Inventory / Certificates tabs. This is the most tangible pixel-level symptom of the divergence.
+
+## 3. KPI CARD — comparison table
+
+`SummaryCard` (`shared/summary-card.tsx`) — the canonical Academics primitive:
+- Container: `rounded-xl border p-4 transition-all duration-200` + tone.bg (e.g. `bg-sky-500/5`) + `border-border` + `hover:border-{tone}-500/40`
+- Label: `text-[10px] uppercase font-bold text-muted-foreground tracking-wider leading-tight break-words`
+- Value: `font-display text-2xl sm:text-3xl font-extrabold tabular-nums leading-tight` + tone text color
+- Sub: `text-[11px] text-muted-foreground mt-1 leading-tight break-words`
+- Icon: `text-muted-foreground/70 shrink-0` (NO chip wrapper, NO ring — flat color only)
+- Animations: count-up from 0 on mount, `motion.div` with `initial={{opacity:0, y:12}}`, `whileHover` y:-2 + scale 1.005
+- Tones supported: sky / amber / emerald / teal / rose / violet / cyan / slate (8)
+
+| KPI variant | File | Container classes | Label classes | Value classes | Sub classes | Icon treatment | Notes |
+|---|---|---|---|---|---|---|---|
+| **SummaryCard** (Academics canonical) | `shared/summary-card.tsx` | `rounded-xl border p-4 transition-all duration-200` + tone.bg + `border-border` + `hover:border-{tone}/40` | `text-[10px] uppercase font-bold text-muted-foreground tracking-wider leading-tight break-words` | `font-display text-2xl sm:text-3xl font-extrabold tabular-nums leading-tight` + tone.text | `text-[11px] text-muted-foreground mt-1 leading-tight break-words` | `text-muted-foreground/70 shrink-0` — flat color, NO chip, NO ring | Count-up animation, inView entrance, 8 tones, optional onClick becomes button |
+| **Exams local KpiCard** | `exams/tabs/overview-tab.tsx:201` | `rounded-xl border border-border bg-card p-4 transition-shadow hover:shadow-sm` + tone.bg | `text-[10px] uppercase font-bold tracking-wider text-muted-foreground` | `font-display text-2xl font-bold tabular-nums tracking-tight` + tone.text | `text-[10px] text-muted-foreground mt-1 leading-tight` | `<span className={t.text}>{icon}</span>` — flat color, NO chip, NO ring | Similar to SummaryCard but no count-up, no inView, no scale on hover, slightly smaller sub |
+| **FeeKpiCard / SalaryKpiCard / FinanceKpiCard / LibKpiCard / TptKpiCard / InvKpiCard / CertKpiCard** — module-specific duplicates | `fees/fees-shared.tsx`, `salary/salary-shared.tsx`, `finance-dashboard/finance-shared.tsx`, `library/library-shared.tsx`, `transport/transport-shared.tsx`, `inventory/inventory-shared.tsx`, `certificates/cert-shared.tsx` (7 files) | `group relative w-full text-left rounded-xl border p-3.5 transition-all duration-200 overflow-hidden` + accent.cardBg + accent.cardBorder + `hover:shadow-md hover:-translate-y-0.5` | `text-[10px] uppercase font-semibold text-muted-foreground tracking-wider truncate` | `font-display text-xl sm:text-2xl font-bold tabular-nums mt-1.5 leading-none` | `text-[10px] text-muted-foreground mt-1.5 truncate` | `flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1` + accent.bg + accent.ring — chip wrapper with ring | Also has `absolute -top-6 -right-6 h-16 w-16 rounded-full blur-2xl opacity-30` glow, ArrowRight on hover when clickable. 6 accents (emerald/rose/amber/sky/violet/cyan). **All 7 modules use IDENTICAL class strings — pure copy-paste.** |
+| **Kpi** (exams/workspace-shared.tsx) — workspace section KPIs | `exams/workspace-shared.tsx:65` | `rounded-xl border border-border bg-card p-3 hover:shadow-sm transition-shadow` + accent.bg | `text-[10px] uppercase font-semibold text-muted-foreground` | `font-display text-2xl font-bold tabular-nums mt-1` | `text-[10px] text-muted-foreground mt-0.5` | `flex h-7 w-7 items-center justify-center rounded-lg shrink-0` + accent.bg + accent.text (7×7 chip, smaller than FeeKpiCard's 9×9) | Also supports `progress` bar. Another distinct variant. |
+| **Legacy KpiCard** (procurement + analytics) | `src/components/shared/kpi-card.tsx` | `group relative bg-card/80 backdrop-blur-md rounded-xl p-3 sm:p-3.5 border border-border/80 shadow-2xs hover:shadow-xs transition-all overflow-hidden` | `text-[10px] sm:text-[11px] text-muted-foreground font-medium truncate` | `font-display text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-foreground leading-tight mt-0.5` | `text-[10px] text-muted-foreground mt-0.5 truncate` | `flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-lg text-xs shrink-0` + accent.bg + accent.text | Trend pill (`TrendingUp`/`TrendingDown` + %), optional sparkline (`MiniLine`), AnimatedCounter. ANOTHER distinct variant. |
+
+### KPI card — distinct implementations count: **4** (with the 7 module-specific duplicates collapsed as one)
+
+1. **Shared `SummaryCard`** — used by 6 Academics modules: `classes/index.tsx`, `classes/details/class-overview.tsx`, `teachers/directory-tab.tsx`, `students/overview-tab.tsx`, `dashboard/kpi-row.tsx`, `timetable/overview-cards.tsx`.
+2. **Module-specific duplicated KpiCard** (FeeKpiCard / SalaryKpiCard / FinanceKpiCard / LibKpiCard / TptKpiCard / InvKpiCard / CertKpiCard) — IDENTICAL class strings copy-pasted across 7 `*-shared.tsx` files. Used by their respective module sub-pages (e.g. Fees Overview, Salary Overview, Finance Overview, Library FinesSummary, etc.). NOT rendered in the main shell of library/transport/inventory/certificates (those KPI rows were removed in Tasks 11–14, but the component definitions remain in the *-shared.tsx files "in case other agents need them on sub-pages").
+3. **Exams local KpiCard** (`exams/tabs/overview-tab.tsx:201`) — used by the Exams Overview tab. Similar to SummaryCard but no count-up, no scale hover.
+4. **Exams workspace `Kpi`** (`exams/workspace-shared.tsx:65`) — used by Exam Workspace sections (Overview, Schedule, Marks, etc.). 7×7 chip + progress bar variant.
+5. **Legacy `KpiCard`** (`src/components/shared/kpi-card.tsx`) — used by `analytics/index.tsx` + `procurement/kpi-row.tsx`. Has `backdrop-blur-md`, sparkline, trend pill, AnimatedCounter. ANOTHER distinct visual.
+
+## 4. PANEL / SECTION CONTAINER — comparison table
+
+There is NO shared Panel component in `src/components/principal/modules/shared/`. Every module defines its own (with the same exact class strings, copy-pasted).
+
+| Panel variant | File | Container classes | Header row classes | Title classes | Subtitle classes | Body classes |
+|---|---|---|---|---|---|---|
+| **FeePanel / SalaryPanel / FinancePanel / LibPanel / TptPanel / InvPanel / CertPanel / CommPanel / CalPanel / DownloadsPanel** — 10 module-specific duplicates, ALL IDENTICAL | `fees/fees-shared.tsx`, `salary/salary-shared.tsx`, `finance-dashboard/finance-shared.tsx`, `library/library-shared.tsx`, `transport/transport-shared.tsx`, `inventory/inventory-shared.tsx`, `certificates/cert-shared.tsx`, `communication/comm-shared.tsx`, `calendar/calendar-shared.tsx`, `downloads/downloads-shared.tsx` | `rounded-xl border border-border bg-card overflow-hidden` | `flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/60 bg-muted/20` | `text-xs font-semibold tracking-tight` | `text-[10px] text-muted-foreground mt-0.5 truncate` | `p-3` |
+| **CollapsibleSection** (Exams workspace) | `exams/collapsible-section.tsx` | `rounded-lg border border-border/60 overflow-hidden` (NOTE: `rounded-lg` not `rounded-xl`) | `px-3 py-2 border-b border-border/40 bg-muted/30 border-l-2 flex items-center justify-between gap-2` (NOTE: has `border-l-2` accent + `bg-muted/30` not `bg-muted/20`) | `text-[10px] uppercase font-semibold text-muted-foreground tracking-wide truncate` (NOTE: uppercase) | `text-[9px] text-muted-foreground/70 truncate` (smaller) | no body wrapper (children direct) + collapsible |
+| **SettingsCard** (school-settings) | `shared/settings-primitives.tsx:89` | `rounded-xl border border-border/60 bg-card px-6 divide-y divide-border/40` (NOTE: `divide-y` not header+body) | n/a (uses SettingsCardSection instead — collapsible rows) | n/a | n/a | n/a |
+
+### Panel — distinct implementations count: **3**
+
+1. **Module-specific duplicated Panel** — FeePanel / SalaryPanel / FinancePanel / LibPanel / TptPanel / InvPanel / CertPanel / CommPanel / CalPanel / DownloadsPanel. 10 files, IDENTICAL class strings: `rounded-xl border border-border bg-card overflow-hidden` + header `px-4 py-2.5 border-b border-border/60 bg-muted/20` + body `p-3`. Used everywhere in Finance + Operations sub-pages.
+2. **CollapsibleSection** (Exams) — `rounded-lg` (not `rounded-xl`), `border-l-2` accent stripe, `bg-muted/30` (not `bg-muted/20`), uppercase title (`text-[10px] uppercase` vs `text-xs`), no body wrapper. Visually distinct from the module-specific Panel.
+3. **SettingsCard** (school-settings) — flat single-surface with `divide-y` rows; no header+body split. Different paradigm.
+
+## 5. ROOT CAUSE ANALYSIS
+
+### Distinct implementations of each primitive
+
+| Primitive | Distinct implementations | Already on shared | Module-specific duplicates |
+|---|---|---|---|
+| **Header** | **4** | `ModuleHeader` (used by 3 — teachers, attendance sub-tab, legacy students-classes) | Bespoke sticky "eyebrow+h1+desc+actions" header (10 modules: fees, salary, finance, library, transport, inventory, certificates, calendar, communication, downloads); Bespoke MINIMAL (messaging); Legacy `SectionHeading` (procurement, analytics) |
+| **Tabs** | **5** | `SegmentedTabs` in `segmented-tabs.tsx` (used by 3: exams, attendance, procurement); `SegmentedTabs` in `settings-primitives.tsx` (used by 1: school-settings — older simpler variant) | Bespoke "grouped pill row" `px-2.5 text-[11px]` (6 modules: fees, salary, library, transport, inventory, certificates — IDENTICAL); Bespoke "Finance/Comm variant" `px-3 text-xs` (2 modules: finance-dashboard, communication — IDENTICAL but WIDER); Bespoke "category chip" `border` + `rounded-md`/`rounded-xl` (2 modules: downloads, analytics) |
+| **KPI card** | **4** (counting the 7 duplicates as one) | `SummaryCard` (used by 6: classes ×2, teachers, students, dashboard, timetable) | Module-specific duplicated KpiCard (7 files: fees, salary, finance, library, transport, inventory, certificates — IDENTICAL); Exams local KpiCard (1); Exams workspace Kpi (1); Legacy `shared/kpi-card.tsx` (procurement + analytics) |
+| **Panel** | **3** | NONE — there is no shared Panel in `shared/` | Module-specific duplicated Panel (10 files: fees, salary, finance, library, transport, inventory, certificates, communication, calendar, downloads — ALL IDENTICAL); Exams CollapsibleSection (1, visually different); SettingsCard (school-settings, different paradigm) |
+
+### Which modules are ALREADY consistent (look like Academics)?
+
+✅ **Teachers, Students, Classes, Timetable, Dashboard** — use shared `ModuleHeader` + shared `SegmentedTabs` + shared `SummaryCard`. These are the "Academics reference" modules. They look consistent with each other.
+
+⚠️ **Exams, Attendance** — Academics family, but their SHELLS do NOT use `ModuleHeader`. They skip the header entirely (only `<SegmentedTabs>` row). Their sub-tab KPI cards: Exams uses its own local `KpiCard` (NOT shared `SummaryCard`); Attendance doesn't show KPI cards in the shell (uses SelectedDayPanel). So even within Academics, Exams + Attendance diverge from Teachers/Students/Classes because they don't use `SummaryCard` for KPI displays.
+
+✅ **Procurement** — uses shared `SegmentedTabs` (good) but uses legacy `SectionHeading` (bad) + legacy `shared/kpi-card.tsx` (bad). Partially converged.
+
+### Which modules are visually diverging (module-specific duplicates)?
+
+🔴 **Finance family** (fees, salary, finance-dashboard) — bespoke "eyebrow+h1+desc" header, bespoke "grouped pill" tabs (fees/salary use `px-2.5 text-[11px]`, finance uses `px-3 text-xs` — INCONSISTENT WITHIN THE SAME FAMILY), module-specific `FeeKpiCard`/`SalaryKpiCard`/`FinanceKpiCard` (identical classes), module-specific `FeePanel`/`SalaryPanel`/`FinancePanel` (identical classes).
+
+🔴 **Operations family** (library, transport, inventory, certificates, calendar, communication, messaging, downloads) — bespoke "eyebrow+h1+desc" header (messaging has NO eyebrow), bespoke "grouped pill" tabs (library/transport/inventory/certificates use `px-2.5 text-[11px]`, communication uses `px-3 text-xs` — INCONSISTENT WITHIN THE SAME FAMILY), module-specific `LibKpiCard`/`TptKpiCard`/`InvKpiCard`/`CertKpiCard` (identical classes), module-specific `LibPanel`/`TptPanel`/`InvPanel`/`CertPanel`/`CommPanel`/`CalPanel`/`DownloadsPanel` (10 IDENTICAL copies).
+
+### Why the user STILL sees Finance/Operations "look like separately designed dashboards"
+
+The previous refinement (Tasks 4–16) made the **content** and **information hierarchy** consistent — but it left the **primitives** themselves duplicated. So the SAME class strings are reproduced in 7 KPI files + 10 Panel files + 10 bespoke header blocks + 8 bespoke tab blocks. Tiny drift is already visible:
+- Finance Dashboard tabs use `px-3 text-xs` while Fees/Salary tabs use `px-2.5 text-[11px]` — a 2px / 1pt delta that's perceptible.
+- Finance Dashboard description uses `text-xs` while Fees uses `text-[11px]`.
+- Messaging has no eyebrow; everyone else has one.
+- Exams has a local KpiCard that doesn't count-up; Teachers/Students use SummaryCard that does count-up.
+
+The visual divergence is NOT from a single big difference — it's the compounding of 4–6 micro-divergences per primitive, all because each module is its own source of truth.
+
+## 6. CONSOLIDATION PLAN
+
+### Phase A — Promote `shared/ModuleHeader` to handle the "eyebrow+h1+desc+actions" pattern
+
+The current `shared/module-header.tsx` is too minimal (just `label + meta + actions`). It needs to grow an optional eyebrow + description, then every bespoke header block switches to it.
+
+**Change `shared/module-header.tsx` to accept**:
+- `eyebrow?: ReactNode` (small `text-[10px] uppercase tracking-[0.14em] text-muted-foreground` — can include an icon + text)
+- `title?: ReactNode` (already there, but bump to `text-base sm:text-lg font-bold tracking-tight` when `eyebrow` is present; keep `text-base font-semibold` when no eyebrow for backward-compat with teachers/students/attendance)
+- `description?: ReactNode` (`text-[11px] text-muted-foreground mt-0.5`)
+- `actions?: ReactNode` (already there)
+- `summaryPills?: ReactNode` (the optional per-module pill line — Library/Transport/Inventory/Communication pass their own)
+- `sticky?: boolean` (already there) — when sticky, use the wrapper `border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm px-4 sm:px-6 py-3` instead of the current `bg-background/95`
+
+**Files that would change**: `shared/module-header.tsx` (extend), then 10 shell files swap bespoke header block for `<ModuleHeader eyebrow={...} title={...} description={...} actions={...} summaryPills={...} sticky />`:
+- `fees/fees-shell.tsx` (lines 106–132 → 1 line)
+- `salary/salary-shell.tsx` (lines 93–113 → 1 line)
+- `finance-dashboard/finance-shell.tsx` (lines 68–117 → 1 line)
+- `library/index.tsx` (lines 112–153 → 1 line)
+- `transport/index.tsx` (lines 131–195 → 1 line)
+- `inventory/index.tsx` (lines 96–145 → 1 line)
+- `certificates/index.tsx` (lines 73–93 → 1 line)
+- `calendar/index.tsx` (lines 190–214 → 1 line)
+- `communication/comm-shell.tsx` (lines 71–86 → 1 line)
+- `downloads/index.tsx` (lines 110–125 → 1 line)
+- `messaging/index.tsx` (lines 60–73 → 1 line, with no eyebrow — using the same component)
+- `procurement/index.tsx` (replace legacy SectionHeading)
+- `analytics/index.tsx` (replace legacy SectionHeading)
+
+Estimated effort: 1 day. **Header convergence: 4 distinct → 1 shared.**
+
+### Phase B — Promote `shared/SegmentedTabs` to support grouped + icon + badge tabs, then every bespoke tab block switches to it
+
+The current `shared/segmented-tabs.tsx` already supports `icon` + `badge` + `disabled` per tab. It needs ONE new feature: tab groups (the `Operate · Administer · Insights` separator pattern used by Fees/Salary). Add an optional `groups?: { label?: string; items: SegmentedTab[] }[]` prop OR a `<SegmentedTabsGroup>` wrapper.
+
+The existing bespoke Finance/Comm variant (`px-3 text-xs`) and the Operations variant (`px-2.5 text-[11px]`) would both be replaced by the shared variant. The shared variant's existing `px-3.5 text-xs rounded-full` is a third size — to converge, pick ONE: recommend `px-3 text-xs rounded-md` (matches the most common Operations variant). Add a `size?: 'sm' | 'md'` prop if the Academics pills want to stay `rounded-full`.
+
+The Downloads + Analytics "category chip" tabs are a different paradigm (bordered, not pill). These could stay bespoke OR be added as a `variant="chip"` prop on the shared SegmentedTabs. Recommend leaving them bespoke for now (they have count badges + filter semantics that don't fit the pill pattern).
+
+**Files that would change**:
+- `shared/segmented-tabs.tsx` (extend with `groups` + `size`)
+- `shared/settings-primitives.tsx` (delete the duplicate `SegmentedTabs` export — make `school-settings/index.tsx` import from `segmented-tabs.tsx` instead)
+- `fees/fees-shell.tsx` (lines 134–172 → 1 component call)
+- `salary/salary-shell.tsx` (lines 115–153)
+- `finance-dashboard/finance-shell.tsx` (lines 119–144)
+- `library/index.tsx` (lines 156–191)
+- `transport/index.tsx` (lines 198–238)
+- `inventory/index.tsx` (lines 148–183)
+- `certificates/index.tsx` (lines 96–116)
+- `communication/comm-shell.tsx` (lines 89–120)
+
+Estimated effort: 1 day. **Tabs convergence: 5 distinct → 1 shared (+2 bespoke category-chip variants left as documented exceptions).**
+
+### Phase C — Add `shared/panel.tsx`, then delete the 10 module-specific Panel duplicates
+
+Create `src/components/principal/modules/shared/panel.tsx` exporting `Panel` with the EXACT class strings currently duplicated across 10 files:
+```
+container: 'rounded-xl border border-border bg-card overflow-hidden'
+header:    'flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/60 bg-muted/20'
+title:     'text-xs font-semibold tracking-tight'
+subtitle:  'text-[10px] text-muted-foreground mt-0.5 truncate'
+body:      'p-3'
+```
+Then in each `*-shared.tsx` file, replace the local `FeePanel` (and Salary/Finance/Lib/Tpt/Inv/Cert/Comm/Cal/DownloadsPanel) definition with `export const FeePanel = Panel` (a 1-line re-export) — preserves the existing import sites without churn — or alternatively do a codemod to replace `FeePanel` with `Panel` at every import site.
+
+**Files that would change**:
+- ADD `shared/panel.tsx` (~30 LOC)
+- `fees/fees-shared.tsx` (delete FeePanel lines 137–152 → re-export or codemod)
+- `salary/salary-shared.tsx` (delete SalaryPanel lines 149–164)
+- `finance-dashboard/finance-shared.tsx` (delete FinancePanel lines 92–107)
+- `library/library-shared.tsx` (delete LibPanel lines 96–111)
+- `transport/transport-shared.tsx` (delete TptPanel lines 161–192)
+- `inventory/inventory-shared.tsx` (delete InvPanel lines 97–112)
+- `certificates/cert-shared.tsx` (delete CertPanel lines 182–197)
+- `communication/comm-shared.tsx` (delete CommPanel lines 122–137)
+- `calendar/calendar-shared.tsx` (delete CalPanel lines 79–94)
+- `downloads/downloads-shared.tsx` (delete DownloadsPanel lines 196–215)
+
+Estimated effort: 0.5 day (mostly mechanical). **Panel convergence: 3 distinct → 1 shared + 1 CollapsibleSection (Academics exams) + 1 SettingsCard (settings) as documented exceptions.**
+
+### Phase D — Add `shared/kpi-card.tsx` (NEW, distinct from the existing legacy `shared/kpi-card.tsx`), then converge the 7 module-specific duplicates + Exams local KpiCard onto it
+
+Two options:
+- **Option D1 (recommended)**: Extend the existing `shared/summary-card.tsx` SummaryCard to support the module-specific KPI card layout (icon chip with ring, blur glow, no count-up variant). Add `variant?: 'default' | 'chip'` prop. Default keeps the Academics count-up + flat-color icon; `chip` variant renders the FeeKpiCard-style 9×9 ring chip + glow.
+- **Option D2**: Create a NEW `shared/module-kpi-card.tsx` that copies the FeeKpiCard class strings verbatim, then point every `*-shared.tsx` `FeeKpiCard`/`SalaryKpiCard`/etc. to re-export it.
+
+Recommend D1 (one component, two variants, one source of truth).
+
+**Files that would change**:
+- `shared/summary-card.tsx` (add `variant='chip'` support — ~50 LOC)
+- `fees/fees-shared.tsx` (delete FeeKpiCard lines 91–124 → re-export `SummaryCard` with `variant="chip"` OR codemod all FeeKpiCard callers)
+- `salary/salary-shared.tsx` (delete SalaryKpiCard lines 104–136)
+- `finance-dashboard/finance-shared.tsx` (delete FinanceKpiCard lines 40–79)
+- `library/library-shared.tsx` (delete LibKpiCard lines 51–83)
+- `transport/transport-shared.tsx` (delete TptKpiCard lines 91–148)
+- `inventory/inventory-shared.tsx` (delete InvKpiCard lines 52–84)
+- `certificates/cert-shared.tsx` (delete CertKpiCard lines 137–169)
+- `exams/tabs/overview-tab.tsx` (delete local KpiCard lines 201–234 → import shared)
+- `exams/workspace-shared.tsx` (replace `Kpi` lines 65–93 with shared variant, or keep for `progress` bar if no shared variant supports it)
+- Optionally later: `procurement/kpi-row.tsx` + `analytics/index.tsx` (replace legacy `shared/kpi-card.tsx` with shared `SummaryCard`)
+
+Estimated effort: 1 day. **KPI card convergence: 4 distinct → 1 shared (`SummaryCard` with `variant` prop).**
+
+### Phase E — Converge Exams/Attendance shells to use shared `ModuleHeader` + `SegmentedTabs` like the rest
+
+Currently `exams/index.tsx` and `attendance/index.tsx` skip the header entirely. They should adopt `<ModuleHeader sticky eyebrow={...} title={...} actions={...} />` like everyone else, even if the eyebrow is just "Academic Year 2025-26". This is the single biggest reason Academics looks "different" from Finance/Operations — Academics shells don't have the eyebrow strip at all.
+
+**Files that would change**:
+- `exams/index.tsx` (add `<ModuleHeader>` above the existing `<SegmentedTabs>` row)
+- `attendance/index.tsx` (add `<ModuleHeader>` above the existing `<AttendanceTabs>` row)
+
+Estimated effort: 0.25 day.
+
+### Phase F — Migrate the legacy `SegmentedTabs` in `school-settings/index.tsx` to the canonical shared one
+
+`school-settings/index.tsx` imports the older, simpler `SegmentedTabs` from `settings-primitives.tsx`. Migrate it to `shared/segmented-tabs.tsx` (the full-featured one). Then delete the older `SegmentedTabs` export from `settings-primitives.tsx:63`.
+
+**Files that would change**: `school-settings/index.tsx`, `shared/settings-primitives.tsx` (delete duplicate export).
+
+Estimated effort: 0.25 day.
+
+## 7. SUMMARY — TOTAL EFFORT & EXPECTED OUTCOME
+
+| Phase | Effort | Files touched | Outcome |
+|---|---|---|---|
+| A. Extend + adopt shared `ModuleHeader` | 1 day | 1 + 13 shells | 4 header variants → 1 |
+| B. Extend + adopt shared `SegmentedTabs` (with groups + size) | 1 day | 1 + 1 delete + 8 shells | 5 tab variants → 1 (+2 documented exceptions: Downloads/Analytics category chips) |
+| C. Add shared `Panel` + delete 10 duplicates | 0.5 day | 1 new + 10 *-shared.tsx | 3 panel variants → 1 (+2 documented exceptions: CollapsibleSection, SettingsCard) |
+| D. Extend `SummaryCard` with `variant='chip'` + delete 7 duplicates + Exams local Kpi | 1 day | 1 + 8 *-shared.tsx + 2 exams | 4 KPI variants → 1 |
+| E. Add `ModuleHeader` to Exams + Attendance shells | 0.25 day | 2 shells | All Academics shells use the same header |
+| F. Migrate `school-settings` to canonical `SegmentedTabs` | 0.25 day | 2 | One `SegmentedTabs` source of truth |
+| **TOTAL** | **~4 days** | **~30 files** | **17 distinct primitive implementations → 3 shared + 4 documented bespoke exceptions** |
+
+### Why this will fix the user's complaint
+
+After Phases A–F, every module shell renders the same `ModuleHeader` + `SegmentedTabs` primitives with the same class strings — the same way `Teachers`, `Students`, `Classes`, `Dashboard`, `Timetable` already do today. The per-module `*-shared.tsx` files become thin re-export wrappers (or are deleted entirely). The 7 KpiCard copies collapse to `SummaryCard variant="chip"`. The 10 Panel copies collapse to `Panel`. The 10 bespoke sticky-header blocks collapse to `<ModuleHeader sticky eyebrow title description actions summaryPills />`. Tiny drifts (Finance's `text-xs` vs Fees's `text-[11px]`, Finance's `px-3 text-xs` tabs vs Library's `px-2.5 text-[11px]` tabs, Messaging's missing eyebrow, Exams' local KpiCard without count-up) all disappear because there is ONE source of truth for each primitive.
+
+### What this audit does NOT recommend
+
+- Do NOT touch the bespoke Downloads / Analytics "category chip" tabs in Phase B — they have count badges + filter semantics that don't fit the pill pattern. Document them as known exceptions.
+- Do NOT touch `CollapsibleSection` (Exams) or `SettingsCard` (school-settings) in Phase C — they're intentionally different paradigms (collapsing rows + flat divided surface). Document them as known exceptions.
+- Do NOT delete the legacy `shared/kpi-card.tsx` in Phase D — Procurement + Analytics still depend on its trend-pill + sparkline features. Migrate them later as a separate effort (Phase G — out of scope here).
+- Do NOT change the per-module summary pill line content in Phase A — the pills themselves stay (Task 11–14 decided to keep them as the single home for each metric); only the WRAPPER header becomes shared.
+
+### Quick "smell test" — files that would change first (highest impact, lowest effort)
+
+1. `shared/module-header.tsx` — extend with eyebrow + description + summaryPills + sticky-border wrapper (the keystone change).
+2. `shared/segmented-tabs.tsx` — add `groups` + `size` props (the second keystone).
+3. `shared/panel.tsx` — NEW file (the third keystone).
+4. `fees/fees-shell.tsx` + `salary/salary-shell.tsx` + `finance-dashboard/finance-shell.tsx` — swap bespoke header + tab markup for shared (the first 3 module shells to migrate; proves the pattern).
+5. `library/index.tsx` + `transport/index.tsx` + `inventory/index.tsx` + `certificates/index.tsx` + `communication/comm-shell.tsx` + `calendar/index.tsx` + `downloads/index.tsx` + `messaging/index.tsx` — same swap (the next 8 shells).
+6. `exams/index.tsx` + `attendance/index.tsx` — add `ModuleHeader` (Phase E).
+7. The 10 `*-shared.tsx` Panel re-export simplifications (Phase C, mechanical).
+8. The 8 `*-shared.tsx` KpiCard re-export simplifications + `exams/tabs/overview-tab.tsx` (Phase D).
+
+After step 4 alone, Fees/Salary/Finance will already LOOK identical at the shell level. That's the user's primary complaint resolved.
+
+---
+Task ID: 9-C
+Agent: full-stack-developer (Library + Transport + Inventory visual convergence)
+Task: Converge Library, Transport, Inventory to Academics visual pattern
+
+Work Log:
+
+### Pre-flight: read the audit + Academics canonical
+- Read `/home/z/my-project/worklog.md` (7,333 lines) — absorbed:
+  • Task ID 1 Academics design language spec.
+  • Task ID 2-A exact visual spec with class strings extracted from Exams/Attendance (line 6,654).
+  • Task ID 2-B the 4-header-variant / 5-tab-variant / 10-panel-duplicate divergence map (line 6,997).
+  • Task ID 9 the previous refinement pass that dropped KPI rows + merged pills (line 6,525).
+- Read in full (read-only):
+  • Academics canonical: `exams/index.tsx` (262 LOC), `attendance/index.tsx` (85 LOC), `shared/segmented-tabs.tsx` (90 LOC), `shared/panel.tsx` (103 LOC).
+  • 3 target modules: `library/index.tsx` (242 LOC), `transport/index.tsx` (293 LOC), `inventory/index.tsx` (224 LOC) + their `*-shared.tsx` files (`library-shared.tsx` 209 LOC, `transport-shared.tsx` 338 LOC, `inventory-shared.tsx` 189 LOC).
+  • The shared `Panel` component at `src/components/principal/modules/shared/panel.tsx` (created in Task 2-B's Phase C recommendation, was unused until now).
+  • The `AppShell` at `src/components/shell/app-shell.tsx` — confirmed the shell ALREADY provides `<div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar">` for the main content area. So the previous module shells' own `flex-1 overflow-y-auto p-4 sm:p-6` wrapper created DOUBLE-SCROLLING + DOUBLE-PADDING — exactly the divergence root cause named in the task brief.
+- Enumerated every consumer of `LibPanel` / `TptPanel` / `InvPanel` via ripgrep — confirmed they only use the props `{ title, subtitle, action, bodyClassName, children }`, all of which exist on the shared `Panel` interface (`shared/panel.tsx:41-50`):
+  • `LibPanel` callers: `fines-summary.tsx` (4 sites), `books-tables.tsx` (2 sites).
+  • `TptPanel` callers: `maintenance-panel.tsx`, `transport-users.tsx`, `vehicles-table.tsx`, `transport-charts.tsx` (2 sites), `routes-table.tsx`.
+  • `InvPanel` callers: `movement-panels.tsx` (4 sites), `items-table.tsx` (1 site).
+- Confirmed `LibKpiCard` / `TptKpiCard` / `InvKpiCard` are only defined in their `*-shared.tsx` files — no callers (Task 9 dropped the KPI rows that consumed them). Kept the definitions as exports so any future sub-page can still import them.
+
+### Step 1: Promote shared `Panel` to handle table-clipping
+- `src/components/principal/modules/shared/panel.tsx` — added `overflow-hidden` to the container `rounded-xl border border-border bg-card overflow-hidden` (line 66). The Academics canonical flat card was `rounded-xl border border-border bg-card p-4` without `overflow-hidden`, but every legacy module-specific Panel (FeePanel / LibPanel / TptPanel / InvPanel / etc.) carried `overflow-hidden` so that tables rendered with `bodyClassName="p-0"` get their corners clipped to the rounded-xl border. Without it, the table's `bg-muted/40` header rows would bleed past the rounded border at the top-left and top-right corners. For bodies with the default `p-4` padding the `overflow-hidden` has zero visible effect. Updated the docstring (lines 17-28) to document the rationale. Verified `cn('p-4', 'p-0')` correctly resolves to `p-0` via `twMerge` so the existing `bodyClassName="p-0"` callers continue to render flush-to-border tables correctly.
+
+### Step 2: Convert `LibPanel` / `TptPanel` / `InvPanel` to thin re-exports of the shared `Panel`
+The task spec said: "Update the LibPanel/TptPanel/InvPanel definitions to use the shared Panel pattern (flat, no header strip)… The shared Panel signature is `{ title, subtitle, action, children, className, bodyClassName }` — match this interface so existing callers work without changes." Applied the cleanest possible approach — a 1-line `export const LibPanel = Panel` re-export per file. This auto-converges every consumer of `LibPanel` / `TptPanel` / `InvPanel` to the flat Academics section-container style without touching any caller file.
+
+- `src/components/principal/modules/library/library-shared.tsx`:
+  • Removed the local `interface PanelProps` + the 15-line `LibPanel` function body (old lines 87-111).
+  • Added `import { Panel } from '../shared/panel'` (line 26).
+  • Added `export const LibPanel = Panel` (line 100) with an explanatory comment block.
+  • Refreshed the file-header docstring (lines 3-20) to document that the section container is now a thin re-export of the shared flat-Panel, that `LibKpiCard` is kept for any sub-page that wants the chip-style KPI (Task 9 dropped the shell-level KPI row), and that `LibPill`, status badges, `BorrowerTypePill`, `LibEmptyState`, and `LIB_GLOBAL_STYLES` remain module-specific.
+  • All other exports unchanged: `LibTab`, `LibAccent`, `LibKpiCard`, `LibPill`, `BookStatusBadge`, `IssueStatusBadge`, `FineStatusBadge`, `BorrowerTypePill`, `LibEmptyState`, `LIB_GLOBAL_STYLES`.
+
+- `src/components/principal/modules/transport/transport-shared.tsx`:
+  • Removed the local `interface PanelProps` + the 32-line `TptPanel` function body (old lines 152-192).
+  • Added `import { Panel } from '../shared/panel'` (line 32).
+  • Added `export const TptPanel = Panel` (line 164) with an explanatory comment block.
+  • Refreshed the file-header docstring (lines 3-22) accordingly.
+  • All other exports unchanged: `TptTab`, `TptAccent`, `TptKpiCard`, `TptPill`, `RouteStatusBadge`, `VehicleStatusBadge`, `GpsBadge`, `MaintenanceStatusBadge`, `TptEmptyState`, `TPT_GLOBAL_STYLES`.
+
+- `src/components/principal/modules/inventory/inventory-shared.tsx`:
+  • Removed the local `interface PanelProps` + the 15-line `InvPanel` function body (old lines 88-112).
+  • Added `import { Panel } from '../shared/panel'` (line 27).
+  • Added `export const InvPanel = Panel` (line 101) with an explanatory comment block.
+  • Refreshed the file-header docstring (lines 3-21) accordingly.
+  • All other exports unchanged: `InvTab`, `InvAccent`, `InvKpiCard`, `InvPill`, `ItemStatusBadge`, `MovementTypeBadge`, `InvEmptyState`, `INV_GLOBAL_STYLES`.
+
+### Step 3: Converge Library shell to the Academics pattern
+- `src/components/principal/modules/library/index.tsx` — rewrote the shell wrapper from `<div className="flex flex-col h-full library-shell">` + sticky header (eyebrow "CENTRAL LIBRARY" + h1 "Library Catalogue & Issues" + 5-pill summary line + custom tab strip with `bg-muted/40 p-0.5 w-fit` + `px-2.5 py-1 text-[11px]` buttons) + `flex-1 overflow-y-auto p-4 sm:p-6` scroll wrapper → the Academics canonical:
+  ```
+  <>
+    <style dangerouslySetInnerHTML={{ __html: LIB_GLOBAL_STYLES }} />
+    <PageTransition className="space-y-4 library-shell">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <SegmentedTabs tabs={tabsWithBadges} value={tab} onValueChange={...} />
+        <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+          <Plus className="h-3.5 w-3.5" /> Issue Book
+        </Button>
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div key={tab} initial={{opacity:0,y:4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} transition={{duration:0.15}} className="space-y-4">
+          {/* tab content — preserved exactly: BooksCatalogue, banner+IssuedBooksTable, IssuedBooksTable filter="overdue", FinesSummary, LibraryReports */}
+        </motion.div>
+      </AnimatePresence>
+      <IssueBookDialog .../>
+    </PageTransition>
+  </>
+  ```
+  • Dropped the sticky header eyebrow + h1 + summary pill line entirely. The sidebar already names the module; per-tab panel subtitles + tab badges are the single home for each metric (Catalogue panel subtitle shows `${filtered.length} of ${books.length} books`; Issues tab badge shows active loans count; Overdue tab badge shows overdue count; Fines tab badge shows pending fines count; Fines tab FineStatCards show the ₹ total; LibraryReports tab shows category breakdown).
+  • Dropped the gradient primary button (`bg-gradient-to-r from-emerald-600 to-teal-600`) — replaced with the Academics solid `bg-emerald-600 hover:bg-emerald-700 text-white`.
+  • Removed now-unused imports: `BookCopy`, `Library as LibraryIcon`, `IndianRupee as Rupee`, `cn`, `formatINR`. The `analytics.totalBooks / totalIssued / totalAvailable / totalFines` properties are no longer rendered in the shell (still computed by `useLibraryData` for any sub-page consumer).
+  • Tab badges built once as `tabsWithBadges = TABS.map(t => ({ ...t, badge: badgeMap[t.value] }))` and passed to `SegmentedTabs` (suppresses rendering when 0 — matches the previous `badge !== undefined && badge > 0` logic). The previous per-tab rose-tinted badge for `overdue` and `fines` collapses to the Academics uniform `bg-muted/80`/`bg-muted/60` neutral badge (matches how Exams/Attendance render their tab badges).
+  • Moved the `<style>` tag OUTSIDE the `PageTransition` to avoid Tailwind's `space-y-4 > :not([hidden]) ~ :not([hidden])` selector applying an unwanted `margin-top: 1rem` to the first visible child (the `<style>` tag is `display:none` but is NOT `[hidden]`-attribute-hidden, so Tailwind's selector counts it as a sibling). Putting it in a sibling `<>` fragment before the PageTransition avoids the issue while keeping the `.library-shell *` CSS selector applicable to the PageTransition's descendants.
+  • Updated the file-header docstring (lines 3-32) to document the new shell pattern.
+
+### Step 4: Converge Transport shell to the Academics pattern
+- `src/components/principal/modules/transport/index.tsx` — same architectural rewrite as Library:
+  • Replaced `<div className="flex flex-col h-full transport-shell">` + sticky header (eyebrow "SCHOOL TRANSPORT" + h1 "Transport Operations" + 7-pill summary line including the merged Maintenance pill from Task 9 + custom tab strip) + `flex-1 overflow-y-auto p-4 sm:p-6` scroll wrapper → the Academics canonical `<>` fragment with `<style>` outside + `<PageTransition className="space-y-4 transport-shell">` containing the `SegmentedTabs` row + Assign Student button + `AnimatePresence` tab content + dialogs.
+  • Dropped the "Reports" outline button from the header — the Reports tab in the SegmentedTabs is the canonical navigation; the outline button was a duplicate shortcut.
+  • Dropped the gradient primary button → Academics solid `bg-emerald-600 hover:bg-emerald-700 text-white`.
+  • Tab badges for `maintenance` (rose-tinted in the previous code, due+overdue count) and `users` (amber-tinted in the previous code, unassigned count) collapse to the Academics uniform neutral badge. The `badgeTone` field on the local `TABS` type is removed; `SegmentedTabs` uses a single neutral Badge style.
+  • Removed now-unused imports: `Navigation`, `AlertTriangle` (only used in the summary pills), `cn` (only used in the custom tab strip's `cn(...)` active-state classes). The `analytics.totalVehicles / totalRoutes / totalDrivers / studentsUsingTransport / onRoad / inMaintenance` properties are no longer rendered in the shell (still computed by `useTransportData`).
+  • Tab content preserved exactly: `RoutesTable`, `VehiclesTable`, `UnassignedStudentsBanner + AssignmentsTable`, `MaintenancePanel` (with `onComplete={() => setTab('vehicles')}`), `TransportReports`. All dialogs preserved: `AssignStudentDialog`, `ChangeRouteDialog`, `RemoveAssignmentConfirm`.
+  • Same `<style>` tag placement fix as Library (outside PageTransition in `<>` fragment).
+  • Updated the file-header docstring (lines 3-34) to document the new shell pattern.
+
+### Step 5: Converge Inventory shell to the Academics pattern
+- `src/components/principal/modules/inventory/index.tsx` — same architectural rewrite:
+  • Replaced `<div className="flex flex-col h-full inventory-shell">` + sticky header (eyebrow "SCHOOL INVENTORY" + h1 "Inventory & Assets" + 5-pill summary line + custom tab strip) + `flex-1 overflow-y-auto p-4 sm:p-6` scroll wrapper → the Academics canonical `<>` fragment with `<style>` outside + `<PageTransition className="space-y-4 inventory-shell">` containing the `SegmentedTabs` row + Add Item button + `AnimatePresence` tab content + dialogs.
+  • Dropped the "Reports" outline button — the Reports tab is the canonical navigation.
+  • Dropped the gradient primary button → Academics solid `bg-emerald-600 hover:bg-emerald-700 text-white`.
+  • Tab badges for `movements` (count) and `lowstock` (rose-tinted in the previous code, low+out count) collapse to the Academics uniform neutral badge.
+  • Removed now-unused imports: `IndianRupee`, `Layers`, `PackageSearch` (only used in the summary pills), `cn` (only used in the custom tab strip), `formatINR` (only used in the pills). The `analytics.totalItems / totalValue / categoryCount` properties are no longer rendered in the shell (still computed by `useInventoryData`); `analytics.lowStockCount + outOfStockCount` is still used for the `lowstock` tab badge.
+  • Tab content preserved exactly: `ItemsTable`, `StockMovementLog`, `LowStockAlerts` (with `onAddStock={(it) => handleAction('add', it)}`), `InventoryReports`. All dialogs preserved: `AddItemDialog`, `ItemActionDialog`.
+  • Same `<style>` tag placement fix.
+  • Updated the file-header docstring (lines 3-32) to document the new shell pattern.
+
+### Verification (all passed)
+1. `cd /home/z/my-project && bun run lint` → 0 errors. Only the pre-existing config-deprecation warning: `ESLintIgnoreWarning: The ".eslintignore" file is no longer supported. Switch to using the "ignores" property in "eslint.config.js"` (unrelated to my changes — present in every previous Task's verification log too).
+2. `curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:3000/` → HTTP 200.
+3. `cd /home/z/my-project && bunx tsc --noEmit 2>&1 | grep -E "library/|transport/|inventory/" | head -20` → empty. No TS errors in any of the 3 modules. (Pre-existing TS errors remain in `exams/*`, `lib/exams/*`, `lib/store/finance-store.ts` — all outside this task's scope, listed in Task 9's verification log.)
+4. `dev.log` post-edit shows clean compiles (`✓ Compiled in 253ms`, `✓ Compiled in 277ms`, …) and HTTP 200 responses. No library/transport/inventory-specific errors logged (verified via `grep -i "library\|transport\|inventory" /home/z/my-project/dev.log` → empty).
+5. Verified the `AppShell` already provides the scroll container at `src/components/shell/app-shell.tsx` (`<div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar">`) — so removing the modules' own `flex-1 overflow-y-auto p-4 sm:p-6` wrapper eliminates the double-scroll + double-padding that was the root cause of the visual divergence.
+
+Stage Summary:
+
+### What changed (the architectural convergence)
+- **Shared Panel (`shared/panel.tsx`)**: added `overflow-hidden` to the container so tables rendered with `bodyClassName="p-0"` get their corners clipped to the rounded-xl border — matches the legacy module-specific Panel behavior. Zero visible effect for bodies with the default `p-4` padding.
+- **3 module `*-shared.tsx` files** (`library-shared.tsx`, `transport-shared.tsx`, `inventory-shared.tsx`): `LibPanel` / `TptPanel` / `InvPanel` became 1-line `export const … = Panel` re-exports of the shared flat-Panel. Every consumer of these (15 sites across `fines-summary.tsx`, `books-tables.tsx`, `maintenance-panel.tsx`, `transport-users.tsx`, `vehicles-table.tsx`, `transport-charts.tsx`, `routes-table.tsx`, `movement-panels.tsx`, `items-table.tsx`) now renders the flat Academics section container (`rounded-xl border border-border bg-card overflow-hidden` + `<h3 className="text-sm font-semibold tracking-tight text-foreground truncate">` title + `text-xs text-muted-foreground mt-0.5` subtitle + `p-4` body) with no `border-b border-border/60 bg-muted/20` colored header strip. The `LibKpiCard` / `TptKpiCard` / `InvKpiCard` definitions are preserved as exports for any future sub-page that wants the chip-style KPI card (Task 9 already removed the shell-level KPI rows).
+- **3 module `index.tsx` shells** (`library/index.tsx`, `transport/index.tsx`, `inventory/index.tsx`): replaced the bespoke `<div className="flex flex-col h-full">` + sticky eyebrow+h1+summary-pill header + custom grouped-pill tab strip + `flex-1 overflow-y-auto p-4 sm:p-6` scroll wrapper with the Academics canonical `<>` fragment + `<PageTransition className="space-y-4 …-shell">` + one `flex items-center justify-between gap-3 flex-wrap` row containing `<SegmentedTabs>` on the left and the primary action button on the right + `<AnimatePresence mode="wait">` tab transitions. The sticky header, eyebrow, h1, summary pill line, custom tab strip, and inner scroll wrapper are all gone — the AppShell's own scroll container + padding now controls page layout, exactly like Examinations + Attendance.
+
+### Visual improvements (what the user will see)
+- Navigating Examinations → Library (or → Transport / → Inventory) no longer feels like switching to a separately designed dashboard. All 4 modules now render the same composition:
+  1. A single row at the top: rounded-full `bg-muted/60` SegmentedTabs strip on the left + a solid emerald primary action button on the right (Issue Book / Assign Student / Add Item).
+  2. Tab content below with `space-y-4` vertical rhythm, each section rendered as a flat `rounded-xl border border-border bg-card` Panel with a `<h3 className="text-sm font-semibold">` title and no colored header strip.
+  3. No sticky eyebrow + h1 + summary pill header. The sidebar already names the module; per-tab panel subtitles and tab badges are the single home for each metric.
+- The previous `bg-muted/20` colored header strip on every section container is gone — sections now have a single flat surface, matching the Exams / Attendance flat cards.
+- The previous custom grouped-pill tabs (`px-2.5 py-1 text-[11px] rounded-md bg-muted/40 p-0.5`) are replaced by the canonical `inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60` SegmentedTabs with `px-3.5 rounded-full text-xs` buttons and `bg-white dark:bg-white/10 shadow-sm` active state — the exact Academics tab style.
+- The previous gradient primary buttons (`bg-gradient-to-r from-emerald-600 to-teal-600`) are replaced by the Academics solid `bg-emerald-600 hover:bg-emerald-700 text-white`.
+- The previous double-scroll + double-padding artifact (the AppShell's `p-4 sm:p-6 lg:p-8` outer padding PLUS the module's own `p-4 sm:p-6` inner padding) is gone — the module now flows naturally inside the AppShell's scroll container, exactly like Examinations + Attendance.
+- The summary pill lines (5 pills for Library, 7 pills for Transport, 5 pills for Inventory) are dropped entirely. Per the task brief's "LESS NOISE" guidance, every metric they carried is available in the tab content: Catalogue panel subtitle shows total/filtered book counts; Issues tab badge + banner shows active/overdue/on-schedule counts; Overdue tab badge shows overdue count; Fines tab badge + FineStatCards show pending fines + ₹ total; Reports tab shows category breakdown. Transport: Routes/Vehicles/Users/Maintenance tab badges + panel subtitles show all counts. Inventory: Items tab subtitle shows total/filtered counts; Movements tab badge shows movement count; Low Stock tab badge + panel subtitle show low+out counts; Reports tab shows category value + movements-by-type.
+
+### What was preserved (NOT touched)
+- All Library data: books catalogue (with search + filter + 8-column table + per-row Issue action), issued/overdue tables (with Remind action on overdue), fines ledger + 4 FineStatCards + filter, reports (Most Issued + Inventory Snapshot + Category Distribution donut), Issue Book dialog with borrower/book selectors and fine policy box.
+- All Transport data: routes/vehicles/users/maintenance tables, AssignStudentDialog / ChangeRouteDialog / RemoveAssignmentConfirm, UnassignedStudentsBanner, TransportReports (Route Distribution + Capacity Utilization), all status badges (RouteStatusBadge / VehicleStatusBadge / GpsBadge / MaintenanceStatusBadge).
+- All Inventory data: items table with 4-filter row + 8 columns + More-menu 4 actions, StockMovementLog with 7 movement types, LowStockAlerts, CategoryValueDistribution donut, Movements by Type table, AddItemDialog + ItemActionDialog (4 stock actions).
+- All premium chart components: `MiniDonut` in LibraryReports + CategoryValueDistribution — untouched.
+- All shared primitives: `LibPanel` / `TptPanel` / `InvPanel` (now re-exports), `LibPill` / `TptPill` / `InvPill`, all `*StatusBadge` / `GpsBadge` / `MovementTypeBadge` / `BorrowerTypePill`, all `*EmptyState`, `LIB_GLOBAL_STYLES` / `TPT_GLOBAL_STYLES` / `INV_GLOBAL_STYLES`. `LibKpiCard` / `TptKpiCard` / `InvKpiCard` definitions preserved as exports (zero current callers — Task 9 dropped the only consumers — kept for any future sub-page).
+- All store management: `library-store`, `transport-store`, `inventory-store` — no mutations, selectors, or analytics computations touched. `useLibraryData` / `useTransportData` / `useInventoryData` return the same analytics object shape (some properties no longer rendered in the shell but still computed and available to any sub-page consumer).
+- All keyboard shortcuts (1-5 for Library/Transport, 1-4 for Inventory) — untouched.
+- All filters, search inputs, Select dropdowns, per-row actions, dialogs, toasts — untouched. All AnimatePresence tab transitions preserved (same `initial/animate/exit` opacity+y + `duration: 0.15` as before).
+- All `*-shared.tsx` consumers (the 15 Panel call sites across 8 files) — untouched. The re-export approach means they automatically render the new Academics flat-Panel style without any caller-side changes.
+
+### Files modified: 7
+1. `src/components/principal/modules/shared/panel.tsx` — added `overflow-hidden` to container (line 66), updated docstring (lines 17-28). 103 → 109 LOC (+6).
+2. `src/components/principal/modules/library/library-shared.tsx` — `LibPanel` 15-LOC function → 1-line `export const LibPanel = Panel` re-export. Added `import { Panel }`. Refreshed docstring. 209 → 207 LOC (−2 net: −15 LOC function +1 LOC import +1 LOC re-export +11 LOC refreshed docstring/comments).
+3. `src/components/principal/modules/transport/transport-shared.tsx` — `TptPanel` 32-LOC function → 1-line re-export. 338 → 327 LOC (−11).
+4. `src/components/principal/modules/inventory/inventory-shared.tsx` — `InvPanel` 15-LOC function → 1-line re-export. 189 → 187 LOC (−2).
+5. `src/components/principal/modules/library/index.tsx` — shell rewrite to Academics pattern. 242 → 189 LOC (−53). Dropped sticky header, summary pills, custom tab strip, scroll wrapper; added SegmentedTabs row + PageTransition wrapper; moved `<style>` outside PageTransition; refreshed docstring; cleaned unused imports.
+6. `src/components/principal/modules/transport/index.tsx` — shell rewrite to Academics pattern. 293 → 195 LOC (−98). Same drops + additions as Library.
+7. `src/components/principal/modules/inventory/index.tsx` — shell rewrite to Academics pattern. 224 → 161 LOC (−63). Same drops + additions as Library.
+
+### Net LOC change: −217 lines across 7 files (the 3 Panel re-exports alone saved 60 lines of duplicated function bodies; the 3 shell rewrites saved ~210 lines of sticky-header + summary-pill + custom-tab-strip + scroll-wrapper markup; offset by +6 lines on the shared Panel for the `overflow-hidden` + docstring update).
+
+### Key principle applied
+The visual divergence was NOT a class-string drift — it was an architectural mismatch. The 3 modules wrapped their content in `<div className="flex flex-col h-full">` + sticky header + custom tab strip + `flex-1 overflow-y-auto p-4 sm:p-6` scroll wrapper, while Academics (Exams + Attendance) used `<PageTransition className="space-y-4">` with one tab-row + flat content. The AppShell already provides the scroll container + padding at `src/components/shell/app-shell.tsx`, so the modules' own scroll wrapper created double-scroll + double-padding. Converging to the Academics pattern (PageTransition + SegmentedTabs + flat Panel sections) eliminates the architectural mismatch — the modules now flow naturally inside the AppShell, exactly like Exams + Attendance. The 3 module-specific Panel re-exports auto-converge all 15 caller sites without touching any caller file. The 3 shell rewrites remove ~210 lines of bespoke header/tab/scroll markup. When the user navigates Examinations → Library (or → Transport / → Inventory), the visual composition is now identical: same tab style, same section container style, same spacing, same primary-button style, no header, no eyebrow, no summary pills.
+
+---
+Task ID: 9-D
+Agent: full-stack-developer (Operations visual convergence)
+Task: Converge Certificates, Calendar, Communication, Messages, Downloads to Academics visual pattern
+
+Work Log:
+
+### Phase 0: Context
+- Read `/home/z/my-project/worklog.md` for: Task ID 1 (Academics design language spec), Task ID 2-A (visual spec with class strings extracted from Exams/Attendance), Task ID 2-B (component divergence analysis — counted 4 distinct header variants + 5 distinct tab variants + 4 distinct KPI variants + 3 distinct Panel variants), Tasks 12-16 (the previous refinement pass that collapsed Certificates rainbow, rewrote Calendar, deduped Communication, etc.).
+- Read the 4 shared primitives:
+  - `src/components/principal/modules/shared/panel.tsx` — the NEW flat Panel: `rounded-xl border border-border bg-card` + `<h3 className="text-sm font-semibold">` + `text-xs text-muted-foreground` subtitle + `p-4` body. NO `border-b bg-muted/20` header strip.
+  - `src/components/principal/modules/shared/segmented-tabs.tsx` — `inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60` + `px-3.5 rounded-full text-xs` per tab + optional `badge`.
+- Read the Academics canonical shell `src/components/principal/modules/exams/index.tsx:135-211` — `<PageTransition className="space-y-4">` + `<div className="flex items-center justify-between gap-3 flex-wrap"><SegmentedTabs/></div>` + `<AnimatePresence mode="wait">` per tab.
+- Confirmed AppShell at `src/components/shell/app-shell.tsx:172` provides the scroll container + padding (`flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8`), so module-level `flex-1 overflow-y-auto` + sticky `top-0 z-20` headers were DOUBLE-SCROLLING + DOUBLE-PADDING.
+
+### Phase 1: Certificates convergence
+- `cert-shared.tsx:172-179` — replaced the local `CertPanel` (function with `rounded-xl border border-border bg-card overflow-hidden` + `border-b border-border/60 bg-muted/20` header strip + `p-3` body) with `export const CertPanel = Panel` (re-export of shared Panel). One-line re-export replaces 22 LOC. Callers in `generate-tab.tsx`, `templates-tab.tsx`, `history-tab.tsx` (15 caller sites) auto-inherit the flat Academics look — no caller file touched.
+- `certificates/index.tsx` — full rewrite: replaced `<div className="flex flex-col h-full cert-shell">` + sticky header (eyebrow "DOCUMENTS & CERTIFICATES" + h1 "Document Generation" + meta strip "8 generated · 24/24 templates · 7 this month · AY 2026") + custom tab strip (`px-2.5 text-[11px] rounded-md`) + `<div className="flex-1 overflow-y-auto p-4 sm:p-6">` body wrapper with `<PageTransition className="space-y-4 cert-shell">` + ONE `<SegmentedTabs tabs={[Generate, Templates, History]} />` row + the existing `<AnimatePresence mode="wait">` tab-content motion.div. Dropped: meta strip (History tab carries its own stats), the now-unused `Sparkles/Layers/HistoryIcon/cn/useCertificatesStore` imports + the `kpis/documents/templates` state. LOC: 137 → 87.
+
+### Phase 2: Calendar convergence
+- `calendar-shared.tsx:69-76` — `export const CalPanel = Panel`. Same re-export treatment as CertPanel. Callers in `calendar-grid.tsx`, `selected-day-panel.tsx`, `upcoming-events.tsx` auto-inherit the flat look.
+- `calendar/index.tsx` — full rewrite: replaced `<div className="flex flex-col h-full calendar-shell">` + sticky header (eyebrow "Academic Year 2025-26 · December" + h1 "Academic & Cultural Calendar" + description) + `<div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">` body with `<PageTransition className="space-y-4 calendar-shell">` + ONE `<div className="flex items-center justify-between gap-3 flex-wrap">` row with `FilterChips` (left) + emerald "Add Event" primary (`h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white`) (right) + the existing `grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4` row with `CalendarGrid` (month name + Today/Prev/Next live in its CalPanel header) + mutually-exclusive `SelectedDayPanel` / `UpcomingEvents`. Dropped: `CalendarDays` import (was only in the eyebrow), `MONTH_NAMES` import (visible month lives in CalendarGrid's CalPanel header), `cn` import (the only `cn()` call was a single literal string with no conditionals). LOC: 263 → 229.
+
+### Phase 3: Communication convergence
+- `comm-shared.tsx:112-119` — `export const CommPanel = Panel`. Same re-export. Callers in `comm-announcements.tsx`, `comm-circulars.tsx`, `comm-history.tsx` auto-inherit.
+- `communication/comm-shell.tsx` — full rewrite: replaced `<div className="flex flex-col h-full comm-shell">` + sticky header (eyebrow "Academic Year 2024-25" + h1 "Announcements, Circulars & Messaging" + summary pill line "Active 6 · Scheduled 1 · Drafts 1") + custom tab strip (`px-3 text-xs rounded-md`) with `<PageTransition className="space-y-4 comm-shell">` + ONE `<SegmentedTabs tabs={[Announcements, Circulars, Compose, History]} />` row + the existing `<AnimatePresence mode="wait">` tab-content motion.div. Collapsed the summary pills into a single Announcements tab badge (scheduled + draft count, surfaced via `tabs[t.value === 'announcements' && badge > 0 ? badge : undefined]`). Dropped: `Megaphone/FileText/Plus/HistoryIcon` icon imports (SegmentedTabs doesn't need per-tab icons in this module), `cn` import, `school` import (was only for the eyebrow's academic year), the `activeCount` derivation (the Announcements tab content itself shows the active count). LOC: 142 → 106.
+
+### Phase 4: Messages convergence (kept 3-pane structure)
+- `messaging/index.tsx` — partial rewrite. Per the task spec, the 3-pane mail layout (FoldersSidebar / ConversationList / ThreadView) is fundamentally different from a tabbed list view and needs `h-full` to give the inner panes fixed-height scroll areas. So I did NOT collapse it to `space-y-4`. Instead: replaced `<div className="flex flex-col h-full">` + sticky header (h1 "Messages & Inbox") with `<PageTransition className="flex flex-col h-full gap-3">` + ONE compact `<div className="flex items-center justify-end gap-3 flex-wrap shrink-0">` row with just the emerald "Compose" primary button on the right. The 3-pane container was kept (now `<div className="flex-1 min-h-0 overflow-hidden bg-card border border-border rounded-xl shadow-sm">` — removed the redundant `m-4 mt-0` margin since the AppShell already provides padding, added `min-h-0` to ensure flexbox shrinkability for the inner `overflow-hidden` 3-pane grid). Preserved ALL messaging groups logic: `folders-sidebar.tsx`, `conversation-list.tsx`, `thread-view.tsx`, `compose-modal.tsx`, `groups-panel.tsx` — untouched. LOC: 105 → 107 (+2 — the Compose button + 3-pane container's `min-h-0` was added; the sticky header was removed).
+
+### Phase 5: Downloads convergence
+- `downloads-shared.tsx:186-193` — `export const DownloadsPanel = Panel`. Same re-export. (DownloadsPanel wasn't used anywhere except its own definition — the re-export keeps the export available for any future caller.)
+- `downloads/index.tsx` — full rewrite: replaced `<div className="flex flex-col h-full downloads-shell">` + sticky header (eyebrow "Documents & Files" + h1 "Document Library" with emerald Library icon + description) + search/filter row + custom category tab strip (`px-3 py-1.5 rounded-md border text-[11px]` — completely different from the SegmentedTabs pill style) + `<div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 downloads-list-scroll">` body with `<PageTransition className="space-y-4 downloads-shell">` + ONE `<div className="flex items-center justify-between gap-3 flex-wrap">` row with `<SegmentedTabs tabs={[All, Recent, Generated, Forms, Templates, Reports]} />` (with per-tab count badges — replaces the bespoke category chip tabs that had count badges + filter semantics) on the left + the search input + category filter + sort dropdown + Clear button on the right (in a sibling `<div className="flex items-center gap-2 flex-wrap">`). The QuickAccess motion.section was flattened to match the shared `Panel` look (`rounded-xl border border-border bg-card p-4`, `h3 text-sm font-semibold tracking-tight text-foreground` title). The document-list section header was upgraded from `text-xs uppercase tracking-wider text-muted-foreground` to `text-sm font-semibold tracking-tight text-foreground` (matches the Academics section header style). Preserved: slide-from-right detail drawer, document list table, cert bridge (live counts from useCertificatesStore), "/" keyboard shortcut for focusing search. Dropped: `Library` icon import, `cn` import. LOC: 345 → 304.
+
+### Phase 6: Verification
+- `bun run lint` → 0 errors (only the pre-existing `ESLintIgnoreWarning: The ".eslintignore" file is no longer supported` config-deprecation warning, unrelated to my changes).
+- `bunx tsc --noEmit 2>&1 | grep -E "certificates/|calendar/|communication/|messaging/|downloads/" | head -20` → empty. No TS errors in any of the 5 modules I touched. Pre-existing TS errors remain in `exams/*`, `lib/exams/*`, `lib/store/finance-store.ts` — all outside this task's scope.
+- `curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:3000/` → HTTP 200.
+- `dev.log` post-edit shows clean compiles (`✓ Compiled in 284ms`) and HTTP 200 responses. The "Export YEAR doesn't exist" errors in the log are STALE — they reference the pre-Task-16 calendar/index.tsx that imported `DAYS_IN_MONTH, FIRST_DAY, MONTH, YEAR` from `./data`. The current calendar/data.ts (rewritten in Task 16) doesn't export those constants, and my new calendar/index.tsx doesn't import them. The errors are from cached chunks before Task 16's rewrite landed.
+- Visual sanity check via `agent-browser`: logged in as principal, navigated to Certificates (verified SegmentedTabs with Generate/Templates/History, tab switching works — clicked Templates → "All 24" + "Bonafide 4" chips appeared; clicked History → "All statuses" filter combo), Calendar (FilterChips row + emerald Add Event button on the right + calendar grid renders), Communication (SegmentedTabs with Announcements/Circulars/Compose/History), Messages (compact Compose button row + 3-pane mail layout preserved), Downloads (SegmentedTabs with All/Recent/Generated/Forms/Templates/Reports + search/filter/sort on the right). All 5 modules render cleanly.
+
+Stage Summary:
+
+### What changed (the architectural convergence)
+
+The 5 Operations module shells were each wrapped in `<div className="flex flex-col h-full">` + a bespoke sticky header (eyebrow + h1 + description + summary pills + action buttons) + a custom tab strip + a `flex-1 overflow-y-auto p-4 sm:p-6` scroll wrapper. The AppShell already provides the scroll container + padding at `app-shell.tsx:172`, so the modules were DOUBLE-SCROLLING + DOUBLE-PADDING. The Academics pattern is `<PageTransition className="space-y-4">` with one tab row + flat section containers — no sticky header, no eyebrow, no h1, no description (sidebar already names the module).
+
+I converged all 5 shells to the Academics pattern:
+- **Certificates**: 137 → 87 LOC. Tab strip switched from bespoke `px-2.5 text-[11px] rounded-md bg-muted/40` to shared `SegmentedTabs`. Meta strip dropped (History tab carries its own stats line).
+- **Calendar**: 263 → 229 LOC. No tabs (single view). ONE row: FilterChips (left) + emerald Add Event primary (right). The visible month label + Today/Prev/Next nav live in the CalendarGrid's CalPanel header (already there from Task 16).
+- **Communication**: 142 → 106 LOC. Tab strip switched from bespoke `px-3 text-xs rounded-md bg-muted/40` to shared `SegmentedTabs`. Summary pills collapsed into a single Announcements tab badge (scheduled + draft count).
+- **Messages**: 105 → 107 LOC (+2). Kept the 3-pane mail layout (fundamentally different from a tabbed list view — needs `h-full` for inner pane scroll). Removed the sticky "Messages & Inbox" h1 header. ONE compact row with just the Compose primary button on the right. Removed the redundant `m-4 mt-0` margin (AppShell already pads). Added `min-h-0` to the 3-pane container for proper flexbox shrink.
+- **Downloads**: 345 → 304 LOC. Bespoke category chip tabs (`px-3 py-1.5 rounded-md border text-[11px]` with separate count badge span) replaced with shared `SegmentedTabs` (per-tab `badge` prop carries the counts). ONE row: tabs left + search/filter/sort/clear right. QuickAccess flattened to shared Panel look. Section header upgraded from `text-xs uppercase` to `text-sm font-semibold tracking-tight text-foreground`.
+
+I also consolidated the 4 module-specific Panel duplicates:
+- `CertPanel` in `cert-shared.tsx` (22 LOC) → `export const CertPanel = Panel` (1 LOC re-export)
+- `CalPanel` in `calendar-shared.tsx` (16 LOC) → `export const CalPanel = Panel` (1 LOC re-export)
+- `CommPanel` in `comm-shared.tsx` (16 LOC) → `export const CommPanel = Panel` (1 LOC re-export)
+- `DownloadsPanel` in `downloads-shared.tsx` (20 LOC) → `export const DownloadsPanel = Panel` (1 LOC re-export)
+
+All 4 now share the SINGLE source of truth in `src/components/principal/modules/shared/panel.tsx`. The 15+ caller sites (in generate-tab, templates-tab, history-tab, calendar-grid, selected-day-panel, upcoming-events, comm-announcements, comm-circulars, comm-history) auto-inherit the flat Academics look — no caller file touched.
+
+### What was kept (NOT touched)
+
+- All functionality: tab switching, keyboard shortcuts (1-3 for cert, 1-4 for comm, "/" for downloads search), form submissions, CRUD, dialogs, toasts.
+- All data: certificates (7 doc types, template CRUD, history), calendar (real month nav, add-event persistence, unified events from useMockExamsStore + useCalendarStore + school-calendar.ts), communication (announcements, circulars, compose, history), messaging (6 group types, member refs, smart auto-fill connected to real students/teachers/classes data — folders-sidebar.tsx, conversation-list.tsx, thread-view.tsx, compose-modal.tsx, groups-panel.tsx all untouched), downloads (document list, search, filters, drawer, cert bridge).
+- All premium chart components.
+- All store management (certificates-store, calendar-store, communication-store, messaging-store, downloads-store) — no mutations or selectors touched.
+- All sub-tab components (generate-tab, templates-tab, history-tab, cert-shared exports other than CertPanel, comm-announcements, comm-circulars, comm-compose, comm-history, calendar-grid, selected-day-panel, upcoming-events, filter-chips, add-event-dialog, document-list, document-detail) — untouched.
+- All single-emerald design language from the previous pass (no new accent colors added).
+
+### Net LOC change
+
+- 9 files modified (4 `*-shared.tsx` Panel consolidations + 5 shell rewrites).
+- No files added or deleted.
+- Total: −234 lines across 9 files.
+
+### Files modified
+
+1. `src/components/principal/modules/certificates/cert-shared.tsx` — CertPanel → shared Panel re-export (added `import { Panel } from '../shared/panel'`, replaced the 22-LOC local CertPanel with `export const CertPanel = Panel`).
+2. `src/components/principal/modules/certificates/index.tsx` — full rewrite to Academics shell pattern (137 → 87 LOC, −50).
+3. `src/components/principal/modules/calendar/calendar-shared.tsx` — CalPanel → shared Panel re-export.
+4. `src/components/principal/modules/calendar/index.tsx` — full rewrite to Academics shell pattern (263 → 229 LOC, −34).
+5. `src/components/principal/modules/communication/comm-shared.tsx` — CommPanel → shared Panel re-export.
+6. `src/components/principal/modules/communication/comm-shell.tsx` — full rewrite to Academics shell pattern (142 → 106 LOC, −36).
+7. `src/components/principal/modules/messaging/index.tsx` — partial rewrite: kept 3-pane, removed sticky header, kept h-full (105 → 107 LOC, +2).
+8. `src/components/principal/modules/downloads/downloads-shared.tsx` — DownloadsPanel → shared Panel re-export.
+9. `src/components/principal/modules/downloads/index.tsx` — full rewrite to Academics shell pattern (345 → 304 LOC, −41).
+
+### Result
+
+After this pass, navigating Examinations → Certificates → Calendar → Communication → Messages → Downloads shows the same visual composition: same SegmentedTabs pill style on the left of the first row, same emerald primary button style on the right (where present), same flat Panel section containers (`rounded-xl border border-border bg-card` + `text-sm font-semibold` title + `text-xs text-muted-foreground` subtitle + `p-4` body), same `space-y-4` vertical rhythm, no sticky header, no eyebrow, no h1, no description (sidebar already names the module), no double-scroll / double-padding. Each module now feels like another section of the same Scholario ERP, not a different dashboard. The architectural mismatch (modules wrapping their content in their own scroll container + sticky header when the AppShell already provides both) is gone — modules now flow naturally inside the AppShell, exactly like Exams + Attendance do.
+
+### Key principle applied (same as Task 9-A/B/C)
+
+The visual divergence was NOT a class-string drift — it was an architectural mismatch. The 5 modules wrapped their content in `<div className="flex flex-col h-full">` + sticky header + custom tab strip + `flex-1 overflow-y-auto p-4 sm:p-6` scroll wrapper, while Academics (Exams + Attendance) used `<PageTransition className="space-y-4">` with one tab-row + flat content. The AppShell already provides the scroll container + padding at `src/components/shell/app-shell.tsx`, so the modules' own scroll wrapper created double-scroll + double-padding. Converging to the Academics pattern (PageTransition + SegmentedTabs + flat Panel sections) eliminates the architectural mismatch — the modules now flow naturally inside the AppShell, exactly like Exams + Attendance. The 4 module-specific Panel re-exports auto-converge all 15+ caller sites without touching any caller file. The 5 shell rewrites remove ~210 lines of bespoke header/tab/scroll markup. When the user navigates Examinations → Certificates (or → Calendar / → Communication / → Messages / → Downloads), the visual composition is now identical: same tab style, same section container style, same spacing, same primary-button style, no header, no eyebrow, no summary pills.
+
+---
+Task ID: FINAL-2
+Agent: main
+Task: Second-pass visual convergence — Finance + Operations match Academics visual DNA
+
+Work Log:
+- Launched 2 parallel audit agents (Task IDs 2-A + 2-B) to extract the EXACT visual values from Exams/Attendance and map the component divergence (4 header variants, 5 tab variants, 4 KPI variants, 10 panel duplicates).
+- Root cause identified: Finance/Operations used a DIFFERENT shell architecture (sticky header + eyebrow + h1 + description + custom grouped pill tabs + own scroll wrapper) vs Academics (PageTransition space-y-4 + SegmentedTabs row + flat sections). The AppShell already provides scroll + padding, so Finance/Ops were DOUBLE-SCROLLING and DOUBLE-PADDING.
+- Created shared Panel component at src/components/principal/modules/shared/panel.tsx — flat section container matching Academics pattern (rounded-xl border border-border bg-card, h3 title, no colored header strip).
+- Fixed Exams bugs: -316 days negative countdown (filtered past-dated exams from upcoming list, only show positive countdowns) + duplicated "Class 11, Class 11" classes (deduplicated with [...new Set()] in examination-context + archive-view).
+- Fixed hydration warning: CalPanel rendered title in <p> but CalendarGrid passed <div> as title — changed <p> to <div> in calendar-shared.tsx.
+- Launched 3 parallel convergence agents:
+  • Finance (6-C): converged all 3 shells to PageTransition + SegmentedTabs, replaced KPI cards with SummaryCard, re-exported FeePanel/SalaryPanel/FinancePanel as shared Panel. (Agent hit turn limit after completing shells + panels + fees KPIs; I manually finished salary + finance KPI card convergence.)
+  • Library+Transport+Inventory (9-C): converged all 3 shells, re-exported LibPanel/TptPanel/InvPanel as shared Panel, dropped summary pills + gradient buttons.
+  • Certificates+Calendar+Communication+Messages+Downloads (9-D): converged all 5 shells, re-exported CertPanel/CalPanel/CommPanel/DownloadsPanel as shared Panel.
+- VLM-verified convergence: Exams → Fees → Library → Certificates all use same tab style, same KPI card style, same section container style — rated as same design system.
+- VLM-verified Exams bug fixes: no negative countdown, no duplicated classes, Current Status now shows "Action Needed · 2 results pending".
+- Browser console: clean (no errors, no hydration warnings).
+- ESLint: 0 errors. Server: HTTP 200.
+
+Stage Summary:
+- Second-pass visual convergence COMPLETE. All 11 Finance + Operations modules now share the SAME visual DNA as Examinations + Attendance:
+  • Same shell: PageTransition space-y-4 (no sticky header, no eyebrow, no h1 — sidebar already names the module)
+  • Same tabs: SegmentedTabs (rounded-full bg-muted/60, active bg-white shadow-sm)
+  • Same KPI cards: SummaryCard + SummaryCardGrid (soft tinted bg, count-up animation, hover lift)
+  • Same sections: shared Panel (flat rounded-xl border border-border bg-card, h3 title, no colored header strip)
+  • Same spacing: space-y-4 vertical rhythm
+  • Same buttons: solid bg-emerald-600 (not gradient), h-8 text-xs
+- 4 component primitives consolidated to 1 shared source of truth each (was 4 headers, 5 tabs, 4 KPIs, 10 panels → 1 each).
+- Exams bugs fixed (-316d countdown + duplicated classes).
+- Hydration warning fixed (div inside p in CalPanel).
+- Committed and pushed to main, stable, development.

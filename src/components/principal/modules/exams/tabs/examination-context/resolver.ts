@@ -99,6 +99,12 @@ export function resolveExamContext(exams: ExamDTO[]): ExamContext {
   const upcomingExams = exams
     .filter((e) => ['Scheduled', 'Ongoing', 'Draft'].includes(e.status))
     .filter((e) => e.startDate)
+    // Exclude past-dated exams from the upcoming list (stale "Scheduled" data)
+    .filter((e) => {
+      const d = new Date(e.startDate!)
+      d.setHours(0, 0, 0, 0)
+      return d.getTime() >= today.getTime()
+    })
     .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
 
   if (upcomingExams.length > 0) {

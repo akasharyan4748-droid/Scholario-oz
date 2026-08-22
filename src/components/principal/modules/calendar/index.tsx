@@ -3,21 +3,23 @@
 /**
  * CalendarModule — Principal Calendar workspace orchestrator.
  *
- * The global sidebar already says "Calendar", so the header here uses a
- * contextual title ("Academic & Cultural Calendar") — NO duplicate
- * "School Calendar" title.
+ * Converged to the Academics (Exams + Attendance) shell pattern:
+ *   <PageTransition className="space-y-4 calendar-shell">
+ *     <div className="flex items-center justify-between gap-3 flex-wrap">
+ *       <FilterChips />           // left: event-type filters with live counts
+ *       <AddEventButton />        // right: primary action (emerald)
+ *     </div>
+ *     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+ *       <CalendarGrid />          // spans 2 cols — month name + nav in its panel header
+ *       {selectedDay ? <SelectedDayPanel /> : <UpcomingEvents />}
+ *     </div>
+ *   </PageTransition>
  *
- * Layout:
- *   - Header (shared pattern): small eyebrow → h1 → short description →
- *     primary actions (h-8 text-xs). NO summary pills.
- *   - Filter chips row (above the grid).
- *   - Grid: lg:grid-cols-3 — CalendarGrid spans 2 cols; right-side panel
- *     (SelectedDayPanel when a day is selected, UpcomingEvents otherwise)
- *     spans 1 col. The two panels are mutually exclusive (audit fix #5 —
- *     no more 3 simultaneous views of the same events).
- *   - Add Event dialog.
+ * NO sticky header, NO eyebrow, NO h1 (sidebar already says "Calendar"),
+ * NO description. The AppShell already provides the scroll container +
+ * padding.
  *
- * State:
+ * State preserved from the previous pass:
  *   - year/month: visible month (defaults to today's month).
  *   - selectedDay: clicked day in the visible month, or null.
  *   - filterTypes: active event-type chips (defaults to all).
@@ -30,28 +32,16 @@
  *   - exam events (per-exam Begins/Ends markers + per-schedule-item events
  *     from useMockExamsStore)
  *   - user events (useCalendarStore.addEvent mutations)
- *
- * Migration notes (audit fixes #1, #2, #3, #4, #5, #6, #7, #8, #9):
- *  - Dropped legacy SectionHeading + GlassCard from `@/components/shared/ui`.
- *  - Dropped the redundant mini-header inside the calendar grid.
- *  - Month navigation now mutates year/month state and recomputes the grid.
- *  - Add Event now calls a real Zustand mutation.
- *  - Default selectedDay is null (no day selected → UpcomingEvents shows).
- *  - Single CalendarDays icon in the header (was previously used twice).
- *  - No static legend at the bottom of the grid (filter chips cover that).
- *  - Holidays come from school-calendar.ts (Dec 23 for winter break, not
- *    the stale Dec 24 from calendarEvents).
  */
 
 import { useMemo, useState } from 'react'
-import { CalendarDays, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { PageTransition } from '@/components/shared/ui'
 import { useCalendarStore, getUnifiedEvents } from '@/lib/store/calendar-store'
 import { useMockExamsStore } from '@/lib/exams/mock-exams-data'
 import {
   ALL_TYPES,
-  MONTH_NAMES,
   buildMonthCells,
   getTodayInMonth,
   pad,
@@ -180,44 +170,12 @@ export function CalendarModule() {
 
   // ─── Render ──────────────────────────────────────────────────────
 
-  const eyebrow = `Academic Year ${year}-${(year + 1).toString().slice(2)} · ${MONTH_NAMES[month]}`
-
   return (
-    <div className="flex flex-col h-full calendar-shell">
+    <PageTransition className="space-y-4 calendar-shell">
       <style dangerouslySetInnerHTML={{ __html: CAL_GLOBAL_STYLES }} />
 
-      {/* Header — shared pattern (eyebrow → title → short description → actions) */}
-      <div className="border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
-        <div className="px-4 sm:px-6 py-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em] flex items-center gap-1.5">
-                <CalendarDays className="h-3 w-3" />
-                {eyebrow}
-              </p>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight mt-0.5">
-                Academic &amp; Cultural Calendar
-              </h1>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                School events, holidays, examinations &amp; meetings in one view. Click a day to see its schedule.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
-                onClick={() => setAddOpen(true)}
-              >
-                <Plus className="h-3.5 w-3.5" /> Add Event
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
-        {/* Filter chips — above the grid */}
+      {/* Action row — filter chips on the left, Add Event primary on the right. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <FilterChips
           filterTypes={filterTypes}
           onToggle={toggleType}
@@ -226,38 +184,45 @@ export function CalendarModule() {
           onAll={() => setFilterTypes([...ALL_TYPES])}
           onNone={() => setFilterTypes([])}
         />
+        <Button
+          size="sm"
+          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+          onClick={() => setAddOpen(true)}
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Event
+        </Button>
+      </div>
 
-        {/* Grid + right-side panel — SelectedDay when a day is clicked,
-            UpcomingEvents when nothing is selected (mutually exclusive). */}
-        <div className={cn('grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4')}>
-          <CalendarGrid
+      {/* Grid + right-side panel — SelectedDay when a day is clicked,
+          UpcomingEvents when nothing is selected (mutually exclusive). */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+        <CalendarGrid
+          year={year}
+          month={month}
+          cells={cells}
+          eventsByDay={eventsByDay}
+          selectedDay={selectedDay}
+          onSelectDay={(d) => setSelectedDay(d)}
+          today={todayDay}
+          onPrevMonth={prevMonth}
+          onNextMonth={nextMonth}
+          onToday={goToToday}
+        />
+
+        {selectedDay !== null ? (
+          <SelectedDayPanel
             year={year}
             month={month}
-            cells={cells}
-            eventsByDay={eventsByDay}
             selectedDay={selectedDay}
-            onSelectDay={(d) => setSelectedDay(d)}
-            today={todayDay}
-            onPrevMonth={prevMonth}
-            onNextMonth={nextMonth}
-            onToday={goToToday}
+            selectedEvents={selectedEvents}
+            onClear={clearSelection}
           />
-
-          {selectedDay !== null ? (
-            <SelectedDayPanel
-              year={year}
-              month={month}
-              selectedDay={selectedDay}
-              selectedEvents={selectedEvents}
-              onClear={clearSelection}
-            />
-          ) : (
-            <UpcomingEvents events={upcomingEvents} />
-          )}
-        </div>
+        ) : (
+          <UpcomingEvents events={upcomingEvents} />
+        )}
       </div>
 
       <AddEventDialog open={addOpen} onOpenChange={setAddOpen} year={year} month={month} />
-    </div>
+    </PageTransition>
   )
 }

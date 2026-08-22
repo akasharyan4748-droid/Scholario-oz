@@ -3,15 +3,19 @@
 /**
  * inventory-shared — Shared primitives for the Inventory workspace.
  *
- * Design language follows FeePanel / FeeKpiCard from the Fees module and
- * LibPanel / LibKpiCard from the Library module:
- *   - InvPanel: rounded card container with optional header + action
- *   - InvKpiCard: soft tinted background KPI card (5 accents)
+ * Visual language follows the Academics (Examinations + Attendance)
+ * canonical pattern. The section container InvPanel is now a thin re-export
+ * of the shared `Panel` (flat `rounded-xl border border-border bg-card`,
+ * title rendered as `<h3 className="text-sm font-semibold">`, no separate
+ * colored header strip with `border-b bg-muted/20`). Other primitives
+ * remain module-specific:
+ *   - InvKpiCard: soft tinted background KPI card (5 accents) — kept for
+ *     any sub-page that wants a chip-style KPI; not rendered in the shell.
  *   - InvPill: compact semantic pill
  *   - ItemStatusBadge: In Stock / Low Stock / Out of Stock (with dot)
  *   - MovementTypeBadge: Stock In / Stock Out / Adjustment / Damaged / Lost / Returned / Issued
  *   - InvEmptyState
- *   - INV_GLOBAL_STYLES for prefers-reduced-motion
+ *   - INV_GLOBAL_STYLES (reduced-motion styles)
  *
  * NO indigo/blue. Emerald / amber / rose / cyan / violet only.
  */
@@ -20,6 +24,7 @@ import { motion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ItemStatus, MovementType } from '@/lib/store/inventory-store'
+import { Panel } from '../shared/panel'
 
 // ─── Tab type ────────────────────────────────────────────────────────
 
@@ -37,7 +42,9 @@ const ACCENT_MAP: Record<string, { bg: string; ring: string; hover: string; card
 
 export type InvAccent = keyof typeof ACCENT_MAP
 
-// ─── InvKpiCard (soft tinted KPI) ────────────────────────────────────
+// ─── InvKpiCard (soft tinted KPI) ──────────────────────────────────────
+// Kept for any sub-page that wants the chip-style KPI card. Not rendered
+// in the Inventory shell (Task 9 dropped the 4-card KPI row).
 
 interface KpiProps {
   icon: React.ReactNode
@@ -83,33 +90,15 @@ export function InvKpiCard({ icon, label, value, sub, accent, onClick, delay = 0
   )
 }
 
-// ─── InvPanel (rounded card container) ───────────────────────────────
+// ─── InvPanel (flat Academics section container) ─────────────────────
+// Re-exports the shared `Panel` so all Inventory sub-pages render the
+// same flat `rounded-xl border border-border bg-card` section container
+// as the Examinations + Attendance modules. Existing callers using
+// `<InvPanel title="..." subtitle="..." action={...} bodyClassName="p-0">`
+// continue to work — the shared Panel signature is a superset of the
+// original.
 
-interface PanelProps {
-  title?: string
-  subtitle?: string
-  action?: React.ReactNode
-  children: React.ReactNode
-  className?: string
-  bodyClassName?: string
-}
-
-export function InvPanel({ title, subtitle, action, children, className, bodyClassName }: PanelProps) {
-  return (
-    <div className={cn('rounded-xl border border-border bg-card overflow-hidden', className)}>
-      {(title || action) && (
-        <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/60 bg-muted/20">
-          <div className="min-w-0">
-            {title && <p className="text-xs font-semibold tracking-tight">{title}</p>}
-            {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{subtitle}</p>}
-          </div>
-          {action && <div className="shrink-0">{action}</div>}
-        </div>
-      )}
-      <div className={cn('p-3', bodyClassName)}>{children}</div>
-    </div>
-  )
-}
+export const InvPanel = Panel
 
 // ─── InvPill ─────────────────────────────────────────────────────────
 

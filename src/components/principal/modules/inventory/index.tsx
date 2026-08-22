@@ -3,14 +3,26 @@
 /**
  * InventoryModule — Principal Inventory workspace orchestrator.
  *
- * The global sidebar already says "Inventory", so the header here uses a
- * contextual title ("Inventory & Assets") — no duplicate "Inventory
- * Management" title.
+ * Visual shell follows the Academics (Examinations + Attendance) canonical
+ * pattern:
+ *   <PageTransition className="space-y-4">
+ *     <div className="flex items-center justify-between gap-3 flex-wrap">
+ *       <SegmentedTabs ... />          ← left
+ *       <Button>Add Item</Button>      ← right (primary, solid emerald)
+ *     </div>
+ *     <AnimatePresence mode="wait">
+ *       {tab === 'items' && <motion.div key="items" ...><ItemsTable /></motion.div>}
+ *       ...
+ *     </AnimatePresence>
+ *   </PageTransition>
+ *
+ * NO sticky header, NO eyebrow, NO h1, NO summary pill line — the sidebar
+ * already names the module, and the per-tab content (panel subtitles, tab
+ * badges) is the single home for each metric.
  *
  * Layout:
- *   - Header: contextual title + Add Item button
- *   - Summary pill line: items · total value · low stock · out of stock · categories
- *   - Tab navigation: Items · Movements · Low Stock · Reports
+ *   - Tab row: Items · Movements · Low Stock · Reports (left)
+ *              + Add Item button (right)
  *   - Active tab panel:
  *       * items:    ItemsTable
  *       * movements: StockMovementLog (full)
@@ -19,21 +31,19 @@
  *   - Add Item dialog
  *   - Item Action dialog (single dialog handling all 4 stock actions)
  *
- * State from inventory-store + useInventoryData.
+ * State from inventory-store + useInventoryData. Keyboard shortcuts 1-4.
  */
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Package, Plus, AlertTriangle, IndianRupee, Layers,
-  FileBarChart2, History, PackageSearch,
+  Package, Plus, AlertTriangle, FileBarChart2, History,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { PageTransition } from '@/components/shared/ui'
+import { SegmentedTabs } from '../shared/segmented-tabs'
 import { useInventoryStore, useInventoryData } from '@/lib/store/inventory-store'
 import type { InventoryItem } from '@/lib/store/inventory-store'
-import { formatINR } from '@/lib/format'
-import { toast } from 'sonner'
 import { INV_GLOBAL_STYLES, type InvTab } from './inventory-shared'
 import { ItemsTable } from './items-table'
 import { AddItemDialog } from './add-item-dialog'
@@ -58,11 +68,14 @@ export function InventoryModule() {
   const { analytics } = data
   const movementsCount = useInventoryStore((s) => s.movements.length)
 
-  // Tab badges (real counts)
-  const tabBadges: Partial<Record<InvTab, number>> = {
-    movements: movementsCount,
-    lowstock: analytics.lowStockCount + analytics.outOfStockCount,
-  }
+  // Tab badges (real counts). SegmentedTabs suppresses rendering when 0.
+  const tabsWithBadges = TABS.map((t) => {
+    const badgeMap: Partial<Record<InvTab, number>> = {
+      movements: movementsCount,
+      lowstock: analytics.lowStockCount + analytics.outOfStockCount,
+    }
+    return { ...t, badge: badgeMap[t.value] }
+  })
 
   // Keyboard shortcuts: 1-4 switch tabs.
   useEffect(() => {
@@ -89,127 +102,49 @@ export function InventoryModule() {
   }
 
   return (
-    <div className="flex flex-col h-full inventory-shell">
+    <>
       <style dangerouslySetInnerHTML={{ __html: INV_GLOBAL_STYLES }} />
-
-      {/* Header */}
-      <div className="border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
-        <div className="px-4 sm:px-6 py-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]">
-                School Inventory
-              </p>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight">Inventory & Assets</h1>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={() => setTab('reports')}
-              >
-                <FileBarChart2 className="h-3.5 w-3.5" /> Reports
-              </Button>
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
-                onClick={() => setAddOpen(true)}
-              >
-                <Plus className="h-3.5 w-3.5" /> Add Item
-              </Button>
-            </div>
-          </div>
-
-          {/* Summary pill line */}
-          <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground flex-wrap">
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <Package className="h-2.5 w-2.5" /> Items <span className="font-bold text-foreground">{analytics.totalItems}</span>
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <IndianRupee className="h-2.5 w-2.5" /> Value <span className="font-bold text-emerald-600">{formatINR(analytics.totalValue, true)}</span>
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <AlertTriangle className="h-2.5 w-2.5" /> Low <span className="font-bold text-amber-600">{analytics.lowStockCount}</span>
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <PackageSearch className="h-2.5 w-2.5" /> Out <span className="font-bold text-rose-600">{analytics.outOfStockCount}</span>
-            </span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums inline-flex items-center gap-1">
-              <Layers className="h-2.5 w-2.5" /> Categories <span className="font-bold text-violet-600">{analytics.categoryCount}</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Tab navigation */}
-        <div className="px-4 sm:px-6 pb-2 overflow-x-auto">
-          <div className="flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 w-fit">
-            {TABS.map((t) => {
-              const badge = tabBadges[t.value]
-              return (
-                <button
-                  key={t.value}
-                  onClick={() => setTab(t.value)}
-                  aria-current={tab === t.value ? 'page' : undefined}
-                  className={cn(
-                    'px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5',
-                    tab === t.value
-                      ? 'bg-card text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {t.icon}
-                  <span>{t.label}</span>
-                  {badge !== undefined && badge > 0 && (
-                    <span className={cn(
-                      'inline-flex items-center justify-center h-3.5 px-1 rounded-full text-[8px] font-bold tabular-nums',
-                      t.value === 'lowstock'
-                        ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
-                        : tab === t.value
-                          ? 'bg-muted/80 text-muted-foreground'
-                          : 'bg-muted/60 text-muted-foreground',
-                    )}>
-                      {badge}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+      <PageTransition className="space-y-4 inventory-shell">
+      {/* Tab row + Add Item action on the right */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <SegmentedTabs
+          tabs={tabsWithBadges}
+          value={tab}
+          onValueChange={(v) => setTab(v as InvTab)}
+        />
+        <Button
+          size="sm"
+          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+          onClick={() => setAddOpen(true)}
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Item
+        </Button>
       </div>
 
-      {/* Main content */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        {/* Active tab panel */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={tab}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
-            className="space-y-4"
-          >
-            {tab === 'items' && (
-              <ItemsTable onAction={handleAction} />
-            )}
-            {tab === 'movements' && (
-              <StockMovementLog />
-            )}
-            {tab === 'lowstock' && (
-              <LowStockAlerts onAddStock={(it) => handleAction('add', it)} />
-            )}
-            {tab === 'reports' && (
-              <InventoryReports />
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
+      {/* Active tab content with AnimatePresence transitions */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.15 }}
+          className="space-y-4"
+        >
+          {tab === 'items' && (
+            <ItemsTable onAction={handleAction} />
+          )}
+          {tab === 'movements' && (
+            <StockMovementLog />
+          )}
+          {tab === 'lowstock' && (
+            <LowStockAlerts onAddStock={(it) => handleAction('add', it)} />
+          )}
+          {tab === 'reports' && (
+            <InventoryReports />
+          )}
+        </motion.div>
+      </AnimatePresence>
 
       {/* Dialogs */}
       <AddItemDialog open={addOpen} onOpenChange={setAddOpen} />
@@ -219,6 +154,7 @@ export function InventoryModule() {
         kind={actionKind}
         item={actionItem}
       />
-    </div>
+      </PageTransition>
+    </>
   )
 }

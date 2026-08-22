@@ -147,9 +147,11 @@ function computeOverview(exams: ExamDTO[]): OverviewData {
   // Current exam: prefer Ongoing, then most recent Scheduled
   const currentExam = exams.find((e) => e.status.toLowerCase() === 'ongoing') ?? null
 
-  // Next exam: upcoming, sorted by start date
+  // Next exam: upcoming, sorted by start date — only include exams whose
+  // start date is today or later (past-dated 'Scheduled' exams are stale data)
   const nextExam = exams
     .filter((e) => e.status.toLowerCase() === 'scheduled')
+    .filter((e) => !e.startDate || daysUntil(e.startDate) >= 0)
     .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))[0] ?? null
 
   // Status logic
@@ -164,7 +166,8 @@ function computeOverview(exams: ExamDTO[]): OverviewData {
   } else if (nextExam) {
     const days = nextExam.startDate ? daysUntil(nextExam.startDate) : null
     statusLabel = 'Upcoming'
-    statusSub = days !== null ? `${nextExam.name} · in ${days}d` : nextExam.name
+    // Only show a positive countdown; if days is null show just the name
+    statusSub = days !== null && days > 0 ? `${nextExam.name} · in ${days}d` : nextExam.name
     statusTone = 'sky'
   } else if (total > 0 && declared < total) {
     statusLabel = 'Action Needed'

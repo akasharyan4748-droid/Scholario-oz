@@ -5,8 +5,14 @@
  *
  * Layout: Folders sidebar · (Conversation list OR Groups panel) · Active conversation · Reply composer
  *
+ * Converged to the Academics shell pattern as far as a 3-pane mail client
+ * allows: NO sticky header, NO eyebrow, NO h1 (sidebar already says
+ * "Messages"). One compact row at the top carries only the primary
+ * Compose action on the right; the 3-pane mail layout fills the rest of
+ * the viewport with `h-full` so the inner panes can scroll independently.
+ *
  * Folder counts (Unread/Starred/Sent/Groups/Drafts/Archive) live in the
- * FoldersSidebar — NOT duplicated in the header here.
+ * FoldersSidebar — NOT duplicated in the shell.
  *
  * NO fake "online" status, NO fake "typing" indicators, NO fake "read" receipts.
  * NO dead Call/Video buttons.
@@ -26,6 +32,7 @@
 
 import { useState, useEffect } from 'react'
 import { Send } from 'lucide-react'
+import { PageTransition } from '@/components/shared/ui'
 import { useMessagingStore } from '@/lib/store/messaging-store'
 import { FoldersSidebar } from './folders-sidebar'
 import { ConversationList } from './conversation-list'
@@ -54,27 +61,22 @@ export function MessagingModule() {
   const isGroupsFolder = activeFolder === 'groups'
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header — compact, no giant KPI cards.
-          Folder counts live in the FoldersSidebar (one source of truth). */}
-      <div className="border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
-        <div className="px-4 sm:px-6 py-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <h1 className="text-base sm:text-lg font-bold tracking-tight">Messages & Inbox</h1>
-            </div>
-            <button
-              onClick={() => handleCompose()}
-              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white"
-            >
-              <Send className="h-3.5 w-3.5" /> Compose
-            </button>
-          </div>
-        </div>
+    <PageTransition className="flex flex-col h-full gap-3">
+      {/* Compact action row — Compose primary on the right.
+          No h1 (sidebar already names the module), no KPI cards.
+          `justify-end` keeps the button right-aligned without an
+          explicit empty div. */}
+      <div className="flex items-center justify-end gap-3 flex-wrap shrink-0">
+        <button
+          onClick={() => handleCompose()}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+        >
+          <Send className="h-3.5 w-3.5" /> Compose
+        </button>
       </div>
 
-      {/* Mail client — 3-pane on desktop, stack on mobile */}
-      <div className="flex-1 overflow-hidden bg-card border border-border rounded-xl m-4 mt-0 shadow-sm">
+      {/* 3-pane mail client — flat card surface fills the remaining viewport. */}
+      <div className="flex-1 min-h-0 overflow-hidden bg-card border border-border rounded-xl shadow-sm">
         <div className="grid lg:grid-cols-[180px_300px_1fr] h-full">
           {/* Folders sidebar — desktop only */}
           <FoldersSidebar />
@@ -100,6 +102,6 @@ export function MessagingModule() {
         onClose={() => setComposeOpen(false)}
         preselectedRecipient={composeRecipient}
       />
-    </div>
+    </PageTransition>
   )
 }

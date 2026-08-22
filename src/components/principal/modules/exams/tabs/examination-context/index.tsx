@@ -73,7 +73,7 @@ function LiveExamination({ ctx, onSelectExam }: { ctx: ExamContext; onSelectExam
       {ctx.exam && (
         <div className="mb-3">
           <h2 className="font-display text-base font-bold tracking-tight">{ctx.exam.name}</h2>
-          <p className="text-[11px] text-muted-foreground">{ctx.exam.type} · {ctx.exam.classes.map((c) => c.className).join(', ') || '—'}</p>
+          <p className="text-[11px] text-muted-foreground">{ctx.exam.type} · {[...new Set(ctx.exam.classes.map((c) => c.className))].join(', ') || '—'}</p>
         </div>
       )}
 
@@ -197,19 +197,19 @@ function UpcomingExamination({ ctx, onSelectExam, onNavigate }: {
               {exam.classes.length > 0 && (
                 <>
                   <span className="text-muted-foreground/40">•</span>
-                  <span className="truncate">{exam.classes.map((c) => c.className).join(', ')}</span>
+                  <span className="truncate">{[...new Set(exam.classes.map((c) => c.className))].join(', ')}</span>
                 </>
               )}
             </div>
           </div>
-          {/* Days-until countdown */}
-          {ctx.daysUntilNext !== null && (
+          {/* Days-until countdown — only show for positive future days */}
+          {ctx.daysUntilNext !== null && ctx.daysUntilNext > 0 && (
             <div className="text-right shrink-0 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20">
               <p className="font-display text-2xl font-bold tabular-nums text-sky-600 dark:text-sky-400 leading-none">
-                {ctx.daysUntilNext === 0 ? 'Today' : ctx.daysUntilNext === 1 ? '1' : `${ctx.daysUntilNext}`}
+                {ctx.daysUntilNext === 1 ? '1' : `${ctx.daysUntilNext}`}
               </p>
               <p className="text-[9px] text-sky-600/80 dark:text-sky-400/80 mt-0.5 font-medium uppercase tracking-wider">
-                {ctx.daysUntilNext === 0 ? 'starting soon' : ctx.daysUntilNext === 1 ? 'day left' : 'days left'}
+                {ctx.daysUntilNext === 1 ? 'day left' : 'days left'}
               </p>
             </div>
           )}
@@ -338,14 +338,14 @@ function SessionPerformance({ ctx, onSelectExam, onNavigate, classPerformance }:
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Session Performance</span>
-        {ctx.nextExam && ctx.daysUntilNext !== null && (
+        {ctx.nextExam && ctx.daysUntilNext !== null && ctx.daysUntilNext > 0 && (
           <span className="text-[10px] text-muted-foreground ml-auto">
             Next exam in {ctx.daysUntilNext}d
           </span>
         )}
       </div>
 
-      {ctx.nextExam ? (
+      {ctx.nextExam && ctx.daysUntilNext !== null && ctx.daysUntilNext > 0 ? (
         <div className="mb-3">
           <p className="text-xs text-muted-foreground">No examination is currently active.</p>
           <p className="text-xs text-muted-foreground mt-0.5">

@@ -3,22 +3,26 @@
 /**
  * comm-shell — Communication Center orchestrator.
  *
- * 4-tab workspace:
- *   Announcements · Circulars · Compose · History
+ * Converged to the Academics (Exams + Attendance) shell pattern:
+ *   <PageTransition className="space-y-4 comm-shell">
+ *     <div className="flex items-center justify-between gap-3 flex-wrap">
+ *       <SegmentedTabs ... />   // Announcements · Circulars · Compose · History
+ *     </div>
+ *     <AnimatePresence mode="wait"> tab content </AnimatePresence>
+ *   </PageTransition>
  *
- * The global header already says "Communication Center" so this shell
- * does NOT repeat the title. Content starts with contextual info.
+ * NO sticky header, NO eyebrow, NO h1 (sidebar already says "Communication"),
+ * NO summary pills (counts already live as tab badges on Announcements),
+ * NO double-scroll. The AppShell already provides the scroll container +
+ * padding.
  *
  * NO separate SMS/Email/Push tabs — channels live inside the Compose tab.
  */
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Megaphone, FileText, Plus, History as HistoryIcon,
-} from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { school } from '@/lib/mock/school'
+import { PageTransition } from '@/components/shared/ui'
+import { SegmentedTabs } from '../shared/segmented-tabs'
 import { useCommunicationStore } from '@/lib/store/communication-store'
 import type { CommTab } from './comm-shared'
 import { COMM_GLOBAL_STYLES } from './comm-shared'
@@ -27,11 +31,11 @@ import { CircularsSection } from './comm-circulars'
 import { ComposeSection } from './comm-compose'
 import { HistorySection } from './comm-history'
 
-const TABS: Array<{ value: CommTab; label: string; icon: React.ReactNode }> = [
-  { value: 'announcements', label: 'Announcements', icon: <Megaphone className="h-3.5 w-3.5" /> },
-  { value: 'circulars', label: 'Circulars', icon: <FileText className="h-3.5 w-3.5" /> },
-  { value: 'compose', label: 'Compose', icon: <Plus className="h-3.5 w-3.5" /> },
-  { value: 'history', label: 'History', icon: <HistoryIcon className="h-3.5 w-3.5" /> },
+const TABS = [
+  { value: 'announcements', label: 'Announcements' },
+  { value: 'circulars', label: 'Circulars' },
+  { value: 'compose', label: 'Compose' },
+  { value: 'history', label: 'History' },
 ]
 
 export function CommShell() {
@@ -40,11 +44,11 @@ export function CommShell() {
 
   const scheduledCount = announcements.filter((a) => a.status === 'Scheduled').length
   const draftCount = announcements.filter((a) => a.status === 'Draft' && !a.archived).length
-  const activeCount = announcements.filter((a) => !a.archived && a.status !== 'Draft').length
 
-  const tabBadges: Partial<Record<CommTab, number>> = {
-    announcements: scheduledCount + draftCount,
-  }
+  // The Announcements tab badge surfaces scheduled + draft counts — the
+  // summary pills that used to live in the header are now collapsed into
+  // this single tab badge (one home per metric, no duplicate display).
+  const announcementsBadge = scheduledCount + draftCount
 
   // Keyboard shortcuts: 1-4 switch tabs.
   useEffect(() => {
@@ -56,7 +60,7 @@ export function CommShell() {
         const idx = Number(e.key) - 1
         if (idx < TABS.length) {
           e.preventDefault()
-          setTab(TABS[idx].value)
+          setTab(TABS[idx].value as CommTab)
         }
       }
     }
@@ -64,79 +68,39 @@ export function CommShell() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  const tabs = TABS.map((t) => ({
+    ...t,
+    badge: t.value === 'announcements' && announcementsBadge > 0 ? announcementsBadge : undefined,
+  }))
+
   return (
-    <div className="flex flex-col h-full comm-shell">
+    <PageTransition className="space-y-4 comm-shell">
       <style dangerouslySetInnerHTML={{ __html: COMM_GLOBAL_STYLES }} />
-      {/* Header — contextual content (NOT a duplicate "Communication Center" title) */}
-      <div className="border-b border-border bg-card/95 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
-        <div className="px-4 sm:px-6 py-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.14em]">Academic Year {school.academicYear}</p>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight">Announcements, Circulars & Messaging</h1>
-            </div>
-          </div>
-          {/* Summary pill line — counts shown once here, not duplicated elsewhere */}
-          <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground flex-wrap">
-            <span className="tabular-nums">Active <span className="font-bold text-foreground">{activeCount}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">Scheduled <span className="font-bold text-amber-600">{scheduledCount}</span></span>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="tabular-nums">Drafts <span className="font-bold text-muted-foreground">{draftCount}</span></span>
-          </div>
-        </div>
 
-        {/* Tab navigation */}
-        <div className="px-4 sm:px-6 pb-2 overflow-x-auto">
-          <div className="flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 w-max">
-            {TABS.map((t) => {
-              const badge = tabBadges[t.value]
-              return (
-                <button
-                  key={t.value}
-                  onClick={() => setTab(t.value)}
-                  aria-current={tab === t.value ? 'page' : undefined}
-                  className={cn(
-                    'px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap flex items-center gap-1.5',
-                    tab === t.value
-                      ? 'bg-card text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {t.icon}
-                  <span>{t.label}</span>
-                  {badge !== undefined && badge > 0 && (
-                    <span className={cn(
-                      'inline-flex items-center justify-center h-3.5 px-1 rounded-full text-[8px] font-bold tabular-nums',
-                      tab === t.value ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-muted text-muted-foreground',
-                    )}>
-                      {badge}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+      {/* Tab row — SegmentedTabs on the left, no right-side control. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <SegmentedTabs
+          tabs={tabs}
+          value={tab}
+          onValueChange={(v) => setTab(v as CommTab)}
+        />
       </div>
 
-      {/* Main content */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={tab}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
-          >
-            {tab === 'announcements' && <AnnouncementsSection onNavigate={setTab} />}
-            {tab === 'circulars' && <CircularsSection />}
-            {tab === 'compose' && <ComposeSection />}
-            {tab === 'history' && <HistorySection />}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </div>
+      {/* Active tab content. */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.15 }}
+        >
+          {tab === 'announcements' && <AnnouncementsSection onNavigate={setTab} />}
+          {tab === 'circulars' && <CircularsSection />}
+          {tab === 'compose' && <ComposeSection />}
+          {tab === 'history' && <HistorySection />}
+        </motion.div>
+      </AnimatePresence>
+    </PageTransition>
   )
 }

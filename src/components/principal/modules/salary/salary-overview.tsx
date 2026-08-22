@@ -19,7 +19,8 @@ import { Button } from '@/components/ui/button'
 import { useSalaryData } from '@/lib/store/salary-store'
 import { formatINR, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { SalaryKpiCard, SalaryPanel, SalaryEmptyState } from './salary-shared'
+import { SalaryPanel, SalaryEmptyState } from './salary-shared'
+import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
 import { MiniAreaChart, MiniDonut, MiniBars } from '../fees/fees-charts'
 import type { SalaryTab } from './salary-shared'
 
@@ -32,46 +33,46 @@ export function SalaryOverviewSection({ data, onNavigate }: Props) {
   const { analytics, audit } = data
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SalaryKpiCard
+    <div className="space-y-4">
+      {/* KPI Cards — Academics canonical SummaryCard pattern */}
+      <SummaryCardGrid columns={4}>
+        <SummaryCard
           icon={<Wallet className="h-4 w-4" />}
           label="Monthly Payroll"
           value={formatINR(analytics.monthlyPayroll, true)}
           sub={`${analytics.employeeCount} employees`}
-          accent="sky"
+          tone="sky"
           delay={0}
           onClick={() => onNavigate('payroll')}
         />
-        <SalaryKpiCard
+        <SummaryCard
           icon={<CheckCircle2 className="h-4 w-4" />}
           label="Net Payable"
           value={formatINR(analytics.netPayable, true)}
           sub="after deductions"
-          accent="emerald"
+          tone="emerald"
           delay={0.05}
           onClick={() => onNavigate('payroll')}
         />
-        <SalaryKpiCard
+        <SummaryCard
           icon={<ArrowDownRight className="h-4 w-4" />}
           label="Deductions"
           value={formatINR(analytics.totalDeductions, true)}
           sub="PF · Tax · Insurance"
-          accent="rose"
+          tone="rose"
           delay={0.1}
           onClick={() => onNavigate('reports')}
         />
-        <SalaryKpiCard
+        <SummaryCard
           icon={<Clock className="h-4 w-4" />}
           label="Needs Attention"
           value={String(analytics.exceptions.length + analytics.pendingAdjustments)}
           sub={`${analytics.pendingAdjustments} pending`}
-          accent="amber"
+          tone="amber"
           delay={0.15}
           onClick={() => onNavigate('adjustments')}
         />
-      </div>
+      </SummaryCardGrid>
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">

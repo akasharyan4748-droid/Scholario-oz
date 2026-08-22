@@ -3,17 +3,20 @@
 /**
  * transport-shared — Shared primitives for the Transport workspace.
  *
- * Design language follows LibPanel / LibKpiCard (Library) and InvPanel /
- * InvKpiCard (Inventory) so the Transport workspace matches the rest of
- * SCHOLARIO's operational modules:
- *   - TptPanel: rounded card container with optional header + action
- *   - TptKpiCard: soft tinted background KPI card (5 accents)
+ * Visual language follows the Academics (Examinations + Attendance)
+ * canonical pattern. The section container TptPanel is now a thin
+ * re-export of the shared `Panel` (flat `rounded-xl border border-border
+ * bg-card`, title rendered as `<h3 className="text-sm font-semibold">`,
+ * no separate colored header strip with `border-b bg-muted/20`). Other
+ * primitives remain module-specific:
+ *   - TptKpiCard: soft tinted background KPI card (5 accents) — kept for
+ *     any sub-page that wants a chip-style KPI; not rendered in the shell.
  *   - TptPill: compact semantic pill
  *   - RouteStatusBadge / VehicleStatusBadge /
  *     MaintenanceStatusBadge
  *   - GpsBadge (Active / Off)
  *   - TptEmptyState
- *   - Reduced-motion styles
+ *   - TPT_GLOBAL_STYLES (reduced-motion styles)
  *
  * NO indigo/blue. Emerald / amber / rose / cyan / violet only.
  */
@@ -26,6 +29,7 @@ import type {
   VehicleStatus,
   MaintenanceStatus,
 } from '@/lib/store/transport-store'
+import { Panel } from '../shared/panel'
 
 // ─── Tab type ────────────────────────────────────────────────────────
 
@@ -76,7 +80,9 @@ const ACCENT_MAP: Record<
 
 export type TptAccent = keyof typeof ACCENT_MAP
 
-// ─── TptKpiCard (soft tinted KPI) ────────────────────────────────────
+// ─── TptKpiCard (soft tinted KPI) ─────────────────────────────────────
+// Kept for any sub-page that wants the chip-style KPI card. Not rendered
+// in the Transport shell (Task 9 dropped the 4-card KPI row).
 
 interface KpiProps {
   icon: React.ReactNode
@@ -147,49 +153,15 @@ export function TptKpiCard({
   )
 }
 
-// ─── TptPanel (rounded card container) ───────────────────────────────
+// ─── TptPanel (flat Academics section container) ─────────────────────
+// Re-exports the shared `Panel` so all Transport sub-pages render the
+// same flat `rounded-xl border border-border bg-card` section container
+// as the Examinations + Attendance modules. Existing callers using
+// `<TptPanel title="..." subtitle="..." action={...} bodyClassName="p-0">`
+// continue to work — the shared Panel signature is a superset of the
+// original.
 
-interface PanelProps {
-  title?: string
-  subtitle?: string
-  action?: React.ReactNode
-  children: React.ReactNode
-  className?: string
-  bodyClassName?: string
-}
-
-export function TptPanel({
-  title,
-  subtitle,
-  action,
-  children,
-  className,
-  bodyClassName,
-}: PanelProps) {
-  return (
-    <div
-      className={cn(
-        'rounded-xl border border-border bg-card overflow-hidden',
-        className
-      )}
-    >
-      {(title || action) && (
-        <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/60 bg-muted/20">
-          <div className="min-w-0">
-            {title && <p className="text-xs font-semibold tracking-tight">{title}</p>}
-            {subtitle && (
-              <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                {subtitle}
-              </p>
-            )}
-          </div>
-          {action && <div className="shrink-0">{action}</div>}
-        </div>
-      )}
-      <div className={cn('p-3', bodyClassName)}>{children}</div>
-    </div>
-  )
-}
+export const TptPanel = Panel
 
 // ─── TptPill ─────────────────────────────────────────────────────────
 
