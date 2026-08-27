@@ -9,7 +9,7 @@
  *
  * Payments is a unified workspace (Collect → Record → Verify → Track →
  * Receipt) with internal sub-views: Overview / Transactions / Pending
- * Verification + a primary Collect Payment action.
+ * Verification + a primary Collect Fee action.
  *
  * All numbers derive from the canonical students store via useFeeData().
  */

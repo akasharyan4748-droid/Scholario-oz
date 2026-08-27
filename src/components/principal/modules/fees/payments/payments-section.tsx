@@ -7,9 +7,10 @@
  *
  * Contents (flat, no nested sub-views):
  *   1. Benchmark header row — title block ("Payments" + "<Month Year> ·
- *      collections & verification") LEFT, the primary emerald
- *      "+ Collect Payment" CTA RIGHT (opens the existing collection wizard:
- *      student → amount → mode → receipt).
+ *      collections & verification") LEFT, the primary white-outline
+ *      "Collect Fee" CTA RIGHT (opens the existing collection wizard:
+ *      student → amount → mode → receipt). Same design language as Salary
+ *      & Payroll → Payments' "Record Payment" button — one ERP system.
  *   2. Collection activity — Today / This Week / This Month as three
  *      micro-stat TILES (Salary benchmark recipe). Operational feedback that
  *      collections are landing right now — not analytics. The Today tile
@@ -27,7 +28,7 @@
  */
 
 import { motion } from 'framer-motion'
-import { Plus } from 'lucide-react'
+import { Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFeeData } from '@/lib/store/fee-store'
 import { formatINR } from '@/lib/format'
@@ -64,12 +65,17 @@ export function PaymentsSection({ data, onCollect }: Props) {
             {monthLabel} · collections &amp; verification
           </p>
         </div>
+        {/* Primary action — same treatment as Salary & Payroll → Payments'
+            "Record Payment" (white outline, subtle border, Wallet icon,
+            identical height/typography/radius): one shared enterprise
+            design system across money modules. */}
         <Button
+          variant="outline"
           size="sm"
-          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+          className="h-7 text-[11px] gap-1 shrink-0"
           onClick={onCollect}
         >
-          <Plus className="h-3.5 w-3.5" /> Collect Payment
+          <Wallet className="h-3 w-3" /> Collect Fee
         </Button>
       </div>
 

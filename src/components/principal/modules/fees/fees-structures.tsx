@@ -106,7 +106,7 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
   const [deleteTarget, setDeleteTarget] = useState<FeeStructureConfig | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
-  // PHASE 5 — Master Catalogue drawer state (school-wide fee-head
+  // PHASE 5 — Master Catalogue deep-view state (school-wide fee-head
   // catalogue surfaced directly inside Fee Management).
   const [catalogueOpen, setCatalogueOpen] = useState(false)
 
@@ -133,8 +133,8 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
 
   // PHASE 6 — listen for `fee-open-catalogue` events so the Add-Head
   // form (inside the detail drawer) can ask this parent to open the
-  // Master Catalogue drawer. The drawer remains the single source of
-  // truth for catalogue administration — the Add-Head form never edits
+  // Master Catalogue deep view. The catalogue remains the single source
+  // of truth for catalogue administration — the Add-Head form never edits
   // the catalogue directly.
   useEffect(() => {
     const handler = () => setCatalogueOpen(true)
@@ -359,6 +359,15 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
     }, 250)
   }
 
+  // PHASE 5 — Master Catalogue opens as a DEEP PAGE inside Fee Management:
+  // while open it takes over this tab's CONTENT AREA only. The application
+  // shell (left sidebar, top header, module tab bar) stays exactly where it
+  // is — no fixed full-screen overlay, no browser-viewport takeover. All
+  // hooks above already ran, so returning early here is safe.
+  if (catalogueOpen) {
+    return <FeesMasterCatalogue open onClose={() => setCatalogueOpen(false)} />
+  }
+
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
       {/* TASK 2-c — benchmark header pair (icon-title h2 + subtitle;
@@ -380,8 +389,8 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
           <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40">
             <GraduationCap className="h-2.5 w-2.5" /> {boundClassCount} bound {boundClassCount === 1 ? 'class' : 'classes'}
           </Badge>
-          {/* PHASE 5 — Master Catalogue drawer launcher. Kept as a peer
-              action of the summary chips; reads "+ Master Catalogue". */}
+          {/* PHASE 5 — Master Catalogue launcher. Kept as a peer action
+              of the summary chips; reads "+ Master Catalogue". */}
           <Button
             size="sm"
             variant="outline"
@@ -858,14 +867,11 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
         })()}
       </AnimatePresence>
 
-      {/* PHASE 5 — Master Catalogue drawer (school-wide fee-head admin). */}
-      <FeesMasterCatalogue open={catalogueOpen} onClose={() => setCatalogueOpen(false)} />
-
       {/* PHASE 6 — Normalize Uncatalogued Heads drawer. Lets the
           principal link every per-structure FeeHead lacking a
           catalogueId binding to a master catalogue entry in one click.
-          Drawer pattern matches the Master Catalogue drawer so the
-          UX is consistent. */}
+          Drawer pattern keeps focus on one structure so the UX stays
+          consistent. */}
       <FeesNormalizeHeadsDrawer
         open={normalizeOpen}
         onClose={() => setNormalizeOpen(false)}

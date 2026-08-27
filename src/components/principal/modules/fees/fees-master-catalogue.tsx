@@ -1,14 +1,20 @@
 'use client'
 
 /**
- * FeesMasterCatalogue — the school-wide fee head library, as a TRUE
- * FULL-SCREEN workspace (not a drawer).
+ * FeesMasterCatalogue — the school-wide fee head library, rendered as a
+ * DEEP PAGE INSIDE the Fee Management module.
  *
- * The Principal opens this from Fee Structures → "Master Catalogue" and
- * enters a dedicated management screen that occupies the complete
- * application workspace. A clear "← Back to Fee Structures" returns to
- * the module — it never feels like a temporary popup and no blurred
- * fragment of the previous page stays visible.
+ * The Principal opens this from Fee Structures → "Master Catalogue" and it
+ * takes over the Fee Management CONTENT AREA only — the normal Scholario
+ * application shell stays exactly where it is:
+ *   • left sidebar visible
+ *   • top header visible
+ *   • Fee Management tab bar visible (module context never lost)
+ *   • normal application navigation intact
+ *
+ * It is NOT a fixed full-screen overlay and NOT a standalone route — the
+ * catalogue is an ordinary in-flow section of the workspace. "← Back to
+ * Fee Structures" returns to the structures grid.
  *
  * DESIGN GOALS (Principal-first):
  *   • A scannable LIBRARY, not a technical database — compact list rows
@@ -23,14 +29,14 @@
  *
  * Mutations write through school-settings-store (addFeeHead /
  * updateFeeHead / archiveFeeHead / restoreFeeHead) — same behaviour as
- * the previous drawer, unchanged business logic.
+ * the previous overlay, unchanged business logic.
  */
 
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Pencil, Check, Archive, RotateCcw, Search, Layers,
-  Box, Info, ArrowLeft, X, IndianRupee,
+  Box, Info, ArrowLeft, IndianRupee,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -83,19 +89,17 @@ export function FeesMasterCatalogue({
   const [draftPatch, setDraftPatch] = useState<Partial<FeeHeadConfig>>({})
   const [addingNew, setAddingNew] = useState(false)
 
-  // Lock body scroll while the full-screen workspace is open.
-  useEffect(() => {
-    if (open) {
-      const prev = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
-      return () => { document.body.style.overflow = prev }
-    }
-  }, [open])
+  // [open] prop remains so fees-structures can swap this deep page into its
+  // content area without touching the parent's layout logic.
 
-  // Escape closes the workspace — same affordance as the Back button.
+  // Escape returns to Fee Structures — same affordance as the Back button.
+  // Inputs/textareas are excluded so deleting typed text never bails out
+  // of the whole catalogue.
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handler)
@@ -182,141 +186,129 @@ export function FeesMasterCatalogue({
   const archivedCount = store.fees.feeHeads.length - activeCount
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-50 bg-background flex flex-col"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Master Fee Head Catalogue"
+    <motion.section
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15 }}
+      aria-label="Master Fee Head Catalogue"
+      className="space-y-4"
+    >
+
+      {/* Benchmark header pair - same recipe as the Fee Structures page:
+          back affordance + icon-title + counts LEFT, primary "+ New Fee
+          Head" action RIGHT. Ordinary document flow: no fixed chrome and no
+          takeover of the application shell (sidebar/header/tabs stay put). */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2.5 text-xs gap-1.5 shrink-0"
+            onClick={onClose}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Fee Structures
+          </Button>
+          <div className="min-w-0 hidden sm:block">
+            <h2 className="text-base font-bold flex items-center gap-2 truncate">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20">
+                <Layers className="h-4 w-4" />
+              </span>
+              Master Fee Head Catalogue
+            </h2>
+            <p className="text-[10px] text-muted-foreground">
+              {activeCount} active · {archivedCount} archived · school-wide fee head library
+            </p>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+          onClick={() => { setAddingNew(true); setEditingId(null) }}
         >
-          {/* ── Workspace header ─────────────────────────────────────── */}
-          <header className="border-b border-border bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/50">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2.5 text-xs gap-1.5 shrink-0"
-                    onClick={onClose}
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" /> Back to Fee Structures
-                  </Button>
-                  <div className="h-5 w-px bg-border hidden sm:block" />
-                  <div className="min-w-0 hidden sm:block">
-                    <h2 className="text-sm font-bold flex items-center gap-2 truncate">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20">
-                        <Layers className="h-4 w-4" />
-                      </span>
-                      Master Fee Head Catalogue
-                    </h2>
-                    <p className="text-[10px] text-muted-foreground">
-                      {activeCount} active · {archivedCount} archived · school-wide fee head library
-                    </p>
-                  </div>
-                </div>
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 lg:hidden" onClick={onClose} aria-label="Close">
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+          <Plus className="h-3.5 w-3.5" /> New Fee Head
+        </Button>
+      </div>
 
-              {/* ── Compact toolbar: [Search] [Category] [Show archived] [+ New] ── */}
-              <div className="flex items-center gap-2 flex-wrap mt-3">
-                <div className="relative flex-1 min-w-[180px] max-w-md">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search fee heads…"
-                    className="h-8 text-xs pl-8"
-                  />
-                </div>
-                <Select value={filterCategory} onValueChange={setFilterCategory}>
-                  <SelectTrigger className="h-8 text-xs w-[130px]">
-                    <SelectValue placeholder="Category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All categories</SelectItem>
-                    {CATEGORY_ORDER.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer select-none">
-                  <Switch checked={showArchived} onCheckedChange={setShowArchived} />
-                  <span className="text-muted-foreground">Show archived</span>
-                </label>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs gap-1.5 ml-auto bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => { setAddingNew(true); setEditingId(null) }}
-                >
-                  <Plus className="h-3.5 w-3.5" /> New Fee Head
-                </Button>
-              </div>
+      {/* Compact toolbar: [Search] [Category] [Show archived] */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[180px] max-w-md">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search fee heads…"
+            className="h-8 text-xs pl-8"
+          />
+        </div>
+        <Select value={filterCategory} onValueChange={setFilterCategory}>
+          <SelectTrigger className="h-8 text-xs w-[130px]">
+            <SelectValue placeholder="Category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {CATEGORY_ORDER.map((t) => (
+              <SelectItem key={t} value={t}>{t}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer select-none">
+          <Switch checked={showArchived} onCheckedChange={setShowArchived} />
+          <span className="text-muted-foreground">Show archived</span>
+        </label>
+      </div>
+
+      {/* List body - ordinary page flow; the AppShell scrolls naturally.
+          Uses the full Fee Management content area (no inner column). */}
+      <div className="space-y-3">
+        {/* New Fee Head - simple creation experience */}
+        <AnimatePresence>
+          {addingNew && (
+            <NewFeeHeadForm
+              onCancel={() => setAddingNew(false)}
+              onCreated={() => setAddingNew(false)}
+            />
+          )}
+        </AnimatePresence>
+
+        {filtered.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border py-16 text-center">
+            <p className="text-sm font-medium text-muted-foreground">No fee heads match your filters.</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">Try a different search, or create a new fee head.</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            {/* Column header (desktop) */}
+            <div className="hidden md:grid grid-cols-[minmax(0,2.2fr)_1fr_0.9fr_0.9fr_auto] gap-3 px-4 py-2 bg-muted/40 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider">
+              <span>Fee Head</span>
+              <span>Category · Frequency</span>
+              <span className="text-right">Default Amount</span>
+              <span className="text-right">Usage</span>
+              <span className="text-right">Actions</span>
             </div>
-          </header>
-
-          {/* ── List body ────────────────────────────────────────────── */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 space-y-3">
-              {/* New Fee Head — simple creation experience */}
-              <AnimatePresence>
-                {addingNew && (
-                  <NewFeeHeadForm
-                    onCancel={() => setAddingNew(false)}
-                    onCreated={() => setAddingNew(false)}
-                  />
-                )}
-              </AnimatePresence>
-
-              {filtered.length === 0 ? (
-                <div className="text-center py-16">
-                  <p className="text-sm font-medium text-muted-foreground">No fee heads match your filters.</p>
-                  <p className="text-xs text-muted-foreground/70 mt-1">Try a different search, or create a new fee head.</p>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-border bg-card overflow-hidden">
-                  {/* Column header (desktop) */}
-                  <div className="hidden md:grid grid-cols-[minmax(0,2.2fr)_1fr_0.9fr_0.9fr_auto] gap-3 px-4 py-2 bg-muted/40 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider">
-                    <span>Fee Head</span>
-                    <span>Category · Frequency</span>
-                    <span className="text-right">Default Amount</span>
-                    <span className="text-right">Usage</span>
-                    <span className="text-right">Actions</span>
-                  </div>
-                  <div className="divide-y divide-border/60">
-                    {filtered.map((h) => (
-                      <CatalogueRow
-                        key={h.id}
-                        head={h}
-                        usage={usageCounts[h.id] ?? { structures: 0, instances: 0 }}
-                        editing={editingId === h.id}
-                        draftPatch={draftPatch}
-                        setDraftPatch={setDraftPatch}
-                        onStartEdit={() => { startEdit(h); setAddingNew(false) }}
-                        onCancelEdit={cancelEdit}
-                        onSaveEdit={() => saveEdit(h.id)}
-                        onArchive={() => handleArchive(h)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <p className="text-[10px] text-muted-foreground text-center pt-1 pb-6">
-                Editing a fee head updates defaults for new structures only — existing class structures keep their snapshot.
-              </p>
+            <div className="divide-y divide-border/60">
+              {filtered.map((h) => (
+                <CatalogueRow
+                  key={h.id}
+                  head={h}
+                  usage={usageCounts[h.id] ?? { structures: 0, instances: 0 }}
+                  editing={editingId === h.id}
+                  draftPatch={draftPatch}
+                  setDraftPatch={setDraftPatch}
+                  onStartEdit={() => { startEdit(h); setAddingNew(false) }}
+                  onCancelEdit={cancelEdit}
+                  onSaveEdit={() => saveEdit(h.id)}
+                  onArchive={() => handleArchive(h)}
+                />
+              ))}
             </div>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+
+        <p className="text-[10px] text-muted-foreground text-center pt-1 pb-2">
+          Editing a fee head updates defaults for new structures only — existing class structures keep their snapshot.
+        </p>
+      </div>
+    </motion.section>
   )
 }
 

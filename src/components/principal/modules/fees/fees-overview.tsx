@@ -6,8 +6,10 @@
  *
  *   1. Four KPI cards (Total Expected · Collected · Outstanding ·
  *      Students With Dues) — clickable, wired to Accounts/Transactions.
- *   2. Collection Trend (Panel, compact ~180px chart) + Breakdown
- *      (expected obligation by fee head, thin CSS bars) side by side.
+ *   2. Collection Trend (OPEN chart — sits directly on the page surface,
+ *      no card/container — same pattern as Analytics/Dashboard/Finance)
+ *      + Breakdown (expected obligation by fee head, thin CSS bars) beside
+ *      it in a bordered panel.
  *   3. Outstanding Dues + Needs Attention — one two-column grid of
  *      ACTIONABLE panels: avatar rows with amount + overdue chip; every
  *      row navigates to Student Accounts. (Replaces the former dues +
@@ -34,6 +36,7 @@ import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
 import { Panel } from '../shared/panel'
+import { OpenChartSection } from '../shared/open-chart-section'
 import { FeeEmptyState, ModeIcon, modeAccent } from './fees-shared'
 import { MiniAreaChart, FEES_CHART_PALETTE } from './fees-charts'
 import type { FeeTab } from './fees-shared'
@@ -179,32 +182,34 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
       </SummaryCardGrid>
 
       {/* 2 — Collection Trend + Breakdown (one command-centre row).
-          ONE legend — Panel action slot, colored to exactly match the
-          chart's series; the chart itself renders none. */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 min-w-0">
-          <Panel
-            title="Collection Trend"
-            subtitle={`${yearLabel} · collected vs pending`}
-            className="h-full"
-            action={
-              <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.collected }} /> Collected
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.pending }} /> Pending
-                </span>
-              </div>
-            }
-          >
-            {trendHasData ? (
-              <MiniAreaChart data={analytics.monthly} height={180} format={(n) => formatINR(n, true)} showArea />
-            ) : (
-              <p className="text-xs text-muted-foreground py-10 text-center">No collections yet — record a payment to see the trend.</p>
-            )}
-          </Panel>
-        </div>
+          The trend is an OPEN chart section — NO card, NO oversized empty
+          container: it sits directly on the page using only its natural
+          height (shared OpenChartSection recipe). ONE legend — action slot,
+          colored to exactly match the chart's series. items-start keeps
+          each column at its own natural height so neither the chart nor
+          the Breakdown panel forces extra empty space into the row. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <OpenChartSection
+          title="Collection Trend"
+          subtitle={`${yearLabel} · collected vs pending`}
+          className="lg:col-span-2 min-w-0"
+          action={
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.collected }} /> Collected
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.pending }} /> Pending
+              </span>
+            </div>
+          }
+        >
+          {trendHasData ? (
+            <MiniAreaChart data={analytics.monthly} height={180} format={(n) => formatINR(n, true)} showArea />
+          ) : (
+            <p className="text-xs text-muted-foreground py-6 text-center">No collections yet — record a payment to see the trend.</p>
+          )}
+        </OpenChartSection>
 
         {/* Expected obligation per fee head — honest policy view (bars are
             relative to the largest head, share % is of total expected). */}

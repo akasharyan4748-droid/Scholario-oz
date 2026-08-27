@@ -4,14 +4,14 @@
  * FeesShell — Principal Fee Management workspace.
  *
  * FINAL INFORMATION ARCHITECTURE (6 top-level sections):
- *   Overview · Student Accounts · Fee Structures · Payments · Transactions · Settings
+ *   Overview · Payments · Transactions · Student Accounts · Fee Structures · Settings
  *
  * Clear responsibilities, no duplicated pages:
  *   Overview      — Insights (KPIs, trend, dues, recent payments, mode mix)
+ *   Payments      — OPERATIONS: Collect Fee + cash verification queue
+ *   Transactions  — The complete authoritative payment history (ledger)
  *   Student Accts — Per-student fee accounts
  *   Fee Structures— Configured fee rules
- *   Payments      — OPERATIONS: Collect Payment + cash verification queue
- *   Transactions  — The complete authoritative payment history (ledger)
  *   Settings      — Configuration
  *
  * LAYOUT: follows the Academics canonical pattern (Attendance/Salary
@@ -40,7 +40,8 @@ import { FeesSettingsSection } from './fees-settings'
 import { CollectPaymentModal } from './fees-collect-payment'
 
 // Static tab values used for keyboard-shortcut mapping (1–6 → tab index).
-const TAB_VALUES: FeeTab[] = ['overview', 'accounts', 'structures', 'payments', 'transactions', 'settings']
+// MUST mirror the display order of the `tabs` array below.
+const TAB_VALUES: FeeTab[] = ['overview', 'payments', 'transactions', 'accounts', 'structures', 'settings']
 
 export function FeesShell({ onNavigate }: { onNavigate?: (moduleKey: string) => void }) {
   const [tab, setTab] = useState<FeeTab>('overview')
@@ -70,12 +71,14 @@ export function FeesShell({ onNavigate }: { onNavigate?: (moduleKey: string) => 
   // actionable queue (cash collections awaiting verification).
   const pendingVerification = data.analytics.pendingCashRequests
 
+  // Primary navigation ORDER everywhere the tab bar renders:
+  // Overview → Payments → Transactions → Student Accounts → Fee Structures → Settings
   const tabs: SegmentedTab[] = [
     { value: 'overview', label: 'Overview' },
-    { value: 'accounts', label: 'Student Accounts' },
-    { value: 'structures', label: 'Fee Structures' },
     { value: 'payments', label: 'Payments', badge: pendingVerification > 0 ? pendingVerification : undefined },
     { value: 'transactions', label: 'Transactions' },
+    { value: 'accounts', label: 'Student Accounts' },
+    { value: 'structures', label: 'Fee Structures' },
     { value: 'settings', label: 'Settings' },
   ]
 
@@ -143,7 +146,7 @@ export function FeesShell({ onNavigate }: { onNavigate?: (moduleKey: string) => 
         </AnimatePresence>
       </PageTransition>
 
-      {/* Collect Payment — shared modal (Payments page + Student Accounts +
+      {/* Collect Fee — shared modal (Payments page + Student Accounts +
           any contextual "Record Payment" flow). */}
       <CollectPaymentModal
         open={collectOpen}
