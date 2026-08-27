@@ -24,7 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Radio, RefreshCw, CheckCheck, Server, Database, X,
-  Megaphone, ShieldAlert, Users,
+  Megaphone, ShieldAlert, Users, Download, Loader2, TrendingUp, Crown,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatRelativeTime, formatDate } from '@/lib/format'
@@ -205,6 +205,14 @@ export function PlatformBroadcasts({ search, refreshSignal, focusNotice, onNotic
         </button>
       </div>
 
+      {/* Delivery insights strip — roll-up of the visible broadcasts.
+          Shows: total acks, average delivery rate (audience-estimated rows
+          only) and the current top-performing broadcast. Updates live with
+          the search filter so it doubles as a filtered-set summary. */}
+      {!error && rows !== null && rows.length > 0 && (
+        <DeliveryInsights rows={visible} totalRows={rows.length} totalAcksAll={rows.reduce((s, a) => s + a.acknowledgedBy, 0)} />
+      )}
+
       {/* Body */}
       {error ? (
         <div className="px-3 py-3 flex items-start gap-2 bg-amber-500/[0.06]">
@@ -326,6 +334,66 @@ export function PlatformBroadcasts({ search, refreshSignal, focusNotice, onNotic
   )
 }
 
+// Delivery insights strip — aggregated analytics over the visible rows.
+// Only audience-estimated rows participate in the rate average; the top
+// broadcast is the highest-rate row with at least one ack.
+function DeliveryInsights({ rows, totalRows, totalAcksAll }: { rows: PlatformAnnouncement[]; totalRows: number; totalAcksAll: number }) {
+  const totalAcks = rows.reduce((s, a) => s + a.acknowledgedBy, 0)
+  const rated = rows.filter((a) => typeof a.estimatedRecipients === 'number' && a.estimatedRecipients > 0)
+  const avgRate = rated.length > 0
+    ? Math.round(rated.reduce((s, a) => s + Math.min(100, (a.acknowledgedBy / (a.estimatedRecipients || 1)) * 100), 0) / rated.length)
+    : null
+  const top = rated
+    .filter((a) => a.acknowledgedBy > 0)
+    .sort((x, y) => (y.acknowledgedBy / (y.estimatedRecipients || 1)) - (x.acknowledgedBy / (x.estimatedRecipients || 1)))[0]
+  const topRate = top ? Math.min(100, Math.round((top.acknowledgedBy / (top.estimatedRecipients || 1)) * 100)) : null
+  const tone = avgRate !== null ? rateTone(avgRate) : null
+  const filtered = rows.length !== totalRows
+
+  return (
+    <div className="grid grid-cols-3 divide-x divide-border/40 border-b border-border/40 bg-gradient-to-r from-primary/[0.04] via-transparent to-transparent">
+      {/* Total acknowledgements */}
+      <div className="px-3 py-2 min-w-0">
+        <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+          <Users className="h-2.5 w-2.5" /> Acks {filtered && <span className="normal-case font-medium">· filtered</span>}
+        </div>
+        <motion.p
+          key={totalAcks}
+          initial={{ opacity: 0, y: 3 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-sm font-bold tabular-nums leading-tight mt-0.5"
+        >
+          {totalAcks}
+          {filtered && <span className="text-[10px] font-medium text-muted-foreground"> of {totalAcksAll}</span>}
+        </motion.p>
+      </div>
+      {/* Average delivery rate */}
+      <div className="px-3 py-2 min-w-0">
+        <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+          <TrendingUp className="h-2.5 w-2.5" /> Avg Delivery
+        </div>
+        <p className={cn('text-sm font-bold tabular-nums leading-tight mt-0.5', tone?.text ?? 'text-muted-foreground')}>
+          {avgRate !== null ? `${avgRate}%` : '—'}
+        </p>
+      </div>
+      {/* Top-performing broadcast */}
+      <div className="px-3 py-2 min-w-0">
+        <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+          <Crown className="h-2.5 w-2.5" /> Top Broadcast
+        </div>
+        {top ? (
+          <p className="text-[10px] font-semibold leading-tight mt-0.5 truncate" title={`${top.title} — ${topRate}%`}>
+            <span className={cn('tabular-nums', rateTone(topRate ?? 0).text)}>{topRate}%</span>
+            <span className="text-muted-foreground"> · {top.title}</span>
+          </p>
+        ) : (
+          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">No acks yet</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // SVG progress ring for the modal delivery-rate summary.
 function RateRing({ ratePct, tone }: { ratePct: number; tone: { stroke: string } }) {
   const r = 24
@@ -357,6 +425,7 @@ function PlatformViewModal({ announcement: a, onClose }: { announcement: Platfor
   // Acknowledgement feed — fetched once when the modal opens.
   const [reads, setReads] = useState<AckRead[] | null>(null)
   const [readsError, setReadsError] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -532,7 +601,42 @@ function PlatformViewModal({ announcement: a, onClose }: { announcement: Platfor
           </div>
         </div>
 
-        <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-end gap-1">
+        <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-between gap-2">
+          {/* Export — CSV acknowledgement report (raw Response endpoint,
+              blob → object URL download, payments-export pattern). */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            disabled={exporting}
+            onClick={async () => {
+              if (exporting) return
+              setExporting(true)
+              try {
+                const r = await fetch(`/api/announcements/${a.id}/reads/export`, { cache: 'no-store' })
+                if (!r.ok) throw new Error('unavailable')
+                const blob = await r.blob()
+                const dispo = r.headers.get('Content-Disposition') ?? ''
+                const match = dispo.match(/filename="?([^";]+)"?/)
+                const url = URL.createObjectURL(blob)
+                const link = document.createElement('a')
+                link.href = url
+                link.download = match?.[1] ?? `ack-report-${a.id}.csv`
+                document.body.appendChild(link)
+                link.click()
+                link.remove()
+                URL.revokeObjectURL(url)
+                toast.success('Acknowledgement report downloaded', { description: `${reads?.length ?? 0} read receipts exported as CSV` })
+              } catch {
+                toast.error('Export failed', { description: 'The report could not be generated right now.' })
+              } finally {
+                setExporting(false)
+              }
+            }}
+          >
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            Export CSV
+          </Button>
           <Button size="sm" className="h-8 text-xs" onClick={onClose}>Close</Button>
         </div>
       </motion.div>

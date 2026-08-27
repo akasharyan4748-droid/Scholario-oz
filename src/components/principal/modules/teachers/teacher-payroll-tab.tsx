@@ -32,7 +32,7 @@ import {
   EditSalaryDialog,
 } from '../salary/salary-employee-drawer'
 import { PaymentDetailDialog, ReceiptViewDialog } from '../salary/payment-dialogs'
-import { PayslipDocument } from '../salary/payslip-document'
+import { PayslipDocument, printPayslip } from '../salary/payslip-document'
 import {
   fmtDay, fmtDayYear, moneyMy, LockedBadge, SessionSalaryBadge, PaymentStatusBadge,
   PayslipStateBadge, RequestStatusBadge, useEditingWindow,
@@ -311,7 +311,7 @@ export function TeacherPayrollTab({ teacherId }: { teacherId: string }) {
             payable={payable}
           />
           <div className="flex justify-end">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => window.print()}>
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => printPayslip()}>
               <Printer className="h-3.5 w-3.5" /> Print / Save PDF
             </Button>
           </div>

@@ -30,7 +30,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useSalaryStore, type PaymentMethod } from '@/lib/store/salary-store'
-import { netPayableFor, confirmedPaidFor, periodOptions, periodLabel } from '@/lib/store/salary-store'
+import { netPayableFor, confirmedPaidFor, periodOptions, periodLabel, nextCashReference } from '@/lib/store/salary-store'
 import { moneyMy } from './salary-shared'
 
 const METHODS: PaymentMethod[] = ['Bank Transfer', 'UPI', 'Cash', 'Cheque']
@@ -180,6 +180,17 @@ export function RecordPaymentDialog({ open, onOpenChange, employeeId, periodKey 
   const amountNum = Number(amount) || 0
   const overBalance = amountNum > balance
 
+  // Cash carries no external transaction number — Scholario assigns the
+  // school's internal payment reference automatically (CASH-YYYY-NNNN).
+  // The preview below becomes the persisted value when submitted.
+  const cashReference = useMemo(
+    () => nextCashReference(
+      payments.map((p) => p.reference),
+      Number(date.slice(0, 4)) || new Date().getFullYear(),
+    ),
+    [payments, date],
+  )
+
   const handleSubmit = () => {
     if (submitting) return
     setSubmitting(true)
@@ -195,6 +206,9 @@ export function RecordPaymentDialog({ open, onOpenChange, employeeId, periodKey 
       })
       toast.success('Payment recorded', {
         description: `${employee?.name} · ${moneyMy(amountNum)} · ${periodLabel(month)} — pending receipt`,
+        classNames: {
+          description: '!text-xs !font-medium !text-zinc-700 dark:!text-zinc-300',
+        },
       })
       onOpenChange(false)
     } catch (err) {
@@ -315,16 +329,29 @@ export function RecordPaymentDialog({ open, onOpenChange, employeeId, periodKey 
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs" htmlFor="rp-ref">
-                Reference No.{refRequired ? <span className="text-rose-500"> *</span> : null}
+              <Label className="text-xs" htmlFor={method === 'Cash' ? undefined : 'rp-ref'}>
+                Reference No.{method !== 'Cash' && refRequired ? <span className="text-rose-500"> *</span> : null}
               </Label>
-              <Input
-                id="rp-ref"
-                className="h-9 text-xs"
-                placeholder={method === 'Cheque' ? 'CHQ-5521' : method === 'UPI' ? 'UPI-77213' : 'NEFT-88341'}
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
-              />
+              {method === 'Cash' ? (
+                <div className="space-y-1">
+                  <Input
+                    aria-label="Cash payment reference"
+                    readOnly
+                    tabIndex={-1}
+                    className="h-9 text-xs font-mono tabular-nums text-slate-600 dark:text-slate-300 bg-muted/50 cursor-default select-none focus-visible:ring-0"
+                    value={cashReference}
+                  />
+                  <p className="text-[10px] leading-none text-muted-foreground">Auto-generated</p>
+                </div>
+              ) : (
+                <Input
+                  id="rp-ref"
+                  className="h-9 text-xs"
+                  placeholder={method === 'Cheque' ? 'CHQ-5521' : method === 'UPI' ? 'UPI-77213' : 'NEFT-88341'}
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                />
+              )}
             </div>
           </div>
 
@@ -355,7 +382,7 @@ export function RecordPaymentDialog({ open, onOpenChange, employeeId, periodKey 
             size="sm"
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
             onClick={handleSubmit}
-            disabled={!empId || !month || !amountNum || !date || (refRequired && !reference.trim())}
+            disabled={!empId || !month || !amountNum || !date || (method !== 'Cash' && refRequired && !reference.trim())}
           >
             Record Payment
           </Button>

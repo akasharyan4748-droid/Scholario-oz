@@ -1,10 +1,20 @@
 'use client'
 
 /**
- * SalaryPayslipsSection — per-month payslip states for every employee:
- * ▤ Unpaid · ▤ Pending · ▤ Paid. Viewing a payslip opens the
- * professional school salary-slip document (PayslipDocument) — the same
- * structure, adjustments and payment records the whole module uses.
+ * SalaryPayslipsSection — ISSUED payslips only.
+ *
+ * A salary slip is a payroll document issued once a payment has been
+ * confirmed by the employee. This tab therefore lists ONLY employees
+ * whose payment for the selected month is Confirmed:
+ *
+ *   Unpaid                      → no slip
+ *   Pending Receipt (recorded)  → no slip yet
+ *   Not Received / Reversed     → no active slip
+ *   ✓ Confirmed                 → slip available here
+ *
+ * Viewing a slip opens the minimal school salary-slip document
+ * (PayslipDocument) built from the same structure, adjustments and
+ * payment records the whole module uses.
  */
 
 import { useMemo, useState } from 'react'
@@ -18,9 +28,9 @@ import {
   useSalaryStore, periodOptions, periodLabel, netPayableFor, confirmedPaidFor,
 } from '@/lib/store/salary-store'
 import { useSalaryUI } from './salary-ui-context'
-import { moneyMy, PayslipStateBadge } from './salary-shared'
+import { moneyMy, SalaryEmptyState } from './salary-shared'
 import { ReceiptViewDialog } from './payment-dialogs'
-import { PayslipDocument } from './payslip-document'
+import { PayslipDocument, printPayslip } from './payslip-document'
 
 export function SalaryPayslipsSection() {
   const employees = useSalaryStore((s) => s.employees)
@@ -35,6 +45,7 @@ export function SalaryPayslipsSection() {
   const [viewing, setViewing] = useState<string | null>(null) // employeeId
   const [receiptNo, setReceiptNo] = useState<string | null>(null)
 
+  // Only months with at least one confirmed payment carry an issued slip.
   const rows = useMemo(() => {
     return employees
       .filter((e) => e.status === 'Active' || e.status === 'On Leave')
@@ -48,14 +59,9 @@ export function SalaryPayslipsSection() {
           : monthPayments.some((p) => p.status === 'Pending Receipt') ? 'Pending' : 'Unpaid'
         return { employee: e, state, payable, confirmed, payState, monthPayments }
       })
+      .filter((r) => r.payState === 'Paid') // ← issued slips only
       .sort((a, b) => a.employee.name.localeCompare(b.employee.name))
   }, [employees, salaries, adjustments, payments, month])
-
-  const counts = {
-    paid: rows.filter((r) => r.payState === 'Paid').length,
-    pending: rows.filter((r) => r.payState === 'Pending').length,
-    unpaid: rows.filter((r) => r.payState === 'Unpaid').length,
-  }
 
   const viewRow = viewing ? rows.find((r) => r.employee.id === viewing) : null
   const receipt = receipts.find((r) => r.receiptNo === receiptNo) ?? null
@@ -72,42 +78,51 @@ export function SalaryPayslipsSection() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            {counts.paid} paid · {counts.pending} pending · {counts.unpaid} unpaid
+            {rows.length} issued {rows.length === 1 ? 'payslip' : 'payslips'}
           </p>
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="max-h-[calc(100vh-280px)] min-h-[240px] overflow-y-auto salary-scroll">
-          <div className="divide-y divide-border">
-            {rows.map((r) => (
-              <button
-                key={r.employee.id}
-                type="button"
-                onClick={() => setViewing(r.employee.id)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors text-left"
-              >
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback className="text-[10px] font-semibold bg-muted">{r.employee.avatar}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold truncate">{r.employee.name}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    {r.employee.designation} · {moneyMy(r.payable)}
-                    {r.confirmed > 0 && <span className="text-emerald-600 dark:text-emerald-400"> · {moneyMy(r.confirmed)} confirmed</span>}
-                  </p>
-                </div>
-                <PayslipStateBadge state={r.payState} />
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-              </button>
-            ))}
+      {rows.length === 0 ? (
+        <div className="rounded-xl border bg-card">
+          <SalaryEmptyState
+            icon={<FileText className="h-5 w-5" />}
+            title={`No payslips for ${periodLabel(month)} yet`}
+            description="A salary slip is issued when the employee confirms the payment. Payments still awaiting confirmation are not listed here."
+          />
+        </div>
+      ) : (
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="max-h-[calc(100vh-280px)] min-h-[240px] overflow-y-auto salary-scroll">
+            <div className="divide-y divide-border">
+              {rows.map((r) => (
+                <button
+                  key={r.employee.id}
+                  type="button"
+                  onClick={() => setViewing(r.employee.id)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors text-left"
+                >
+                  <Avatar className="h-8 w-8 shrink-0">
+                    <AvatarFallback className="text-[10px] font-semibold bg-muted">{r.employee.avatar}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate">{r.employee.name}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {r.employee.designation} · {moneyMy(r.confirmed)}
+                    </p>
+                  </div>
+                  <BadgeCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Professional payslip document */}
+      {/* Salary slip document */}
       <Dialog open={!!viewRow} onOpenChange={(o) => !o && setViewing(null)}>
-        <DialogContent className="sm:max-w-2xl max-h-[92dvh] overflow-y-auto">
+        <DialogContent className="sm:max-w-lg max-h-[92dvh] overflow-y-auto">
           {viewRow && viewRow.state && (
             <>
               <DialogHeader>
@@ -131,10 +146,10 @@ export function SalaryPayslipsSection() {
                 payable={viewRow.payable}
               />
 
-              <div className="flex justify-between items-center gap-2 flex-wrap">
+              <div className="flex justify-between items-center gap-2 flex-wrap print:hidden">
                 <Button
                   variant="outline" size="sm" className="h-8 text-xs gap-1.5"
-                  onClick={() => window.print()}
+                  onClick={() => printPayslip()}
                 >
                   <Printer className="h-3.5 w-3.5" /> Print / Save PDF
                 </Button>

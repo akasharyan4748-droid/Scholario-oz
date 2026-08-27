@@ -30,10 +30,12 @@
  *     manage members + send-to-group via compose preselect)
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Send } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
 import { useMessagingStore } from '@/lib/store/messaging-store'
+import { useFocusStore } from '@/lib/store/focus-store'
+import { toast } from 'sonner'
 import { FoldersSidebar } from './folders-sidebar'
 import { ConversationList } from './conversation-list'
 import { ThreadView } from './thread-view'
@@ -44,9 +46,42 @@ import { cn } from '@/lib/utils'
 export function MessagingModule() {
   const activeConversationId = useMessagingStore((s) => s.activeConversationId)
   const activeFolder = useMessagingStore((s) => s.activeFolder)
+  const conversations = useMessagingStore((s) => s.conversations)
+  const openConversation = useMessagingStore((s) => s.openConversation)
   const [composeOpen, setComposeOpen] = useState(false)
   const [composeRecipient, setComposeRecipient] = useState<string | null>(null)
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list')
+
+  // Parent deep-link from the command palette: focus.type 'parent' carries
+  // the guardian's name. If a parent conversation already exists for that
+  // guardian (matched by name — exact → prefix → contains), open it
+  // directly; otherwise pre-address a fresh compose so the principal can
+  // reach out without hunting for the thread. Cleared after handling so
+  // re-mounts never replay the request.
+  const focus = useFocusStore((s) => s.focus)
+  const handledParentTs = useRef<number | null>(null)
+  useEffect(() => {
+    if (!focus || focus.type !== 'parent' || handledParentTs.current === focus.ts) return
+    handledParentTs.current = focus.ts
+    const name = focus.title.toLowerCase().trim()
+    if (!name) return
+    const parents = conversations.filter((c) => c.type === 'parent')
+    const match =
+      parents.find((c) => c.name.toLowerCase().trim() === name) ??
+      parents.find((c) => name.startsWith(c.name.toLowerCase().trim())) ??
+      parents.find((c) => c.name.toLowerCase().includes(name) || name.includes(c.name.toLowerCase().trim()))
+    if (match) {
+      openConversation(match.id)
+      toast.success(`Opened ${match.name}'s conversation`, { description: 'Deep-linked from global search' })
+    } else {
+      setComposeRecipient(focus.title)
+      setComposeOpen(true)
+      toast.info(`New message to ${focus.title}`, {
+        description: 'No existing conversation with this guardian yet — compose pre-addressed.',
+      })
+    }
+    useFocusStore.getState().clearFocus()
+  }, [focus?.ts, focus?.type, focus?.title, conversations, openConversation])
 
   // Switch to thread view on mobile when conversation opened
   useEffect(() => {

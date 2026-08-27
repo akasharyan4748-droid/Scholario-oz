@@ -1,29 +1,26 @@
 'use client'
 
 /**
- * PayslipDocument — a professional school salary slip.
+ * PayslipDocument — a minimal school salary slip.
  *
- * A DOCUMENT, not a dashboard: white paper surface, letterhead school
- * identity, aligned employee information, real earnings/deductions
- * tables, a strong net-pay band, amount in words (always derived from
- * the actual net — never hardcoded), payment information that reflects
- * the live confirmation state, and a restrained system footer.
+ * Visual direction: "Payment detail card + small school-document header".
+ * The same quiet label-left / value-right rhythm as PaymentDetailDialog,
+ * compact spacing, hairline dividers, restrained badges — NOT a corporate
+ * payroll dashboard. Only real salary/payment data appears here.
  *
  * Every number comes from the salary store's single calculation path:
- * the same structure components, adjustments and payments the Principal
- * sees in Salary & Payroll. Nothing here is an independent calculation.
+ * gross − deductions must land exactly on payable. Nothing is an
+ * independent calculation.
  *
- * Print: window.print() prints ONLY the document (print CSS isolates
- * .payslip-print from the rest of the app), so "Save as PDF" from the
- * browser's print dialog produces a clean PDF payslip.
+ * Print: window.print() prints ONLY this document (print CSS isolates
+ * .payslip-print), with an A5 PORTRAIT default page size so the slip fits
+ * one page without oversized A4 output. The user can still pick another
+ * paper size manually. No mention of paper size on the document itself.
  */
 
-import {
-  Check, Clock, X,
-} from 'lucide-react'
+import { Check } from 'lucide-react'
 
 import { school } from '@/lib/mock/school'
-import { teachers } from '@/lib/mock/teachers'
 import { amountInWordsINR } from '@/lib/format'
 import type {
   Employee, MonthlyAdjustment, SalaryPayment, SessionSalary,
@@ -31,31 +28,57 @@ import type {
 import { periodLabel } from '@/lib/store/salary-store'
 import { fmtDayYear } from './salary-shared'
 
-// ─── Derived payment state for the slip ──────────────────────────────
+// ─── Slip identity ───────────────────────────────────────────────────
 
-interface PaymentSummary {
-  overall: 'Confirmed' | 'Pending Receipt' | 'Not Received' | 'Unpaid'
-  primary: SalaryPayment | null
-  extraPayments: SalaryPayment[]
-  receiptLine: string
+/** Stable, human slip no. — e.g. EMP-014 · 2026-08 → SLIP-2026-08-0014 */
+function slipNumberFor(employee: Pick<Employee, 'employeeId'>, periodKey: string): string {
+  const digits = employee.employeeId.match(/(\d+)\s*$/)?.[1]
+  const tail = digits ? digits.padStart(4, '0') : employee.employeeId
+  return `SLIP-${periodKey}-${tail}`
 }
 
-function summarisePayments(payments: SalaryPayment[]): PaymentSummary {
-  if (payments.length === 0) {
-    return { overall: 'Unpaid', primary: null, extraPayments: [], receiptLine: '—' }
+/** The month's primary payment line for the details block. */
+function primaryPayment(payments: SalaryPayment[]): SalaryPayment | null {
+  return payments.find((p) => p.status === 'Confirmed')
+    ?? payments.find((p) => p.status === 'Pending Receipt')
+    ?? payments.find((p) => p.status === 'Not Received')
+    ?? null
+}
+
+// ─── Print ───────────────────────────────────────────────────────────
+
+/**
+ * Prints ONLY the salary slip, nothing else.
+ *
+ * The slip is cloned into a dedicated #print-root element at document.body
+ * level, every other top-level element (app shell, dialogs, portals, toasts)
+ * is display:none while the body carries .salary-printing. This avoids the
+ * classic clipping bug where the slip lives inside a scrolling dialog and
+ * the old visibility-hack printed half a page. Restored on afterprint.
+ */
+export function printPayslip(): void {
+  const node = document.querySelector('.payslip-print')
+  if (!node) return window.print()
+
+  let root = document.getElementById('print-root')
+  if (!root) {
+    root = document.createElement('div')
+    root.id = 'print-root'
+    document.body.appendChild(root)
   }
-  const confirmed = payments.find((p) => p.status === 'Confirmed')
-  const pending = payments.find((p) => p.status === 'Pending Receipt')
-  const notReceived = payments.find((p) => p.status === 'Not Received')
-  const primary = confirmed ?? pending ?? notReceived ?? payments[0]
-  const overall: PaymentSummary['overall'] =
-    confirmed ? 'Confirmed' : pending ? 'Pending Receipt' : notReceived ? 'Not Received' : 'Unpaid'
-  let receiptLine: string
-  if (confirmed?.receiptNo) receiptLine = `Issued · ${confirmed.receiptNo}`
-  else if (pending) receiptLine = 'Not issued — awaiting employee confirmation'
-  else if (notReceived) receiptLine = 'Not issued — employee reported not received'
-  else receiptLine = '—'
-  return { overall, primary, extraPayments: payments.filter((p) => p.id !== primary.id), receiptLine }
+  root.replaceChildren(node.cloneNode(true))
+  document.body.classList.add('salary-printing')
+
+  const cleanup = () => {
+    document.body.classList.remove('salary-printing')
+    root?.replaceChildren()
+    window.removeEventListener('afterprint', cleanup)
+  }
+  window.addEventListener('afterprint', cleanup)
+  // Safety net: browsers that never fire afterprint (or cancel paths).
+  setTimeout(cleanup, 60_000)
+
+  window.print()
 }
 
 // ─── Document ────────────────────────────────────────────────────────
@@ -76,7 +99,6 @@ export function PayslipDocument({
   employee, session, periodKey, adjustments, payments, payable,
 }: PayslipDocumentProps) {
   // Structure components + month adjustments = the full slip line items.
-  // No second calculation: gross − deductions must land exactly on payable.
   const earningLines = [
     ...session.earnings,
     ...adjustments.filter((a) => a.amount > 0).map((a) => ({ name: a.label, type: 'Earning' as const, amount: a.amount })),
@@ -88,146 +110,140 @@ export function PayslipDocument({
   const gross = earningLines.reduce((s, c) => s + c.amount, 0)
   const totalDeductions = deductionLines.reduce((s, c) => s + c.amount, 0)
 
-  const summary = summarisePayments(payments)
-  const payState = summary.overall
+  const primary = primaryPayment(payments)
+  const confirmed = payments.some((p) => p.status === 'Confirmed')
   const monthName = periodLabel(periodKey)
-  const subject = teachers.find((t) => t.id === employee.id)?.subjects.join(', ')
-  const payslipNo = `PS-${periodKey}-${employee.employeeId}`
+  const slipNo = slipNumberFor(employee, periodKey)
 
   return (
-    <div className="payslip-print bg-white text-slate-800 rounded-lg border border-slate-200 shadow-sm print-color-adjust-exact">
-      {/* ── Letterhead ── */}
-      <div className="px-6 pt-5 pb-4 text-center border-b-2 border-slate-800">
-        <div className="flex h-11 w-11 mx-auto items-center justify-center rounded-full border-[2.5px] border-slate-800 font-bold text-lg leading-none">
+    <div
+      className="payslip-print bg-white text-slate-800 rounded-lg border border-slate-200 shadow-sm"
+      style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+    >
+      {/* ── School header (small, professional) ── */}
+      <div className="px-5 pt-5 pb-3.5 flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-[1.5px] border-slate-800 text-[13px] font-bold leading-none">
           {school.logo}
         </div>
-        <p className="mt-2 text-[15px] font-bold tracking-[0.14em] uppercase">{school.name}</p>
-        <p className="text-[9px] text-slate-500 mt-0.5">{school.address}</p>
-        <p className="text-[9px] text-slate-500">
-          Ph: {school.phone} &nbsp;·&nbsp; {school.email}
-        </p>
-        <p className="text-[9px] text-slate-500">{school.affiliation}</p>
-      </div>
-
-      {/* ── Title ── */}
-      <div className="px-6 py-3.5 text-center bg-slate-50/70 border-b border-slate-200">
-        <p className="text-[13px] font-bold tracking-[0.3em] uppercase">Salary Slip</p>
-        <p className="text-[10px] text-slate-500 mt-0.5">
-          For the month of <span className="font-semibold text-slate-700">{monthName}</span>
-          {' '}· Payslip No: <span className="font-mono">{payslipNo}</span>
-        </p>
-      </div>
-
-      {/* ── Employee information ── */}
-      <div className="px-6 py-4 border-b border-slate-200">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2">
-          <InfoRow label="Employee Name" value={employee.name} strong />
-          <InfoRow label="Pay Period" value={monthName} />
-          <InfoRow label="Employee ID" value={employee.employeeId} mono />
-          <InfoRow label="Payment Date" value={summary.primary ? fmtDayYear(summary.primary.date) : '—'} />
-          <InfoRow label="Designation" value={employee.designation} />
-          <InfoRow label="Salary Structure" value={session.structureName} />
-          <InfoRow label="Department" value={employee.department} />
-          {subject ? <InfoRow label="Subject" value={subject} /> : <InfoRow label="Joined" value={fmtDayYear(employee.joiningDate)} />}
+        <div className="min-w-0">
+          <p className="text-[12.5px] font-bold tracking-[0.08em] uppercase leading-snug break-words">{school.name}</p>
+          <p className="text-[9px] text-slate-500 mt-0.5 leading-snug">{school.address}</p>
+          <p className="text-[9px] text-slate-500">
+            Ph {school.phone} · {school.email}
+          </p>
+        </div>
+        <div className="ml-auto text-right shrink-0">
+          <p className="text-[10px] font-bold tracking-[0.22em] uppercase text-slate-700">Salary Slip</p>
+          <p className="text-[11px] font-semibold mt-0.5">{monthName}</p>
         </div>
       </div>
 
-      {/* ── Earnings & Deductions ── */}
-      <div className="px-6 py-4 grid grid-cols-1 sm:grid-cols-2 gap-6 border-b border-slate-200">
-        <div>
-          <TableHead label="Earnings" />
-          <table className="w-full">
-            <tbody>
-              {earningLines.map((c, i) => <TableRow key={`${c.name}-${i}`} name={c.name} amount={c.amount} />)}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-[2.5px] border-slate-700">
-                <td className="py-1.5 text-[10px] font-bold uppercase tracking-wider">Gross Earnings</td>
-                <td className="py-1.5 text-right text-[11px] font-bold tabular-nums">{`₹${gross.toLocaleString('en-IN')}`}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        <div>
-          <TableHead label="Deductions" />
-          <table className="w-full">
-            <tbody>
-              {deductionLines.length === 0 && (
-                <tr><td className="py-2 text-[11px] text-slate-400 italic">No deductions</td><td /></tr>
-              )}
-              {deductionLines.map((c, i) => <TableRow key={`${c.name}-${i}`} name={c.name} amount={c.amount} />)}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-[2.5px] border-slate-700">
-                <td className="py-1.5 text-[10px] font-bold uppercase tracking-wider">Total Deductions</td>
-                <td className="py-1.5 text-right text-[11px] font-bold tabular-nums">{`₹${totalDeductions.toLocaleString('en-IN')}`}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
+      <div className="border-t border-slate-200" />
 
-      {/* ── Net pay ── */}
-      <div className="px-6 py-4 border-b border-slate-200">
-        <div className="flex items-center justify-between bg-slate-900 text-white rounded-md px-4 py-3 print-color-adjust-exact">
-          <p className="text-[11px] font-bold tracking-[0.2em] uppercase">Net Pay</p>
-          <p className="text-xl font-bold tabular-nums">{`₹${Math.round(payable).toLocaleString('en-IN')}`}</p>
-        </div>
-        <p className="text-[10px] text-slate-500 mt-2">
-          <span className="font-semibold text-slate-600">Amount in Words:</span>{' '}
-          {amountInWordsINR(payable)}
+      {/* ── Employee ── */}
+      <div className="px-5 py-3.5">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Employee</p>
+        <p className="text-[14px] font-bold leading-tight mt-1">{employee.name}</p>
+        <p className="text-[11px] text-slate-600 mt-0.5">{employee.designation} · {employee.department}</p>
+        <p className="text-[11px] text-slate-600">
+          Employee ID: <span className="font-mono">{employee.employeeId}</span>
         </p>
       </div>
 
-      {/* ── Payment information ── */}
-      <div className="px-6 py-4 border-b border-slate-200">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 mb-2.5">Payment Information</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2">
-          <div className="flex justify-between gap-3">
-            <span className="text-[9px] uppercase tracking-wider text-slate-400 pt-0.5">Payment Status</span>
-            <StatusValue status={payState} />
-          </div>
-          <InfoRow label="Payment Method" value={summary.primary?.method ?? '—'} />
-          <InfoRow label="Payment Date" value={summary.primary ? fmtDayYear(summary.primary.date) : '—'} />
-          <InfoRow label="Receipt Status" value={summary.receiptLine} highlight={summary.overall === 'Confirmed'} />
-        </div>
-        {summary.extraPayments.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-dashed border-slate-200 space-y-1.5">
-            {summary.extraPayments.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3 text-[10px]">
-                <span className="text-slate-500">
-                  {fmtDayYear(p.date)} · {p.method} · {`₹${Math.round(p.amount).toLocaleString('en-IN')}`}
-                  {p.reference ? ` · ${p.reference}` : ''}
-                </span>
-                <StatusValue status={p.status} />
-              </div>
+      <div className="border-t border-slate-200" />
+
+      {/* ── Salary details ── */}
+      <div className="px-5 py-3.5">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Salary Details</p>
+
+        <table className="w-full">
+          <tbody>
+            {earningLines.map((c, i) => (
+              <AmountRow key={`e-${c.name}-${i}`} name={c.name} amount={c.amount} />
             ))}
-          </div>
-        )}
+            {deductionLines.map((c, i) => (
+              <AmountRow key={`d-${c.name}-${i}`} name={c.name} amount={-c.amount} muted />
+            ))}
+            {deductionLines.length === 0 && (
+              <tr><td colSpan={2} className="py-1 text-[10px] italic text-slate-400">No deductions</td></tr>
+            )}
+          </tbody>
+        </table>
+
+        {/* Subtotals */}
+        <div className="mt-2 pt-2 border-t border-dashed border-slate-300 space-y-1">
+          <SubtotalRow label="Gross Earnings" value={`₹${gross.toLocaleString('en-IN')}`} />
+          <SubtotalRow label="Total Deductions" value={`₹${totalDeductions.toLocaleString('en-IN')}`} />
+        </div>
+
+        {/* Net pay */}
+        <div className="mt-2.5 pt-2.5 border-t-[1.5px] border-slate-700 flex items-end justify-between gap-3">
+          <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-slate-700 pb-0.5">Net Pay</p>
+          <p className="text-[19px] font-bold tabular-nums leading-none">{`₹${Math.round(payable).toLocaleString('en-IN')}`}</p>
+        </div>
+        <p className="text-[9px] italic text-slate-400 mt-1.5">{amountInWordsINR(payable)}</p>
       </div>
+
+      <div className="border-t border-slate-200" />
+
+      {/* ── Payment details ── */}
+      <div className="px-5 py-3.5">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Payment Details</p>
+        <div className="space-y-1.5">
+          <DetailRow
+            label="Payment Status"
+            value={
+              confirmed ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  <Check className="h-2.5 w-2.5" strokeWidth={3} /> Paid
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  Pending Receipt
+                </span>
+              )
+            }
+          />
+          <DetailRow label="Payment Date" value={primary ? fmtDayYear(primary.date) : '—'} />
+          <DetailRow label="Payment Method" value={primary?.method ?? '—'} />
+          {primary?.reference && (
+            <DetailRow label="Payment Reference" value={<span className="font-mono text-[11px]">{primary.reference}</span>} />
+          )}
+          <DetailRow label="Salary Slip No." value={<span className="font-mono text-[11px] font-semibold">{slipNo}</span>} />
+        </div>
+      </div>
+
+      <div className="border-t border-slate-200" />
 
       {/* ── Footer ── */}
-      <div className="px-6 py-3.5 flex items-end justify-between gap-4">
-        <div>
-          <p className="text-[8.5px] text-slate-400">This is a system-generated salary slip.</p>
-          <p className="text-[8.5px] text-slate-400">Generated by SCHOLARIO Enterprise School ERP.</p>
-        </div>
+      <div className="px-5 py-3 flex items-center justify-between gap-4">
+        <p className="text-[8.5px] text-slate-400">
+          System-generated salary slip · SCHOLARIO
+        </p>
         <div className="text-right">
-          <p className="text-[9px] text-slate-500">Authorized by</p>
-          <p className="text-[10px] font-semibold text-slate-700 border-t border-slate-400 pt-0.5 px-1">School Administration</p>
+          <p className="text-[8.5px] text-slate-400">For {school.name}</p>
+          <p className="text-[9.5px] font-semibold text-slate-600 border-t border-slate-300 mt-1 pl-6">School Administration</p>
         </div>
       </div>
 
       <style jsx global>{`
+        /* The cloned print root is screen-invisible; it only exists while printing. */
+        #print-root { display: none; }
         @media print {
-          @page { size: A4 portrait; margin: 10mm; }
-          body * { visibility: hidden !important; }
-          .payslip-print, .payslip-print * { visibility: visible !important; }
+          /* A5 portrait default — compact one-page slip. The user can still
+             choose another paper size in the browser's print dialog. */
+          @page { size: A5 portrait; margin: 9mm; }
+          html, body {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: #fff !important;
+          }
+          /* While printing a slip: only #print-root stays in the layout. */
+          body.salary-printing > *:not(#print-root) { display: none !important; }
+          body.salary-printing #print-root { display: block !important; }
           .payslip-print {
-            position: absolute !important;
-            left: 0; top: 0; width: 100%;
             box-shadow: none !important;
-            border: none !important;
             border-radius: 0 !important;
           }
         }
@@ -236,64 +252,33 @@ export function PayslipDocument({
   )
 }
 
-// ─── Small document primitives ───────────────────────────────────────
+// ─── Document primitives (payment-detail-card rhythm) ────────────────
 
-function InfoRow({ label, value, mono, strong, highlight }: {
-  label: string; value: string; mono?: boolean; strong?: boolean; highlight?: boolean
-}) {
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-3">
-      <span className="text-[9px] uppercase tracking-wider text-slate-400 pt-0.5 shrink-0">{label}</span>
-      <span className={`text-[11px] text-right ${strong ? 'font-bold' : 'font-medium'} ${mono ? 'font-mono' : ''} ${highlight ? 'text-emerald-700' : 'text-slate-700'}`}>
-        {value}
-      </span>
+    <div className="flex items-start justify-between gap-3 text-[11px]">
+      <span className="text-slate-400 shrink-0 pt-px">{label}</span>
+      <span className="font-medium text-slate-700 text-right">{value}</span>
     </div>
   )
 }
 
-function TableHead({ label }: { label: string }) {
+function SubtotalRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between pb-1 border-b border-slate-300">
-      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">{label}</p>
-      <p className="text-[9px] uppercase tracking-wider text-slate-400">Amount</p>
+    <div className="flex justify-between gap-3 text-[10px]">
+      <span className="uppercase tracking-wider font-semibold text-slate-500">{label}</span>
+      <span className="font-bold tabular-nums text-slate-700">{value}</span>
     </div>
   )
 }
 
-function TableRow({ name, amount }: { name: string; amount: number }) {
+function AmountRow({ name, amount, muted = false }: { name: string; amount: number; muted?: boolean }) {
   return (
-    <tr className="border-b border-dashed border-slate-200">
-      <td className="py-1.5 text-[11px] text-slate-700">{name}</td>
-      <td className="py-1.5 text-right text-[11px] text-slate-800 tabular-nums">{`₹${Math.round(amount).toLocaleString('en-IN')}`}</td>
+    <tr className="border-b border-dashed border-slate-100 last:border-b-0">
+      <td className={`py-1 text-[11px] ${muted ? 'text-slate-600' : 'text-slate-700'}`}>{name}</td>
+      <td className={`py-1 text-right text-[11px] tabular-nums ${muted ? 'text-slate-500' : 'text-slate-800'}`}>
+        {`${amount < 0 ? '-₹' : '₹'}${Math.abs(Math.round(amount)).toLocaleString('en-IN')}`}
+      </td>
     </tr>
   )
-}
-
-/** Payment status as document text — same colors as the module's pills. */
-function StatusValue({ status }: { status: SalaryPayment['status'] | 'Unpaid' }) {
-  if (status === 'Confirmed') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
-        <Check className="h-3 w-3" strokeWidth={3} /> Confirmed
-      </span>
-    )
-  }
-  if (status === 'Pending Receipt') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700">
-        <Clock className="h-3 w-3" /> Pending Receipt
-      </span>
-    )
-  }
-  if (status === 'Not Received') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-700">
-        <X className="h-3 w-3" strokeWidth={3} /> Not Received
-      </span>
-    )
-  }
-  if (status === 'Reversed') {
-    return <span className="text-[10px] font-semibold text-slate-500">Reversed</span>
-  }
-  return <span className="text-[10px] font-semibold text-slate-500">Unpaid</span>
 }

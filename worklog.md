@@ -313,3 +313,37 @@ Stage Summary:
 3. (Low) Socket.io broadcast rooms are school-global; per-school rooms would matter at multi-tenant scale (carried).
 4. (Low) estimateRecipients counts STUDENTS/PARENTS identically; PARENTS audience could count distinct parent links instead.
 5. (Feature ideas): i18n via next-intl; PWA manifest + offline shell; broadcast templates with variable substitution; teacher-facing collection snapshots; export ack-report CSV per broadcast (data now available via /reads).
+---
+Task ID: 9
+Agent: Z.ai Code (user-directed payroll fixes)
+Task: FINAL SMALL CHANGES — SALARY & PAYROLL. Exactly 4 targeted changes: (1) auto-generated Cash payment reference, (2) Payslips tab = only confirmed/paid salaries, (3) "Payment recorded" toast text contrast, (4) minimal payslip redesign based on Payment Detail Card + A5 default print. Explicitly no other payroll UI/logic changes.
+
+Work Log:
+- CHANGE 1 (Cash auto-reference): added `nextCashReference()` to salary-store.ts — derives `CASH-YYYY-NNNN` from every reference already on file (reversed included → never reused, sequential, per-school since each tenant owns its store/persist). `recordPayment` now assigns it automatically when method === 'Cash' (Principal cannot type it; typed refs for UPI/Bank/Cheque unchanged). Record Payment dialog: Cash → read-only mono field (aria-label "Cash payment reference") showing the live preview + tiny "Auto-generated" hint; submit guard no longer blocks Cash on missing typed ref.
+- CHANGE 2 (Payslips gating): salary-payslips.tsx rows now filtered to payState === 'Paid' (≥1 Confirmed non-reversed payment). Unpaid / Pending Receipt / Not Received / Reversed → no slip. Count line = "N issued payslips". New SalaryEmptyState for months with zero slips ("A salary slip is issued when the employee confirms the payment…"). Rows show green BadgeCheck; pending/unpaid noise removed.
+- CHANGE 3 (toast contrast): the existing toast.success('Payment recorded', {description}) untouched in structure/size/icon; added classNames description '!text-xs !font-medium !text-zinc-700 dark:!text-zinc-300' (sonner's default #3f3f3f/op-desc was too light). Verified live for Bank Transfer; same toast serves Cash/UPI.
+- CHANGE 4 (payslip redesign + A5): payslip-document.tsx fully rewritten in Payment-Detail-Card visual language: compact school header row (logo mark + name/address/phone/email left, "SALARY SLIP / Aug 2026" right), EMPLOYEE block (name bold, designation · department, mono Employee ID), SALARY DETAILS table with aligned tabular amounts (deductions shown −₹), GROSS EARNINGS / TOTAL DEDUCTIONS subtotal lines, strong NET PAY line + amount-in-words, PAYMENT DETAILS label/value rows (status pill "Paid", date, method, mono Payment Reference, mono Salary Slip No.), hairline minimal footer. Slip no. = `SLIP-YYYY-MM-NNNN` (periodKey + employee's trailing digits, EMP-014 → SLIP-2026-08-0014), deterministic/persistent. Print: OLD visibility-hack CLIPPED inside the dialog scroll (verified by first PDF attempt) → replaced with printPayslip(): clones .payslip-print into body-level #print-root, body.salary-printing hides every other top-level element (display:none), restored on afterprint (+60s safety). @page { size: A5 portrait; margin: 9mm }. Callers updated: salary-payslips.tsx + teacher-payroll-tab.tsx print buttons now call printPayslip(). Mobile fix during QA: school-name `truncate` (nowrap) created a 218px unbreakable min → grid column blew to 373px > dialog; replaced with break-words wrapping.
+- E2E (agent-browser, real UI + JS-click dispatch):
+  - TEST 1 CASH ✓: ref auto-shown CASH-2026-0001 (readOnly verified), recorded, detail shows CASH-2026-0001, PAGE RELOAD → same ref (persisted). Second cash → CASH-2026-0002 (sequential, no reuse).
+  - TEST 2 UPI ✓: typed UPI-77990045 preserved on payment detail (note: direct .value set does NOT update React state — use native setter+input event or CDP keyboard typing). Bank Transfer NEFT-TEST-4102 also preserved.
+  - TEST 3 GATING ✓: before confirmation Payslips showed exactly the 5 confirmed employees (new pending payments excluded); teacher login (Rohan Mehta) → Received → "Yes, I received it" → receipt RCP-2608-0201; principal side now 6 issued payslips incl. Rohan. Slip verified: components 7,857/786/400, −PF 943, −PT 200, Gross 9,043, Deductions 1,143, NET 7,900, status Paid, ref UPI-77213, SLIP-2026-08-0014.
+  - TEST 4/5 PRINT ✓: PDF export = ONE page, ONLY the payslip (no sidebar/tabs/buttons/dashboard), compact + sharp. (CDP printToPDF defaults to Letter paper unless preferCSSPageSize is set — in a real browser the @page A5 rule drives the default print-preview paper; user can still override manually. Nothing about A5 appears on the document.)
+  - TEST 6 TOAST ✓: "Payment recorded / Amit Verma · ₹6,500 · Aug 2026 — pending receipt" secondary text now dark zinc-700 font-medium — clearly readable, design/size/icon preserved.
+- QA matrix: lint exit 0 · compiles clean · GET / 200 · mobile 390px: payslips tab no doc overflow (fits verified), page no horizontal scroll · May 2026 empty state renders copy correctly.
+- Screenshots/PDFs: download/t1-cash-dialog.png, t1-cash-detail.png, t2-upi-dialog.png, t3-payslip.png, t3-payslip-mobile2.png, t4-payslip-desktop2.png, t5-payslip-v2.pdf, t6-toast-catch.png.
+
+Stage Summary:
+- Cash now has a permanent school-internal reference (CASH-YYYY-NNNN) distinct from receipts (RCP-…) and slip numbers (SLIP-…); UPI/Bank/Cheque keep principal-entered refs.
+- Payslips tab is now a true issued-documents surface: confirmation is the exact gate.
+- Payslip = Payment-detail-card aesthetic + small school header; prints as a clean one-page A5-only slip via a robust print-root isolation (fixes pre-existing clipping).
+- Demo-state note (this browser profile only): extra QA payments exist (Ananya cash ₹35k CASH-2026-0001, Meera cash ₹6.2k CASH-2026-0002, Sunita Rao UPI ₹6.8k, Faisal UPI ₹5.9k, Amit NEFT ₹6.5k; Rohan's Aug payment confirmed with receipt RCP-2608-0201). All live in localStorage 'scholario-salary-v3', not seed code.
+- Untouched per instruction: Overview, Payment cards, Salary Structure, Settings, History, Reports, payment workflow, teacher payroll logic, navigation.
+
+## Current State Assessment (after Task 9)
+- Services: Next dev :3000 healthy, lint clean, all panels verified. Salary module stable after the 4 surgical changes; no regressions observed in Payments/Overview/teacher side.
+- QA lesson re-confirmed: React controlled inputs need native-setter+input-event or real CDP keystrokes; agent-browser `set viewport W H` works for responsive checks.
+
+## Unresolved Issues / Risks / Next-Phase Priorities
+1. (Low) Payslips for part-paid months (one confirmed part-payment + pending remainder) open the slip; slip's Payment Details uses the Confirmed payment as primary and lists others — acceptable per "keep existing workflow", revisit if partial-pay slip semantics are ever specified.
+2. (Low) @page A5 is honored by Chrome/Edge/Firefox print preview defaults; Safari ignores @page size (uses user paper choice) — graceful degradation, nothing to fix in-app.
+3. (Carried) search-service mock→DB migration, notification PATCH persistence, per-school socket rooms, scheduled-announcement cron, i18n/PWA ideas.

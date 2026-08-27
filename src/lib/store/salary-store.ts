@@ -484,6 +484,24 @@ export function periodOptions(count = 6, now = new Date()): string[] {
   return out
 }
 
+/**
+ * Next internal Cash payment reference for the school/tenant: `CASH-YYYY-NNNN`.
+ * Derived from every reference already on file (reversed included), so a
+ * number is never reused, numbering is sequential and consistent, and the
+ * sequence stays independent per school because each tenant owns its store.
+ */
+export function nextCashReference(existingReferences: Array<string | undefined>, year: number): string {
+  const prefix = `CASH-${year}-`
+  let max = 0
+  for (const ref of existingReferences) {
+    if (ref && ref.startsWith(prefix)) {
+      const n = Number(ref.slice(prefix.length))
+      if (Number.isFinite(n) && n > max) max = n
+    }
+  }
+  return `${prefix}${String(max + 1).padStart(4, '0')}`
+}
+
 const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 
 // ─── Seed payments & audit ───────────────────────────────────────────
@@ -740,6 +758,15 @@ export const useSalaryStore = create<SalaryState>()(
             throw new Error(`Reference number is required for ${input.method}.`)
           }
           const payable = netPayableFor(get(), input.employeeId, input.periodKey)
+          // Cash has no external transaction number — the school's internal
+          // payment reference is generated here, once, and persists with the
+          // payment. UPI / Bank Transfer / Cheque keep the Principal-entered ref.
+          const reference = input.method === 'Cash'
+            ? nextCashReference(
+                get().payments.map((p) => p.reference),
+                Number(String(input.date).slice(0, 4)) || new Date().getFullYear(),
+              )
+            : input.reference?.trim() || undefined
           const payment: SalaryPayment = {
             id: `PAY-${Date.now().toString(36)}`,
             employeeId: input.employeeId,
@@ -750,7 +777,7 @@ export const useSalaryStore = create<SalaryState>()(
             amount: input.amount,
             date: input.date,
             method: input.method,
-            reference: input.reference?.trim() || undefined,
+            reference,
             bankAccount: input.method === 'Bank Transfer' ? (input.bankAccount || emp.bankAccount) : undefined,
             status: 'Pending Receipt',
             recordedBy: PRINCIPAL,
