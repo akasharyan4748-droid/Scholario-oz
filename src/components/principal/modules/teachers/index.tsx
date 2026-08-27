@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   UserPlus, FileCheck, FileSpreadsheet,
   ChevronLeft, SlidersHorizontal, Users,
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 
 import { ModuleHeader } from '../shared/module-header'
 import { SegmentedTabs } from '../shared/segmented-tabs'
+import { useFocusStore } from '@/lib/store/focus-store'
 import { useTeachersState } from './use-teachers-state'
 import { useTeachersActions } from './use-teachers-actions'
 import { DirectoryTab } from './directory-tab'
@@ -43,6 +44,33 @@ export function TeachersModule() {
   const s = useTeachersState()
   const actions = useTeachersActions(s)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+
+  // Deep-link: command palette teacher results open the faculty profile
+  // directly. The DB id doesn't exist in the demo roster, so match by
+  // name (exact → prefix); fall back to the directory with an honest toast.
+  const focus = useFocusStore((st) => st.focus)
+  const clearFocus = useFocusStore((st) => st.clearFocus)
+  const handledFocusTs = useRef<number | null>(null)
+  useEffect(() => {
+    if (!focus || focus.type !== 'teacher' || handledFocusTs.current === focus.ts) return
+    handledFocusTs.current = focus.ts
+    clearFocus()
+    const title = focus.title.toLowerCase().trim()
+    const match =
+      s.teachers.find((t) => t.name.toLowerCase() === title) ??
+      s.teachers.find((t) => title.startsWith(t.name.toLowerCase())) ??
+      s.teachers.find((t) => t.name.toLowerCase().includes(title))
+    if (match) {
+      s.setSelectedTeacher(match)
+      s.setSheetOpen(true)
+      toast.success(`Opened ${match.name}'s faculty profile`, { description: 'Deep-linked from global search' })
+    } else {
+      s.setActiveTab('directory')
+      toast.info(`${focus.title} — faculty directory`, {
+        description: 'Record synced from the school database. The interactive demo roster may not include every faculty member.',
+      })
+    }
+  }, [focus?.ts])
 
   // Settings full-page sub-route — takes over the entire module area
   if (isSettingsOpen) {

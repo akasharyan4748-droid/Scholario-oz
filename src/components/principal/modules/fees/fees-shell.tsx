@@ -22,11 +22,13 @@
  * All numbers derive from the canonical useFeeData() hook.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs, type SegmentedTab } from '../shared/segmented-tabs'
 import { useFeeData } from '@/lib/store/fee-store'
+import { useFocusStore } from '@/lib/store/focus-store'
+import { toast } from 'sonner'
 import { school } from '@/lib/mock/school'
 import type { FeeTab } from './fees-shared'
 import { FeesOverviewSection } from './fees-overview'
@@ -44,7 +46,25 @@ export function FeesShell({ onNavigate }: { onNavigate?: (moduleKey: string) => 
   const [tab, setTab] = useState<FeeTab>('overview')
   const [collectOpen, setCollectOpen] = useState(false)
   const [preselectStudentId, setPreselectStudentId] = useState<string | undefined>(undefined)
+  const [feeFocusStudent, setFeeFocusStudent] = useState<{ name: string; ts: number } | null>(null)
   const data = useFeeData(school.academicYear)
+
+  // Deep-link: command palette fee results jump to the Student Accounts tab
+  // and open the fee account workspace for the student named in the result
+  // title ("<Fee title> — <Student name>"). Matched by name inside the
+  // accounts section; a miss shows an honest directory toast there.
+  const focus = useFocusStore((s) => s.focus)
+  const clearFocus = useFocusStore((s) => s.clearFocus)
+  const handledFocusTs = useRef<number | null>(null)
+  useEffect(() => {
+    if (!focus || focus.type !== 'fee' || handledFocusTs.current === focus.ts) return
+    handledFocusTs.current = focus.ts
+    clearFocus()
+    const studentName = focus.title.split(' — ').slice(1).join(' — ').trim()
+    if (!studentName) return
+    setFeeFocusStudent({ name: studentName, ts: focus.ts })
+    setTab('accounts')
+  }, [focus?.ts])
 
   // Live verification count for the Payments tab badge — the Principal's
   // actionable queue (cash collections awaiting verification).
@@ -114,7 +134,7 @@ export function FeesShell({ onNavigate }: { onNavigate?: (moduleKey: string) => 
             className="max-w-7xl mx-auto"
           >
             {tab === 'overview' && <FeesOverviewSection data={data} onNavigate={setTab} />}
-            {tab === 'accounts' && <FeesStudentAccountsSection data={data} onCollect={(id) => openCollect(id)} />}
+            {tab === 'accounts' && <FeesStudentAccountsSection data={data} onCollect={(id) => openCollect(id)} focusStudent={feeFocusStudent} />}
             {tab === 'structures' && <FeesStructuresSection data={data} onNavigate={onNavigate} />}
             {tab === 'payments' && <PaymentsSection data={data} onCollect={() => openCollect()} />}
             {tab === 'transactions' && <FeesTransactionsSection data={data} />}

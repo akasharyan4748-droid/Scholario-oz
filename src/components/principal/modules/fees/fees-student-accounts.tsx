@@ -9,7 +9,7 @@
  *   Overview · Fee Ledger · Payments · Receipts · Concessions · Dues · Audit
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, X, Wallet, IndianRupee, ChevronRight, ArrowLeft,
@@ -28,11 +28,37 @@ import { toast } from 'sonner'
 interface Props {
   data: ReturnType<typeof useFeeData>
   onCollect: (studentId: string) => void
+  /** Deep-link request from the command palette (fee result) — opens the
+   * matching student's fee account workspace directly. */
+  focusStudent?: { name: string; ts: number } | null
 }
 
-export function FeesStudentAccountsSection({ data, onCollect }: Props) {
+export function FeesStudentAccountsSection({ data, onCollect, focusStudent }: Props) {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<StudentFeeAccount | null>(null)
+
+  // Consume the deep-link: match by student name (exact → prefix → contains)
+  // and open the account drawer; fall back to an honest info toast when the
+  // demo roster doesn't include that student. No first-word fallback —
+  // matching "Aarav Sharma" to "Aarav Joshi" would open the wrong account.
+  const handledFocusTs = useRef<number | null>(null)
+  useEffect(() => {
+    if (!focusStudent || handledFocusTs.current === focusStudent.ts) return
+    handledFocusTs.current = focusStudent.ts
+    const name = focusStudent.name.toLowerCase().trim()
+    const match =
+      data.accounts.find((a) => a.studentName.toLowerCase() === name) ??
+      data.accounts.find((a) => name.startsWith(a.studentName.toLowerCase())) ??
+      data.accounts.find((a) => a.studentName.toLowerCase().includes(name))
+    if (match) {
+      setSelected(match)
+      toast.success(`Opened ${match.studentName}'s fee account`, { description: 'Deep-linked from global search' })
+    } else {
+      toast.info(`${focusStudent.name} — fee directory`, {
+        description: 'Fee record synced from the school database. The interactive demo roster may not include this account yet.',
+      })
+    }
+  }, [focusStudent?.ts, data.accounts])
 
   const searchResults = useMemo(() => {
     const q = search.toLowerCase().trim()

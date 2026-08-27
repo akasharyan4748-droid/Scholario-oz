@@ -238,3 +238,40 @@ Stage Summary:
 3. (Low) Event-stream still broadcast-to-all; per-school socket.io rooms would cut client-side filtering at scale.
 4. (Low) Scheduled announcements ('Schedule for Later') remain demo-only — a cron in event-stream could publish due scheduled rows for a full real path.
 5. (Feature ideas): i18n via next-intl; PWA manifest + offline shell; parent-facing digest; announcement templates with variable substitution; delivery analytics per channel.
+---
+Task ID: 7
+Agent: Z.ai Code (webDevReview cron round)
+Task: Assess project, QA via agent-browser, then implement: Platform Broadcasts history (wire GET /api/announcements), search deep-linking for teachers + fees, styling polish, mobile fixes.
+
+Work Log:
+- Health check: :3000 + :81 gateway + event-stream :3003 all healthy; lint clean. QA sweep (public site, superadmin overview) — zero console errors, no blocking bugs → proceeded to features.
+- FEATURE 1 — Platform Broadcasts panel (closes Task-6 priority "History still renders the local store only"):
+  - New `comm-platform-broadcasts.tsx`: fetches GET /api/announcements on mount (+manual refresh button), unwraps {ok,data} envelope. Rows = authoritative DB Notification records with sender, canonical audience (audienceLabel maps ALL/PARENTS/STUDENTS/TEACHERS/STAFF/CLASS:x → human labels), priority chip (URGENT→Emergency rose / HIGH→Priority amber / NORMAL→General), per-row ack counts (CheckCheck + count from `reads` _count), relative timestamps.
+  - UX states: 3 skeleton rows while loading · amber demo-mode strip when endpoint unavailable · distinct empty states (no broadcasts yet vs no search match) · search-aware (filters along with the History search box) · detail modal with full message + metadata grid (sender/audience/priority/acks/published/DB record id) + emerald "Live platform record" strip.
+  - Wired above the local history table in `comm-history.tsx`; local empty-state copy updated to point at the platform panel. E2E verified as principal: 5 real broadcasts render (incl. the 3 curl/posted test notices + Task-6 Science Museum), Mid-Term shows ack count 1 (persistent from Task 4), modal + refresh + search filtering all work.
+- FEATURE 2 — Deep-linking extended (closes Task-6 priority):
+  - Teachers module (`teachers/index.tsx`): consumes focus type 'teacher' → matches s.teachers by name (exact → full-prefix → contains) → opens TeacherProfilePage full-page sub-route + success toast; miss → Directory tab + honest info toast. E2E: palette "Rohan" → DB row (GWS-T-014) → profile opened ("Opened Rohan Mehta's faculty profile · Deep-linked from global search").
+  - Fee Management (`fees-shell.tsx` + `fees-student-accounts.tsx`): consumes focus type 'fee' → parses student name from result title ("<Fee> — <Student>" em-dash split) → switches to Student Accounts tab → opens that student's fee account workspace drawer. BUG FOUND & FIXED during E2E: original matcher had a first-word fallback that matched "Aarav Sharma" to "Aarav Joshi" (wrong account opened) — removed the loose fallback in BOTH modules (exact → full-name prefix → contains only); re-verified success path with "Riya Singh" (exists in DB + demo accounts) → correct account opened; "Arnav Verma"/"Aarav Sharma" (DB-only names) → honest fallback toast.
+- STYLING — superadmin donut card dead space eliminated:
+  - "Collections by Payment Method" column now a flex-col with a bottom-anchored 3-stat insight strip (TOP CHANNEL with donut-matched color dot + share % · AVG TICKET · total TRANSACTIONS), aligning the column's bottom edge with the Transaction Ledger card. Verified desktop 1440 (strip bottom-aligned with ledger) + mobile 390 (3-up strip fits, no overflow).
+- MOBILE FIX — local history table overlap at 390px (pre-existing): Message column col-span-5 → col-span-9 sm:col-span-5, Status cell col-span-1 → col-span-3 sm:col-span-1, pin/archive action buttons hidden on mobile (View stays). Verified: titles fully readable, badges + eye fit their cell, zero overlap.
+- QA matrix: lint exit 0; GET / 200; GET /api/announcements → 401 unauth (RBAC correct) / 200 authed; no console/page errors; doc overflow-x false at 390px on Communication History + superadmin dashboard; palette match highlighting intact.
+- Screenshots: qa7-superadmin.png, qa7-insight-strip3.png, qa7-platform-broadcasts2.png, qa7-broadcast-modal.png, qa7-teacher-deeplink3.png, qa7-fee-deeplink3.png, qa7-mobile-fixed.png, qa7-mobile-strip.png.
+
+Stage Summary:
+- Communication History is now split into two authoritative layers: "Platform Broadcasts" (server rows, cross-session, ack counts, live badges) + local demo-mode history below — closing the loop on Task-6's broadcast pipeline.
+- Deep-linking now covers student profiles, faculty profiles, and fee account drawers (3/5 entity types; notice/parent remain navigate-only by design).
+- Demo-data note: DB student/fee names (Aarav Sharma…) intentionally differ from the generated demo fee roster (Riya Agarwal…); deep-links fall back honestly, and names present in both (Riya Singh) open directly.
+- Matcher lesson recorded: never fall back to first-word matching for person entities — wrong-record opens are worse than an honest "not in demo roster" toast.
+
+## Current State Assessment (after Task 7)
+- Services: Next dev :3000 + event-stream :3003 (event-stream still manual-start; was running).
+- New surfaces this round: Platform Broadcasts panel (principal Communication → History), teacher/fee palette deep-links, donut insight strip (superadmin), mobile-fixed history table.
+- All 4 role panels + public site verified; mobile 390px clean on touched surfaces; lint clean.
+
+## Unresolved Issues / Risks / Next-Phase Priorities
+1. (Medium) Notice/parent palette results navigate but don't focus (notice → Communication top; parent → Messaging top). Could open the Platform Broadcasts modal for notices and the parent chat for guardians.
+2. (Medium) Ack counts are raw numbers only — an ack-list drawer (who acknowledged, when) would complete the delivery-analytics story (data exists: NotificationRead rows).
+3. (Low) Scheduled announcements ('Schedule for Later') still demo-only — event-stream cron could publish due rows (carried over from Task 6).
+4. (Low) Event-stream broadcast-to-all; per-school socket.io rooms (carried over).
+5. (Feature ideas): i18n via next-intl; PWA manifest + offline shell; teacher-facing collection snapshots; parent digest; broadcast templates with variable substitution; platform-broadcast search behind a dedicated filter chip in History.

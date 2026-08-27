@@ -288,25 +288,55 @@ export function SADashboardModule() {
       </div>
 
       {/* Collections by Payment Method */}
-      {methodBreakdown.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
-          <ChartCard
-            title="Collections by Payment Method"
-            subtitle="Successful transactions across all tenants"
-            height={260}
-            className="lg:col-span-1"
-          >
-            <Donut
-              data={methodBreakdown.map((m: { method: string; amount: number }, i: number) => ({
-                name: methodLabel(m.method),
-                value: Math.round(m.amount),
-                color: METHOD_COLORS[i % METHOD_COLORS.length],
-              }))}
-              centerLabel="Total"
-              centerValue={formatINR(methodBreakdown.reduce((s: number, m: { amount: number }) => s + m.amount, 0), true)}
-            />
-          </ChartCard>
-          <GlassCard className="p-4 sm:p-5 lg:col-span-2">
+      {methodBreakdown.length > 0 && (() => {
+        const totalAmt = methodBreakdown.reduce((s: number, m: { amount: number }) => s + m.amount, 0)
+        const totalCount = methodBreakdown.reduce((s: number, m: { count: number }) => s + m.count, 0)
+        const top = [...methodBreakdown].sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount)[0]
+        const topIdx = methodBreakdown.indexOf(top)
+        const topPct = totalAmt > 0 ? Math.round((top.amount / totalAmt) * 100) : 0
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+            {/* Donut column — chart + bottom-anchored insight strip so the
+                cell height matches the ledger card without dead space */}
+            <div className="lg:col-span-1 flex flex-col gap-3 h-full">
+              <ChartCard
+                title="Collections by Payment Method"
+                subtitle="Successful transactions across all tenants"
+                height={260}
+              >
+                <Donut
+                  data={methodBreakdown.map((m: { method: string; amount: number }, i: number) => ({
+                    name: methodLabel(m.method),
+                    value: Math.round(m.amount),
+                    color: METHOD_COLORS[i % METHOD_COLORS.length],
+                  }))}
+                  centerLabel="Total"
+                  centerValue={formatINR(totalAmt, true)}
+                />
+              </ChartCard>
+              {/* Insight strip — anchors to the row bottom, mirroring the ledger card edge */}
+              <div className="mt-auto grid grid-cols-3 gap-2">
+                <div className="group rounded-xl border border-border bg-muted/20 p-2.5 hover:bg-accent/30 hover:ring-1 hover:ring-emerald-500/20 transition-all">
+                  <p className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1">Top Channel</p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: METHOD_COLORS[topIdx % METHOD_COLORS.length] }} />
+                    <p className="text-[11px] font-bold truncate">{methodLabel(top.method)}</p>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground mt-0.5 tabular-nums">{topPct}% of collections</p>
+                </div>
+                <div className="rounded-xl border border-border bg-muted/20 p-2.5 hover:bg-accent/30 hover:ring-1 hover:ring-emerald-500/20 transition-all">
+                  <p className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1">Avg Ticket</p>
+                  <p className="text-[11px] font-bold tabular-nums">{formatINR(totalCount > 0 ? Math.round(totalAmt / totalCount) : 0, true)}</p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5">per transaction</p>
+                </div>
+                <div className="rounded-xl border border-border bg-muted/20 p-2.5 hover:bg-accent/30 hover:ring-1 hover:ring-emerald-500/20 transition-all">
+                  <p className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1">Transactions</p>
+                  <p className="text-[11px] font-bold tabular-nums">{formatNumber(totalCount)}</p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5">successful payments</p>
+                </div>
+              </div>
+            </div>
+            <GlassCard className="p-4 sm:p-5 lg:col-span-2">
             <div className="flex items-start justify-between gap-3">
               <SectionHeading
                 icon={<IndianRupee className="h-4 w-4 text-cyan-500" />}
@@ -362,9 +392,10 @@ export function SADashboardModule() {
                 )
               })}
             </div>
-          </GlassCard>
-        </div>
-      )}
+            </GlassCard>
+          </div>
+        )
+      })()}
 
       {/* Monthly collections trend by channel (stacked columns) */}
       {methodTrend.length > 0 && (

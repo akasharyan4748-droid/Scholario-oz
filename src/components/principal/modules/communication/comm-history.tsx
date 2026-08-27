@@ -23,6 +23,7 @@ import {
   CategoryBadge, StatusBadge, AudienceBadge, ChannelBadge,
   CommPanel, CommEmptyState,
 } from './comm-shared'
+import { PlatformBroadcasts } from './comm-platform-broadcasts'
 import { toast } from 'sonner'
 
 type FilterType = 'all' | 'push' | 'sms' | 'email' | 'scheduled' | 'sent' | 'failed' | 'archived'
@@ -86,16 +87,20 @@ export function HistorySection() {
         </Select>
       </div>
 
-      {/* History list */}
+      {/* Platform broadcasts — authoritative DB rows (server-side) with
+          acknowledgement counts; filters along with the search box. */}
+      <PlatformBroadcasts search={search} />
+
+      {/* Local history list */}
       {filtered.length > 0 ? (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           {/* Header */}
           <div className="px-3 py-2 border-b border-border/60 bg-muted/20 grid grid-cols-12 gap-2 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider">
-            <div className="col-span-5">Message</div>
+            <div className="col-span-9 sm:col-span-5">Message</div>
             <div className="col-span-2 hidden md:block">Audience</div>
             <div className="col-span-2 hidden lg:block">Channels</div>
             <div className="col-span-2 hidden sm:block">Date</div>
-            <div className="col-span-1">Status</div>
+            <div className="col-span-3 sm:col-span-1">Status</div>
           </div>
           {/* Rows */}
           <div className="divide-y divide-border/30 max-h-[36rem] overflow-y-auto">
@@ -107,8 +112,8 @@ export function HistorySection() {
                 transition={{ delay: i * 0.02 }}
                 className="grid grid-cols-12 gap-2 px-3 py-2 hover:bg-muted/20 transition-colors items-center"
               >
-                {/* Message */}
-                <div className="col-span-5 min-w-0">
+                {/* Message — wider on mobile so the status cell never overlaps */}
+                <div className="col-span-9 sm:col-span-5 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="text-[11px] font-medium truncate">{a.title}</p>
                     {a.pinned && <Pin className="h-2.5 w-2.5 text-primary shrink-0" />}
@@ -147,19 +152,19 @@ export function HistorySection() {
                     formatDate(a.createdAt)
                   )}
                 </div>
-                {/* Status + actions */}
-                <div className="col-span-1 flex items-center justify-end gap-0.5">
+                {/* Status + actions — pin/archive hidden on mobile for room; view stays */}
+                <div className="col-span-3 sm:col-span-1 flex items-center justify-end gap-0.5">
                   <StatusBadge status={a.status} />
                   <div className="flex items-center gap-0.5 ml-1">
                     <button onClick={() => setViewing(a)} className="inline-flex items-center justify-center h-6 w-6 rounded text-primary hover:bg-primary/10 transition-colors" title="View">
                       <Eye className="h-3 w-3" />
                     </button>
                     {!a.archived && (
-                      <button onClick={() => { pinAnnouncement(a.id); toast.success(a.pinned ? 'Unpinned' : 'Pinned') }} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title={a.pinned ? 'Unpin' : 'Pin'}>
+                      <button onClick={() => { pinAnnouncement(a.id); toast.success(a.pinned ? 'Unpinned' : 'Pinned') }} className="hidden sm:inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title={a.pinned ? 'Unpin' : 'Pin'}>
                         {a.pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
                       </button>
                     )}
-                    <button onClick={() => { archiveAnnouncement(a.id); toast.success(a.archived ? 'Restored' : 'Archived') }} className={cn('inline-flex items-center justify-center h-6 w-6 rounded transition-colors',
+                    <button onClick={() => { archiveAnnouncement(a.id); toast.success(a.archived ? 'Restored' : 'Archived') }} className={cn('hidden sm:inline-flex items-center justify-center h-6 w-6 rounded transition-colors',
                       a.archived ? 'text-emerald-600 hover:bg-emerald-500/10' : 'text-amber-600 hover:bg-amber-500/10')} title={a.archived ? 'Restore' : 'Archive'}>
                       {a.archived ? <RotateCcw className="h-3 w-3" /> : <Archive className="h-3 w-3" />}
                     </button>
@@ -171,7 +176,7 @@ export function HistorySection() {
         </div>
       ) : (
         <CommPanel>
-          <CommEmptyState icon={<HistoryIcon className="h-6 w-6" />} title="No communication history" description={search ? "Try a different search." : "Sent and scheduled communications will appear here."} />
+          <CommEmptyState icon={<HistoryIcon className="h-6 w-6" />} title="No local history" description={search ? "Try a different search." : "Drafts and demo-mode sends from this session will appear here. Delivered broadcasts live in the Platform Broadcasts panel above."} />
         </CommPanel>
       )}
 
