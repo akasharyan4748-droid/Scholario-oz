@@ -1,0 +1,1140 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model School {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  code         String   @unique
+  domain       String?
+  address      String?
+  city         String?
+  phone        String?
+  email        String?
+  themeColor   String   @default("#0f766e")
+  accentColor  String   @default("#f59e0b")
+  logoUrl      String?
+  plan         String   @default("STANDARD")
+  status       String   @default("ACTIVE")
+  academicYear String?
+  board        String   @default("CBSE") // CBSE | UP_BOARD | ICSE | STATE | CUSTOM
+  isDemo       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users                User[]
+  teachers             Teacher[]
+  students             Student[]
+  classes              Class[]
+  subjects             Subject[]
+  exams                Exam[]
+  fees                 Fee[]
+  attendance           Attendance[]
+  timetables           Timetable[]
+  assignments          Assignment[]
+  notifications        Notification[]
+  libraryBooks         LibraryBook[]
+  drivers              Driver[]
+  routes               Route[]
+  vehicles             Vehicle[]
+  questionBanks        QuestionBank[]
+  examPapers           ExamPaper[]
+  activityLogs         ActivityLog[]
+  messages             Message[]
+  events               SchoolEvent[]
+  examTypes            ExamTypeConfig[]
+  gradeScales          GradeScale[]
+  examRules            ExamRule[]
+  admitCardConfigs     AdmitCardConfig[]
+  reportCardConfigs    ReportCardConfig[]
+  homeworks            Homework[]
+  homeworkSubmissions  HomeworkSubmission[]
+  homeworkAuditLogs    HomeworkAuditLog[]
+  homeworkPolicies     HomeworkPolicy[]
+  noHomeworkDates      NoHomeworkDate[]
+  parentGrievances     ParentGrievance[]
+  homeworkSurveys      HomeworkSurvey[]
+  subjectAssignments   ClassSubjectAssignment[]
+  masterFeeHeads       MasterFeeHead[]
+  feeStructures        FeeStructure[]
+  feeHeads             FeeHead[]
+  feeStructureVersions FeeStructureVersion[]
+  feeTransactions      FeeTransaction[]
+  settlements          Settlement[]
+  reconciliations      Reconciliation[]
+  webhookEvents        WebhookEvent[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  schoolId     String?
+  school       School?   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  email        String    @unique
+  passwordHash String?
+  name         String?
+  role         String    @default("STUDENT")
+  phone        String?
+  avatar       String?
+  avatarUrl    String?
+  status       String    @default("ACTIVE")
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  teacher            Teacher?
+  student            Student?
+  driver             Driver?
+  sessions           Session[]
+  activityLogs       ActivityLog[]
+  sentNotifications  Notification[]
+  createdAssignments Assignment[]
+  sentMessages       Message[]      @relation("MessageSender")
+  receivedMessages   Message[]      @relation("MessageRecipient")
+  createdEvents      SchoolEvent[]
+  createdHomeworks   Homework[]
+}
+
+model Teacher {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeId    String?
+  department    String?
+  qualification String?
+  subjects      String?
+  createdAt     DateTime @default(now())
+}
+
+model Student {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classId       String?
+  class         Class?   @relation(fields: [classId], references: [id])
+  rollNo        String?
+  admissionNo   String?
+  guardianId    String?
+  guardianName  String?
+  guardianPhone String?
+  dob           String?
+  gender        String?
+  bloodGroup    String?
+  address       String?
+  routeId       String?
+  route         Route?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  results             Result[]
+  fees                Fee[]
+  attendance          Attendance[]
+  bookIssues          BookIssue[]
+  examMarks           ExamMark[]
+  examAttendance      ExamAttendance[]
+  seatAssignments     ExamSeatAssignment[]
+  resultOutcomes      ExamResultOutcome[]
+  homeworkSubmissions HomeworkSubmission[]
+}
+
+model Class {
+  id             String   @id @default(cuid())
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name           String
+  gradeLevel     String?
+  section        String?
+  stream         String? // Science-PCM | Science-PCB | Science-PCMB | Commerce | Humanities | General
+  capacity       Int?     @default(40)
+  room           String?
+  classTeacherId String?
+  createdAt      DateTime @default(now())
+
+  students           Student[]
+  subjects           Subject[] // LEGACY — kept for backward-compat; new code should use subjectAssignments
+  exams              Exam[]
+  attendance         Attendance[]
+  timetables         Timetable[]
+  assignments        Assignment[]
+  questionBanks      QuestionBank[]
+  examClasses        ExamClass[]
+  examSubjects       ExamSubjectConfig[]
+  examSchedule       ExamScheduleItem[]
+  examMarks          ExamMark[]
+  homeworks          Homework[]
+  subjectAssignments ClassSubjectAssignment[]
+}
+
+model Subject {
+  id        String    @id @default(cuid())
+  schoolId  String
+  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId   String? // LEGACY — kept for backward-compat during migration; will be NULL after canonicalization. New code should use ClassSubjectAssignment.
+  class     Class?    @relation(fields: [classId], references: [id])
+  name      String
+  code      String?
+  fullMarks Int?      @default(100)
+  passMarks Int?      @default(33)
+  // Spec §18: subject lifecycle — Active appears in new exam creation;
+  // Archived remains queryable for historical records.
+  status    String    @default("Active") // Active | Archived
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+
+  results          Result[]
+  timetables       Timetable[]
+  assignments      Assignment[]
+  questionBanks    QuestionBank[]
+  examSubjects     ExamSubjectConfig[]
+  examSchedule     ExamScheduleItem[]
+  examMarks        ExamMark[]
+  homeworks        Homework[]
+  examAttendances  ExamAttendance[]
+  classAssignments ClassSubjectAssignment[]
+
+  // Spec §12/§32: stable canonical identity per school — one subject per code.
+  // Prevents future duplicate subject creation at the database level.
+  @@unique([schoolId, code])
+}
+
+// ─── ClassSubjectAssignment (Spec §19/§20) ─────────────────────────────
+// Separates the SUBJECT (canonical, school-scoped) from its ASSIGNMENT to
+// a specific class (+ optional stream). One canonical "Hindi" subject can
+// be assigned to many classes. Removing an assignment does NOT delete the
+// canonical subject — historical records remain valid (Spec §16/§25).
+model ClassSubjectAssignment {
+  id           String    @id @default(cuid())
+  schoolId     String
+  school       School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId      String
+  class        Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  // Spec §34: distinguishes core/default subjects from additional/optional ones.
+  isCore       Boolean   @default(true)
+  // Spec §18/§35: an inactive assignment is excluded from new examinations
+  // but historical records remain valid. Archived subjects are not selectable.
+  isActive     Boolean   @default(true)
+  // Spec §33: some subjects are examinable, others are not (e.g. PE, Music).
+  examinable   Boolean   @default(true)
+  // Spec §33: deterministic ordering for display.
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime? @updatedAt
+
+  // Spec §12/§19: one assignment per (class, subject) — prevents duplicates.
+  @@unique([classId, subjectId])
+}
+
+model Exam {
+  id             String    @id @default(cuid())
+  schoolId       String
+  school         School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name           String
+  term           String?
+  type           String    @default("Unit Test")
+  session        String?   @default("2025-2026")
+  classId        String?
+  class          Class?    @relation(fields: [classId], references: [id])
+  startDate      DateTime?
+  endDate        DateTime?
+  status         String    @default("Draft")
+  resultStatus   String    @default("Not Started")
+  passPercentage Float     @default(33)
+  declaredAt     DateTime?
+  declaredBy     String?
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  results         Result[]
+  examPapers      ExamPaper[]
+  examClasses     ExamClass[]
+  examSubjects    ExamSubjectConfig[]
+  scheduleItems   ExamScheduleItem[]
+  marks           ExamMark[]
+  auditLogs       ExamAuditLog[]
+  examAttendance  ExamAttendance[]
+  seatAssignments ExamSeatAssignment[]
+  resultOutcomes  ExamResultOutcome[]
+}
+
+model ExamClass {
+  id        String   @id @default(cuid())
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([examId, classId])
+}
+
+model ExamSubjectConfig {
+  id             String   @id @default(cuid())
+  examId         String
+  exam           Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId        String
+  class          Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  maxMarks       Int      @default(100)
+  passMarks      Float    @default(33)
+  theoryMarks    Int      @default(100)
+  practicalMarks Int      @default(0)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@unique([examId, classId, subjectId])
+}
+
+model ExamScheduleItem {
+  id              String   @id @default(cuid())
+  examId          String
+  exam            Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId         String
+  class           Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId       String
+  subject         Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  date            DateTime
+  startTime       String
+  endTime         String
+  room            String?
+  invigilatorId   String?
+  invigilatorName String?
+  createdAt       DateTime @default(now())
+
+  examAttendance ExamAttendance[]
+}
+
+model ExamMark {
+  id             String    @id @default(cuid())
+  examId         String
+  exam           Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId        String
+  class          Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  marksObtained  Float?
+  status         String    @default("PRESENT")
+  workflowStatus String    @default("DRAFT")
+  originalMarks  Float?
+  graceMarks     Float     @default(0)
+  graceReason    String?
+  graceBy        String?
+  remarks        String?
+  enteredBy      String?
+  verifiedBy     String?
+  lockedBy       String?
+  enteredAt      DateTime?
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([examId, classId, subjectId, studentId])
+}
+
+model ExamAttendance {
+  id             String            @id @default(cuid())
+  examId         String
+  exam           Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  scheduleItemId String?
+  scheduleItem   ExamScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: SetNull)
+  classId        String
+  studentId      String
+  student        Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  date           DateTime
+  status         String            @default("PRESENT") // PRESENT, ABSENT, MEDICAL, EXEMPTED
+  remarks        String?
+  markedBy       String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([examId, studentId, subjectId, date])
+}
+
+model ExamSeatAssignment {
+  id         String   @id @default(cuid())
+  examId     String
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  classId    String
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  room       String
+  seatNumber Int
+  row        Int?
+  column     Int?
+  createdAt  DateTime @default(now())
+
+  @@unique([examId, classId, studentId])
+  @@unique([examId, room, seatNumber])
+}
+
+model ExamResultOutcome {
+  id         String   @id @default(cuid())
+  examId     String
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId    String
+  outcome    String   @default("PROMOTED") // PROMOTED, COMPARTMENT, RETEST, NOT_PROMOTED
+  reason     String?
+  overrideBy String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([examId, studentId])
+}
+
+model ExamAuditLog {
+  id        String   @id @default(cuid())
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  userId    String?
+  userName  String?
+  action    String
+  entity    String?
+  entityId  String?
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+}
+
+model Result {
+  id         String   @id @default(cuid())
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  examId     String
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  marks      Float
+  totalMarks Float    @default(100)
+  grade      String?
+  remarks    String?
+  createdAt  DateTime @default(now())
+}
+
+model QuestionBank {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  subjectId  String?
+  subject    Subject? @relation(fields: [subjectId], references: [id])
+  classId    String?
+  class      Class?   @relation(fields: [classId], references: [id])
+  question   String
+  optionA    String?
+  optionB    String?
+  optionC    String?
+  optionD    String?
+  answer     String?
+  type       String   @default("MCQ")
+  difficulty String   @default("MEDIUM")
+  marks      Float    @default(1)
+  createdAt  DateTime @default(now())
+}
+
+model ExamPaper {
+  id           String   @id @default(cuid())
+  schoolId     String
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  examId       String?
+  exam         Exam?    @relation(fields: [examId], references: [id])
+  title        String
+  content      String?
+  subjectName  String?
+  className    String?
+  duration     Int      @default(180)
+  totalMarks   Int      @default(100)
+  instructions String?
+  questions    String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+}
+
+model Fee {
+  id        String    @id @default(cuid())
+  schoolId  String
+  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  title     String
+  amount    Float
+  paid      Float     @default(0)
+  type      String?
+  dueDate   DateTime?
+  status    String    @default("UNPAID")
+  method    String?
+  paidDate  DateTime?
+  createdAt DateTime  @default(now())
+
+  payments Payment[]
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  feeId         String?
+  fee           Fee?     @relation(fields: [feeId], references: [id], onDelete: SetNull)
+  amount        Float
+  method        String?
+  status        String   @default("SUCCESS")
+  transactionId String?
+  note          String?
+  createdAt     DateTime @default(now())
+}
+
+model Attendance {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId   String?
+  class     Class?   @relation(fields: [classId], references: [id])
+  date      DateTime
+  status    String
+  markedBy  String?
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, date], name: "studentId_date")
+}
+
+model Timetable {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId     String
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subject     Subject? @relation(fields: [subjectId], references: [id])
+  day         String
+  period      Int
+  startTime   String?
+  endTime     String?
+  teacherName String?
+  room        String?
+  createdAt   DateTime @default(now())
+}
+
+model Assignment {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId     String?
+  class       Class?    @relation(fields: [classId], references: [id])
+  subjectId   String?
+  subject     Subject?  @relation(fields: [subjectId], references: [id])
+  title       String
+  description String?
+  dueDate     DateTime?
+  createdBy   String?
+  creator     User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  // Legacy compatibility — kept for old assignment routes
+}
+
+// ─── Homework (richer model with full lifecycle) ──────────────────────
+
+model Homework {
+  id                   String    @id @default(cuid())
+  schoolId             String
+  school               School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title                String
+  description          String?
+  classId              String
+  class                Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId            String?
+  subject              Subject?  @relation(fields: [subjectId], references: [id])
+  teacherId            String?
+  teacherName          String?
+  topic                String?
+  chapter              String?
+  learningObjective    String?
+  content              String?
+  attachments          String? // JSON array of {name, url, type}
+  maxMarks             Float?
+  gradingType          String    @default("marks") // marks, grade, completion
+  assignedDate         DateTime
+  dueDate              DateTime
+  dueTime              String    @default("23:59")
+  status               String    @default("DRAFT") // DRAFT, PUBLISHED, ACTIVE, CLOSED, ARCHIVED
+  allowLateSubmission  Boolean   @default(true)
+  lateDeadline         DateTime?
+  latePenalty          Float     @default(0)
+  allowResubmission    Boolean   @default(true)
+  createdBy            String?
+  creator              User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  publishedAt          DateTime?
+  closedAt             DateTime?
+  originalDueDate      DateTime?
+  deadlineChangedBy    String?
+  deadlineChangedAt    DateTime?
+  deadlineChangeReason String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @default(now()) @updatedAt
+
+  submissions HomeworkSubmission[]
+  auditLogs   HomeworkAuditLog[]
+  grievances  ParentGrievance[]
+}
+
+model HomeworkSubmission {
+  id                 String    @id @default(cuid())
+  homeworkId         String
+  homework           Homework  @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  studentId          String
+  student            Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  schoolId           String
+  school             School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  attemptNumber      Int       @default(1)
+  status             String    @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, SUBMITTED, LATE, RETURNED, RESUBMISSION_REQUIRED, REVIEWED
+  responseText       String?
+  attachments        String? // JSON array
+  submittedAt        DateTime?
+  submittedLate      Boolean   @default(false)
+  lateByMinutes      Int?
+  marks              Float?
+  grade              String?
+  feedback           String?
+  privateNote        String?
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  returnedAt         DateTime?
+  resubmissionReason String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
+
+  @@unique([homeworkId, studentId, attemptNumber])
+}
+
+model HomeworkAuditLog {
+  id         String   @id @default(cuid())
+  homeworkId String
+  homework   Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId     String?
+  userName   String?
+  action     String
+  entity     String?
+  entityId   String?
+  oldValue   String?
+  newValue   String?
+  createdAt  DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  audience  String   @default("ALL")
+  priority  String   @default("NORMAL")
+  senderId  String?
+  sender    User?    @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+}
+
+model LibraryBook {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title     String
+  author    String?
+  category  String?
+  publisher String?
+  isbn      String?
+  shelf     String?
+  copies    Int      @default(1)
+  available Int      @default(1)
+  createdAt DateTime @default(now())
+
+  issues BookIssue[]
+}
+
+model BookIssue {
+  id         String      @id @default(cuid())
+  bookId     String
+  book       LibraryBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  studentId  String?
+  student    Student?    @relation(fields: [studentId], references: [id])
+  issuedDate DateTime    @default(now())
+  dueDate    DateTime?
+  returnDate DateTime?
+  status     String      @default("ISSUED")
+}
+
+model Driver {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id])
+  licenseNo String?
+  phone     String?
+  createdAt DateTime @default(now())
+
+  vehicles Vehicle[]
+}
+
+model Route {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String
+  stops     String?
+  fare      Float?
+  startTime String?
+  endTime   String?
+  createdAt DateTime @default(now())
+
+  vehicles Vehicle[]
+  students Student[]
+}
+
+model Vehicle {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  number    String
+  type      String   @default("BUS")
+  capacity  Int?
+  driverId  String?
+  driver    Driver?  @relation(fields: [driverId], references: [id])
+  routeId   String?
+  route     Route?   @relation(fields: [routeId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  schoolId  String?
+  school    School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model PlatformSetting {
+  id             String   @id @default("global")
+  showDemoSchool Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  senderId    String?
+  sender      User?    @relation("MessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+  recipientId String?
+  recipient   User?    @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
+  subject     String
+  body        String
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model SchoolEvent {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  type        String    @default("EVENT")
+  startDate   DateTime
+  endDate     DateTime?
+  location    String?
+  audience    String    @default("ALL")
+  createdBy   String?
+  creator     User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+}
+
+// ─── Examination Configuration (school-scoped, persisted) ─────────────
+
+model ExamTypeConfig {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String
+  code      String?
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, name])
+}
+
+model GradeScale {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  grade     String
+  minPct    Float
+  maxPct    Float    @default(100)
+  color     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, grade])
+}
+
+model ExamRule {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, key])
+}
+
+model AdmitCardConfig {
+  id               String   @id @default(cuid())
+  schoolId         String
+  school           School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  showPhoto        Boolean  @default(true)
+  showRollNumber   Boolean  @default(true)
+  showRoom         Boolean  @default(true)
+  showSeatNumber   Boolean  @default(true)
+  showTimetable    Boolean  @default(true)
+  showInstructions Boolean  @default(true)
+  showQrCode       Boolean  @default(false)
+  updatedAt        DateTime @updatedAt
+
+  @@unique([schoolId])
+}
+
+model ReportCardConfig {
+  id                   String   @id @default(cuid())
+  schoolId             String
+  school               School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  showAttendance       Boolean  @default(true)
+  showRank             Boolean  @default(true)
+  showPercentage       Boolean  @default(true)
+  showGrade            Boolean  @default(true)
+  showCoScholastic     Boolean  @default(false)
+  showRemarks          Boolean  @default(true)
+  showClassTeacherSign Boolean  @default(true)
+  showPrincipalSign    Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
+
+  @@unique([schoolId])
+}
+
+// ─── Homework Policy & Oversight (Principal) ──────────────────────────
+
+model HomeworkPolicy {
+  id               String   @id @default(cuid())
+  schoolId         String
+  school           School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  gradeLevel       String // "1", "2", ..., "9", "10", "11", "12", "all"
+  maxMinutesPerDay Int      @default(30) // max daily homework minutes
+  enabled          Boolean  @default(true)
+  updatedAt        DateTime @updatedAt
+
+  @@unique([schoolId, gradeLevel])
+}
+
+model NoHomeworkDate {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  date      DateTime
+  reason    String? // "Sports Day", "Festival", "Exam Week"
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, date])
+}
+
+model ParentGrievance {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  homeworkId  String?
+  homework    Homework? @relation(fields: [homeworkId], references: [id], onDelete: SetNull)
+  parentId    String?
+  parentName  String?
+  studentName String?
+  subject     String
+  description String
+  category    String    @default("workload") // workload, ambiguous, missing_link, other
+  status      String    @default("open") // open, acknowledged, resolved, dismissed
+  response    String?
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model HomeworkSurvey {
+  id             String   @id @default(cuid())
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  term           String // "term1", "term2", "annual"
+  respondentType String   @default("parent") // parent, student
+  manageable     Boolean  @default(true)
+  stressful      Boolean  @default(false)
+  rating         Int      @default(3) // 1-5
+  feedback       String?
+  createdAt      DateTime @default(now())
+}
+
+// ─── Phase 9 — Enterprise Fee Architecture (DB-backed) ───────────────
+//
+// The fee-store has been in-memory + Zustand-persist (localStorage) since
+// takeover. These new models make the fee system truly DB-backed and
+// multi-tenant-safe, and let the webhook route auto-reconcile instead of
+// just logging. All new models are ADDITIVE — the existing Fee + Payment
+// models remain untouched so the legacy /api/fees route keeps working.
+//
+// Architectural mapping (store type → DB row):
+//   - school-settings-store.fees.feeHeads[]  → MasterFeeHead
+//   - fee-store.FEE_STRUCTURES[]             → FeeStructure (+ FeeHead rows)
+//   - fee-store.FeeStructureVersion          → FeeStructureVersion
+//   - fee-store.SEED_TRANSACTIONS[]          → FeeTransaction (immutable)
+//   - fee-store.settlements[]                → Settlement
+//   - fee-store.reconciliations[]            → Reconciliation
+//   - fee-store.webhookEvents[]              → WebhookEvent
+//
+// Settlement status lifecycle:
+//   pending → settled → reconciled
+//                     ↘ exception → (manual review) → reconciled
+//   failure → reversed
+
+/// School-wide master fee-head catalogue — single source of truth for
+/// head names, default frequencies, default amounts, categories.
+/// Picked from when building per-class fee structures.
+model MasterFeeHead {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name        String
+  category    String   @default("Other") // Tuition, Admission, Annual, Transport, Lab, Library, Exam, Activity, Board, Other
+  frequency   String   @default("Monthly") // Annual, Half-Yearly, Quarterly, Monthly, Per Term, One-Time
+  amount      Float    @default(0)
+  mandatory   Boolean  @default(true)
+  active      Boolean  @default(true)
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  /// Per-structure line items bound to this catalogue entry (read model).
+  structures FeeHead[]
+
+  @@unique([schoolId, name])
+}
+
+/// Per-class fee structure — one per (schoolId, classId). The effective
+/// structure for a class is the one with status='current'. Drafts and
+/// scheduled future structures live alongside as status='draft' or
+/// 'scheduled'. Archived structures keep status='archived'.
+model FeeStructure {
+  id             String    @id @default(cuid())
+  schoolId       String
+  school         School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId        String
+  className      String
+  classLevel     String    @default("Primary") // Pre-Primary, Primary, Middle, Secondary, Senior Secondary
+  status         String    @default("draft") // draft, current, scheduled, archived
+  version        Int       @default(1)
+  effectiveFrom  DateTime?
+  effectiveTo    DateTime?
+  publishedAt    DateTime?
+  archivedAt     DateTime?
+  archivedReason String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  heads        FeeHead[]
+  versions     FeeStructureVersion[]
+  transactions FeeTransaction[]
+
+  @@unique([schoolId, classId, status])
+  @@index([schoolId, status])
+}
+
+/// Per-structure line item — snapshot of a master catalogue entry at the
+/// time of structure creation. Editing the master catalogue doesn't
+/// retroactively change existing structures (versioning integrity).
+model FeeHead {
+  id          String         @id @default(cuid())
+  schoolId    String
+  school      School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  structureId String
+  structure   FeeStructure   @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  /// Optional link back to the master catalogue entry. NULL means this
+  /// head was custom-typed by the principal and is uncatalogued.
+  catalogueId String?
+  catalogue   MasterFeeHead? @relation(fields: [catalogueId], references: [id], onDelete: SetNull)
+  name        String
+  category    String         @default("Other")
+  amount      Float          @default(0)
+  frequency   String         @default("Monthly")
+  mandatory   Boolean        @default(true)
+  active      Boolean        @default(true)
+  sortOrder   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([schoolId, structureId])
+  @@index([schoolId, catalogueId])
+}
+
+/// Immutable snapshot of a fee structure at the moment it was published.
+/// Used for historical audit (a published structure can never be edited —
+/// only superseded by a new version that becomes 'current').
+model FeeStructureVersion {
+  id          String       @id @default(cuid())
+  schoolId    String
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  structureId String
+  structure   FeeStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  version     Int
+  /// JSON snapshot of the entire FeeStructureConfig (heads + examFees +
+  /// meta) at publish time. Kept as a single JSON column so we don't
+  /// need a parallel FeeHeadVersion table.
+  snapshot    String
+  publishedAt DateTime     @default(now())
+  publishedBy String?
+  notes       String?
+
+  @@index([schoolId, structureId])
+}
+
+/// Immutable financial transaction — every payment event is recorded here
+/// for audit + reconciliation. Updates to Fee.paid remain on the legacy
+/// Fee model; this table is the source of truth for finance reports.
+model FeeTransaction {
+  id                   String           @id @default(cuid())
+  schoolId             String
+  school               School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId            String?
+  studentName          String?
+  className            String?
+  structureId          String?
+  structure            FeeStructure?    @relation(fields: [structureId], references: [id], onDelete: SetNull)
+  feeHeadName          String?
+  amount               Float
+  method               String           @default("CASH") // UPI, Card, Net Banking, Cash, Bank Transfer
+  status               String           @default("PENDING") // PENDING, SUCCESS, FAILED, REFUNDED, UNDER_VERIFICATION
+  /// Gateway order id (e.g. Razorpay order_id) — used by the webhook
+  /// to match the incoming payment.payment_id event back to this row.
+  gatewayOrderId       String?          @unique
+  gatewayPaymentId     String?
+  gatewaySignature     String?
+  gatewayName          String? // razorpay, cashfree, payu, manual
+  settlementId         String?
+  settlement           Settlement?      @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  reconciliationStatus String           @default("unreconciled") // unreconciled, reconciled, pending, exception
+  reconciliationNote   String?
+  reconciledAt         DateTime?
+  reconciledBy         String?
+  receiptNo            String?
+  note                 String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  reconciliations      Reconciliation[]
+
+  @@index([schoolId, status])
+  @@index([schoolId, reconciliationStatus])
+  @@index([schoolId, createdAt])
+}
+
+/// Gateway payout settlement — a batch of transactions the gateway
+/// paid out to the school's bank account on a given date.
+model Settlement {
+  id            String    @id @default(cuid())
+  schoolId      String
+  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  payoutId      String?   @unique // gateway payout id (e.g. Razorpay settlement_id)
+  gatewayName   String? // razorpay, cashfree, payu, manual
+  periodStart   DateTime
+  periodEnd     DateTime
+  grossAmount   Float
+  fees          Float     @default(0)
+  netAmount     Float
+  status        String    @default("pending") // pending, settled, failed, reversed
+  bankReference String?
+  paidOutAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  transactions FeeTransaction[]
+
+  @@index([schoolId, status])
+  @@index([schoolId, periodStart])
+}
+
+/// Reconciliation audit row — matches a FeeTransaction against a
+/// Settlement (or against a manual bank statement entry). One row per
+/// match attempt (a transaction can be rematched after exceptions).
+model Reconciliation {
+  id            String         @id @default(cuid())
+  schoolId      String
+  school        School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  transactionId String
+  transaction   FeeTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  settlementId  String?
+  status        String         @default("pending") // reconciled, unreconciled, pending, exception
+  matchedAt     DateTime       @default(now())
+  matchedBy     String?
+  note          String?
+
+  @@index([schoolId, transactionId])
+}
+
+/// Idempotent webhook event log — every incoming webhook is recorded
+/// here FIRST, then processed. The unique eventId means a duplicate
+/// webhook delivery is a no-op (idempotency).
+model WebhookEvent {
+  id                   String    @id @default(cuid())
+  schoolId             String?
+  school               School?   @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  eventId              String    @unique // gateway event_id — used for idempotency
+  eventType            String // payment.captured, payment.failed, settlement.processed
+  gatewayName          String    @default("razorpay")
+  signature            String?
+  rawPayload           String // full JSON body
+  status               String    @default("received") // received, processing, processed, error, duplicate
+  matchedTransactionId String?
+  error                String?
+  receivedAt           DateTime  @default(now())
+  processedAt          DateTime?
+
+  @@index([schoolId, status])
+  @@index([eventType])
+}

@@ -1,0 +1,113 @@
+import type { AdmissionFormData } from '@/components/principal/modules/admission/types'
+import type { FeeDataState } from '@/components/principal/modules/FeeStructureStep'
+import type { SectionKey, SectionReviewState } from './types'
+
+export const defaultSectionReviews = (): Record<SectionKey, SectionReviewState> => ({
+  personal: { status: 'Complete', remarks: 'Aadhaar and DOB matches birth certificate.' },
+  parents: { status: 'Complete', remarks: 'Parent contact details verified via OTP.' },
+  address: { status: 'Complete', remarks: 'Current address proof verified.' },
+  previousSchool: { status: 'Complete', remarks: 'Transfer certificate verified with previous board.' },
+  medical: { status: 'Complete', remarks: 'Vaccination records & doctor details clear.' },
+  classAllocation: { status: 'Complete', remarks: 'Class & section availability confirmed.' },
+  fees: { status: 'Complete', remarks: 'Fee structure approved; concessions verified.' },
+  documents: { status: 'Complete', remarks: 'All mandatory certificates attached & scanned.' },
+  photo: { status: 'Complete', remarks: 'Passport photograph meets CBSE dimension standards.' },
+})
+
+export const defaultInitialFormData: AdmissionFormData = {
+  admissionType: 'fresh',
+  firstName: 'Ira',
+  lastName: 'Malhotra',
+  dob: '2017-08-14',
+  gender: 'Female',
+  bloodGroup: 'B+',
+  nationality: 'Indian',
+  religion: 'Hindu',
+  category: 'General',
+  aadhaarNo: '4829 1029 3847',
+
+  fatherName: 'Rajiv Malhotra',
+  fatherOccupation: 'Software Architect',
+  fatherPhone: '+91 98100 47821',
+  fatherEmail: 'rajiv.malhotra@gmail.com',
+  fatherAadhaar: '9081 2234 5512',
+  motherName: 'Sunita Malhotra',
+  motherOccupation: 'Chartered Accountant',
+  motherPhone: '+91 98201 93456',
+  motherEmail: 'sunita.malhotra@gmail.com',
+  motherAadhaar: '9081 2234 5513',
+  primaryComm: 'father',
+
+  emergencyName: 'Anil Malhotra',
+  emergencyRelation: 'Grandfather',
+  emergencyPhone: '+91 98300 11234',
+
+  currentAddress: 'A-204, Sector 62, Noida',
+  district: 'Gautam Buddha Nagar',
+  state: 'Uttar Pradesh',
+  country: 'India',
+  city: 'Noida',
+  pincode: '201301',
+  sameAsCurrentAddress: true,
+  permAddress: 'A-204, Sector 62, Noida',
+  permDistrict: 'Gautam Buddha Nagar',
+  permState: 'Uttar Pradesh',
+  permCountry: 'India',
+  permCity: 'Noida',
+  permPincode: '201301',
+
+  previousSchool: 'Eurokids Preschool, Sector 62',
+  previousLocation: 'Noida, Uttar Pradesh',
+  previousBoard: 'CBSE',
+  previousClass: 'UKG',
+  previousSection: 'A',
+  previousYear: '2024–2025',
+  stream: 'PCM (Physics, Chemistry, Mathematics)',
+  tcStatus: 'uploaded',
+  tcNumber: 'TC-2024-8841',
+  tcDate: '2024-03-15',
+  reasonForLeaving: 'Relocation & Progression to Primary School',
+  previousMarks: '94.2%',
+  academicRemarks: 'Consistently excellent performance and active participation in co-curriculars.',
+
+  heightCm: '118',
+  weightKg: '21',
+  allergies: 'None',
+  conditions: 'None',
+  specialNeeds: 'None',
+  emergencyNotes: 'Contact father immediately in case of emergency.',
+  medicationInstructions: 'None',
+  doctorName: 'Dr. S. K. Gupta',
+  doctorPhone: '+91 98111 22334',
+  vaccinationStatus: 'Fully Vaccinated',
+
+  className: 'Class 2',
+  section: 'A',
+
+  transportRequired: true,
+  transportRoute: 'Route 2 · Golf Course Road – DLF Ph 5',
+  pickupPoint: 'A-204 Sector 62 Gate',
+  dropPoint: 'School Campus Gate 1',
+  hostelRequired: false,
+  hostelRoomType: '',
+
+  docStatuses: {
+    birth_cert: { status: 'uploaded', fileName: 'Birth_Certificate_Ira.pdf', ocrConfidence: 99, verifiedBy: 'AI Vision OCR System', verificationTime: 'Today, 10:20 AM' },
+    aadhaar: { status: 'uploaded', fileName: 'Student_Parent_Aadhaar.pdf', ocrConfidence: 97, verifiedBy: 'AI Vision OCR System', verificationTime: 'Today, 10:21 AM' },
+    tc: { status: 'uploaded', fileName: 'TC_Original_Signed.pdf', ocrConfidence: 98, verifiedBy: 'AI Vision OCR System', verificationTime: 'Today, 10:22 AM' },
+    marksheet: { status: 'uploaded', fileName: 'UKG_Progress_Report.pdf', ocrConfidence: 96, verifiedBy: 'AI Vision OCR System', verificationTime: 'Today, 10:22 AM' },
+  },
+  photoUploaded: true,
+}
+
+export const defaultInitialFeeData: FeeDataState = {
+  bookSelections: {},
+  uniformSelections: {},
+  activityKitSelections: {},
+  examGroups: { unitTest: false, termExam: false, customGroups: false },
+  transportSelected: false,
+  hostelSelected: false,
+  discountCode: 'NONE',
+  customDiscountValue: 0,
+  customDiscountReason: '',
+}

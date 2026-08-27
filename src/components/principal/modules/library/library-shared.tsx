@@ -1,0 +1,198 @@
+'use client'
+
+/**
+ * library-shared — Shared primitives for the Library workspace.
+ *
+ * Visual language follows the Academics (Examinations + Attendance)
+ * canonical pattern. The section container LibPanel is now a thin re-export
+ * of the shared `Panel` (flat `rounded-xl border border-border bg-card`,
+ * title rendered as `<h3 className="text-sm font-semibold">`, no separate
+ * colored header strip with `border-b bg-muted/20`). All other primitives
+ * below remain module-specific:
+ *   - LibKpiCard: soft tinted background KPI card (5 accents) — kept for
+ *     any sub-page that wants a chip-style KPI; not rendered in the shell.
+ *   - LibPill: compact semantic pill
+ *   - BookStatusBadge, IssueStatusBadge, FineStatusBadge, BorrowerTypePill
+ *   - LibEmptyState
+ *   - LIB_GLOBAL_STYLES (reduced-motion styles)
+ *
+ * NO indigo/blue. Emerald / amber / rose / cyan / violet only.
+ */
+
+import { motion } from 'framer-motion'
+import { ArrowRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import type { BookStatus, IssueStatus, FineStatus } from '@/lib/store/library-store'
+import { Panel } from '../shared/panel'
+
+// ─── Tab type ────────────────────────────────────────────────────────
+
+export type LibTab = 'catalogue' | 'issues' | 'overdue' | 'fines' | 'reports'
+
+// ─── Accent map (soft tinted backgrounds) ────────────────────────────
+
+const ACCENT_MAP: Record<string, { bg: string; ring: string; hover: string; cardBg: string; cardBorder: string }> = {
+  emerald: { bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300', ring: 'ring-emerald-500/20', hover: 'hover:shadow-emerald-500/20', cardBg: 'bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06]', cardBorder: 'border-emerald-500/20' },
+  rose: { bg: 'bg-rose-500/15 text-rose-700 dark:text-rose-300', ring: 'ring-rose-500/20', hover: 'hover:shadow-rose-500/20', cardBg: 'bg-rose-500/[0.04] dark:bg-rose-500/[0.06]', cardBorder: 'border-rose-500/20' },
+  amber: { bg: 'bg-amber-500/15 text-amber-700 dark:text-amber-300', ring: 'ring-amber-500/20', hover: 'hover:shadow-amber-500/20', cardBg: 'bg-amber-500/[0.04] dark:bg-amber-500/[0.06]', cardBorder: 'border-amber-500/20' },
+  cyan: { bg: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300', ring: 'ring-cyan-500/20', hover: 'hover:shadow-cyan-500/20', cardBg: 'bg-cyan-500/[0.04] dark:bg-cyan-500/[0.06]', cardBorder: 'border-cyan-500/20' },
+  violet: { bg: 'bg-violet-500/15 text-violet-700 dark:text-violet-300', ring: 'ring-violet-500/20', hover: 'hover:shadow-violet-500/20', cardBg: 'bg-violet-500/[0.04] dark:bg-violet-500/[0.06]', cardBorder: 'border-violet-500/20' },
+}
+
+export type LibAccent = keyof typeof ACCENT_MAP
+
+// ─── LibKpiCard (soft tinted KPI) ──────────────────────────────────────
+// Kept for any sub-page that wants the chip-style KPI card. Not rendered
+// in the Library shell (Task 9 dropped the 5-card KPI row).
+
+interface KpiProps {
+  icon: React.ReactNode
+  label: string
+  value: string | number
+  sub?: string
+  accent: LibAccent
+  onClick?: () => void
+  delay?: number
+}
+
+export function LibKpiCard({ icon, label, value, sub, accent, onClick, delay = 0 }: KpiProps) {
+  const a = ACCENT_MAP[accent]
+  return (
+    <motion.button
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay, ease: [0.22, 1, 0.36, 1] }}
+      onClick={onClick}
+      disabled={!onClick}
+      className={cn(
+        'group relative w-full text-left rounded-xl border p-3.5 transition-all duration-200 overflow-hidden',
+        a.cardBg, a.cardBorder,
+        onClick && `cursor-pointer hover:shadow-md ${a.hover} hover:-translate-y-0.5`,
+        onClick && 'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+      )}
+    >
+      <div className={cn('absolute -top-6 -right-6 h-16 w-16 rounded-full blur-2xl opacity-30', a.bg)} aria-hidden />
+      <div className="relative flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider truncate">{label}</p>
+          <p className="font-display text-xl sm:text-2xl font-bold tabular-nums mt-1.5 leading-none">{value}</p>
+          {sub && <p className="text-[10px] text-muted-foreground mt-1.5 truncate">{sub}</p>}
+        </div>
+        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1', a.bg, a.ring)}>
+          {icon}
+        </span>
+      </div>
+      {onClick && (
+        <ArrowRight className="absolute bottom-2 right-2 h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      )}
+    </motion.button>
+  )
+}
+
+// ─── LibPanel (flat Academics section container) ─────────────────────
+// Re-exports the shared `Panel` so all Library sub-pages render the same
+// flat `rounded-xl border border-border bg-card` section container as the
+// Examinations + Attendance modules. Existing callers using
+// `<LibPanel title="..." subtitle="..." action={...} bodyClassName="p-0">`
+// continue to work — the shared Panel signature is a superset of the
+// original.
+
+export const LibPanel = Panel
+
+// ─── LibPill ─────────────────────────────────────────────────────────
+
+export function LibPill({ children, accent, className }: { children: React.ReactNode; accent?: string; className?: string }) {
+  return (
+    <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap', accent, className)}>
+      {children}
+    </span>
+  )
+}
+
+// ─── Status badges (with dot) ────────────────────────────────────────
+
+export function BookStatusBadge({ status }: { status: BookStatus }) {
+  const map: Record<BookStatus, string> = {
+    'Available': 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    'Low Stock': 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    'Out of Stock': 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+  }
+  return (
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold', map[status])}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+      {status}
+    </span>
+  )
+}
+
+export function IssueStatusBadge({ status }: { status: IssueStatus }) {
+  const map: Record<IssueStatus, string> = {
+    'Issued': 'bg-sky-500/10 text-sky-700 dark:text-sky-300',
+    'Overdue': 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+    'Returned': 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  }
+  return (
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold', map[status])}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+      {status}
+    </span>
+  )
+}
+
+export function FineStatusBadge({ status }: { status: FineStatus }) {
+  const map: Record<FineStatus, string> = {
+    'Pending': 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+    'Paid': 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    'Waived': 'bg-muted text-muted-foreground',
+  }
+  return (
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold', map[status])}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+      {status}
+    </span>
+  )
+}
+
+// ─── Borrower-type pill (Student / Teacher) ──────────────────────────
+
+export function BorrowerTypePill({ type }: { type: 'student' | 'teacher' }) {
+  const accent = type === 'student'
+    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+    : 'bg-violet-500/10 text-violet-700 dark:text-violet-300'
+  return (
+    <LibPill accent={accent}>
+      {type === 'student' ? 'Student' : 'Teacher'}
+    </LibPill>
+  )
+}
+
+// ─── LibEmptyState ───────────────────────────────────────────────────
+
+export function LibEmptyState({ icon, title, description, action }: { icon: React.ReactNode; title: string; description?: string; action?: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="flex flex-col items-center justify-center py-12 text-center"
+    >
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted/40 text-muted-foreground/60 mb-3">
+        {icon}
+      </div>
+      <p className="text-sm font-semibold text-muted-foreground">{title}</p>
+      {description && <p className="text-xs text-muted-foreground/70 mt-1 max-w-xs">{description}</p>}
+      {action && <div className="mt-3">{action}</div>}
+    </motion.div>
+  )
+}
+
+// ─── Reduced-motion styles ──────────────────────────────────────────
+
+export const LIB_GLOBAL_STYLES = `
+@media (prefers-reduced-motion: reduce) {
+  .library-shell * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+`

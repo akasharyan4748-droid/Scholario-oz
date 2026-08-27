@@ -1,0 +1,197 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useLiveAlerts, getNextSimulatedAlert } from '@/lib/store/live-alerts-store'
+import { toast } from 'sonner'
+import {
+  alertIcons, fallbackAlertIcon, type LiveAlertWithIcon,
+} from './data'
+import { LiveAlertsToolbar } from './live-alerts-toolbar'
+import { LiveAlertsContent } from './live-alerts-content'
+import { Panel } from '../shared/panel'
+
+export interface LiveAlertsProps {
+  onNavigate?: (module: string) => void
+}
+
+/**
+ * LiveAlerts — compact "Principal Attention" panel.
+ *
+ * Redesigned (DASH-1) from a giant red container with:
+ *   - h-44 blur blob, h-11 gradient Megaphone hero, ping/pulse badges
+ *   - 7 toolbar buttons including 3 demo features (Simulate, Auto, Reset)
+ *   - 4-button stats strip (redundant with the list itself)
+ *   - "Today's Alert Activity" fake bar chart
+ *   - storytelling subtitle
+ *
+ * Into a flat `Panel` with:
+ *   - "Principal Attention" title + small "N active · M critical" meta
+ *   - 3 real actions (Resolve All, Snooze All, More) using the shared
+ *     `LiveAlertsToolbar` (More hides Simulate/Auto/Reset/Restore)
+ *   - the alert list itself (kept) wired so clicking a row navigates to
+ *     the alert's `navKey` module via `onNavigate`
+ *
+ * The Zustand store (`live-alerts-store`) is preserved unchanged — only the
+ * visual presentation was rebuilt.
+ */
+export function LiveAlerts({ onNavigate }: LiveAlertsProps) {
+  const {
+    alerts: storeAlerts, dismissed, snoozed, severityFilter,
+    autoAlertsEnabled, toggleAutoAlerts, resolve, resolveAll, restore, reset,
+    snooze, snoozeAll, unsnooze, addAlert, clearNewFlag, setSeverityFilter,
+  } = useLiveAlerts()
+
+  const [snoozeMenuFor, setSnoozeMenuFor] = useState<string | null>(null)
+  const [snoozeAllMenuOpen, setSnoozeAllMenuOpen] = useState(false)
+
+  // Hydrate alert objects with icon JSX (store keeps them serializable)
+  const alerts: LiveAlertWithIcon[] = storeAlerts.map((a) => ({
+    ...a,
+    icon: alertIcons[a.id] ?? fallbackAlertIcon,
+  }))
+
+  const handleResolve = (id: string) => {
+    const alert = alerts.find((a) => a.id === id)
+    if (!alert) return
+    resolve(id)
+    toast.success('Alert resolved', { description: alert.title })
+  }
+
+  const handleResolveAll = () => {
+    if (alerts.length === 0) return
+    const count = alerts.length
+    resolveAll()
+    toast.success(`${count} alerts resolved`, { description: 'All active alerts have been dismissed' })
+  }
+
+  const handleSnooze = (id: string, minutes: number) => {
+    const alert = alerts.find((a) => a.id === id)
+    if (!alert) return
+    snooze(id, minutes)
+    setSnoozeMenuFor(null)
+    const durLabel = minutes < 60 ? `${minutes} min` : minutes < 240 ? `${minutes / 60} hour` : `${minutes / 60} hours`
+    toast.info(`Snoozed for ${durLabel}`, { description: alert.title })
+  }
+
+  const handleSnoozeAll = (minutes: number) => {
+    if (alerts.length === 0) return
+    const count = alerts.length
+    snoozeAll(minutes)
+    setSnoozeAllMenuOpen(false)
+    const durLabel = minutes < 60 ? `${minutes} min` : minutes < 240 ? `${minutes / 60} hour` : `${minutes / 60} hours`
+    toast.info(`${count} alerts snoozed for ${durLabel}`, { description: 'All active alerts have been snoozed' })
+  }
+
+  const handleSimulateNewAlert = () => {
+    const newAlert = getNextSimulatedAlert()
+    addAlert(newAlert)
+    toast.success('New alert received!', { description: newAlert.title })
+    // Clear the "isNew" flag after 5 seconds
+    setTimeout(() => clearNewFlag(newAlert.id), 5000)
+  }
+
+  const handleUnsnooze = (id: string) => {
+    const alert = snoozed.find((a) => a.id === id)
+    if (!alert) return
+    unsnooze(id)
+    toast.success('Alert restored', { description: alert.title })
+  }
+
+  const handleRestore = () => {
+    if (dismissed.length === 0) return
+    restore()
+    toast.info('All alerts restored', { description: `${dismissed.length} alert${dismissed.length > 1 ? 's' : ''} brought back` })
+  }
+
+  const handleAlertClick = (alert: LiveAlertWithIcon) => {
+    if (onNavigate) {
+      onNavigate(alert.navKey)
+    } else {
+      toast.info('Navigating…', { description: `Opening ${alert.navKey} module for: ${alert.title}` })
+    }
+  }
+
+  const handleResetAll = () => {
+    reset()
+    setSeverityFilter('all')
+    toast.info('Alerts reset', { description: 'All alerts restored to initial state' })
+  }
+
+  // Auto-arriving alerts with countdown (kept — same store behaviour)
+  const [countdown, setCountdown] = useState(30)
+  useEffect(() => {
+    if (!autoAlertsEnabled) {
+      setCountdown(30)
+      return
+    }
+    setCountdown(30)
+    const tickInterval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          const newAlert = getNextSimulatedAlert()
+          addAlert(newAlert)
+          toast.success('New alert received!', { description: newAlert.title })
+          setTimeout(() => clearNewFlag(newAlert.id), 5000)
+          return 30
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(tickInterval)
+  }, [autoAlertsEnabled, addAlert, clearNewFlag])
+
+  const criticalCount = alerts.filter((a) => a.severity === 'critical').length
+  const activeCount = alerts.length
+
+  return (
+    <Panel
+      title="Principal Attention"
+      action={
+        <LiveAlertsToolbar
+          alertsLength={alerts.length}
+          dismissedCount={dismissed.length}
+          snoozedCount={snoozed.length}
+          autoAlertsEnabled={autoAlertsEnabled}
+          countdown={countdown}
+          snoozeAllMenuOpen={snoozeAllMenuOpen}
+          setSnoozeAllMenuOpen={setSnoozeAllMenuOpen}
+          onResolveAll={handleResolveAll}
+          onSnoozeAll={handleSnoozeAll}
+          onSimulateNewAlert={handleSimulateNewAlert}
+          onToggleAutoAlerts={toggleAutoAlerts}
+          onResetAll={handleResetAll}
+          onRestore={handleRestore}
+        />
+      }
+      subtitle={
+        <span className="inline-flex items-center gap-2">
+          <span className="inline-flex items-center gap-1">
+            <span className={`h-1.5 w-1.5 rounded-full ${activeCount > 0 ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+            <span>{activeCount} active</span>
+          </span>
+          {criticalCount > 0 && (
+            <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+              <span>{criticalCount} critical</span>
+            </span>
+          )}
+        </span>
+      }
+    >
+      <LiveAlertsContent
+        alerts={alerts}
+        dismissed={dismissed}
+        snoozed={snoozed}
+        severityFilter={severityFilter}
+        snoozeMenuFor={snoozeMenuFor}
+        setSnoozeMenuFor={setSnoozeMenuFor}
+        setSeverityFilter={setSeverityFilter}
+        onResolve={handleResolve}
+        onSnooze={handleSnooze}
+        onUnsnooze={handleUnsnooze}
+        onRestore={handleRestore}
+        onAlertClick={handleAlertClick}
+      />
+    </Panel>
+  )
+}
