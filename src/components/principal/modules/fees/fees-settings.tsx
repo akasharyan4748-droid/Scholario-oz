@@ -16,14 +16,25 @@
  * paymentModes[] state + togglePaymentMode mutation as before; it just lives
  * alongside the new gateway / bank / UPI / reconciliation configuration so
  * the Principal sees the whole "School Finance Configuration" in one place.
+ *
+ * Phase 2-e polish (presentation-only): version-safety banner condensed to a
+ * single Lock-icon line; Fee Heads rows tightened (py-2.5 rhythm, normalized
+ * chips); Late Fee / Concession rules restructured into 2-col labeled grids
+ * topped by icon chips with live value-summary chips; NEW "One-Time Entry
+ * Fees" informational card on the Concession Rules tab reading admissionPolicy
+ * from the store ({enabled,boysAmount,girlsFreeAboveGrade}) with a Switch
+ * bound to the existing updateAdmissionPolicy({enabled}) action; Receipt
+ * Settings field grid tidied. All five sub-tabs, handlers and store mutations
+ * are behaviour-identical.
  */
 
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   IndianRupee, Landmark, AlertTriangle, Gift,
-  Receipt, ShieldCheck, Check, Plus, Archive,
+  Receipt, Check, Plus, Archive,
   ChevronDown, ChevronUp, RotateCcw,
+  Lock, UserPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,6 +54,49 @@ import { toast } from 'sonner'
 
 type SettingsTab = 'fee-heads' | 'payment-collection' | 'late-fee' | 'concession' | 'receipt'
 
+// Shared micro-primitives for the settings cards (2-e):
+// ChipTitle — icon-chip + title used at the top of rule cards.
+// RuleChip  — tiny mono value chip summarising the live rule values.
+// SwitchField — labeled toggle field matching the house switch visual.
+function ChipTitle({ icon, tone, children }: { icon: React.ReactNode; tone: string; children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-2 min-w-0">
+      <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', tone)}>
+        {icon}
+      </span>
+      <span className="truncate">{children}</span>
+    </span>
+  )
+}
+
+function RuleChip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-md border border-border/50 bg-muted/60 px-2 py-0.5 text-[10px] font-medium tabular-nums whitespace-nowrap">
+      {children}
+    </span>
+  )
+}
+
+function SwitchField({ label, checked, onToggle, className }: { label: string; checked: boolean; onToggle: () => void; className?: string }) {
+  return (
+    <div className={cn('flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2', className)}>
+      <p className="text-[11px] font-medium">{label}</p>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={label}
+        aria-pressed={checked}
+        className={cn('relative h-5 w-9 rounded-full transition-colors shrink-0', checked ? 'bg-emerald-600' : 'bg-muted-foreground/30')}
+      >
+        <span
+          className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
+          style={{ left: checked ? '1.125rem' : '0.125rem' }}
+        />
+      </button>
+    </div>
+  )
+}
+
 export function FeesSettingsSection() {
   const [tab, setTab] = useState<SettingsTab>('fee-heads')
 
@@ -56,13 +110,12 @@ export function FeesSettingsSection() {
 
   return (
     <div className="space-y-4 max-w-5xl mx-auto">
-      {/* Version safety banner */}
-      <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 p-2.5 flex items-start gap-2">
-        <ShieldCheck className="h-3.5 w-3.5 text-sky-600 shrink-0 mt-0.5" />
-        <div className="text-[11px] text-muted-foreground">
-          <p className="font-semibold text-sky-700 dark:text-sky-300">Fee Structure History</p>
-          <p className="mt-0.5">New fee plans will use the updated settings. Previous payments remain unchanged.</p>
-        </div>
+      {/* Version safety banner — one short line (2-e); guidance behaviour unchanged */}
+      <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 px-2.5 py-1.5 flex items-center gap-2">
+        <Lock className="h-3 w-3 text-sky-600 shrink-0" />
+        <p className="text-[11px] text-muted-foreground truncate">
+          <span className="font-semibold text-sky-700 dark:text-sky-300">Version-safe:</span> new fee plans will use the updated settings · previous payments remain unchanged.
+        </p>
       </div>
 
       {/* Tabs */}
@@ -238,7 +291,7 @@ function FeeHeadsSettings() {
     <FeePanel
       title="Fee Heads"
       subtitle={`${activeCount} active · ${archivedCount} archived · ${masterHeads.length} unique head names`}
-      action={<Button size="sm" className="h-7 text-xs gap-1" onClick={() => setShowAdd(true)}><Plus className="h-3 w-3" /> Add Head</Button>}
+      action={<Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowAdd(true)}><Plus className="h-3 w-3" /> Add Head</Button>}
     >
       {/* Tab filter — [All] [Active] [Archived]. A "Mixed" head (active in
           some structures, archived in others) appears in BOTH the Active
@@ -284,10 +337,10 @@ function FeeHeadsSettings() {
             const uniqueStructureNames = Array.from(new Set(h.structures))
             return (
               <div key={h.name} className="rounded-md border border-border/60 bg-card overflow-hidden">
-                {/* Row */}
-                <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/30">
+                {/* Row — unified py-2.5 rhythm (2-e) */}
+                <div className="flex items-center gap-2 px-2.5 py-2.5 hover:bg-muted/30">
                   <span className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-md shrink-0',
+                    'flex h-8 w-8 items-center justify-center rounded-md shrink-0',
                     h.anyActive ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground',
                   )}>
                     <IndianRupee className="h-3.5 w-3.5" />
@@ -299,7 +352,7 @@ function FeeHeadsSettings() {
                         {status}
                       </span>
                     </div>
-                    <p className="text-[9px] text-muted-foreground mt-0.5 truncate">
+                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
                       Used in <span className="font-medium text-foreground">{uniqueStructureNames.length}</span> structure(s) · Frequencies: {frequenciesStr}
                     </p>
                   </div>
@@ -308,7 +361,7 @@ function FeeHeadsSettings() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 text-[9px] gap-1 text-amber-600 hover:text-amber-700"
+                        className="h-6 text-[10px] gap-1 text-amber-600 hover:text-amber-700"
                         onClick={() => handleArchiveAll(h.name)}
                         title={`Archive "${h.name}" across all structures where it is currently active`}
                       >
@@ -319,7 +372,7 @@ function FeeHeadsSettings() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 text-[9px] gap-1 text-emerald-600 hover:text-emerald-700"
+                        className="h-6 text-[10px] gap-1 text-emerald-600 hover:text-emerald-700"
                         onClick={() => handleRestoreAll(h.name)}
                         title={`Restore "${h.name}" across all structures where it is currently archived`}
                       >
@@ -346,7 +399,7 @@ function FeeHeadsSettings() {
                     </p>
                     <div className="space-y-0.5">
                       {instances.map((i) => (
-                        <div key={i.headId} className="flex items-center gap-2 text-[10px] px-1 py-0.5 rounded hover:bg-muted/40">
+                        <div key={i.headId} className="flex items-center gap-2 text-[10px] px-1 py-1 rounded hover:bg-muted/40">
                           <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', i.active ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
                           <span className="font-medium min-w-0 flex-1 truncate">{i.structureName}</span>
                           <span className="text-muted-foreground whitespace-nowrap">{i.frequency} · {i.mandatory ? 'Mandatory' : 'Optional'}</span>
@@ -497,50 +550,59 @@ function LateFeeSettings() {
 
   return (
     <FeePanel
-      title="Late Fee Rules"
-      subtitle="automatic late fee calculation policy"
+      title={
+        <ChipTitle icon={<AlertTriangle className="h-4 w-4" />} tone="bg-amber-500/15 text-amber-600">
+          Late Fee Rules
+        </ChipTitle>
+      }
+      subtitle="Automatic late fee calculation policy"
       action={
         dirty && (
-          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { updateLateFeeRule(local); toast.success('Late fee rules updated') }}>
+          <Button size="sm" className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => { updateLateFeeRule(local); toast.success('Late fee rules updated') }}>
             <Check className="h-3 w-3" /> Save
           </Button>
         )
       }
     >
-      <div className="space-y-3">
-        <label className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold">Enable Late Fee</p>
-            <p className="text-[10px] text-muted-foreground">Automatically apply late fee to overdue accounts</p>
-          </div>
-          <button
-            onClick={() => setLocal({ ...local, enabled: !local.enabled })}
-            className={cn('relative h-5 w-9 rounded-full transition-colors', local.enabled ? 'bg-emerald-600' : 'bg-muted-foreground/30')}
-          >
-            <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all', local.enabled ? 'left-4.5' : 'left-0.5')} style={{ left: local.enabled ? '1.125rem' : '0.125rem' }} />
-          </button>
-        </label>
+      <div className="space-y-4">
+        {/* Live rule summary — current values at a glance (updates as fields change) */}
+        <div className="flex items-center flex-wrap gap-1.5">
+          <RuleChip>{formatINR(local.amountPerMonth, true)} / month</RuleChip>
+          <RuleChip>max {formatINR(local.maxLateFee, true)}</RuleChip>
+          <RuleChip>grace {local.gracePeriodDays}d</RuleChip>
+          <RuleChip>{local.appliesTo === 'mandatory_only' ? 'mandatory heads' : 'all heads'}</RuleChip>
+          {local.enabled
+            ? <RuleChip><span className="text-emerald-600 font-semibold">on</span></RuleChip>
+            : <RuleChip><span className="text-muted-foreground">off</span></RuleChip>}
+        </div>
+        {/* Rule inputs — 2-col grid of labeled fields */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label className="text-[11px]">Amount per Month (₹)</Label>
-            <Input type="number" value={local.amountPerMonth} onChange={(e) => setLocal({ ...local, amountPerMonth: Number(e.target.value) })} className="h-8 text-xs tabular-nums" />
+            <Input type="number" value={local.amountPerMonth} onChange={(e) => setLocal({ ...local, amountPerMonth: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
           </div>
           <div>
             <Label className="text-[11px]">Grace Period (days)</Label>
-            <Input type="number" value={local.gracePeriodDays} onChange={(e) => setLocal({ ...local, gracePeriodDays: Number(e.target.value) })} className="h-8 text-xs tabular-nums" />
+            <Input type="number" value={local.gracePeriodDays} onChange={(e) => setLocal({ ...local, gracePeriodDays: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
           </div>
           <div>
             <Label className="text-[11px]">Max Late Fee (₹)</Label>
-            <Input type="number" value={local.maxLateFee} onChange={(e) => setLocal({ ...local, maxLateFee: Number(e.target.value) })} className="h-8 text-xs tabular-nums" />
+            <Input type="number" value={local.maxLateFee} onChange={(e) => setLocal({ ...local, maxLateFee: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
           </div>
           <div>
             <Label className="text-[11px]">Applies To</Label>
-            <select value={local.appliesTo} onChange={(e) => setLocal({ ...local, appliesTo: e.target.value as any })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2">
+            <select value={local.appliesTo} onChange={(e) => setLocal({ ...local, appliesTo: e.target.value as any })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1">
               <option value="mandatory_only">Mandatory Heads Only</option>
               <option value="all">All Heads</option>
             </select>
           </div>
         </div>
+        {/* Master switch */}
+        <SwitchField
+          label="Enable Late Fee — automatically apply to overdue accounts"
+          checked={local.enabled}
+          onToggle={() => setLocal({ ...local, enabled: !local.enabled })}
+        />
         <div className="rounded-lg bg-muted/30 border border-border p-2.5 text-[10px] text-muted-foreground">
           <p>Preview: A student 3 months overdue will be charged <span className="font-bold tabular-nums">{formatINR(local.amountPerMonth * 3, true)}</span> late fee (capped at {formatINR(local.maxLateFee, true)}).</p>
         </div>
@@ -558,58 +620,129 @@ function ConcessionSettings() {
   const dirty = JSON.stringify(local) !== JSON.stringify(rule)
 
   return (
-    <FeePanel
-      title="Concession Rules"
-      subtitle="approved concession categories & discounts"
-      action={
-        dirty && (
-          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { updateConcessionRule(local); toast.success('Concession rules updated') }}>
-            <Check className="h-3 w-3" /> Save
-          </Button>
-        )
-      }
-    >
-      <div className="space-y-3">
-        <label className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold">Enable Concessions</p>
-            <p className="text-[10px] text-muted-foreground">Allow fee concessions on student accounts</p>
+    <div className="space-y-4">
+      <FeePanel
+        title={
+          <ChipTitle icon={<Gift className="h-4 w-4" />} tone="bg-violet-500/15 text-violet-600">
+            Concession Rules
+          </ChipTitle>
+        }
+        subtitle="Approved concession categories & discounts"
+        action={
+          dirty && (
+            <Button size="sm" className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => { updateConcessionRule(local); toast.success('Concession rules updated') }}>
+              <Check className="h-3 w-3" /> Save
+            </Button>
+          )
+        }
+      >
+        <div className="space-y-4">
+          {/* Live rule summary — discounts at a glance (updates as fields change) */}
+          <div className="flex items-center flex-wrap gap-1.5">
+            <RuleChip>sibling {local.siblingDiscountPct}%</RuleChip>
+            <RuleChip>staff ward {local.staffWardDiscountPct}%</RuleChip>
+            <RuleChip>scholarship {local.scholarshipDiscountPct}%</RuleChip>
+            {local.requiresApproval && <RuleChip><span className="text-amber-600 font-semibold">principal approval</span></RuleChip>}
+            {local.enabled
+              ? <RuleChip><span className="text-emerald-600 font-semibold">on</span></RuleChip>
+              : <RuleChip><span className="text-muted-foreground">off</span></RuleChip>}
           </div>
-          <button
-            onClick={() => setLocal({ ...local, enabled: !local.enabled })}
-            className={cn('relative h-5 w-9 rounded-full transition-colors', local.enabled ? 'bg-emerald-600' : 'bg-muted-foreground/30')}
-          >
-            <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all', local.enabled ? 'left-4.5' : 'left-0.5')} style={{ left: local.enabled ? '1.125rem' : '0.125rem' }} />
-          </button>
-        </label>
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <Label className="text-[11px]">Sibling Discount (%)</Label>
-            <Input type="number" value={local.siblingDiscountPct} onChange={(e) => setLocal({ ...local, siblingDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums" />
-          </div>
-          <div>
-            <Label className="text-[11px]">Staff Ward (%)</Label>
-            <Input type="number" value={local.staffWardDiscountPct} onChange={(e) => setLocal({ ...local, staffWardDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums" />
-          </div>
-          <div>
-            <Label className="text-[11px]">Scholarship (%)</Label>
-            <Input type="number" value={local.scholarshipDiscountPct} onChange={(e) => setLocal({ ...local, scholarshipDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums" />
+          {/* Rule inputs — 2-col grid of labeled fields (discount %s + approval switch field) */}
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <Label className="text-[11px]">Sibling Discount (%)</Label>
+              <Input type="number" value={local.siblingDiscountPct} onChange={(e) => setLocal({ ...local, siblingDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
+            </div>
+            <div>
+              <Label className="text-[11px]">Staff Ward (%)</Label>
+              <Input type="number" value={local.staffWardDiscountPct} onChange={(e) => setLocal({ ...local, staffWardDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
+            </div>
+            <div>
+              <Label className="text-[11px]">Scholarship (%)</Label>
+              <Input type="number" value={local.scholarshipDiscountPct} onChange={(e) => setLocal({ ...local, scholarshipDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
+            </div>
+            <SwitchField
+              label="Require Principal Approval"
+              checked={local.requiresApproval}
+              onToggle={() => setLocal({ ...local, requiresApproval: !local.requiresApproval })}
+            />
+            <SwitchField
+              className="sm:col-span-2"
+              label="Enable Concessions — allow fee concessions on student accounts"
+              checked={local.enabled}
+              onToggle={() => setLocal({ ...local, enabled: !local.enabled })}
+            />
           </div>
         </div>
-        <label className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold">Require Principal Approval</p>
-            <p className="text-[10px] text-muted-foreground">Concessions must be approved by Principal before applying</p>
+      </FeePanel>
+
+      {/* NEW (2-e) — one-time entry fees policy, read directly from the store;
+          the Switch writes through updateAdmissionPolicy({ enabled }) instantly. */}
+      <AdmissionFeesCard />
+    </div>
+  )
+}
+
+// ─── One-Time Entry Fees (admission policy snapshot) ──────────────
+// Reads admissionPolicy ({enabled, boysAmount, girlsFreeAboveGrade}) from
+// useFeeStore; the only editable control is the master Switch which calls
+// updateAdmissionPolicy({ enabled }) (store action — no local draft state).
+function AdmissionFeesCard() {
+  const admissionPolicy = useFeeStore((s) => s.admissionPolicy)
+  const updateAdmissionPolicy = useFeeStore((s) => s.updateAdmissionPolicy)
+
+  const handleToggle = () => {
+    const next = !admissionPolicy.enabled
+    updateAdmissionPolicy({ enabled: next })
+    toast.success(next ? 'One-time entry fees enabled' : 'One-time entry fees disabled')
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-600">
+            <UserPlus className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold tracking-tight truncate">One-Time Entry Fees</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+              Charged only during admission events — never billed with monthly dues.
+            </p>
           </div>
-          <button
-            onClick={() => setLocal({ ...local, requiresApproval: !local.requiresApproval })}
-            className={cn('relative h-5 w-9 rounded-full transition-colors', local.requiresApproval ? 'bg-emerald-600' : 'bg-muted-foreground/30')}
-          >
-            <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all', local.requiresApproval ? 'left-4.5' : 'left-0.5')} style={{ left: local.requiresApproval ? '1.125rem' : '0.125rem' }} />
-          </button>
-        </label>
+        </div>
+        <button
+          type="button"
+          onClick={handleToggle}
+          aria-label="Enable one-time entry fees"
+          aria-pressed={admissionPolicy.enabled}
+          className={cn('relative h-5 w-9 rounded-full transition-colors shrink-0 mt-1', admissionPolicy.enabled ? 'bg-emerald-600' : 'bg-muted-foreground/30')}
+        >
+          <span
+            className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
+            style={{ left: admissionPolicy.enabled ? '1.125rem' : '0.125rem' }}
+          />
+        </button>
       </div>
-    </FeePanel>
+      <div className={cn(
+        'divide-y divide-border/40 rounded-lg border border-border/50 overflow-hidden transition-opacity',
+        !admissionPolicy.enabled && 'opacity-60',
+      )}>
+        <div className="flex items-center justify-between gap-3 px-2.5 py-2.5 text-xs">
+          <p className="font-medium shrink-0">Admission Fee</p>
+          <p className="text-[11px] text-muted-foreground text-right min-w-0">
+            boys <span className="font-semibold tabular-nums text-foreground">{formatINR(admissionPolicy.boysAmount)}</span> one-time · girls free above Class{' '}
+            <span className="font-semibold tabular-nums text-foreground">{admissionPolicy.girlsFreeAboveGrade}</span>
+          </p>
+        </div>
+        <div className="flex items-center justify-between gap-3 px-2.5 py-2.5 text-xs">
+          <p className="font-medium shrink-0">Registration Fee</p>
+          <p className="text-[11px] text-muted-foreground text-right min-w-0">
+            <span className="font-semibold tabular-nums text-foreground">₹300</span> at Class 9 &amp; 11 entry points
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -625,49 +758,42 @@ function ReceiptSettings() {
   return (
     <FeePanel
       title="Receipt Settings"
-      subtitle="receipt numbering, footer, signature"
+      subtitle="Receipt numbering, footer message & signature"
       action={
         dirty && (
-          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { updateReceiptSettings(local); toast.success('Receipt settings updated') }}>
+          <Button size="sm" className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => { updateReceiptSettings(local); toast.success('Receipt settings updated') }}>
             <Check className="h-3 w-3" /> Save
           </Button>
         )
       }
     >
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-4">
+        <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <Label className="text-[11px]">Receipt Number Prefix</Label>
-            <Input value={local.prefix} onChange={(e) => setLocal({ ...local, prefix: e.target.value })} className="h-8 text-xs font-mono" />
+            <Input value={local.prefix} onChange={(e) => setLocal({ ...local, prefix: e.target.value })} className="h-8 text-xs font-mono mt-1" />
           </div>
           <div>
             <Label className="text-[11px]">Paper Size</Label>
-            <select value={local.paperSize} onChange={(e) => setLocal({ ...local, paperSize: e.target.value as any })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2">
+            <select value={local.paperSize} onChange={(e) => setLocal({ ...local, paperSize: e.target.value as any })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1">
               <option value="80mm">80mm Thermal</option>
               <option value="A5">A5 Half-Page</option>
             </select>
           </div>
         </div>
-        <div className="rounded-md bg-muted/30 border border-border p-2.5">
+        <div className="rounded-md bg-muted/30 border border-border p-2.5 flex items-baseline justify-between gap-3">
           <p className="text-[10px] text-muted-foreground">Next receipt number will be:</p>
           <p className="font-mono text-base font-bold tabular-nums">{local.prefix}{receiptCounter + 1}</p>
         </div>
         <div>
           <Label className="text-[11px]">Footer Message</Label>
-          <Input value={local.footerMessage} onChange={(e) => setLocal({ ...local, footerMessage: e.target.value })} className="h-8 text-xs" />
+          <Input value={local.footerMessage} onChange={(e) => setLocal({ ...local, footerMessage: e.target.value })} className="h-8 text-xs mt-1" />
         </div>
-        <label className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold">Show Authorized Signature</p>
-            <p className="text-[10px] text-muted-foreground">Print Principal signature line on receipts</p>
-          </div>
-          <button
-            onClick={() => setLocal({ ...local, showAuthorizedSignature: !local.showAuthorizedSignature })}
-            className={cn('relative h-5 w-9 rounded-full transition-colors', local.showAuthorizedSignature ? 'bg-emerald-600' : 'bg-muted-foreground/30')}
-          >
-            <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all', local.showAuthorizedSignature ? 'left-4.5' : 'left-0.5')} style={{ left: local.showAuthorizedSignature ? '1.125rem' : '0.125rem' }} />
-          </button>
-        </label>
+        <SwitchField
+          label="Show Authorized Signature — print Principal signature line on receipts"
+          checked={local.showAuthorizedSignature}
+          onToggle={() => setLocal({ ...local, showAuthorizedSignature: !local.showAuthorizedSignature })}
+        />
       </div>
     </FeePanel>
   )

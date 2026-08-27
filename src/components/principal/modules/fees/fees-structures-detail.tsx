@@ -53,6 +53,7 @@ import {
   type ExamFeeSchedule,
   computeHeadsTotal,
   computeExamFeeTotal,
+  CURRENT_ACADEMIC_YEAR,
 } from '@/lib/store/fee-store'
 import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 import { useStudentsStore } from '@/lib/store/students-store'
@@ -731,7 +732,7 @@ function DetailDrawerInner({
                         "Select a class to begin" placeholder otherwise. */}
                     <p className="text-[11px] text-muted-foreground">
                       {selectedClass
-                        ? `${selectedClass.level} · AY ${createAcademicYear.trim() || '2025-2026'}`
+                        ? `${selectedClass.level} · AY ${createAcademicYear.trim() || CURRENT_ACADEMIC_YEAR}`
                         : 'Select a class to begin'}
                     </p>
                     {/* Compact inline metadata inputs — Class select +
@@ -756,7 +757,7 @@ function DetailDrawerInner({
                       <Input
                         value={createAcademicYear}
                         onChange={(e) => setCreateAcademicYear(e.target.value)}
-                        placeholder="AY 2025-2026"
+                        placeholder={`AY ${CURRENT_ACADEMIC_YEAR}`}
                         className="h-7 text-xs w-28"
                       />
                       <Input
@@ -797,7 +798,7 @@ function DetailDrawerInner({
                   <div className="min-w-0">
                     <h2 className="text-base font-bold truncate">{structure.className}</h2>
                     <p className="text-[11px] text-muted-foreground">
-                      {structure.category} · {structure.classLevel} · AY 2025-2026
+                      {structure.category} · {structure.classLevel} · AY {CURRENT_ACADEMIC_YEAR}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
                       <span className="inline-flex items-center gap-1"><Calendar className="h-2.5 w-2.5" /> Effective {formatDate(structure.effectiveFrom)}</span>

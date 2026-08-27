@@ -1,23 +1,23 @@
 'use client'
 
 /**
- * FeesOverviewSection — the Fee Management landing view: the school's
- * financial position at a glance (INSIGHTS).
- *
- * Executive financial view — "what is happening and what needs attention":
+ * FeesOverviewSection — the Fee Management landing view: a FINANCIAL
+ * COMMAND CENTRE. The Principal grasps the school's position in seconds:
  *
  *   1. Four KPI cards (Total Expected · Collected · Outstanding ·
- *      Students With Dues — the Principal's four questions)
- *   2. Collection Trend (open chart, flat on the page — Attendance
- *      chart architecture, honest ₹0-anchored currency axis)
- *   3. Outstanding Dues + Needs Attention (who owes, who's urgent)
- *   4. Recent Payments + Payment Modes (concise activity summary — the
- *      complete history lives in the Transactions section)
- *   5. Outstanding Aging (compact buckets)
- *   6. Class-wise Collection (stream-aware, top classes)
+ *      Students With Dues) — clickable, wired to Accounts/Transactions.
+ *   2. Collection Trend (Panel, compact ~180px chart) + Breakdown
+ *      (expected obligation by fee head, thin CSS bars) side by side.
+ *   3. Outstanding Dues + Needs Attention — one two-column grid of
+ *      ACTIONABLE panels: avatar rows with amount + overdue chip; every
+ *      row navigates to Student Accounts. (Replaces the former dues +
+ *      attention duplicate sections and the aging bucket strip.)
+ *   4. Recent Payments (summary only — full history in Transactions)
+ *      + Payment Modes mix.
  *
- * Fee-structure CONFIGURATION status intentionally lives in the Fee
- * Structures tab, not here — this page is financial performance only.
+ * REMOVED from this view: aging buckets, class-wise bar chart, and the
+ * old category strip — redundant with the panels above. Fee-structure
+ * CONFIGURATION status lives in the Fee Structures tab, not here.
  *
  * All numbers derive from useFeeData() — the same single calculation path
  * the Payments page, Transactions ledger, and Student Accounts consume.
@@ -26,16 +26,16 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Wallet, CheckCircle2, AlertCircle, Users, ArrowRight,
-  CheckCheck, Banknote,
+  Wallet, CheckCircle2, AlertCircle, Users, ArrowRight, CheckCheck, Banknote,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useFeeData } from '@/lib/store/fee-store'
+import { useFeeData, CURRENT_ACADEMIC_YEAR } from '@/lib/store/fee-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
-import { FeeStatusBadge, FeeEmptyState, ModeIcon, modeAccent } from './fees-shared'
-import { MiniAreaChart, MiniBars, FEES_CHART_PALETTE } from './fees-charts'
+import { Panel } from '../shared/panel'
+import { FeeEmptyState, ModeIcon, modeAccent } from './fees-shared'
+import { MiniAreaChart, FEES_CHART_PALETTE } from './fees-charts'
 import type { FeeTab } from './fees-shared'
 
 interface Props {
@@ -54,25 +54,45 @@ function classDisplayName(className: string, classId: string): string {
   return className
 }
 
+/** Avatar initials for student rows ("Aarav Sharma" → "AS"). */
+function initialsOf(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => (p[0] ?? '').toUpperCase()).join('')
+}
+
+/** Minimal days-overdue chip (spec chip recipe: emerald/amber/rose/slate tints).
+ *  Escalation: Due soon → slate · ≤30d → amber · >30d → rose. */
+function OverdueChip({ days }: { days: number }) {
+  const tone =
+    days <= 0 ? 'bg-slate-500/10 text-slate-600 dark:text-slate-400'
+      : days <= 30 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+        : 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+  return (
+    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap', tone)}>
+      {days <= 0 ? 'Due soon' : `${days}d overdue`}
+    </span>
+  )
+}
+
 export function FeesOverviewSection({ data, onNavigate }: Props) {
   const { analytics, accounts, transactions } = data
 
-  // Top outstanding + urgent dues (derived from the same accounts).
+  // Session label read from the ledger itself (honest — never hardcoded).
+  const yearLabel = useMemo(() => {
+    const years = new Set(transactions.map((t) => t.academicYear).filter(Boolean))
+    return Array.from(years)[0] ?? CURRENT_ACADEMIC_YEAR
+  }, [transactions])
+
+  // Largest outstanding balances — the collection worklist (max 25 kept,
+  // scroll cap shows ~5 at a time).
   const topDues = useMemo(
-    () => [...accounts].filter((a) => a.outstanding > 0).sort((a, b) => b.outstanding - a.outstanding).slice(0, 5),
+    () => [...accounts].filter((a) => a.outstanding > 0).sort((a, b) => b.outstanding - a.outstanding).slice(0, 25),
     [accounts],
   )
 
-  // Classes with students carrying dues.
+  // Classes with students carrying dues (KPI sub-line).
   const classesWithDues = useMemo(
     () => new Set(accounts.filter((a) => a.outstanding > 0).map((a) => a.classId)).size,
     [accounts],
-  )
-
-  // Class-wise — top 6 by outstanding, stream-aware labels.
-  const topClasses = useMemo(
-    () => analytics.classWise.filter((c) => c.outstanding > 0).slice(0, 6),
-    [analytics.classWise],
   )
 
   // Recent successful payments — a concise activity SUMMARY (the complete
@@ -86,8 +106,7 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
     [transactions],
   )
 
-  // Payment mode mix — share of successfully collected amount (analytical
-  // summary; compact rows, not a chart).
+  // Payment mode mix — share of successfully collected amount.
   const modeMix = useMemo(() => {
     const totals = new Map<string, number>()
     let sum = 0
@@ -101,8 +120,21 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
       .sort((a, b) => b.value - a.value)
   }, [transactions])
 
+  // Breakdown — expected obligation per fee head (store pre-sorts desc).
+  const categories = analytics.byCategory
+  const catTotal = useMemo(() => categories.reduce((sum, c) => sum + c.value, 0), [categories])
+  const catMax = categories[0]?.value ?? 0
+  const visibleCategories = categories.slice(0, 6)
+  const hiddenCategories = Math.max(0, categories.length - visibleCategories.length)
+
+  const trendHasData = analytics.monthly.some((m) => m.collected > 0 || m.pending > 0)
+
+  /* Shared row anatomy — avatar + identity + right-aligned amount/chip. */
+  const listPanelBtnClass =
+    'w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors text-left focus:outline-none focus-visible:bg-muted/40'
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 1 — KPI cards: the Principal's four questions */}
       <SummaryCardGrid columns={4}>
         <SummaryCard
@@ -126,7 +158,11 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
           icon={<AlertCircle className="h-4 w-4" />}
           label="Outstanding"
           value={formatINR(analytics.totalOutstanding, true)}
-          sub={`${analytics.pendingCount} students with dues`}
+          sub={
+            analytics.totalLateFee > 0
+              ? `incl. ${formatINR(analytics.totalLateFee, true)} late fee`
+              : `${analytics.overdueCount} overdue`
+          }
           tone="rose"
           delay={0.1}
           onClick={() => onNavigate('accounts')}
@@ -142,183 +178,240 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
         />
       </SummaryCardGrid>
 
-      {/* 1b — Collection by Category (flat border-left strip, no boxes).
-          Core school fees, examination fees and additional charges are
-          reported SEPARATELY — never one mixed number. */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
-        {(() => {
-          const ct = analytics.categoryTotals
-          const rows = [
-            { label: 'Regular School Fees', collected: ct.core.collected, accent: 'border-emerald-500/40' },
-            { label: 'Examination Fees', collected: ct.exam.collected, accent: 'border-orange-500/40' },
-            { label: 'Additional Charges', collected: ct.additional.collected, accent: 'border-violet-500/40' },
-            { label: 'Total Collected', collected: ct.core.collected + ct.exam.collected + ct.additional.collected, accent: 'border-foreground/20' },
-          ]
-          return rows.map((r) => (
-            <div key={r.label} className={`border-l-2 ${r.accent} pl-3`}>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{r.label}</p>
-              <p className="text-base font-bold tabular-nums text-foreground leading-tight mt-0.5">
-                {formatINR(r.collected, true)}
-              </p>
+      {/* 2 — Collection Trend + Breakdown (one command-centre row).
+          ONE legend — Panel action slot, colored to exactly match the
+          chart's series; the chart itself renders none. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 min-w-0">
+          <Panel
+            title="Collection Trend"
+            subtitle={`${yearLabel} · collected vs pending`}
+            className="h-full"
+            action={
+              <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.collected }} /> Collected
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.pending }} /> Pending
+                </span>
+              </div>
+            }
+          >
+            {trendHasData ? (
+              <MiniAreaChart data={analytics.monthly} height={180} format={(n) => formatINR(n, true)} showArea />
+            ) : (
+              <p className="text-xs text-muted-foreground py-10 text-center">No collections yet — record a payment to see the trend.</p>
+            )}
+          </Panel>
+        </div>
+
+        {/* Expected obligation per fee head — honest policy view (bars are
+            relative to the largest head, share % is of total expected). */}
+        <Panel title="Breakdown" subtitle={`${yearLabel} · expected by fee head`} className="h-full" bodyClassName="p-0">
+          {visibleCategories.length > 0 ? (
+            <div className="divide-y divide-border py-1">
+              {visibleCategories.map((c, i) => (
+                <motion.div
+                  key={c.name}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="px-4 py-2.5"
+                >
+                  <div className="flex items-center gap-3">
+                    <span aria-hidden className="h-2 w-2 rounded-full shrink-0" style={{ background: c.color }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium truncate">{c.name}</p>
+                      <p className="text-[10px] text-muted-foreground tabular-nums">
+                        {catTotal > 0 ? Math.round((c.value / catTotal) * 100) : 0}% of expected
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold tabular-nums shrink-0">{formatINR(c.value, true)}</span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${catMax > 0 ? Math.max(3, Math.round((c.value / catMax) * 100)) : 0}%` }}
+                      transition={{ duration: 0.5, delay: i * 0.06 }}
+                      className="h-full rounded-full"
+                      style={{ background: c.color }}
+                    />
+                  </div>
+                </motion.div>
+              ))}
+              {hiddenCategories > 0 && (
+                <p className="px-4 py-2 text-[10px] text-muted-foreground">+{hiddenCategories} more heads</p>
+              )}
             </div>
-          ))
-        })()}
+          ) : (
+            <div className="py-6">
+              <FeeEmptyState icon={<Wallet className="h-5 w-5" />} title="No fee heads configured." description="Set up fee structures to see the breakdown." />
+            </div>
+          )}
+        </Panel>
       </div>
 
-      {/* 2 — Collection Trend (open chart directly on the page).
-          ONE legend — here in the section header, colored to exactly match
-          the chart's series. The chart itself renders none. */}
-      <section>
-        <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Collection Trend</h3>
-            <p className="text-[11px] text-muted-foreground">monthly collection this academic year</p>
-          </div>
-          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.collected }} /> Collected
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.pending }} /> Pending
-            </span>
-          </div>
-        </div>
-        {analytics.monthly.some((m) => m.collected > 0 || m.pending > 0) ? (
-          <MiniAreaChart data={analytics.monthly} height={170} format={(n) => formatINR(n, true)} showArea />
-        ) : (
-          <p className="text-xs text-muted-foreground py-8 text-center">No collections yet — record a payment to see the trend.</p>
-        )}
-      </section>
-
-      {/* 3 — Outstanding Dues + Needs Attention (two columns) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-foreground">Outstanding Dues</h3>
-            <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => onNavigate('accounts')}>
-              View Students <ArrowRight className="h-3 w-3" />
+      {/* 3 — Outstanding Dues + Needs Attention (merged actionable pair).
+          Every row navigates to Student Accounts; chips carry the aging
+          signal inline so no separate buckets section is needed. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Panel
+          title="Outstanding Dues"
+          subtitle={`${topDues.length} student${topDues.length === 1 ? '' : 's'} · largest balances`}
+          className="h-full"
+          action={
+            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1.5" onClick={() => onNavigate('accounts')}>
+              View accounts <ArrowRight className="h-3 w-3" />
             </Button>
-          </div>
+          }
+          bodyClassName="p-0"
+        >
           {topDues.length > 0 ? (
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-border max-h-72 overflow-y-auto custom-scrollbar py-1">
               {topDues.map((a, i) => (
                 <motion.button
                   key={a.studentId}
+                  type="button"
                   initial={{ opacity: 0, x: -6 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.04 }}
                   onClick={() => onNavigate('accounts')}
-                  className="w-full flex items-center gap-2 py-2.5 px-1.5 rounded-md hover:bg-muted/30 transition-colors text-left"
+                  aria-label={`Open fee account for ${a.studentName}, outstanding ${formatINR(a.outstanding, true)}`}
+                  className={listPanelBtnClass}
                 >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-500/10 ring-1 ring-slate-500/20 text-[9px] font-semibold text-slate-600 dark:text-slate-300">
+                    {initialsOf(a.studentName)}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold truncate">{a.studentName}</p>
-                    <p className="text-[10px] text-muted-foreground">{classDisplayName(a.className, a.classId)} · {a.section}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {classDisplayName(a.className, a.classId)} · {a.section} · {a.admissionNo}
+                    </p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-xs font-bold tabular-nums text-rose-600">{formatINR(a.outstanding, true)}</p>
-                    <FeeStatusBadge status={a.status} />
+                  <div className="flex flex-col items-end gap-0.5 shrink-0">
+                    <span className="text-xs font-bold tabular-nums text-rose-600 dark:text-rose-400">{formatINR(a.outstanding, true)}</span>
+                    <OverdueChip days={a.daysOverdue} />
                   </div>
                 </motion.button>
               ))}
             </div>
           ) : (
-            <FeeEmptyState
-              icon={<CheckCheck className="h-5 w-5" />}
-              title="All student accounts are clear."
-              description="No outstanding dues to follow up on right now."
-            />
+            <div className="py-6">
+              <FeeEmptyState
+                icon={<CheckCheck className="h-5 w-5" />}
+                title="All student accounts are clear."
+                description="No outstanding dues to follow up on right now."
+              />
+            </div>
           )}
-        </section>
+        </Panel>
 
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-foreground">Needs Attention</h3>
-            <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => onNavigate('accounts')}>
-              View All <ArrowRight className="h-3 w-3" />
+        <Panel
+          title="Needs Attention"
+          subtitle={`${analytics.urgentActions.length} urgent · oldest overdue first`}
+          className="h-full"
+          action={
+            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1.5" onClick={() => onNavigate('accounts')}>
+              Follow up <ArrowRight className="h-3 w-3" />
             </Button>
-          </div>
-          <div className="divide-y divide-border">
-            {analytics.urgentActions.slice(0, 5).map((a, i) => (
+          }
+          bodyClassName="p-0"
+        >
+          <div className="divide-y divide-border max-h-72 overflow-y-auto custom-scrollbar py-1">
+            {analytics.urgentActions.map((a, i) => (
               <motion.button
                 key={a.studentId}
+                type="button"
                 initial={{ opacity: 0, x: -6 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.04 }}
                 onClick={() => onNavigate('accounts')}
-                className="w-full flex items-center gap-2.5 py-2.5 px-1.5 rounded-md hover:bg-muted/30 transition-colors text-left"
+                aria-label={`Follow up on ${a.studentName}, ${a.daysOverdue > 0 ? `${a.daysOverdue} days overdue` : 'due soon'}, total due ${formatINR(a.totalDue, true)}`}
+                className={listPanelBtnClass}
               >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-500/10 text-rose-600 ring-1 ring-rose-500/20 text-[10px] font-semibold tabular-nums">
-                  {a.daysOverdue}d
-                </div>
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-500/10 ring-1 ring-rose-500/20 text-[9px] font-semibold text-rose-600 dark:text-rose-300 tabular-nums">
+                  {initialsOf(a.studentName)}
+                </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold truncate">{a.studentName}</p>
-                  <p className="text-[10px] text-muted-foreground">{classDisplayName(a.className, a.classId)} · {a.admissionNo}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {classDisplayName(a.className, a.classId)} · {a.section} · {a.admissionNo}
+                  </p>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-xs font-bold tabular-nums text-rose-600">{formatINR(a.totalDue, true)}</p>
-                  <FeeStatusBadge status={a.status} />
+                <div className="flex flex-col items-end gap-0.5 shrink-0">
+                  <span className="text-xs font-bold tabular-nums text-rose-600 dark:text-rose-400">{formatINR(a.totalDue, true)}</span>
+                  <OverdueChip days={a.daysOverdue} />
                 </div>
               </motion.button>
             ))}
             {analytics.urgentActions.length === 0 && (
-              <FeeEmptyState icon={<CheckCircle2 className="h-5 w-5" />} title="All fees are paid" description="No dues to follow up on." />
+              <div className="py-6">
+                <FeeEmptyState icon={<CheckCircle2 className="h-5 w-5" />} title="All fees are paid." description="No dues to follow up on." />
+              </div>
             )}
           </div>
-        </section>
+        </Panel>
       </div>
 
       {/* 4 — Recent Payments + Payment Modes (concise activity summary).
-          Recent Payments is a SUMMARY only — "View All Transactions" goes to
-          the authoritative ledger. Payment Modes is the analytical mix. */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <section className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-foreground">Recent Payments</h3>
-            <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => onNavigate('transactions')}>
-              View All Transactions <ArrowRight className="h-3 w-3" />
-            </Button>
-          </div>
-          {recentPayments.length > 0 ? (
-            <div className="divide-y divide-border">
-              {recentPayments.map((t, i) => (
-                <motion.button
-                  key={t.id}
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                  onClick={() => onNavigate('transactions')}
-                  className="w-full flex items-center gap-3 py-2.5 px-1.5 text-left hover:bg-muted/30 rounded-md transition-colors"
-                >
-                  <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-md ring-1', modeAccent(t.mode))}>
-                    <ModeIcon mode={t.mode} className="h-3.5 w-3.5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate">{t.studentName}</p>
-                    <p className="text-[10px] text-muted-foreground">{t.className} · {formatDate(t.date)}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-xs font-bold tabular-nums text-emerald-600">{formatINR(t.amount, true)}</p>
-                    <p className="text-[9px] text-muted-foreground font-mono">{t.receiptNo}</p>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-          ) : (
-            <FeeEmptyState
-              icon={<Banknote className="h-5 w-5" />}
-              title="No payments recorded yet."
-              description="Successful payments will appear here as they come in."
-            />
-          )}
-        </section>
+          Recent Payments is a SUMMARY only — "All transactions" goes to the
+          authoritative ledger. Payment Modes is the analytical mix. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 min-w-0">
+          <Panel
+            title="Recent Payments"
+            subtitle="latest collections across all counters"
+            className="h-full"
+            action={
+              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1.5" onClick={() => onNavigate('transactions')}>
+                All transactions <ArrowRight className="h-3 w-3" />
+              </Button>
+            }
+            bodyClassName="p-0"
+          >
+            {recentPayments.length > 0 ? (
+              <div className="divide-y divide-border max-h-72 overflow-y-auto custom-scrollbar py-1">
+                {recentPayments.map((t, i) => (
+                  <motion.button
+                    key={t.id}
+                    type="button"
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    onClick={() => onNavigate('transactions')}
+                    aria-label={`View transaction for ${t.studentName}, ${formatINR(t.amount, true)} via ${t.mode}`}
+                    className={listPanelBtnClass}
+                  >
+                    <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-md ring-1', modeAccent(t.mode))}>
+                      <ModeIcon mode={t.mode} className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold truncate">{t.studentName}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{t.className} · {formatDate(t.date)}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(t.amount, true)}</p>
+                      <p className="text-[9px] text-muted-foreground font-mono">{t.receiptNo}</p>
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+            ) : (
+              <div className="py-6">
+                <FeeEmptyState
+                  icon={<Banknote className="h-5 w-5" />}
+                  title="No payments recorded yet."
+                  description="Successful payments will appear here as they come in."
+                />
+              </div>
+            )}
+          </Panel>
+        </div>
 
-        <section>
-          <div className="flex items-baseline justify-between mb-3">
-            <h3 className="text-sm font-semibold text-foreground">Payment Modes</h3>
-            <span className="text-[10px] text-muted-foreground">share of collected</span>
-          </div>
+        <Panel title="Payment Modes" subtitle="share of collected" className="h-full" bodyClassName="pt-1">
           {modeMix.length > 0 ? (
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {modeMix.map((m, i) => (
                 <motion.div
                   key={m.mode}
@@ -345,80 +438,12 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
               ))}
             </div>
           ) : (
-            <FeeEmptyState icon={<Wallet className="h-5 w-5" />} title="No payments yet." />
+            <div className="py-6">
+              <FeeEmptyState icon={<Wallet className="h-5 w-5" />} title="No payments yet." />
+            </div>
           )}
-        </section>
+        </Panel>
       </div>
-
-      {/* 5 — Outstanding Aging (compact horizontal buckets) */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Outstanding Aging</h3>
-            <p className="text-[11px] text-muted-foreground">students by overdue period</p>
-          </div>
-          <span className="text-[10px] text-muted-foreground tabular-nums">
-            Outstanding {formatINR(analytics.totalOutstanding, true)}
-            {analytics.totalLateFee > 0 && <> · Late fee {formatINR(analytics.totalLateFee, true)}</>}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {[
-            { label: 'Due Soon', value: analytics.aging.dueSoon, cls: 'text-amber-600' },
-            { label: '1–7 days', value: analytics.aging['1-7'], cls: 'text-amber-600' },
-            { label: '8–30 days', value: analytics.aging['8-30'], cls: 'text-orange-600' },
-            { label: '31–60 days', value: analytics.aging['31-60'], cls: 'text-rose-600' },
-            { label: '60+ days', value: analytics.aging['60+'], cls: 'text-rose-700' },
-          ].map((a, i) => (
-            <motion.button
-              key={a.label}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.04 * i }}
-              onClick={() => onNavigate('accounts')}
-              disabled={a.value === 0}
-              className={cn(
-                'text-left border-l-2 pl-3 py-1 transition-colors',
-                a.value > 0 ? 'border-border hover:border-emerald-500/40 cursor-pointer' : 'border-border/40 opacity-60 cursor-default',
-              )}
-            >
-              <p className={cn('text-xl font-bold tabular-nums leading-none', a.value > 0 ? a.cls : 'text-muted-foreground')}>
-                {a.value}
-              </p>
-              <p className="text-[10px] text-muted-foreground mt-1">{a.label}</p>
-            </motion.button>
-          ))}
-        </div>
-      </section>
-
-      {/* 6 — Class-wise Collection (stream-aware) */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Class-wise Collection</h3>
-            <p className="text-[11px] text-muted-foreground">top classes by outstanding</p>
-          </div>
-          <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => onNavigate('accounts')}>
-            View All <ArrowRight className="h-3 w-3" />
-          </Button>
-        </div>
-        <MiniBars
-          data={topClasses.map((c) => ({
-            label: `${classDisplayName(c.className, c.classId)} (${c.students})`,
-            value: c.outstanding,
-            secondary: c.collected,
-            color: c.collectionRate >= 75 ? 'oklch(0.55 0.14 162)' : c.collectionRate >= 50 ? 'oklch(0.65 0.16 75)' : 'oklch(0.62 0.2 25)',
-          }))}
-          formatValue={(n) => formatINR(n, true)}
-          height={140}
-          showSecondary
-        />
-        <div className="flex items-center gap-3 mt-2 text-[9px] text-muted-foreground">
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-foreground/60" /> Outstanding</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/30" /> Collected</span>
-        </div>
-      </section>
     </div>
   )
 }
-

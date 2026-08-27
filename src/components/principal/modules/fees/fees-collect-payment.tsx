@@ -32,7 +32,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { useFeeStore, type PaymentMode, type StudentFeeAccount } from '@/lib/store/fee-store'
+import { useFeeStore, useFeeData, type PaymentMode, type StudentFeeAccount } from '@/lib/store/fee-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { formatINR } from '@/lib/format'
 import { ModeIcon, modeAccent, FeeStatusBadge } from './fees-shared'
@@ -50,9 +50,30 @@ interface Props {
   onRecorded?: () => void
 }
 
+// FEE-POLICY — purposes reflect the 2025-26 schedule (no fictional heads).
 const PURPOSE_OPTIONS = [
-  'Annual Fee — Q1', 'Annual Fee — Q2', 'Annual Fee — Q3', 'Annual Fee — Q4',
-  'Partial Payment', 'Transport Fee', 'Exam Fee', 'Late Fine', 'Library Fee', 'Activity Fee',
+  'Tuition — Monthly Instalment',
+  'Term 1 Tuition (Apr–Jun)',
+  'Term 2 Tuition (Jul–Sep)',
+  'Term 3 Tuition (Oct–Dec)',
+  'Examination Fee — Session',
+  'Board Form Fee',
+  'Transport Fee — Monthly',
+  'Registration Fee',
+  'Late Fee',
+]
+
+const CORE_FEE_HEADS = [
+  'Tuition',
+  'Management & Maintenance',
+  'Transport',
+  'Examination Fee',
+  'Board Form Fee',
+  'Registration Fee',
+  'Physics Practical Fee',
+  'Chemistry Practical Fee',
+  'Biology Practical Fee',
+  'Late Fee',
 ]
 
 export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, onRecorded }: Props) {
@@ -60,6 +81,11 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
   const recordPayment = useFeeStore((s) => s.recordPayment)
   const paymentModes = useFeeStore((s) => s.paymentModes)
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
+  // FEE-POLICY single-source: every rupee shown here derives from the
+  // canonical computeAccount pipeline — identical to the Student Accounts
+  // tab and the student drawer (no duplicated due-math).
+  const { accounts: feeAccounts } = useFeeData()
+  const feeAccountMap = useMemo(() => new Map(feeAccounts.map((a) => [a.studentId, a])), [feeAccounts])
 
   const [stage, setStage] = useState<Stage>('find')
   const [search, setSearch] = useState('')
@@ -142,9 +168,14 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
     ).slice(0, 12)
   }, [students, search])
 
-  const outstanding = selectedStudent ? Math.max(0, selectedStudent.feeTotal - (selectedStudent.scholarship ?? 0) - selectedStudent.feePaid) : 0
-  const lateFee = selectedStudent && selectedStudent.feeStatus === 'Pending' ? 1500 : 0
-  const totalDue = outstanding + lateFee
+  // Canonical figures for the SELECTED student (outstanding excludes late
+  // fee; totalDue includes it — identical to Student Accounts).
+  const selectedAccount = selectedStudent
+    ? feeAccounts.find((a) => a.studentId === selectedStudent.id)
+    : undefined
+  const outstanding = selectedAccount?.outstanding ?? 0
+  const lateFee = selectedAccount?.lateFee ?? 0
+  const totalDue = selectedAccount?.totalDue ?? 0
 
   const handleSubmit = () => {
     // Idempotency guard: prevent re-entry from a double-click or a stale
@@ -298,7 +329,7 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
                 </div>
                 <div className="space-y-1 max-h-[40vh] overflow-y-auto">
                   {searchResults.map((s) => {
-                    const out = Math.max(0, s.feeTotal - (s.scholarship ?? 0) - s.feePaid)
+                    const out = feeAccountMap.get(s.id)?.outstanding ?? 0
                     return (
                       <button
                         key={s.id}
@@ -446,7 +477,7 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
                     <div className="space-y-1.5">
                       <Label className="text-[11px]">Fee Head</Label>
                       <select value={feeHead} onChange={(e) => setFeeHead(e.target.value)} className="w-full h-9 rounded-md border border-border bg-background px-2 text-xs">
-                        {['Tuition', 'Transport', 'Library', 'Exam', 'Activity', 'Late Fee', 'Admission', 'Registration'].map((h) => (
+                        {CORE_FEE_HEADS.map((h) => (
                           <option key={h} value={h}>{h}</option>
                         ))}
                       </select>

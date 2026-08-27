@@ -21,18 +21,32 @@
  *   - Detail drawer wired to real FeeTransaction fields (incl. gateway,
  *     settlement, reconciliation, refund fields) and to the student account
  *     ledger for the balance before/after computation.
+ *
+ * Phase 2-e polish (FEE-SETTINGS-TXN): summary chips became three benchmark
+ * micro-stat tiles; filters moved into an always-visible SearchFilterBar-style
+ * toolbar (search + Class/Mode/Status/Fee Head/Type selects + active-count
+ * badge + reset ghost + CSV export); the Type column merged into the Fee Head
+ * cell as a tiny category dot (Core emerald / Exam cyan / Additional violet);
+ * Collected By now lives in the detail drawer only; ledger table classes
+ * tightened to the module table recipe (h-10 muted/40 header · py-2.5 text-xs
+ * cells · tabular-nums numerics · mono receipt refs · hover:bg-muted/30).
+ * All handlers, exports and the detail drawer flow are behaviour-identical.
  */
 
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Search, Filter, ChevronDown, Download, Printer, Eye,
+  Search, Download, Printer, Eye,
   Receipt as ReceiptIcon, RefreshCw, X, User, Calendar,
   CreditCard, Landmark, ArrowRightLeft, ShieldCheck, AlertCircle,
   FileText, Banknote, Smartphone, Wallet,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet'
@@ -42,7 +56,7 @@ import {
 } from '@/lib/store/fee-store'
 import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { FeePanel, FeeEmptyState, ModeIcon, modeAccent, FeeStatusBadge, statusAccent } from './fees-shared'
+import { FeePanel, FeeEmptyState, ModeIcon, modeAccent, FeeStatusBadge } from './fees-shared'
 import { ReceiptPreview, downloadReceiptHTML, printReceipt } from './fees-receipt'
 import { toast } from 'sonner'
 
@@ -52,6 +66,14 @@ const TXN_TYPE_META: Record<TransactionCategory, { label: string; className: str
   CORE: { label: 'Core Fee', className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20' },
   EXAMINATION: { label: 'Exam Fee', className: 'bg-orange-500/10 text-orange-700 dark:text-orange-300 ring-1 ring-orange-500/20' },
   ADDITIONAL: { label: 'Additional', className: 'bg-violet-500/10 text-violet-700 dark:text-violet-300 ring-1 ring-violet-500/20' },
+}
+
+// Category dot tones used where the Type column merges into the Fee Head
+// cell (spec §7): Core = emerald, Examination = cyan, Additional = violet.
+const TXN_TYPE_DOT: Record<TransactionCategory, { label: string; dot: string }> = {
+  CORE: { label: 'Core Fee', dot: 'bg-emerald-500' },
+  EXAMINATION: { label: 'Examination Fee', dot: 'bg-cyan-500' },
+  ADDITIONAL: { label: 'Additional Charge', dot: 'bg-violet-500' },
 }
 
 export function TransactionTypeBadge({ category, className }: { category: TransactionCategory; className?: string }) {
@@ -72,13 +94,24 @@ interface Props {
   onCollect?: () => void
 }
 
+// Benchmark micro-stat tile (matches the Student Accounts StatTile recipe):
+// muted chip chrome, 9px uppercase label, bold tabular value, optional sub line.
+function TxStatTile({ label, value, sub, valueClassName }: { label: string; value: React.ReactNode; sub?: React.ReactNode; valueClassName?: string }) {
+  return (
+    <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
+      <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">{label}</p>
+      <p className={cn('text-sm font-bold tabular-nums mt-0.5', valueClassName)}>{value}</p>
+      {sub && <p className="text-[9px] text-muted-foreground mt-0.5 truncate">{sub}</p>}
+    </div>
+  )
+}
+
 export function FeesTransactionsSection({ data }: Props) {
   const { transactions, accounts } = data
   const reprintReceipt = useFeeStore((s) => s.reprintReceipt)
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
 
   const [search, setSearch] = useState('')
-  const [showFilters, setShowFilters] = useState(false)
   const [modeFilter, setModeFilter] = useState<'all' | PaymentMode>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | PaymentStatus>('all')
   const [classFilter, setClassFilter] = useState('all')
@@ -126,6 +159,12 @@ export function FeesTransactionsSection({ data }: Props) {
 
   const activeFiltersCount = (modeFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (classFilter !== 'all' ? 1 : 0) + (feeHeadFilter !== 'all' ? 1 : 0) + (typeFilter !== 'all' ? 1 : 0)
 
+  // Reset ghost in the toolbar — same fields the old collapsible panel's
+  // "Clear Filters" button cleared (search text intentionally untouched).
+  const handleResetFilters = () => {
+    setModeFilter('all'); setStatusFilter('all'); setClassFilter('all'); setFeeHeadFilter('all'); setTypeFilter('all')
+  }
+
   const handleReprint = (t: FeeTransaction) => {
     reprintReceipt(t.id, 'Principal')
     toast.success('Receipt reprinted', { description: `${t.receiptNo} — no second transaction created.` })
@@ -166,184 +205,176 @@ export function FeesTransactionsSection({ data }: Props) {
   return (
     <div className="space-y-4">
       {/* Purpose header — distinguishes this full ledger from Collections' Recent Payments snapshot */}
-      <div>
-        <h3 className="text-sm font-semibold tracking-tight text-foreground">Complete Payment Ledger</h3>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
-          Search, filter, verify, print, download, or reprint any receipt. Click any row for the full transaction detail. The authoritative transaction history.
-        </p>
-      </div>
+      <h3 className="text-sm font-semibold tracking-tight text-foreground">Complete Payment Ledger</h3>
 
-      {/* Summary strip (FIX: separate Success vs Total counts; amounts from Success only) */}
+      {/* Summary strip — benchmark micro-stat tiles (amounts from Success only; the
+          Transactions tile carries the success vs other split as its sub line) */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg border border-border bg-card p-2.5">
-          <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Transactions</p>
-          <p className="text-base font-bold tabular-nums mt-0.5">{totalCount}</p>
-          <p className="text-[9px] text-muted-foreground">
-            <span className="text-emerald-600 font-semibold">{successCount} successful</span>
-            {' · '}
-            <span className="text-amber-600 font-semibold">{totalCount - successCount} other</span>
-          </p>
+        <TxStatTile
+          label="Transactions"
+          value={totalCount}
+          sub={
+            <>
+              <span className="text-emerald-600 font-semibold">{successCount} successful</span>
+              {' · '}
+              <span className="text-amber-600 font-semibold">{totalCount - successCount} other</span>
+            </>
+          }
+        />
+        <TxStatTile label="Total Amount" value={formatINR(totalAmount, true)} valueClassName="text-emerald-600" sub="successful only · across filtered rows" />
+        <TxStatTile label="Avg. Transaction" value={formatINR(avgAmount, true)} sub="per successful payment" />
+      </div>
+
+      {/* Toolbar — SearchFilterBar-style composition: search (pl-9 h-9 text-xs)
+          + compact facet Selects (Class · Mode · Status · Fee Head · Type) +
+          active-count badge + reset ghost + CSV export right-aligned. Same
+          filter setters as the previous collapsible panel, now always visible. */}
+      <div className="flex flex-col lg:flex-row gap-2 items-stretch lg:items-center justify-between">
+        <div className="flex flex-col md:flex-row gap-2 items-stretch md:items-center md:flex-wrap flex-1 min-w-0">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student / receipt / transaction ID…" className="pl-9 h-9 text-xs" />
+          </div>
+          <Select value={classFilter} onValueChange={(v) => setClassFilter(v)}>
+            <SelectTrigger className="h-9 text-xs w-full md:w-[130px] xl:w-[140px]"><SelectValue placeholder="All Classes" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Classes</SelectItem>
+              {classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={modeFilter} onValueChange={(v) => setModeFilter(v as 'all' | PaymentMode)}>
+            <SelectTrigger className="h-9 text-xs w-full md:w-[130px] xl:w-[140px]"><SelectValue placeholder="All Modes" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Modes</SelectItem>
+              <SelectItem value="UPI">UPI</SelectItem>
+              <SelectItem value="Card">Card</SelectItem>
+              <SelectItem value="Net Banking">Net Banking</SelectItem>
+              <SelectItem value="Cash">Cash</SelectItem>
+              <SelectItem value="Cheque">Cheque</SelectItem>
+              <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | PaymentStatus)}>
+            <SelectTrigger className="h-9 text-xs w-full md:w-[130px] xl:w-[140px]"><SelectValue placeholder="All Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="Success">Success</SelectItem>
+              <SelectItem value="Pending">Pending</SelectItem>
+              <SelectItem value="Under Verification">Under Verification</SelectItem>
+              <SelectItem value="Failed">Failed</SelectItem>
+              <SelectItem value="Refunded">Refunded</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={feeHeadFilter} onValueChange={(v) => setFeeHeadFilter(v)}>
+            <SelectTrigger className="h-9 text-xs w-full md:w-[130px] xl:w-[140px]"><SelectValue placeholder="All Heads" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Heads</SelectItem>
+              {feeHeads.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {/* FINANCIAL TYPE — Core Fee / Examination Fee / Additional Charge */}
+          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as 'all' | TransactionCategory)}>
+            <SelectTrigger className="h-9 text-xs w-full md:w-[130px] xl:w-[140px]"><SelectValue placeholder="All Types" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="CORE">Core Fee</SelectItem>
+              <SelectItem value="EXAMINATION">Examination Fee</SelectItem>
+              <SelectItem value="ADDITIONAL">Additional Charge</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <div className="rounded-lg border border-border bg-card p-2.5">
-          <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Total Amount</p>
-          <p className="text-base font-bold tabular-nums mt-0.5 text-emerald-600">{formatINR(totalAmount, true)}</p>
-          <p className="text-[9px] text-muted-foreground">successful only · across filtered rows</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-2.5">
-          <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Avg. Transaction</p>
-          <p className="text-base font-bold tabular-nums mt-0.5">{formatINR(avgAmount, true)}</p>
-          <p className="text-[9px] text-muted-foreground">per successful payment</p>
+        <div className="flex items-center gap-2 shrink-0">
+          {activeFiltersCount > 0 && (
+            <>
+              <Badge variant="secondary" className="text-[11px] font-semibold tabular-nums">
+                {activeFiltersCount} active
+              </Badge>
+              <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={handleResetFilters}>
+                <X className="h-3.5 w-3.5" /> Reset
+              </Button>
+            </>
+          )}
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExport}>
+            <Download className="h-3.5 w-3.5" /> Export
+          </Button>
         </div>
       </div>
 
-      {/* Search + filter bar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student / receipt / transaction ID…" className="pl-8 h-8 text-xs" />
-        </div>
-        <Button variant="outline" size="sm" className={cn('h-8 text-xs gap-1', showFilters && 'border-primary')} onClick={() => setShowFilters((v) => !v)}>
-          <Filter className="h-3.5 w-3.5" /> Filters
-          {activeFiltersCount > 0 && <span className="inline-flex items-center justify-center h-3.5 px-1 rounded-full text-[8px] font-bold bg-primary text-primary-foreground">{activeFiltersCount}</span>}
-          <ChevronDown className={cn('h-3 w-3 transition-transform', showFilters && 'rotate-180')} />
-        </Button>
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExport}>
-          <Download className="h-3.5 w-3.5" /> Export
-        </Button>
-      </div>
-
-      <AnimatePresence>
-        {showFilters && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-            <div className="rounded-lg border border-border bg-card p-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Class</label>
-                <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className="w-full h-7 text-xs rounded-md border border-border bg-background px-2 mt-1">
-                  <option value="all">All Classes</option>
-                  {classes.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Payment Mode</label>
-                <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value as any)} className="w-full h-7 text-xs rounded-md border border-border bg-background px-2 mt-1">
-                  <option value="all">All Modes</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Card">Card</option>
-                  <option value="Net Banking">Net Banking</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Cheque">Cheque</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Status</label>
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="w-full h-7 text-xs rounded-md border border-border bg-background px-2 mt-1">
-                  <option value="all">All Status</option>
-                  <option value="Success">Success</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Under Verification">Under Verification</option>
-                  <option value="Failed">Failed</option>
-                  <option value="Refunded">Refunded</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Fee Head</label>
-                <select value={feeHeadFilter} onChange={(e) => setFeeHeadFilter(e.target.value)} className="w-full h-7 text-xs rounded-md border border-border bg-background px-2 mt-1">
-                  <option value="all">All Heads</option>
-                  {feeHeads.map((h) => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-              {/* FINANCIAL TYPE — Core Fee / Examination Fee / Additional Charge */}
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Type</label>
-                <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as any)} className="w-full h-7 text-xs rounded-md border border-border bg-background px-2 mt-1">
-                  <option value="all">All Types</option>
-                  <option value="CORE">Core Fee</option>
-                  <option value="EXAMINATION">Examination Fee</option>
-                  <option value="ADDITIONAL">Additional Charge</option>
-                </select>
-              </div>
-              {activeFiltersCount > 0 && (
-                <div className="col-span-full flex items-center justify-end gap-1 pt-1 border-t border-border/40 mt-1">
-                  <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => { setModeFilter('all'); setStatusFilter('all'); setClassFilter('all'); setFeeHeadFilter('all'); setTypeFilter('all') }}>
-                    <X className="h-3 w-3" /> Clear Filters
-                  </Button>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Transactions table */}
+      {/* Transactions table — module ledger recipe: flush p-0 body inside the
+          rounded-xl bordered panel; muted/40 uppercase header row; py-2.5
+          text-xs cells; hover:bg-muted/30 rows */}
       <FeePanel bodyClassName="p-0">
         <div className="overflow-x-auto max-h-[36rem]">
           <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
-              <tr>
-                <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Receipt</th>
-                <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Student</th>
-                <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground hidden md:table-cell">Class</th>
-                <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground hidden lg:table-cell">Fee Head</th>
-                <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground hidden md:table-cell">Type</th>
-                <th className="text-right px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Amount</th>
-                <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground hidden sm:table-cell">Mode</th>
-                <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
-                <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground hidden lg:table-cell">Date</th>
-                <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground hidden xl:table-cell">Collected By</th>
-                <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Actions</th>
+            <thead className="sticky top-0 z-10 bg-muted/40 shadow-[0_1px_0_0_hsl(var(--border))]">
+              <tr className="h-10">
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap">Receipt</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap">Student</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap hidden lg:table-cell">Class</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap hidden md:table-cell">Fee Head</th>
+                <th className="text-right px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap">Amount</th>
+                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">Mode</th>
+                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap">Status</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap hidden lg:table-cell">Date</th>
+                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((t) => (
-                <tr
-                  key={t.id}
-                  className="border-t border-border/30 hover:bg-muted/20 even:bg-muted/10 cursor-pointer transition-colors"
-                  onClick={() => setDetailTxn(t)}
-                >
-                  <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground whitespace-nowrap">{t.receiptNo}</td>
-                  <td className="px-3 py-2">
-                    <p className="font-medium text-[11px]">{t.studentName}</p>
-                    <p className="text-[9px] text-muted-foreground font-mono">{t.admissionNo}</p>
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground hidden md:table-cell">{t.className}</td>
-                  <td className="px-3 py-2 text-muted-foreground hidden lg:table-cell">{t.feeHead}</td>
-                  <td className="px-3 py-2 text-center hidden md:table-cell">
-                    <TransactionTypeBadge category={txnCategory(t)} />
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatINR(t.amount)}</td>
-                  <td className="px-3 py-2 text-center hidden sm:table-cell">
-                    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ring-1', modeAccent(t.mode))}>
-                      <ModeIcon mode={t.mode} className="h-2.5 w-2.5" />
-                      {t.mode}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-center"><FeeStatusBadge status={t.status} /></td>
-                  <td className="px-3 py-2 text-muted-foreground hidden lg:table-cell whitespace-nowrap text-[10px]">{formatDate(t.date)}</td>
-                  <td className="px-3 py-2 text-muted-foreground hidden xl:table-cell text-[10px]">{t.collectedBy}</td>
-                  <td className="px-3 py-2 text-center">
-                    <div
-                      className="inline-flex items-center gap-0.5"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button onClick={() => setDetailTxn(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-primary hover:bg-primary/10 transition-colors" title="View Detail">
-                        <Eye className="h-3 w-3" />
-                      </button>
-                      <button onClick={() => printReceipt(t, receiptSettings)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Print">
-                        <Printer className="h-3 w-3" />
-                      </button>
-                      <button onClick={() => downloadReceiptHTML(t, receiptSettings)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Download">
-                        <Download className="h-3 w-3" />
-                      </button>
-                      <button onClick={() => handleReprint(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-amber-600 hover:bg-amber-500/10 transition-colors" title="Reprint (no duplicate)">
-                        <RefreshCw className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((t) => {
+                const dotMeta = TXN_TYPE_DOT[txnCategory(t)] ?? TXN_TYPE_DOT.CORE
+                return (
+                  <tr
+                    key={t.id}
+                    className="border-t border-border/30 hover:bg-muted/30 cursor-pointer transition-colors"
+                    onClick={() => setDetailTxn(t)}
+                  >
+                    <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground whitespace-nowrap">{t.receiptNo}</td>
+                    <td className="px-3 py-2.5 text-xs">
+                      <p className="font-medium">{t.studentName}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono">{t.admissionNo}</p>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell">{t.className}</td>
+                    {/* Fee Head + merged category chip (Type column removed): tiny
+                        colored dot — Core emerald / Exam cyan / Additional violet */}
+                    <td className="px-3 py-2.5 text-xs hidden md:table-cell max-w-[220px]">
+                      <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full" title={`${dotMeta.label} · ${t.feeHead}`}>
+                        <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', dotMeta.dot)} aria-hidden />
+                        <span className="truncate text-muted-foreground">{t.feeHead}</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums font-medium whitespace-nowrap">{formatINR(t.amount)}</td>
+                    <td className="px-3 py-2.5 text-center hidden sm:table-cell">
+                      <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ring-1', modeAccent(t.mode))}>
+                        <ModeIcon mode={t.mode} className="h-2.5 w-2.5" />
+                        {t.mode}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-center"><FeeStatusBadge status={t.status} /></td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell whitespace-nowrap">{formatDate(t.date)}</td>
+                    <td className="px-3 py-2.5 text-center">
+                      <div
+                        className="inline-flex items-center gap-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button onClick={() => setDetailTxn(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-primary hover:bg-primary/10 transition-colors" title="View Detail">
+                          <Eye className="h-3 w-3" />
+                        </button>
+                        <button onClick={() => printReceipt(t, receiptSettings)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Print">
+                          <Printer className="h-3 w-3" />
+                        </button>
+                        <button onClick={() => downloadReceiptHTML(t, receiptSettings)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Download">
+                          <Download className="h-3 w-3" />
+                        </button>
+                        <button onClick={() => handleReprint(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-amber-600 hover:bg-amber-500/10 transition-colors" title="Reprint (no duplicate)">
+                          <RefreshCw className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
               {filtered.length === 0 && (
-                <tr><td colSpan={10} className="py-12"><FeeEmptyState icon={<ReceiptIcon className="h-6 w-6" />} title="No transactions match your filters" description="Try adjusting the search or filter criteria." /></td></tr>
+                <tr><td colSpan={9} className="py-12"><FeeEmptyState icon={<ReceiptIcon className="h-6 w-6" />} title="No transactions match your filters" description="Try adjusting the search or filter criteria." /></td></tr>
               )}
             </tbody>
           </table>

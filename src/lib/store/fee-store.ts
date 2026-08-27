@@ -58,9 +58,11 @@ import {
   SEED_CASH_REQUESTS,
   SEED_AUDIT,
   SEED_ADDITIONAL_CHARGES,
+  isHeadApplicableToStudent,
+  DEFAULT_ADMISSION_POLICY,
+  CURRENT_ACADEMIC_YEAR,
 } from './fee-store-data'
-
-// Re-exports — preserves the pre-modularization public API of this module.
+import type { AdmissionFeePolicy } from './fee-store-data'
 export {
   FREQUENCY_MULTIPLIER,
   VALID_FREQUENCIES,
@@ -72,7 +74,9 @@ export {
   DEFAULT_CONCESSION_RULE,
   DEFAULT_RECEIPT_SETTINGS,
   SEED_FEE_TRANSACTIONS,
+  CURRENT_ACADEMIC_YEAR,
 }
+export type { AdmissionFeePolicy }
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -833,6 +837,8 @@ interface FeeState {
   paymentModes: PaymentModeConfig[]
   lateFeeRule: LateFeeRule
   concessionRule: ConcessionRule
+  /** One-time entry-fee policy (admission events only — never monthly billing). */
+  admissionPolicy: AdmissionFeePolicy
   receiptSettings: ReceiptSettings
   receiptCounter: number
   // ─── Payment infrastructure state (Phase 4) ───
@@ -892,6 +898,7 @@ interface FeeState {
   togglePaymentMode: (id: PaymentMode) => void
   updateLateFeeRule: (patch: Partial<LateFeeRule>) => void
   updateConcessionRule: (patch: Partial<ConcessionRule>) => void
+  updateAdmissionPolicy: (patch: Partial<AdmissionFeePolicy>) => void
   updateReceiptSettings: (patch: Partial<ReceiptSettings>) => void
   // ─── Phase 4 — payment infrastructure mutations ──────────────────
   connectGateway: (provider: GatewayProvider, merchantId: string, apiKeyId: string, environment: GatewayEnvironment) => void
@@ -1049,6 +1056,7 @@ export const useFeeStore = create<FeeState>()(
   paymentModes: DEFAULT_PAYMENT_MODES,
   lateFeeRule: DEFAULT_LATE_FEE_RULE,
   concessionRule: DEFAULT_CONCESSION_RULE,
+  admissionPolicy: DEFAULT_ADMISSION_POLICY,
   receiptSettings: DEFAULT_RECEIPT_SETTINGS,
   receiptCounter: 1060,
   // ─── Payment infrastructure state (Phase 4) ───
@@ -1144,7 +1152,7 @@ export const useFeeStore = create<FeeState>()(
       verifiedBy: input.mode === 'Cash' ? null : input.collectedBy,
       verifiedAt: input.mode === 'Cash' ? null : new Date().toISOString(),
       referenceNo: input.referenceNo ?? null,
-      academicYear: '2025-2026',
+      academicYear: CURRENT_ACADEMIC_YEAR,
       category: resolvedCategory,
       ...(input.additionalChargeId ? { additionalChargeId: input.additionalChargeId } : {}),
       meta: input.meta,
@@ -1193,7 +1201,7 @@ export const useFeeStore = create<FeeState>()(
       verifiedBy: actor,
       verifiedAt: new Date().toISOString(),
       referenceNo: null,
-      academicYear: '2025-2026',
+      academicYear: CURRENT_ACADEMIC_YEAR,
       paymentSource: 'offline',
     }
     set({
@@ -2096,6 +2104,10 @@ export const useFeeStore = create<FeeState>()(
     set((state) => ({ concessionRule: { ...state.concessionRule, ...patch } }))
   },
 
+  updateAdmissionPolicy: (patch) => {
+    set((state) => ({ admissionPolicy: { ...state.admissionPolicy, ...patch } }))
+  },
+
   updateReceiptSettings: (patch) => {
     set((state) => ({ receiptSettings: { ...state.receiptSettings, ...patch } }))
   },
@@ -2402,62 +2414,36 @@ export const useFeeStore = create<FeeState>()(
   // `additionalCharges` array (event-based charges like the Class 8
   // Educational Tour) when the persisted state predates the key. Never
   // overwrites user-created charges; never touches transactions.
-  version: 3,
+  version: 5,
   migrate: (persistedState: any, fromVersion: number) => {
-    if (fromVersion < 2 && Array.isArray(persistedState?.feeStructures)) {
-      // Map of className → canonical classId for the seed structures.
-      // Used to set `classId` + `applicableClassIds` on each migrated
-      // structure. Structures whose className isn't in this map (e.g.
-      // user-created drafts with className "Class 9 — Copy") keep
-      // classId undefined and the matcher falls back to className.
-      const classNameToClassId: Record<string, { classId: string; applicableClassIds: string[] }> = {
-        'Pre-Nursery': { classId: 'C01', applicableClassIds: ['C01'] },
-        'Class 2':    { classId: 'C05', applicableClassIds: ['C05'] },
-        'Class 6':    { classId: 'C09', applicableClassIds: ['C09'] },
-        'Class 9':    { classId: 'C12', applicableClassIds: ['C12'] },
-        'Class 10':   { classId: 'C13', applicableClassIds: ['C13'] },
-        // Senior Secondary stream classes share one structure — both
-        // C15-PCM and C15-PCB are applicable.
-        'Class 12':   { classId: 'C15-PCM', applicableClassIds: ['C15-PCM', 'C15-PCB'] },
+    // v5 — session rollover reset: the whole demo dataset moved from the
+    // archived 2025-26 session into the live 2026-27 session (CURRENT_ACADEMIC_YEAR).
+    // Persisted state below v5 carries stale 2025-26 dates, receipt numbers and
+    // academic-year labels that contradict the new seeds (dead Today/Week/Month
+    // tiles), so it is replaced wholesale with the fresh seeds (intentional
+    // product decision — replaces stale demo values).
+    if (fromVersion < 5) {
+      return {
+        transactions: SEED_TRANSACTIONS,
+        cashRequests: SEED_CASH_REQUESTS,
+        audit: SEED_AUDIT,
+        feeStructures: FEE_STRUCTURES,
+        versions: SEED_VERSIONS,
+        changeLog: [],
+        additionalCharges: SEED_ADDITIONAL_CHARGES,
+        paymentModes: DEFAULT_PAYMENT_MODES,
+        lateFeeRule: DEFAULT_LATE_FEE_RULE,
+        concessionRule: DEFAULT_CONCESSION_RULE,
+        admissionPolicy: DEFAULT_ADMISSION_POLICY,
+        receiptSettings: DEFAULT_RECEIPT_SETTINGS,
+        receiptCounter: 1060,
+        gatewayConfig: SEED_GATEWAY_CONFIG,
+        bankAccounts: SEED_BANK_ACCOUNTS,
+        upiQrConfigs: SEED_UPI_QR_CONFIGS,
+        settlements: SEED_SETTLEMENTS,
+        reconciliationRecords: SEED_RECONCILIATION_RECORDS,
+        webhookEvents: SEED_WEBHOOK_EVENTS,
       }
-      // Map of head name → master catalogue id (matches the seeds in
-      // src/lib/store/school-settings-store/initial-state.ts). Used to
-      // set `catalogueId` + `category` on each migrated head. Heads
-      // whose name isn't in this map (e.g. user-typed custom names)
-      // keep catalogueId undefined; the Coverage Matrix UI lists them
-      // under "Uncatalogued".
-      const headNameToCatalogue: Record<string, { catalogueId: string; category: FeeHeadCategory }> = {
-        'Tuition':               { catalogueId: 'fh-1', category: 'Tuition' },
-        'Admission Fee':         { catalogueId: 'fh-2', category: 'Admission' },
-        'Activity':              { catalogueId: 'fh-3', category: 'Activity' },
-        'Computer & Science Lab Fee': { catalogueId: 'fh-4', category: 'Lab' },
-        'Library':               { catalogueId: 'fh-5', category: 'Library' },
-        'Examination Fee':       { catalogueId: 'fh-6', category: 'Exam' },
-        'Transport':             { catalogueId: 'fh-7', category: 'Transport' },
-        'Board Examination Fee': { catalogueId: 'fh-8', category: 'Board' },
-      }
-      persistedState.feeStructures = persistedState.feeStructures.map((fs: any) => {
-        if (fs.classId) return fs // already migrated by a prior v2 load
-        const classInfo = classNameToClassId[fs.className]
-        const components = Array.isArray(fs.components)
-          ? fs.components.map((h: any) => {
-              if (h.catalogueId) return h
-              const cat = headNameToCatalogue[h.name]
-              return cat ? { ...h, ...cat } : h
-            })
-          : fs.components
-        return {
-          ...fs,
-          ...(classInfo ? { classId: classInfo.classId, applicableClassIds: classInfo.applicableClassIds } : {}),
-          components,
-        }
-      })
-    }
-    // v3 — seed additionalCharges for persisted sessions that predate the
-    // key (shallow-merge would keep the seed anyway, but an explicit seed
-    // also covers the case where the persisted object exists yet is null).
-    if (fromVersion < 3 && !Array.isArray(persistedState?.additionalCharges)) {
-      persistedState.additionalCharges = SEED_ADDITIONAL_CHARGES
     }
     return persistedState
   },
@@ -2474,6 +2460,7 @@ export const useFeeStore = create<FeeState>()(
     paymentModes: state.paymentModes,
     lateFeeRule: state.lateFeeRule,
     concessionRule: state.concessionRule,
+    admissionPolicy: state.admissionPolicy,
     receiptSettings: state.receiptSettings,
     receiptCounter: state.receiptCounter,
     gatewayConfig: state.gatewayConfig,
@@ -2516,8 +2503,17 @@ function computeAccount(
   // compatible with the pre-FEE-PER-CLASS seed (range names like
   // "Class 9–10" never exact-match a real student className, so they
   // fall through to the classLevel path).
-  const structure = findStructureForStudent(student.className)
-  const regularFeesTotal = structure ? computeHeadsTotal(structure.components) : student.feeTotal
+  // FEE-PER-CLASS: try an EXACT classId/classId-stream match first. Passes
+  // the student's classId so Class 11/12 stream students resolve to THEIR
+  // stream structure (PCM vs PCB differ in practical fees).
+  const structure = findStructureForStudent(student.className, student.classId)
+  // FEE-POLICY: only ACTIVE heads applicable to THIS student are billed.
+  // Transport, e.g., is charged exclusively to students actually enrolled
+  // in transport (student.transport gate — see isHeadApplicableToStudent).
+  const applicableHeads = structure
+    ? structure.components.filter((c) => c.active && isHeadApplicableToStudent(c, student))
+    : []
+  const regularFeesTotal = structure ? computeHeadsTotal(applicableHeads) : student.feeTotal
   const examFeeTotal = structure ? computeExamFeeTotal(structure.examFeeSchedule) : 0
   const totalApplicable = regularFeesTotal + examFeeTotal
 
@@ -2531,17 +2527,29 @@ function computeAccount(
   // additional outstanding ONLY. The two are NEVER mixed into one number.
   const studentTxns = transactions.filter((t) => t.studentId === student.id)
   const countable = (t: FeeTransaction) => t.status === 'Success' || t.status === 'Under Verification'
-  const coreTxnsPaid = studentTxns
+  const coreTxns = studentTxns
     .filter((t) => countable(t) && txnCategory(t) !== 'ADDITIONAL')
-    .reduce((sum, t) => sum + t.amount, 0)
+  const coreTxnsPaid = coreTxns.reduce((sum, t) => sum + t.amount, 0)
   const additionalTxns = studentTxns.filter((t) => countable(t) && txnCategory(t) === 'ADDITIONAL')
   const additionalPaid = additionalTxns.reduce((sum, t) => sum + t.amount, 0)
 
-  // Use the larger of: (a) canonical student.feePaid or (b) sum of recorded
-  // CORE transactions. Canonical matches Students module; transactions-
-  // based reflects new payments. ADDITIONAL payments are deliberately
-  // EXCLUDED — a ₹2,500 tour payment must never reduce core fee outstanding.
-  const paid = Math.max(student.feePaid, coreTxnsPaid)
+  // Canonical vs digitised money (FEE-LEDGER-CONSISTENCY):
+  // student.feePaid is the canonical "collected to date" kept by the Students
+  // register, and it ALREADY INCLUDES the seeded/historical fee transactions
+  // for this student. Live payments recorded after seeding are NOT in that
+  // number. Live txns carry the runtime id shape `TXN-<timestamp>` while the
+  // seeded history uses the zero-padded `TXN001…` shape, so paid =
+  // feePaid + live core receipts (never double-counted, always monotonic).
+  // ADDITIONAL payments are deliberately EXCLUDED — a ₹2,500 tour payment
+  // must never reduce core fee outstanding.
+  const isLiveTxn = (t: FeeTransaction) => /^TXN-\d+$/.test(t.id)
+  const liveCorePaid = coreTxns.filter((t) => isLiveTxn(t)).reduce((sum, t) => sum + t.amount, 0)
+  const seededCorePaid = coreTxnsPaid - liveCorePaid
+  // The offline-history portion of feePaid that the transaction ledger has no
+  // receipt for — rendered as an explicit "Previous Receipts" ledger line so
+  // the ledger's closing balance equals the account's computed outstanding.
+  const canonicalPrevPaid = student.feePaid - seededCorePaid
+  const paid = student.feePaid + liveCorePaid
 
   // The student's ACTIVE additional charges — matched by explicit student
   // ids when set, otherwise by class binding (student's classId, with a
@@ -2598,10 +2606,10 @@ function computeAccount(
   // separate ledger line — the feeHead reads "Exam Fee — <examType>"
   // and the description uses "Per-exam fee — <examType>".
   const ledger: LedgerEntry[] = []
-  const heads = structure
-  if (heads) {
+  const billedHeads = applicableHeads
+  if (structure) {
     let balance = 0
-    heads.components.filter((c) => c.active).forEach((c) => {
+    billedHeads.forEach((c) => {
       const annualHeadCharge = c.amount * (FREQUENCY_MULTIPLIER[c.frequency] ?? 1)
       balance += annualHeadCharge
       // Exam-like recurring heads (Board Examination Fee, Examination Fee)
@@ -2610,7 +2618,7 @@ function computeAccount(
       const isExamLikeHead = c.category === 'Exam' || c.category === 'Board' || /exam/i.test(c.name)
       ledger.push({
         id: `LED-${student.id}-${c.id}`,
-        date: '2025-04-01',
+        date: '2026-04-01',
         feeHead: c.name,
         charge: annualHeadCharge,
         payment: 0,
@@ -2623,14 +2631,14 @@ function computeAccount(
     // The charge per entry = amount × plannedInstances (the estimated
     // annual exam fee for that exam type). The description shows
     // "Per-exam fee — <examType> × N" so the parent can understand.
-    const activeExamFees = (heads.examFeeSchedule ?? []).filter((e) => e.active)
+    const activeExamFees = (structure.examFeeSchedule ?? []).filter((e) => e.active)
     activeExamFees.forEach((e, idx) => {
       const instances = e.plannedInstances ?? 1
       const annualExamCharge = e.amount * instances
       balance += annualExamCharge
       ledger.push({
         id: `LED-${student.id}-EXAM-${idx}-${e.id}`,
-        date: '2025-04-01',
+        date: '2026-04-01',
         feeHead: `Exam Fee — ${e.examType}`,
         charge: annualExamCharge,
         payment: 0,
@@ -2658,7 +2666,7 @@ function computeAccount(
       balance -= concession
       ledger.push({
         id: `LED-${student.id}-CONC`,
-        date: '2025-04-02',
+        date: '2026-04-02',
         feeHead: 'Concession',
         charge: -concession,
         payment: 0,
@@ -2667,11 +2675,30 @@ function computeAccount(
         entryType: 'concession',
       })
     }
+    // Previous Receipts — the offline-history portion of the canonical
+    // register balance (student.feePaid) that has no digitised transaction.
+    // Without this line the ledger would close at
+    // payable − Σ(receipts) and contradict the account's outstanding
+    // (= payable − feePaid − live receipts). Emitted before the payment
+    // walk so the running balance lands exactly on `outstanding`.
+    if (canonicalPrevPaid !== 0) {
+      balance -= canonicalPrevPaid
+      ledger.push({
+        id: `LED-${student.id}-PREV`,
+        date: '2026-04-01',
+        feeHead: 'Previous Receipts',
+        charge: 0,
+        payment: canonicalPrevPaid,
+        balance,
+        description: 'Collections carried from the Students register (offline history)',
+        entryType: 'payment',
+      })
+    }
     if (lateFee > 0) {
       balance += lateFee
       ledger.push({
         id: `LED-${student.id}-LF`,
-        date: '2025-07-08',
+        date: '2026-07-08',
         feeHead: 'Late Fee',
         charge: lateFee,
         payment: 0,
@@ -2680,8 +2707,12 @@ function computeAccount(
         entryType: 'late-fee',
       })
     }
-    // Sort transactions by date and apply payments
-    const sortedTxns = [...studentTxns].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    // Sort transactions by date and apply payments. Only countable money
+    // (Success / Under Verification) reduces the running balance — Failed
+    // and Refunded transactions are never real money received, and letting
+    // them through would make the ledger's closing balance contradict the
+    // account's computed outstanding (paid only counts countable txns).
+    const sortedTxns = studentTxns.filter(countable).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     for (const t of sortedTxns) {
       balance -= t.amount
       const cat = txnCategory(t)
@@ -2718,7 +2749,7 @@ function computeAccount(
 
 // ─── Hook: Canonical Fee Data ────────────────────────────────────────
 
-export function useFeeData(academicYear: string = '2025-2026') {
+export function useFeeData(academicYear: string = CURRENT_ACADEMIC_YEAR) {
   const students = useStudentsStore((s) => s.students)
   const transactions = useFeeStore((s) => s.transactions)
   const cashRequests = useFeeStore((s) => s.cashRequests)
@@ -2820,6 +2851,9 @@ export function useFeeData(academicYear: string = '2025-2026') {
     }
     const defaultCategoryColor = 'oklch(0.65 0.15 250)'
     const categoryMap = new Map<string, number>()
+    // FEE-POLICY: the breakdown honours per-student head applicability
+    // (e.g. Transport only counts toward students actually enrolled).
+    const studentById = new Map(students.map((s) => [s.id, s]))
     for (const a of accounts) {
       // FEE-PER-CLASS: match by exact className first (e.g. account
       // className="Class 10" → FS05 with className="Class 10"). Falls
@@ -2827,10 +2861,16 @@ export function useFeeData(academicYear: string = '2025-2026') {
       // the exact className. Uses the same lookup as `computeAccount`
       // (`findStructureForStudent`) so the breakdown stays consistent
       // with the ledger each student sees.
-      const heads = findStructureForStudent(a.className)
+      // FEE-PER-CLASS: match by exact classId first (e.g. account
+      // classId="C13" → Class 10 structure; stream ids resolve PCM/PCB
+      // correctly). Falls back to classLevel substring matching when no
+      // structure has the exact className.
+      const stu = studentById.get(a.studentId)
+      if (!stu) continue
+      const heads = findStructureForStudent(a.className, a.classId)
       if (!heads) continue
       for (const c of heads.components) {
-        if (!c.active) continue
+        if (!c.active || !isHeadApplicableToStudent(c, stu)) continue
         // Fix 2 (FEE-CORRECT): multiply by the frequency multiplier so the
         // category breakdown reflects the ANNUAL contribution of each head
         // (e.g. a Monthly Tuition of ₹4,000 contributes ₹48,000 annually).
@@ -2974,6 +3014,9 @@ export function useFeeData(academicYear: string = '2025-2026') {
       const perQuarter: Record<string, number> = { Q1: 0, Q2: 0, Q3: 0, Q4: 0 }
       for (const h of s.components) {
         if (!h.active) continue
+        // FEE-POLICY: Transport is a conditional opt-in charge — excluded
+        // from the expected calendar so expected/actual stays comparable.
+        if (h.category === 'Transport') continue
         const annual = h.amount * (FREQUENCY_MULTIPLIER[h.frequency] ?? 1)
         switch (h.frequency) {
           case 'Annual':

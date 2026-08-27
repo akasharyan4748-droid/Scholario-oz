@@ -2,40 +2,47 @@
 
 /**
  * FeesVerificationQueue — the cash-verification workflow, embedded in the
- * Payments operations page.
+ * Payments operations page (ONE benchmark Panel: "Cash Verification").
  *
  * UX principle (Summary → Decision with progressive disclosure):
- * each pending item shows the decision context at a glance — student,
- * admission no, class, amount, fee head, collector, collection date,
- * balance at submission, notes — and the three decision actions.
- * The confirm modals then show the full impact (balance before/after,
- * what approving/rejecting does) before the Principal commits.
+ * each pending row scans left→right — collector initials avatar · student
+ * name bold + class·fee-head meta + mono admission/date/reference line +
+ * balance snapshot · amount + status chip on the right, with exactly TWO
+ * primary buttons inline (Approve solid emerald / Reject outline rose-text)
+ * and Request Clarification demoted to a quiet 28px ghost icon action. The
+ * confirm modals then show the full impact — approve now surfaces a tiny
+ * Before → After balance tile pair — before the Principal commits.
+ *
+ * Panel chrome: subtitle carries live counts chips (amber pending · violet
+ * clarification) + awaiting amount; when nothing is pending anywhere
+ * (analytics.pendingVerification + pendingCashRequests === 0) a slim all-clear
+ * row replaces the queue ("No pending verifications" + emerald Check chip).
+ * The Recently Resolved audit collapses into a <details> inside the same panel.
  *
  * Business logic is UNCHANGED from the original approvals implementation:
  *   - Approve  → creates verified transaction + audit record + receipt +
  *                updates the student account
- *   - Reject   → mandatory reason → audit record (no transaction posted)
+ *   - Reject   → mandatory reason (REJECT_REASONS catalog below) → audit
+ *                record (no transaction posted)
  *   - Clarify  → message → audit record, moves to "Clarification Requested"
  * Safety preserved: duplicate approval blocked, mandatory reject reason,
  * loading states, immutable audit entries.
- *
- * Flat layout (no box-inside-box): plain sections with divide-y rows.
  */
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Check, X, AlertCircle, MessageSquare, Banknote,
-  Loader2,
+  Check, X, AlertCircle, MessageSquare, Loader2, History, ChevronDown, ArrowRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFeeData, useFeeStore, type CashRequest } from '@/lib/store/fee-store'
-import { formatINR, formatDate } from '@/lib/format'
+import { formatINR, formatDate, initials } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { Panel } from '../shared/panel'
 import { FeeEmptyState, FeeStatusBadge } from './fees-shared'
 import { toast } from 'sonner'
 
-// Rejection reasons (structured list + "Other" with custom text)
+// Rejection reasons (structured list + "Other" with custom text) — catalog UNCHANGED.
 const REJECT_REASONS = [
   'Incorrect amount',
   'Incorrect student',
@@ -45,8 +52,36 @@ const REJECT_REASONS = [
   'Other',
 ] as const
 
+// Queue chip mapping (spec): Pending Principal Acceptance → amber 'Pending',
+// Collected by Teacher → sky, Clarification Requested → violet.
+function queueChip(status: CashRequest['status']): { label: string; tone: string } {
+  switch (status) {
+    case 'Pending Principal Acceptance':
+      return { label: 'Pending', tone: 'bg-amber-500/10 text-amber-700 dark:text-amber-300' }
+    case 'Collected by Teacher':
+      return { label: 'Collected', tone: 'bg-sky-500/10 text-sky-700 dark:text-sky-300' }
+    case 'Clarification Requested':
+      return { label: 'Clarification', tone: 'bg-violet-500/10 text-violet-700 dark:text-violet-300' }
+    default:
+      return { label: status, tone: '' }
+  }
+}
+
+function QueueStatusChip({ status }: { status: CashRequest['status'] }) {
+  const { label, tone } = queueChip(status)
+  return (
+    <span
+      title={status}
+      className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap', tone)}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+      {label}
+    </span>
+  )
+}
+
 export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFeeData> }) {
-  const { cashRequests, accounts } = data
+  const { cashRequests, accounts, analytics } = data
   const approveCashRequest = useFeeStore((s) => s.approveCashRequest)
   const rejectCashRequest = useFeeStore((s) => s.rejectCashRequest)
   const requestClarification = useFeeStore((s) => s.requestClarification)
@@ -62,6 +97,13 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
 
   const pending = cashRequests.filter((r) => r.status === 'Pending Principal Acceptance' || r.status === 'Collected by Teacher' || r.status === 'Clarification Requested')
   const resolved = cashRequests.filter((r) => r.status === 'Confirmed by Principal' || r.status === 'Rejected')
+
+  const pendingAcceptanceCount = pending.filter((r) => r.status !== 'Clarification Requested').length
+  const clarificationCount = pending.filter((r) => r.status === 'Clarification Requested').length
+
+  // Slim all-clear condition (spec §6): nothing pending across BOTH channels
+  // — transaction-level verifications AND the teacher cash-request queue.
+  const combinedZero = analytics.pendingVerification + analytics.pendingCashRequests === 0
 
   // Compute the student's current outstanding for the approve modal
   const getStudentOutstanding = (studentId: string): number => {
@@ -117,28 +159,54 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
   const pendingAmount = pending.reduce((s, r) => s + r.amount, 0)
 
   return (
-    <div className="space-y-6">
-      {/* ── Payments awaiting verification (the actionable queue) ─────── */}
-      <section>
-        <div className="flex items-baseline justify-between gap-3 mb-1 flex-wrap">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Payments Awaiting Verification</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Cash collections submitted by teachers. Approving issues the receipt and posts the
-              payment to the ledger.
-            </p>
-          </div>
-          <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
-            {pending.length} payment{pending.length === 1 ? '' : 's'} · {formatINR(pendingAmount, true)} awaiting
+    <>
+      {/* ── Cash Verification panel (queue + collapsed resolved history) ── */}
+      <Panel
+        title="Cash Verification"
+        subtitle={
+          <span className="mt-1 flex flex-wrap items-center gap-1.5">
+            {pendingAcceptanceCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                {pendingAcceptanceCount} pending
+              </span>
+            )}
+            {clarificationCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-500/10 text-violet-700 dark:text-violet-300">
+                {clarificationCount} clarification{clarificationCount === 1 ? '' : 's'}
+              </span>
+            )}
+            {pending.length > 0 && (
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                {formatINR(pendingAmount, true)} awaiting
+              </span>
+            )}
+            {pending.length === 0 && !combinedZero && (
+              <span className="text-[10px] text-muted-foreground">No cash collections in the queue</span>
+            )}
           </span>
-        </div>
-
+        }
+        bodyClassName="p-0"
+      >
         {pending.length === 0 ? (
-          <FeeEmptyState
-            icon={<Check className="h-6 w-6" />}
-            title="All caught up"
-            description="No cash collections are waiting for your verification."
-          />
+          combinedZero ? (
+            /* Slim all-clear row (spec) — every verification channel empty */
+            <div className="flex items-center gap-2.5 px-4 py-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600" aria-hidden>
+                <Check className="h-3.5 w-3.5" />
+              </span>
+              <p className="text-xs text-muted-foreground">No pending verifications</p>
+            </div>
+          ) : (
+            /* Queue locally empty but other verifications exist (e.g. online
+               payments under review) — keep the fuller empty state */
+            <div className="px-4 pb-4">
+              <FeeEmptyState
+                icon={<Check className="h-6 w-6" />}
+                title="All caught up"
+                description="No cash collections are waiting for your verification."
+              />
+            </div>
+          )
         ) : (
           <div className="divide-y divide-border">
             {pending.map((r, i) => {
@@ -150,142 +218,133 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  className="py-3.5 first:pt-1"
+                  className="px-4 py-2.5 hover:bg-muted/30 transition-colors first:pt-3"
                 >
-                  {/* Summary row — who, what, how much, what state */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <span
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md ring-1 bg-amber-500/10 text-amber-600 ring-amber-500/20"
-                        title="Cash collection"
-                      >
-                        <Banknote className="h-3.5 w-3.5" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold truncate">{r.studentName}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono">{r.admissionNo} · {r.className}</p>
+                  <div className="flex items-start gap-3">
+                    {/* Collector initials avatar */}
+                    <span
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md ring-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/20"
+                      title={`Cash collected by ${r.collectedBy}`}
+                      aria-hidden
+                    >
+                      <span className="text-[10px] font-bold tracking-wide">{initials(r.collectedBy)}</span>
+                    </span>
+
+                    {/* Scan column — who · what · mono reference line */}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold truncate">{r.studentName}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                        {r.className} · {r.feeHead} · Cash
+                      </p>
+                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5 truncate">
+                        {r.admissionNo} · {formatDate(r.collectedAt)} · ref {r.referenceNo ?? '—'}
+                      </p>
+                      {typeof r.contextBalanceAtSubmission === 'number' && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                          Balance then{' '}
+                          <span className="font-semibold tabular-nums">{formatINR(r.contextBalanceAtSubmission, true)}</span>
+                        </p>
+                      )}
+
+                      {/* Teacher's submitted note */}
+                      {r.notes && (
+                        <p className="mt-1.5 text-[10px] text-muted-foreground italic flex items-start gap-1.5 min-w-0">
+                          <MessageSquare className="h-3 w-3 shrink-0 mt-px text-amber-600/70" aria-hidden />
+                          <span className="min-w-0">{r.notes}</span>
+                        </p>
+                      )}
+
+                      {/* Clarification context (if the teacher was already asked) */}
+                      {isClarification && r.reason && (
+                        <p className="mt-1.5 text-[10px] text-sky-700 dark:text-sky-300 flex items-start gap-1.5 min-w-0">
+                          <AlertCircle className="h-3 w-3 shrink-0 mt-px" aria-hidden />
+                          <span className="min-w-0">Clarification requested: {r.reason}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Right — amount, status chip, ≤2 primary actions + kebab-tier clarify */}
+                    <div className="shrink-0 text-right max-w-[9.5rem]">
+                      <p className="text-sm font-bold tabular-nums leading-tight">{formatINR(r.amount, true)}</p>
+                      <div className="mt-1 flex justify-end">
+                        <QueueStatusChip status={r.status} />
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-end gap-1.5 flex-wrap">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 rounded-md text-muted-foreground hover:bg-muted"
+                          aria-label={`Request clarification from ${r.collectedBy} about ${r.studentName}'s payment`}
+                          title="Request Clarification"
+                          onClick={() => { setClarifyReq(r); setClarifyMessage('') }}
+                          disabled={!isPending && !isClarification}
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[10px] gap-1 border-rose-500/30 text-rose-600 hover:bg-rose-500/10 hover:text-rose-600"
+                          onClick={() => { setRejectingReq(r); setRejectReason(''); setRejectNote('') }}
+                          disabled={!isPending && !isClarification}
+                        >
+                          <X className="h-3 w-3" /> Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-7 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={() => setApprovingReq(r)}
+                          disabled={!isPending && !isClarification}
+                        >
+                          <Check className="h-3 w-3" /> Approve
+                        </Button>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold tabular-nums leading-tight">{formatINR(r.amount, true)}</p>
-                      <FeeStatusBadge status={r.status} />
-                    </div>
-                  </div>
-
-                  {/* Decision context — flat definition grid, no boxes */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-2.5 text-[10px]">
-                    <div className="min-w-0">
-                      <span className="text-muted-foreground">Fee head · </span>
-                      <span className="font-medium">{r.feeHead}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-muted-foreground">Mode · </span>
-                      <span className="font-medium">Cash</span>
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-muted-foreground">Collected by · </span>
-                      <span className="font-medium truncate">{r.collectedBy}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-muted-foreground">Collected on · </span>
-                      <span className="font-medium">{formatDate(r.collectedAt)}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-muted-foreground">Reference · </span>
-                      <span className="font-medium font-mono">{r.referenceNo ?? '—'}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-muted-foreground">Balance then · </span>
-                      <span className="font-bold tabular-nums">{r.contextBalanceAtSubmission ? formatINR(r.contextBalanceAtSubmission, true) : '—'}</span>
-                    </div>
-                  </div>
-
-                  {/* Teacher's submitted note */}
-                  {r.notes && (
-                    <p className="mt-2 text-[10px] text-muted-foreground italic flex items-start gap-1.5">
-                      <MessageSquare className="h-3 w-3 shrink-0 mt-px text-amber-600/70" />
-                      {r.notes}
-                    </p>
-                  )}
-
-                  {/* Clarification context (if the teacher was already asked) */}
-                  {isClarification && r.reason && (
-                    <p className="mt-1.5 text-[10px] text-sky-700 dark:text-sky-300 flex items-start gap-1.5">
-                      <AlertCircle className="h-3 w-3 shrink-0 mt-px" />
-                      Clarification requested: {r.reason}
-                    </p>
-                  )}
-
-                  {/* Decision actions */}
-                  <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                    <Button
-                      size="sm"
-                      className="h-7 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                      onClick={() => setApprovingReq(r)}
-                      disabled={!isPending && !isClarification}
-                    >
-                      <Check className="h-3 w-3" /> Approve &amp; Issue Receipt
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-[10px] gap-1 text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
-                      onClick={() => { setClarifyReq(r); setClarifyMessage('') }}
-                      disabled={!isPending && !isClarification}
-                    >
-                      <MessageSquare className="h-3 w-3" /> Request Clarification
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-[10px] gap-1 text-rose-600 border-rose-500/30 hover:bg-rose-500/10"
-                      onClick={() => { setRejectingReq(r); setRejectReason(''); setRejectNote('') }}
-                      disabled={!isPending && !isClarification}
-                    >
-                      <X className="h-3 w-3" /> Reject
-                    </Button>
                   </div>
                 </motion.div>
               )
             })}
           </div>
         )}
-      </section>
 
-      {/* ── Recently resolved (compact audit of decisions) ───────────── */}
-      {resolved.length > 0 && (
-        <section>
-          <div className="flex items-baseline justify-between gap-3 mb-3">
-            <h3 className="text-sm font-semibold text-foreground">Recently Resolved</h3>
-            <span className="text-[10px] text-muted-foreground">{resolved.length} resolved</span>
-          </div>
-          <div className="divide-y divide-border">
-            {resolved.map((r) => (
-              <div key={r.id} className="flex items-center gap-2.5 py-2">
-                <span className={cn(
-                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1',
-                  r.status === 'Confirmed by Principal' ? 'bg-emerald-500/10 text-emerald-600 ring-emerald-500/20' : 'bg-rose-500/10 text-rose-600 ring-rose-500/20',
-                )}>
-                  {r.status === 'Confirmed by Principal' ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium truncate">
-                    {r.studentName} · <span className="text-muted-foreground font-mono text-[10px]">{r.admissionNo}</span>
-                  </p>
-                  <p className="text-[9px] text-muted-foreground truncate">
-                    {r.collectedBy} · {formatDate(r.submittedAt)}
-                    {r.reason && <span className="text-amber-600 italic"> — "{r.reason}"</span>}
-                  </p>
+        {/* ── Recently resolved — collapsed audit inside the same panel ── */}
+        {resolved.length > 0 && (
+          <details className="border-t border-border/60">
+            <summary className="flex items-center justify-between gap-2 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden px-4 py-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/30">
+              <span className="inline-flex items-center gap-1.5">
+                <History className="h-3 w-3" aria-hidden />
+                Recently resolved ({resolved.length})
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            </summary>
+            <div className="divide-y divide-border border-t border-border/50 px-4">
+              {resolved.map((r) => (
+                <div key={r.id} className="flex items-center gap-2.5 py-2">
+                  <span className={cn(
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1',
+                    r.status === 'Confirmed by Principal' ? 'bg-emerald-500/10 text-emerald-600 ring-emerald-500/20' : 'bg-rose-500/10 text-rose-600 ring-rose-500/20',
+                  )}>
+                    {r.status === 'Confirmed by Principal' ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">
+                      {r.studentName} · <span className="text-muted-foreground font-mono text-[10px]">{r.admissionNo}</span>
+                    </p>
+                    <p className="text-[9px] text-muted-foreground truncate">
+                      {r.collectedBy} · {formatDate(r.submittedAt)}
+                      {r.reason && <span className="text-amber-600 italic"> — "{r.reason}"</span>}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-bold tabular-nums">{formatINR(r.amount, true)}</p>
+                    <FeeStatusBadge status={r.status} />
+                  </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-xs font-bold tabular-nums">{formatINR(r.amount, true)}</p>
-                  <FeeStatusBadge status={r.status} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+              ))}
+            </div>
+          </details>
+        )}
+      </Panel>
 
       {/* ── Confirmation modals (business logic unchanged) ───────────── */}
       <AnimatePresence>
@@ -327,7 +386,7 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
           />
         )}
       </AnimatePresence>
-    </div>
+    </>
   )
 }
 
@@ -387,14 +446,22 @@ function ApproveModal({ req, currentOutstanding, loading, onClose, onConfirm }: 
             <span className="text-muted-foreground">Collected At</span>
             <span className="font-medium">{formatDate(req.collectedAt)}</span>
           </div>
-          <div className="flex justify-between text-xs pt-2 border-t border-border/40">
-            <span className="text-muted-foreground">Balance Before</span>
-            <span className="font-bold tabular-nums text-rose-600">{formatINR(currentOutstanding, true)}</span>
+
+          {/* Balance impact — Before → After tiny tile pair (benchmark recipe) */}
+          <div className="pt-2 mt-2 border-t border-border/40">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">
+              <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
+                <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Before</p>
+                <p className="text-sm font-bold tabular-nums text-rose-600 mt-0.5">{formatINR(currentOutstanding, true)}</p>
+              </div>
+              <ArrowRight className="self-center h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+              <div className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5">
+                <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">After</p>
+                <p className="text-sm font-bold tabular-nums text-emerald-600 mt-0.5">{formatINR(balanceAfter, true)}</p>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Balance After</span>
-            <span className="font-bold tabular-nums text-emerald-600">{formatINR(balanceAfter, true)}</span>
-          </div>
+
           <div className="rounded-md bg-emerald-500/5 border border-emerald-500/20 p-2 mt-2">
             <p className="text-[10px] text-emerald-700 dark:text-emerald-300">
               This will approve the cash collection, generate a receipt, post the transaction, update the student's fee account, reduce outstanding dues, and create an audit entry.
@@ -469,8 +536,9 @@ function RejectModal({ req, reason, setReason, note, setNote, loading, onClose, 
           </div>
           {reason === 'Other' && (
             <div>
-              <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Custom Reason <span className="text-rose-600">*</span></label>
+              <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider" htmlFor="cash-reject-custom-reason">Custom Reason <span className="text-rose-600">*</span></label>
               <input
+                id="cash-reject-custom-reason"
                 autoFocus
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
@@ -480,8 +548,9 @@ function RejectModal({ req, reason, setReason, note, setNote, loading, onClose, 
             </div>
           )}
           <div>
-            <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Additional Note (optional)</label>
+            <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider" htmlFor="cash-reject-note">Additional Note (optional)</label>
             <textarea
+              id="cash-reject-note"
               value={note && reason !== 'Other' ? note : ''}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Add any additional context…"
@@ -540,8 +609,9 @@ function ClarifyModal({ req, message, setMessage, loading, onClose, onConfirm }:
           <p className="text-[11px] text-muted-foreground mt-0.5">{req.studentName} · {formatINR(req.amount, true)}</p>
         </div>
         <div className="p-4 space-y-2">
-          <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Message to Collector <span className="text-rose-600">*</span></label>
+          <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider" htmlFor="cash-clarify-message">Message to Collector <span className="text-rose-600">*</span></label>
           <textarea
+            id="cash-clarify-message"
             autoFocus
             value={message}
             onChange={(e) => setMessage(e.target.value)}

@@ -96,10 +96,13 @@ function FeesTrendTooltip({ active, payload, label, format }: FeesTrendTooltipPr
 }
 
 /* ── MiniAreaChart — monthly trend for { month, collected, pending? }.
-      Renders Pending as a secondary line only when the dataset has it. ── */
+      Renders Pending as a secondary line only when the dataset has it.
+      Default height is the Overview's compact command-centre size (~180px);
+      the Y domain stays ₹0-anchored ([0, niceCeil(max)]) so a zero month
+      always reads as ₹0 and negative collection is never implied. ── */
 export function MiniAreaChart({
   data,
-  height = 170,
+  height = 180,
   format,
   showArea = false,
   strokeWidth = 2,

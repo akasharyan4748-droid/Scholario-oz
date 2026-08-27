@@ -3,10 +3,15 @@
 /**
  * FeesStructuresSection — Versioned Fee Structure admin grid (Phase 8).
  *
- * - Per-class structure cards (5 categories by default, plus any
- *   user-created drafts)
- * - Each card shows: structure name, level, current version, status,
- *   effective date, total, heads count, last updated
+ * - Per-class structure cards (one per canonical class, plus any
+ *   user-created drafts) on the Salary-structures card benchmark:
+ *   md:grid-cols-2 xl:grid-cols-3 grid of rounded-xl bg-card p-4 cards.
+ * - Each card shows: level-toned icon chip, class name (2-line wrap),
+ *   StructureStatusBadge + v{n}, 3 mini-stats (Annual — BASE total
+ *   excluding opt-in Transport — / active heads / students), a top-3
+ *   non-transport fee-heads preview line (monthly heads read "₹X/mo"),
+ *   effective-from meta, and a session-exam-fee line ('Not configured'
+ *   only for intentionally unconfigured schedules, e.g. Class 6/7).
  * - Card actions: Open (detail drawer), History, More (dropdown)
  * - Drawer actions: Edit, Duplicate, Create New Version, View History,
  *   Compare Versions, Archive, Restore, Delete (with safeguards)
@@ -24,9 +29,9 @@
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Layers, History, MoreHorizontal, Plus, Users, ChevronRight, Calendar,
-  FileText, Sparkles, Archive, Copy, Trash2, AlertTriangle, ShieldAlert,
-  BookOpen, GraduationCap, ShieldCheck,
+  Layers, History, MoreHorizontal, Plus, ChevronRight, Calendar,
+  FileText, Archive, Copy, Trash2, AlertTriangle, ShieldAlert,
+  GraduationCap, ShieldCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -39,6 +44,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useFeeData,
   useFeeStore,
+  computeExamFeeTotal,
+  FREQUENCY_MULTIPLIER,
   type FeeStructureConfig,
   type FeeStructureStatus,
 } from '@/lib/store/fee-store'
@@ -60,16 +67,27 @@ import {
 } from './fees-normalize-heads'
 import { toast } from 'sonner'
 
-const CATEGORY_COLORS: Record<string, { chip: string; bar: string; dot: string }> = {
-  'Pre-Primary': { chip: 'bg-cyan-500/10 text-cyan-600 ring-cyan-500/20', bar: 'oklch(0.7 0.15 200)', dot: 'bg-cyan-500' },
-  'Primary': { chip: 'bg-emerald-500/10 text-emerald-600 ring-emerald-500/20', bar: 'oklch(0.55 0.14 162)', dot: 'bg-emerald-500' },
-  'Middle': { chip: 'bg-amber-500/10 text-amber-600 ring-amber-500/20', bar: 'oklch(0.65 0.16 75)', dot: 'bg-amber-500' },
-  'Secondary': { chip: 'bg-violet-500/10 text-violet-600 ring-violet-500/20', bar: 'oklch(0.6 0.18 300)', dot: 'bg-violet-500' },
+// TASK 2-c — flattened to chip tones only (the old `bar`/`dot` fields
+// were legacy-seed helpers that no renderer consumed anymore).
+// Tones follow the shared card recipe: bg-{tone}-500/15 text-{tone}-600.
+// Beyond the five levels we register head-category fallbacks so custom
+// drafts keyed by a fee-head category ('Management & Maintenance',
+// 'Registration Fee', practical 'Lab') resolve to a sensible hue.
+const CATEGORY_COLORS: Record<string, string> = {
+  'Pre-Primary': 'bg-cyan-500/15 text-cyan-600',
+  'Primary': 'bg-emerald-500/15 text-emerald-600',
+  'Middle': 'bg-amber-500/15 text-amber-600',
+  'Secondary': 'bg-violet-500/15 text-violet-600',
   // FEE-PER-CLASS — the seed now uses 'Senior Secondary' (was 'Senior').
   // Keep 'Senior' as a legacy alias for any user-created structures
   // that may still use it.
-  'Senior Secondary': { chip: 'bg-rose-500/10 text-rose-600 ring-rose-500/20', bar: 'oklch(0.62 0.2 25)', dot: 'bg-rose-500' },
-  'Senior': { chip: 'bg-rose-500/10 text-rose-600 ring-rose-500/20', bar: 'oklch(0.62 0.2 25)', dot: 'bg-rose-500' },
+  'Senior Secondary': 'bg-rose-500/15 text-rose-600',
+  'Senior': 'bg-rose-500/15 text-rose-600',
+  // Head-category fallbacks (user-created drafts whose category is a
+  // fee-head category rather than an academic level).
+  'Management & Maintenance': 'bg-violet-500/15 text-violet-600',
+  'Registration Fee': 'bg-cyan-500/15 text-cyan-600',
+  'Lab': 'bg-rose-500/15 text-rose-600',
 }
 
 export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<typeof useFeeData>; onNavigate?: (moduleKey: string) => void }) {
@@ -202,6 +220,18 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
     return counts
   }, [students])
 
+  // TASK 2-c — header chip: distinct academic classes actually bound to a
+  // structure (union of classId + applicableClassIds across ALL structures;
+  // stream ids like C14-PCM count individually).
+  const boundClassCount = useMemo(() => {
+    const ids = new Set<string>()
+    for (const s of feeStructures) {
+      if (s.classId) ids.add(s.classId)
+      if (s.applicableClassIds) for (const id of s.applicableClassIds) ids.add(id)
+    }
+    return ids.size
+  }, [feeStructures])
+
   const openStructure = feeStructures.find((s) => s.id === openStructureId) ?? null
 
   // Per-card actions
@@ -331,38 +361,35 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* Header bar with summary + create button */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
+      {/* TASK 2-c — benchmark header pair (icon-title h2 + subtitle;
+          right actions) with exactly THREE inline elements: Structures
+          chip, Bound-classes chip, Master Catalogue outline launcher. */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-base font-bold flex items-center gap-2">
+            <Layers className="h-4 w-4 text-muted-foreground" /> Fee Structures
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Per-class fee plans, versions and exam-session schedules.
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40">
             <Layers className="h-2.5 w-2.5" /> {feeStructures.length} structures
           </Badge>
-          <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20">
-            {versions.filter((v) => v.status === 'current').length} current
+          <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40">
+            <GraduationCap className="h-2.5 w-2.5" /> {boundClassCount} bound {boundClassCount === 1 ? 'class' : 'classes'}
           </Badge>
-          {versions.filter((v) => v.status === 'scheduled').length > 0 && (
-            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20">
-              <Sparkles className="h-2.5 w-2.5" /> {versions.filter((v) => v.status === 'scheduled').length} scheduled
-            </Badge>
-          )}
-          {versions.filter((v) => v.status === 'draft').length > 0 && (
-            <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20">
-              {versions.filter((v) => v.status === 'draft').length} draft
-            </Badge>
-          )}
-        </div>
-        {/* PHASE 5 — Master Catalogue drawer launcher. Sits next to the
-            existing summary chips so the principal sees it as a peer
-            action, not buried in a menu. */}
-        <div className="flex items-center gap-1.5">
+          {/* PHASE 5 — Master Catalogue drawer launcher. Kept as a peer
+              action of the summary chips; reads "+ Master Catalogue". */}
           <Button
             size="sm"
             variant="outline"
-            className="h-7 text-[10px] gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+            className="h-8 text-xs gap-1"
             onClick={() => setCatalogueOpen(true)}
             title="Manage the school-wide master fee-head catalogue"
           >
-            <BookOpen className="h-3 w-3" /> Master Catalogue
+            <Plus className="h-3.5 w-3.5" /> Master Catalogue
           </Button>
         </div>
       </div>
@@ -379,14 +406,16 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
       />
 
       {/* Structure grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {feeStructures.map((f, i) => {
           // FEE-PER-CLASS — `category` and `classLevel` are now the same
           // value (the spec says "category can be removed or set to the
           // same value as classLevel"); fall back to `classLevel` when
           // `category` is empty (e.g. a draft created before the
-          // FEE-PER-CLASS migration may have an empty category).
-          const accentKey = f.category || f.classLevel
+          // FEE-PER-CLASS migration may have an empty category). Strip
+          // the ' (Copy)' suffix that Duplicate-as-draft appends so
+          // copies keep the parent's tone.
+          const accentKey = (f.category || f.classLevel).replace(' (Copy)', '')
           const accent = CATEGORY_COLORS[accentKey] ?? CATEGORY_COLORS['Primary']
           // FEE-PER-CLASS — count students by EXACT className first
           // (e.g. Class 9 card → 4 Class 9 students). Falls back to
@@ -396,92 +425,100 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
           const studentsCount =
             studentsByClassName[f.className] ?? studentsByLevel[f.classLevel] ?? 0
           const status = structureStatus.get(f.id) ?? 'current'
-          // Find the most recent version to show last-updated info.
-          const recentVersion = versions
-            .filter((v) => v.structureId === f.id)
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
           const activeHeads = f.components.filter((c) => c.active)
+          // TASK 2-c — main fee-heads preview: top 3 ACTIVE non-transport
+          // heads ranked by annual contribution (amount × frequency
+          // multiplier). Monthly heads read "{amount}/mo" so frequency
+          // semantics stay visible on the card; everything else shows the
+          // annualised figure. Opt-in Transport is excluded — it never
+          // contributes to the base annual total.
+          const rankedPreviewHeads = activeHeads
+            .filter((h) => h.category !== 'Transport')
+            .sort((a, b) =>
+              (b.amount * (FREQUENCY_MULTIPLIER[b.frequency] ?? 1)) -
+              (a.amount * (FREQUENCY_MULTIPLIER[a.frequency] ?? 1)))
+          const headsPreview = rankedPreviewHeads
+            .slice(0, 3)
+            .map((h) => h.frequency === 'Monthly'
+              ? `${h.name} ${formatINR(h.amount)}/mo`
+              : `${h.name} ${formatINR(h.amount * (FREQUENCY_MULTIPLIER[h.frequency] ?? 1))}`)
+            .join(' · ')
+          // TASK 2-c — session exam fees summed across planned
+          // examinations. An EMPTY examFeeSchedule (seeded on Class 6/7)
+          // means intentionally unconfigured → muted "Not configured".
+          const examTotal = computeExamFeeTotal(f.examFeeSchedule)
+          const examItems = (f.examFeeSchedule ?? []).length
           return (
             <motion.div
               key={f.id}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.04 }}
-              className="rounded-xl border border-border bg-card p-3 hover:border-emerald-500/30 hover:shadow-md transition-all cursor-pointer group"
+              className="rounded-xl border bg-card p-4 flex flex-col gap-2.5 hover:border-emerald-500/30 hover:shadow-md transition-all cursor-pointer group"
               onClick={() => setOpenStructureId(f.id)}
             >
-              {/* Header */}
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1', accent.chip)}>
-                    <Layers className="h-3.5 w-3.5" />
+              {/* Top row — level-toned icon chip + class name + status */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', accent)}>
+                    <Layers className="h-4 w-4" />
                   </span>
                   <div className="min-w-0">
-                    {/* FEE-PER-CLASS — title is the class name (e.g.
-                        "Class 9"); subtitle is the level (e.g.
-                        "Secondary"). No "Structure Name" — the card
-                        title IS the class name. */}
-                    <p className="text-xs font-semibold truncate">{f.className}</p>
-                    <p className="text-[9px] text-muted-foreground">{f.classLevel}</p>
+                    {/* FEE-PER-CLASS — title is the class name (stream
+                        labels wrap onto two lines instead of clipping);
+                        subtitle is the academic level. No "Structure
+                        Name" — the card title IS the class name. */}
+                    <p className="text-sm font-bold leading-snug line-clamp-2">{f.className}</p>
+                    <p className="text-xs text-muted-foreground truncate">{f.classLevel}</p>
                   </div>
                 </div>
                 <StructureStatusBadge status={status} version={f.version} />
               </div>
 
-              {/* Stats row */}
-              <div className="grid grid-cols-3 gap-1.5 mb-2">
-                <div className="rounded-md bg-muted/30 px-1.5 py-1">
-                  <p className="text-[8px] uppercase text-muted-foreground font-semibold">Annual</p>
-                  <p className="text-[11px] font-bold tabular-nums mt-0.5">{formatINR(f.annual, true)}</p>
+              {/* Mini-stat tiles (Salary-benchmark recipe) — Annual shows
+                  the BASE total (excludes opt-in Transport). */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg bg-muted/40 px-2.5 py-1.5" title="Excludes opt-in Transport">
+                  <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Annual</p>
+                  <p className="text-sm font-bold tabular-nums mt-0.5">{formatINR(f.annual)}</p>
+                  <p className="text-[8px] text-muted-foreground/80 mt-0.5">excl. transport</p>
                 </div>
-                <div className="rounded-md bg-muted/30 px-1.5 py-1">
-                  <p className="text-[8px] uppercase text-muted-foreground font-semibold">Heads</p>
-                  <p className="text-[11px] font-bold tabular-nums mt-0.5">{activeHeads.length}</p>
+                <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
+                  <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Heads</p>
+                  <p className="text-sm font-bold tabular-nums mt-0.5">{activeHeads.length}</p>
                 </div>
-                <div className="rounded-md bg-muted/30 px-1.5 py-1">
-                  <p className="text-[8px] uppercase text-muted-foreground font-semibold flex items-center gap-0.5"><Users className="h-2 w-2" /> Students</p>
-                  <p className="text-[11px] font-bold tabular-nums mt-0.5">{studentsCount}</p>
+                <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
+                  <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Students</p>
+                  <p className="text-sm font-bold tabular-nums mt-0.5">{studentsCount}</p>
                 </div>
               </div>
 
-              {/* Components preview (top 4) */}
-              <div className="space-y-1 mb-2 max-h-24 overflow-hidden">
-                {activeHeads.slice(0, 4).map((c) => (
-                  <div key={c.id} className="flex items-center justify-between text-[10px] rounded-md hover:bg-muted/30 px-1.5 py-0.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', accent.dot)} />
-                      <span className="font-medium truncate">{c.name}</span>
-                      {c.mandatory && <Badge variant="outline" className="text-[7px] py-0 px-1 h-3">REQ</Badge>}
-                    </div>
-                    <span className="font-mono font-semibold tabular-nums shrink-0">{formatINR(c.amount, true)}</span>
-                  </div>
-                ))}
-                {activeHeads.length > 4 && (
-                  <p className="text-[9px] text-muted-foreground px-1.5">+ {activeHeads.length - 4} more</p>
-                )}
-                {activeHeads.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground italic px-1.5 py-1">No active heads</p>
-                )}
+              {/* Main fee heads preview — top 3 non-transport heads by
+                  annual contribution; Monthly heads read "₹X/mo". */}
+              <p className="text-[11px] text-muted-foreground truncate min-h-[16px]" title={headsPreview || undefined}>
+                {headsPreview || '—'}
+              </p>
+
+              {/* Meta: effective-from + session exam fees (TASK 2-c) */}
+              <div className="space-y-0.5">
+                <p className="flex items-center gap-1 text-[10px] text-muted-foreground" title="Effective from">
+                  <Calendar className="h-3 w-3 shrink-0" /> Effective {formatDate(f.effectiveFrom)}
+                </p>
+                <p className={examTotal > 0 ? 'text-[10px] text-muted-foreground' : 'text-[10px] italic text-muted-foreground'}>
+                  Session exams:{' '}
+                  {examTotal > 0
+                    ? `${formatINR(examTotal)} · ${examItems} planned`
+                    : 'Not configured'}
+                </p>
               </div>
 
-              {/* Footer metadata */}
-              <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[9px] text-muted-foreground">
-                <span className="inline-flex items-center gap-1" title="Effective from">
-                  <Calendar className="h-2.5 w-2.5" /> {formatDate(f.effectiveFrom)}
-                </span>
-                {recentVersion && (
-                  <span className="inline-flex items-center gap-1" title={`Last updated by ${recentVersion.createdBy}`}>
-                    <History className="h-2.5 w-2.5" /> {formatDate(recentVersion.createdAt)}
-                  </span>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-1 pt-2 mt-2 border-t border-border/40" onClick={(e) => e.stopPropagation()}>
+              {/* Actions — Open / History / dropdown (TASK 2-c benchmark
+                  ghost-button sizing; wiring unchanged) */}
+              <div className="flex items-center gap-1.5 pt-2 mt-auto border-t border-border/40" onClick={(e) => e.stopPropagation()}>
                 <Button
                   size="sm"
                   variant="default"
-                  className="h-6 text-[9px] gap-1 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="h-7 text-[11px] gap-1 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                   onClick={() => setOpenStructureId(f.id)}
                 >
                   Open <ChevronRight className="h-2.5 w-2.5" />
@@ -489,15 +526,15 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-6 text-[9px] gap-1 px-1.5"
+                  className="h-7 text-[11px] gap-1"
                   onClick={() => setHistoryStructure(f)}
-                  title="View history"
+                  title="View version history"
                 >
-                  <History className="h-2.5 w-2.5" />
+                  <History className="h-3 w-3" /> History
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" title="More">
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="More">
                       <MoreHorizontal className="h-3 w-3" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -550,7 +587,7 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: feeStructures.length * 0.04 }}
           onClick={openCreateDrawer}
-          className="rounded-xl border border-dashed border-border bg-card/50 p-3 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all text-left"
+          className="rounded-xl border border-dashed border-border bg-card/50 p-4 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all text-left"
         >
           <div className="flex flex-col items-center justify-center text-center h-full min-h-[180px] gap-2">
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20">

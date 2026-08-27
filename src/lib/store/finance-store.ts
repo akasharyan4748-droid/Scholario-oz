@@ -16,7 +16,7 @@
  */
 
 import { useMemo } from 'react'
-import { useFeeData } from './fee-store'
+import { useFeeData, CURRENT_ACADEMIC_YEAR } from './fee-store'
 import { useSalaryData } from './salary-store'
 import { formatINR } from '@/lib/format'
 import {
@@ -44,7 +44,7 @@ export const FINANCE_PERIODS: FinancePeriod[] = [
 // ─── Hook: useFinanceData ────────────────────────────────────────────
 
 export function useFinanceData(periodId: string = 'fy25-26') {
-  const feeData = useFeeData('2025-2026')
+  const feeData = useFeeData(CURRENT_ACADEMIC_YEAR)
   const salaryData = useSalaryData()
 
   return useMemo(() => {

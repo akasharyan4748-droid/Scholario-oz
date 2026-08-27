@@ -17,6 +17,20 @@
  * Secret keys are NEVER stored client-side. The Connect Gateway form only
  * captures merchantId + apiKeyId (the public key ID). The webhook secret
  * is configured server-side — we surface a note instead of an input.
+ *
+ * Phase 2-e polish (presentation-only): sub-nav labels read "Accepted
+ * Methods · Bank & Settlement · UPI / QR · Gateway · Reconciliation" (same
+ * order/values) and each section's panels carry a uniform icon-chip + title
+ * + one-line subtitle header; payment-method rows compacted with truncated
+ * one-line availability notes and requiresReference/requiresChequeDetails
+ * hint chips; bank cards show a logo-ish letter chip + holder name + masked
+ * ••••-last4 account number (maskAccount) + IFSC/branch, Primary/Active chips
+ * — manage/set-primary/deactivate handlers untouched; gateway state became
+ * four status tiles (connection · webhook health · failed-webhook count rose
+ * when >0 · settlement link) with API Key ID shown via maskMerchant only;
+ * reconciliation keeps its tables but with the tightened module table
+ * recipe and rose-tinted left border on exception rows. No connect/
+ * disconnect/webhook-test flow or masking guarantee changed.
  */
 
 import { useState } from 'react'
@@ -43,17 +57,42 @@ import { cn } from '@/lib/utils'
 import { FeePanel, FeeStatusBadge } from './fees-shared'
 import { toast } from 'sonner'
 
-// ─── Sub-section navigation ──────────────────────────────────────────
+// ─── Sub-section navigation ──────────────────────────────────────
 
 type Section = 'methods' | 'bank' | 'upi' | 'gateway' | 'recon'
 
-const SECTIONS: Array<{ value: Section; label: string }> = [
-  { value: 'methods', label: 'Payment Methods' },
-  { value: 'bank', label: 'Bank & Settlement' },
-  { value: 'upi', label: 'UPI / QR' },
-  { value: 'gateway', label: 'Payment Gateway' },
-  { value: 'recon', label: 'Reconciliation' },
+const SECTIONS: Array<{ value: Section; label: string; icon: React.ReactNode }> = [
+  { value: 'methods', label: 'Accepted Methods', icon: <Smartphone className="h-3 w-3" /> },
+  { value: 'bank', label: 'Bank & Settlement', icon: <Landmark className="h-3 w-3" /> },
+  { value: 'upi', label: 'UPI / QR', icon: <QrCode className="h-3 w-3" /> },
+  { value: 'gateway', label: 'Gateway', icon: <Plug className="h-3 w-3" /> },
+  { value: 'recon', label: 'Reconciliation', icon: <ArrowRightLeft className="h-3 w-3" /> },
 ]
+
+// Uniform section-panel header (2-e): icon chip + bold title. The Panel's
+// subtitle slot renders the one-line description underneath.
+function PanelHeading({ icon, tone, children }: { icon: React.ReactNode; tone: string; children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-2 min-w-0">
+      <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', tone)}>
+        {icon}
+      </span>
+      <span className="truncate">{children}</span>
+    </span>
+  )
+}
+
+// Benchmark micro-stat tile (same recipe as the Transactions ledger tiles):
+// muted chrome, 9px uppercase label, bold tabular value slot, optional sub.
+function MiniTile({ label, sub, className, children }: { label: string; sub?: React.ReactNode; className?: string; children?: React.ReactNode }) {
+  return (
+    <div className={cn('rounded-lg bg-muted/40 px-2.5 py-1.5 min-w-0', className)}>
+      <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider truncate">{label}</p>
+      <div className="text-sm font-bold tabular-nums mt-0.5 flex items-center gap-1.5 min-w-0">{children}</div>
+      {sub && <p className="text-[9px] text-muted-foreground mt-0.5 truncate">{sub}</p>}
+    </div>
+  )
+}
 
 export function FeesPaymentCollectionSettings() {
   const [section, setSection] = useState<Section>('methods')
@@ -67,10 +106,11 @@ export function FeesPaymentCollectionSettings() {
             key={s.value}
             onClick={() => setSection(s.value)}
             className={cn(
-              'inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap',
+              'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap',
               section === s.value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
             )}
           >
+            {s.icon}
             {s.label}
           </button>
         ))}
@@ -219,8 +259,12 @@ function AcceptedPaymentMethods() {
 
   return (
     <FeePanel
-      title="Accepted Payment Methods"
-      subtitle="enable / disable payment modes — the status badge reflects gateway + UPI QR + bank configuration"
+      title={
+        <PanelHeading icon={<Smartphone className="h-4 w-4" />} tone="bg-emerald-500/15 text-emerald-600">
+          Accepted Payment Methods
+        </PanelHeading>
+      }
+      subtitle="Choose how parents can pay — availability reflects gateway, UPI QR & bank configuration"
     >
       <div className="space-y-4">
         {METHOD_GROUPS.map((group) => (
@@ -242,7 +286,7 @@ function AcceptedPaymentMethods() {
                   <div
                     key={modeId}
                     className={cn(
-                      'flex items-start gap-3 rounded-md border px-2.5 py-2 transition-colors',
+                      'flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors',
                       config.active ? 'border-border/60 bg-card' : 'border-border/40 bg-muted/20',
                     )}
                   >
@@ -257,17 +301,18 @@ function AcceptedPaymentMethods() {
                         <p className="text-xs font-semibold">{config.label}</p>
                         {statusBadge}
                         {config.requiresReference && (
-                          <span className="text-[8px] uppercase text-muted-foreground font-semibold tracking-wider">ref required</span>
+                          <span className="inline-flex items-center rounded bg-muted px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground ring-1 ring-border/60 whitespace-nowrap">ref required</span>
                         )}
                         {config.requiresChequeDetails && (
-                          <span className="text-[8px] uppercase text-muted-foreground font-semibold tracking-wider">cheque details</span>
+                          <span className="inline-flex items-center rounded bg-muted px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-muted-foreground ring-1 ring-border/60 whitespace-nowrap">cheque details</span>
                         )}
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{METHOD_DESCRIPTION[modeId]}</p>
+                      {/* Availability note — one truncated muted line (full text on hover) */}
+                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate" title={METHOD_DESCRIPTION[modeId]}>{METHOD_DESCRIPTION[modeId]}</p>
                       {showConfigHint && (
-                        <p className="text-[9px] text-amber-700 dark:text-amber-400 mt-1 flex items-start gap-1">
-                          <AlertTriangle className="h-2.5 w-2.5 shrink-0 mt-0.5" />
-                          <span>{getConfigHint(modeId)}</span>
+                        <p className="text-[9px] text-amber-700 dark:text-amber-400 mt-0.5 flex items-center gap-1 truncate" title={getConfigHint(modeId)}>
+                          <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                          <span className="truncate">{getConfigHint(modeId)}</span>
                         </p>
                       )}
                     </div>
@@ -278,7 +323,7 @@ function AcceptedPaymentMethods() {
                       }}
                       aria-label={`Toggle ${config.label}`}
                       className={cn(
-                        'relative h-5 w-9 rounded-full transition-colors shrink-0 mt-1',
+                        'relative h-5 w-9 rounded-full transition-colors shrink-0 self-center',
                         config.active ? 'bg-emerald-600' : 'bg-muted-foreground/30',
                       )}
                     >
@@ -301,8 +346,8 @@ function AcceptedPaymentMethods() {
 // ─── B. Bank & Settlement ───────────────────────────────────────────
 
 function maskAccount(num: string): string {
-  if (num.length <= 4) return `****${num}`
-  return `**** **** ${num.slice(-4)}`
+  if (num.length <= 4) return `••••${num}`
+  return `•••• ${num.slice(-4)}`
 }
 
 function BankAndSettlement() {
@@ -318,9 +363,13 @@ function BankAndSettlement() {
   return (
     <div className="space-y-3">
       <FeePanel
-        title="Bank & Settlement Accounts"
+        title={
+          <PanelHeading icon={<Landmark className="h-4 w-4" />} tone="bg-sky-500/15 text-sky-600">
+            Bank & Settlement Accounts
+          </PanelHeading>
+        }
         subtitle={`${bankAccounts.length} account(s) · ${bankAccounts.filter((b) => b.isPrimary).length} primary`}
-        action={<Button size="sm" className="h-7 text-xs gap-1" onClick={() => setShowAdd(true)}><Plus className="h-3 w-3" /> Add Account</Button>}
+        action={<Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowAdd(true)}><Plus className="h-3 w-3" /> Add Account</Button>}
       >
         {bankAccounts.length === 0 ? (
           <div className="text-center py-8 text-xs text-muted-foreground">
@@ -332,41 +381,45 @@ function BankAndSettlement() {
               <div
                 key={b.id}
                 className={cn(
-                  'rounded-lg border p-3 transition-colors',
+                  'rounded-lg border p-3 space-y-2 transition-colors',
                   b.isPrimary ? 'border-emerald-500/30 bg-emerald-500/[0.04]' : 'border-border bg-card',
                   b.status === 'inactive' && 'opacity-60',
                 )}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-sky-500/10 text-sky-600 shrink-0">
-                        <Landmark className="h-3.5 w-3.5" />
-                      </span>
-                      <p className="text-xs font-semibold truncate">{b.bankName}</p>
-                      {b.isPrimary && (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20">
-                          <Star className="h-2.5 w-2.5 fill-current" /> Primary
-                        </span>
-                      )}
-                      <FeeStatusBadge status={b.status === 'active' ? 'Active' : 'Inactive'} />
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
-                      <div><span className="text-muted-foreground">Holder:</span> <span className="font-medium">{b.holderName}</span></div>
-                      <div><span className="text-muted-foreground">A/C:</span> <span className="font-mono font-medium">{maskAccount(b.accountNumber)}</span></div>
-                      <div><span className="text-muted-foreground">IFSC:</span> <span className="font-mono font-medium">{b.ifsc}</span></div>
-                      <div><span className="text-muted-foreground">Type:</span> <span className="font-medium capitalize">{b.accountType}</span></div>
-                      <div className="col-span-2"><span className="text-muted-foreground">Branch:</span> <span className="font-medium">{b.branch}</span></div>
-                    </div>
-                    {b.parentDisplayInstructions && (
-                      <div className="mt-2 rounded-md bg-muted/30 border border-border/60 px-2 py-1.5">
-                        <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Parent Instructions</p>
-                        <p className="text-[10px] mt-0.5">{b.parentDisplayInstructions}</p>
+                {/* Identity row — logo-ish letter chip + holder + Primary/Active chips */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300 text-xs font-bold uppercase">
+                      {(b.bankName || '?').charAt(0)}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs font-semibold truncate">{b.holderName}</p>
+                        {b.isPrimary && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20">
+                            <Star className="h-2.5 w-2.5 fill-current" /> Primary
+                          </span>
+                        )}
+                        <FeeStatusBadge status={b.status === 'active' ? 'Active' : 'Inactive'} />
                       </div>
-                    )}
+                      <p className="text-[10px] text-muted-foreground truncate">{b.bankName} · <span className="capitalize">{b.accountType}</span></p>
+                    </div>
                   </div>
+                  <p className="hidden sm:block text-[9px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">IFSC {b.ifsc}</p>
                 </div>
-                <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/40">
+                {/* Sensitive fields row — masked A/C mono · IFSC mono · branch muted */}
+                <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-[10px] rounded-md border border-border/50 bg-muted/30 px-2.5 py-1.5">
+                  <span className="min-w-0"><span className="text-muted-foreground">A/C:</span> <span className="font-mono font-medium">{maskAccount(b.accountNumber)}</span></span>
+                  <span className="sm:hidden"><span className="text-muted-foreground">IFSC:</span> <span className="font-mono font-medium">{b.ifsc}</span></span>
+                  <span className="min-w-0"><span className="text-muted-foreground">Branch:</span> <span className="font-medium">{b.branch}</span></span>
+                </div>
+                {b.parentDisplayInstructions && (
+                  <div className="rounded-md bg-muted/30 border border-border/60 px-2 py-1.5">
+                    <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Parent Instructions</p>
+                    <p className="text-[10px] mt-0.5">{b.parentDisplayInstructions}</p>
+                  </div>
+                )}
+                <div className="flex items-center gap-1 pt-1.5 border-t border-border/40">
                   <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1" onClick={() => setEditing(b.id)}>
                     <Pencil className="h-3 w-3" /> Edit
                   </Button>
@@ -376,7 +429,7 @@ function BankAndSettlement() {
                       className="h-6 text-[10px] gap-1 text-emerald-600"
                       onClick={() => {
                         setPrimaryBankAccount(b.id)
-                        toast.success('Primary account updated', { description: `${b.bankName} ****${b.accountNumber.slice(-4)} is now the primary settlement account.` })
+                        toast.success('Primary account updated', { description: `${b.bankName} ••••${b.accountNumber.slice(-4)} is now the primary settlement account.` })
                       }}
                     >
                       <Star className="h-3 w-3" /> Set Primary
@@ -388,7 +441,7 @@ function BankAndSettlement() {
                       className="h-6 text-[10px] gap-1 text-rose-600"
                       onClick={() => {
                         deactivateBankAccount(b.id)
-                        toast.success('Account deactivated', { description: `${b.bankName} ****${b.accountNumber.slice(-4)} deactivated.` })
+                        toast.success('Account deactivated', { description: `${b.bankName} ••••${b.accountNumber.slice(-4)} deactivated.` })
                       }}
                     >
                       <Ban className="h-3 w-3" /> Deactivate
@@ -413,10 +466,10 @@ function BankAndSettlement() {
           onSave={(payload) => {
             if (showAdd) {
               addBankAccount({ ...payload, status: 'active', isPrimary: false })
-              toast.success('Bank account added', { description: `${payload.bankName} ****${payload.accountNumber.slice(-4)} added.` })
+              toast.success('Bank account added', { description: `${payload.bankName} ••••${payload.accountNumber.slice(-4)} added.` })
             } else if (editing) {
               updateBankAccount(editing, payload)
-              toast.success('Bank account updated', { description: `${payload.bankName} ****${payload.accountNumber.slice(-4)} updated.` })
+              toast.success('Bank account updated', { description: `${payload.bankName} ••••${payload.accountNumber.slice(-4)} updated.` })
             }
             setShowAdd(false)
             setEditing(null)
@@ -441,7 +494,7 @@ function ParentInstructionsEditor() {
   return (
     <div className="space-y-2">
       <p className="text-[10px] text-muted-foreground">
-        Editing instructions for primary account <span className="font-medium">{primary.bankName} ****{primary.accountNumber.slice(-4)}</span>.
+        Editing instructions for primary account <span className="font-medium">{primary.bankName} ••••{primary.accountNumber.slice(-4)}</span>.
       </p>
       <textarea
         value={text}
@@ -578,9 +631,13 @@ function UpiQrConfigSection() {
 
   return (
     <FeePanel
-      title="UPI / QR Configurations"
+      title={
+        <PanelHeading icon={<QrCode className="h-4 w-4" />} tone="bg-emerald-500/15 text-emerald-600">
+          UPI / QR Configurations
+        </PanelHeading>
+      }
       subtitle={`${upiQrConfigs.length} config(s) · ${upiQrConfigs.filter((c) => c.status === 'active').length} active`}
-      action={<Button size="sm" className="h-7 text-xs gap-1" onClick={() => setShowAdd(true)}><Plus className="h-3 w-3" /> Add UPI Config</Button>}
+      action={<Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowAdd(true)}><Plus className="h-3 w-3" /> Add UPI Config</Button>}
     >
       {upiQrConfigs.length === 0 ? (
         <div className="text-center py-8 text-xs text-muted-foreground">
@@ -588,8 +645,11 @@ function UpiQrConfigSection() {
         </div>
       ) : (
         <div className="space-y-2">
+          {/* NOTE (2-e): no QR image is rendered here — no QR mechanism/library exists
+              on this surface today, so we keep the QrCode icon chip and deliberately
+              avoid adding any dependency. */}
           {upiQrConfigs.map((c) => (
-            <div key={c.id} className={cn('rounded-lg border p-3 transition-colors', c.status === 'active' ? 'border-border bg-card' : 'border-border/40 bg-muted/20 opacity-70')}>
+            <div key={c.id} className={cn('rounded-lg border px-3 py-2.5 transition-colors', c.status === 'active' ? 'border-border bg-card' : 'border-border/40 bg-muted/20 opacity-70')}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -602,11 +662,11 @@ function UpiQrConfigSection() {
                     </span>
                     <FeeStatusBadge status={c.status === 'active' ? 'Active' : 'Inactive'} />
                   </div>
-                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
-                    <div><span className="text-muted-foreground">UPI ID:</span> <span className="font-mono font-medium">{c.upiId}</span></div>
-                    <div><span className="text-muted-foreground">Payee:</span> <span className="font-medium">{c.payeeName}</span></div>
+                  <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+                    <div className="min-w-0"><span className="text-muted-foreground">UPI ID:</span> <span className="font-mono font-medium">{c.upiId}</span></div>
+                    <div className="min-w-0"><span className="text-muted-foreground">Payee:</span> <span className="font-medium truncate">{c.payeeName}</span></div>
                     {c.provider && <div><span className="text-muted-foreground">Provider:</span> <span className="font-medium capitalize">{c.provider}</span></div>}
-                    {c.notes && <div className="col-span-2"><span className="text-muted-foreground">Notes:</span> <span className="font-medium">{c.notes}</span></div>}
+                    {c.notes && <div className="col-span-2 min-w-0"><span className="text-muted-foreground">Notes:</span> <span className="font-medium truncate">{c.notes}</span></div>}
                   </div>
                 </div>
               </div>
