@@ -46,8 +46,10 @@ import { useFeeData,
   useFeeStore,
   computeExamFeeTotal,
   FREQUENCY_MULTIPLIER,
+  CURRENT_ACADEMIC_YEAR,
   type FeeStructureConfig,
   type FeeStructureStatus,
+  type StructureRevision,
 } from '@/lib/store/fee-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 // PHASE 5 — class catalogue (used by Bulk Apply to Level + Coverage Matrix).
@@ -57,14 +59,6 @@ import { cn } from '@/lib/utils'
 import { FeesStructuresDetailDrawer } from './fees-structures-detail'
 import { FeesStructuresHistoryDialog } from './fees-structures-history'
 import { VersionStatusPill, StructureStatusBadge } from './fees-structures-shared'
-import { FeesMasterCatalogue } from './fees-master-catalogue'
-// PHASE 6 — Normalize Uncatalogued Heads tool. Banner + drawer that
-// surface every per-structure FeeHead lacking a catalogueId binding and
-// let the principal link it to a master catalogue entry in one click.
-import {
-  FeesNormalizeHeadsBanner,
-  FeesNormalizeHeadsDrawer,
-} from './fees-normalize-heads'
 import { toast } from 'sonner'
 
 // TASK 2-c — flattened to chip tones only (the old `bar`/`dot` fields
@@ -91,11 +85,12 @@ const CATEGORY_COLORS: Record<string, string> = {
 }
 
 export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<typeof useFeeData>; onNavigate?: (moduleKey: string) => void }) {
-  const { feeStructures, versions } = data
+  const { feeStructures, versions, structureRevisions } = data
   const students = useStudentsStore((s) => s.students)
   const archiveFeeStructureVersion = useFeeStore((s) => s.archiveFeeStructureVersion)
   const createFeeStructure = useFeeStore((s) => s.createFeeStructure)
   const deleteFeeStructure = useFeeStore((s) => s.deleteFeeStructure)
+  const syncFeeStructuresForSession = useFeeStore((s) => s.syncFeeStructuresForSession)
 
   const [openStructureId, setOpenStructureId] = useState<string | null>(null)
   const [historyStructure, setHistoryStructure] = useState<FeeStructureConfig | null>(null)
@@ -106,9 +101,6 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
   const [deleteTarget, setDeleteTarget] = useState<FeeStructureConfig | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
-  // PHASE 5 — Master Catalogue deep-view state (school-wide fee-head
-  // catalogue surfaced directly inside Fee Management).
-  const [catalogueOpen, setCatalogueOpen] = useState(false)
 
   // PHASE 5 — Bulk Apply to Level dialog state. Lets the principal pick
   // a source structure (e.g. Class 2 Primary) and apply it to all OTHER
@@ -130,22 +122,6 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
     window.addEventListener('fee-open-structure', handler)
     return () => window.removeEventListener('fee-open-structure', handler)
   }, [])
-
-  // PHASE 6 — listen for `fee-open-catalogue` events so the Add-Head
-  // form (inside the detail drawer) can ask this parent to open the
-  // Master Catalogue deep view. The catalogue remains the single source
-  // of truth for catalogue administration — the Add-Head form never edits
-  // the catalogue directly.
-  useEffect(() => {
-    const handler = () => setCatalogueOpen(true)
-    window.addEventListener('fee-open-catalogue', handler)
-    return () => window.removeEventListener('fee-open-catalogue', handler)
-  }, [])
-
-  // PHASE 6 — Normalize Uncatalogued Heads drawer state. Surfaced as
-  // a collapsible amber banner above the structure grid when there are
-  // any per-structure heads without a catalogueId binding.
-  const [normalizeOpen, setNormalizeOpen] = useState(false)
 
   // FEE-CREATE-DRAWER — "Create New Structure" now opens the same
   // right-side detail drawer used by existing structures, but in
@@ -220,17 +196,45 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
     return counts
   }, [students])
 
-  // TASK 2-c — header chip: distinct academic classes actually bound to a
-  // structure (union of classId + applicableClassIds across ALL structures;
-  // stream ids like C14-PCM count individually).
-  const boundClassCount = useMemo(() => {
+  // STRUCT-SESSION — header chip: how many of the school's active
+  // academic classes have a fee structure bound for the CURRENT session.
+  const activeClassCount = useMemo(() => {
+    const sessionStructs = feeStructures.filter(
+      (s) => (s.academicYear ?? CURRENT_ACADEMIC_YEAR) === CURRENT_ACADEMIC_YEAR,
+    )
     const ids = new Set<string>()
-    for (const s of feeStructures) {
+    for (const s of sessionStructs) {
       if (s.classId) ids.add(s.classId)
       if (s.applicableClassIds) for (const id of s.applicableClassIds) ids.add(id)
     }
     return ids.size
   }, [feeStructures])
+
+  // STRUCT-REV — the live revision for each structure (Pending Approval or
+  // Threshold Reached) so cards can carry a progress pill.
+  const activeRevisionByStructure = useMemo(() => {
+    const m = new Map<string, StructureRevision>()
+    for (const r of structureRevisions) {
+      if (r.status === 'Pending Approval' || r.status === 'Threshold Reached') {
+        m.set(r.structureId, r)
+      }
+    }
+    return m
+  }, [structureRevisions])
+
+  // STRUCT-SESSION — auto-sync: ensure every active class of the CURRENT
+  // session has a fee structure (Draft / Not Configured). Idempotent —
+  // runs on mount and only fills gaps (new classes included, PART 23).
+  useEffect(() => {
+    const r = syncFeeStructuresForSession('System')
+    if (r.created > 0) {
+      toast.info(`${r.created} class structure${r.created === 1 ? '' : 's'} auto-created for ${CURRENT_ACADEMIC_YEAR}`, {
+        description: 'Open each Not configured card to set amounts, then publish.',
+      })
+    }
+    // Run once on mount — the sync is idempotent and only fills gaps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncFeeStructuresForSession])
 
   const openStructure = feeStructures.find((s) => s.id === openStructureId) ?? null
 
@@ -359,15 +363,6 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
     }, 250)
   }
 
-  // PHASE 5 — Master Catalogue opens as a DEEP PAGE inside Fee Management:
-  // while open it takes over this tab's CONTENT AREA only. The application
-  // shell (left sidebar, top header, module tab bar) stays exactly where it
-  // is — no fixed full-screen overlay, no browser-viewport takeover. All
-  // hooks above already ran, so returning early here is safe.
-  if (catalogueOpen) {
-    return <FeesMasterCatalogue open onClose={() => setCatalogueOpen(false)} />
-  }
-
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
       {/* TASK 2-c — benchmark header pair (icon-title h2 + subtitle;
@@ -379,40 +374,20 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
             <Layers className="h-4 w-4 text-muted-foreground" /> Fee Structures
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Per-class fee plans, versions and exam-session schedules.
+            {CURRENT_ACADEMIC_YEAR} &middot; Per-class fee plans, versions and schedules. One structure
+            per active class &mdash; auto-created, configured, then published.
           </p>
         </div>
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40">
-            <Layers className="h-2.5 w-2.5" /> {feeStructures.length} structures
+            <Layers className="h-2.5 w-2.5" /> {feeStructures.length} structure{feeStructures.length === 1 ? '' : 's'}
           </Badge>
           <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40">
-            <GraduationCap className="h-2.5 w-2.5" /> {boundClassCount} bound {boundClassCount === 1 ? 'class' : 'classes'}
+            <GraduationCap className="h-2.5 w-2.5" /> {activeClassCount} active class{activeClassCount === 1 ? '' : 'es'}
           </Badge>
-          {/* PHASE 5 — Master Catalogue launcher. Kept as a peer action
-              of the summary chips; reads "+ Master Catalogue". */}
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs gap-1"
-            onClick={() => setCatalogueOpen(true)}
-            title="Manage the school-wide master fee-head catalogue"
-          >
-            <Plus className="h-3.5 w-3.5" /> Master Catalogue
-          </Button>
         </div>
       </div>
 
-
-      {/* PHASE 6 — Normalize Uncatalogued Heads banner. Auto-hides when
-          there are no uncatalogued heads (so a school that has fully
-          migrated to the master catalogue never sees it). Amber theme
-          matches the "needs attention" semantic — distinct from
-          emerald (good) and rose (destructive). */}
-      <FeesNormalizeHeadsBanner
-        feeStructures={feeStructures}
-        onOpen={() => setNormalizeOpen(true)}
-      />
 
       {/* Structure grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -483,6 +458,16 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
                 </div>
                 <StructureStatusBadge status={status} version={f.version} />
               </div>
+
+              {/* STRUCT-REV — live mid-session revision progress pill. */}
+              {activeRevisionByStructure.get(f.id) && (
+                <RevisionPill revision={activeRevisionByStructure.get(f.id)!} />
+              )}
+              {f.notConfigured && f.components.length === 0 && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 -mt-1">
+                  <AlertTriangle className="h-3 w-3" /> Not configured — set amounts, then publish.
+                </p>
+              )}
 
               {/* Mini-stat tiles (Salary-benchmark recipe) — Annual shows
                   the BASE total (excludes opt-in Transport). */}
@@ -867,16 +852,36 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
         })()}
       </AnimatePresence>
 
-      {/* PHASE 6 — Normalize Uncatalogued Heads drawer. Lets the
-          principal link every per-structure FeeHead lacking a
-          catalogueId binding to a master catalogue entry in one click.
-          Drawer pattern keeps focus on one structure so the UX stays
-          consistent. */}
-      <FeesNormalizeHeadsDrawer
-        open={normalizeOpen}
-        onClose={() => setNormalizeOpen(false)}
-        feeStructures={feeStructures}
-      />
+      
+    </div>
+  )
+}
+
+// ─── STRUCT-REV — revision progress pill (PART 12) ─────────────────────
+
+export function RevisionPill({ revision }: { revision: StructureRevision }) {
+  const approved = Object.values(revision.responses).filter((v) => v === 'Approved').length
+  const declined = Object.values(revision.responses).filter((v) => v === 'Declined').length
+  const pct = revision.affectedStudentIds.length > 0
+    ? Math.round((approved / revision.affectedStudentIds.length) * 1000) / 10
+    : 0
+  const reached = revision.status === 'Threshold Reached'
+  return (
+    <div
+      className={cn(
+        'rounded-lg border px-2.5 py-1.5 text-[10px] flex items-center justify-between gap-2',
+        reached
+          ? 'border-emerald-500/30 bg-emerald-500/[0.07]'
+          : 'border-amber-500/30 bg-amber-500/[0.06]',
+      )}
+      title={`Revision v${revision.toVersion} — ${approved}/${revision.affectedStudentIds.length} approved · ${declined} declined · 60% threshold required`}
+    >
+      <span className={cn('font-semibold', reached ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300')}>
+        Revision v{revision.toVersion} · {revision.status}
+      </span>
+      <span className="tabular-nums text-muted-foreground">
+        {approved}/{revision.affectedStudentIds.length} · {pct}%
+      </span>
     </div>
   )
 }

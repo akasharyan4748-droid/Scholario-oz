@@ -44,7 +44,7 @@ export interface ConfirmChangesProps {
   oldHeads: FeeHead[]
   newHeads: FeeHead[]
   effectiveFrom: string
-  mode: 'publish' | 'schedule'
+  mode: 'publish' | 'schedule' | 'revision'
   onConfirm: (reason: string, effectiveFrom: string) => void
   onClose: () => void
 }
@@ -162,7 +162,7 @@ export function FeesStructuresConfirmDialog({
                   </span>
                   <div className="min-w-0">
                     <h3 className="text-sm font-bold truncate">
-                      {mode === 'publish' ? 'Publish New Version' : 'Schedule New Version'} — {structure.className}
+                      {mode === 'revision' ? 'Submit Revision' : mode === 'publish' ? 'Publish New Version' : 'Schedule New Version'} — {structure.className}
                     </h3>
                     <p className="text-[11px] text-muted-foreground">
                       Step {step} of 2 · {step === 1 ? 'Review Changes' : 'Confirm & Commit'}
@@ -190,7 +190,7 @@ export function FeesStructuresConfirmDialog({
                   setReason={setReason}
                   effectiveFrom={effectiveFrom}
                   setEffectiveFrom={setEffectiveFrom}
-                  mode={mode}
+                  mode={mode as 'publish' | 'schedule' | 'revision'}
                   reasonValid={reasonValid}
                   feeHeadsCount={newHeads.filter((h) => h.active).length}
                 />
@@ -199,7 +199,7 @@ export function FeesStructuresConfirmDialog({
                   isHighImpact={isHighImpact}
                   confirmText={confirmText}
                   setConfirmText={setConfirmText}
-                  mode={mode}
+                  mode={mode as 'publish' | 'schedule' | 'revision'}
                   structure={structure}
                   newTotal={newTotal}
                   affectedStudents={affectedStudents}
@@ -245,7 +245,7 @@ export function FeesStructuresConfirmDialog({
                     onClick={submit}
                   >
                     {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                    {mode === 'publish' ? 'Confirm & Publish' : 'Confirm & Schedule'}
+                    {mode === 'revision' ? 'Submit Revision' : mode === 'publish' ? 'Confirm & Publish' : 'Confirm & Schedule'}
                   </Button>
                 )}
               </div>
@@ -271,7 +271,7 @@ interface Step1Props {
   setReason: (v: string) => void
   effectiveFrom: string
   setEffectiveFrom: (v: string) => void
-  mode: 'publish' | 'schedule'
+  mode: 'publish' | 'schedule' | 'revision'
   reasonValid: boolean
   /** Number of active fee heads in the new version. Fix 5 (FEE-CORRECT). */
   feeHeadsCount: number
@@ -301,7 +301,7 @@ function Step1Review({
         <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
           <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider flex items-center gap-1"><Calendar className="h-2.5 w-2.5" /> Effective</p>
           <p className="text-sm font-bold tabular-nums mt-0.5">{effectiveFrom || '—'}</p>
-          <p className="text-[9px] text-muted-foreground">{mode === 'publish' ? 'immediate' : 'scheduled'}</p>
+          <p className="text-[9px] text-muted-foreground">{mode === 'schedule' ? 'scheduled' : 'after 60% acknowledgement'}</p>
         </div>
         <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
           <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Old Total</p>
@@ -430,7 +430,7 @@ interface Step2Props {
   isHighImpact: boolean
   confirmText: string
   setConfirmText: (v: string) => void
-  mode: 'publish' | 'schedule'
+  mode: 'publish' | 'schedule' | 'revision'
   structure: FeeStructureConfig
   newTotal: number
   affectedStudents: number
@@ -455,7 +455,7 @@ function Step2Confirm({
               {isHighImpact ? 'High-impact change — additional confirmation required' : 'Standard impact — ready to commit'}
             </p>
             <p className="text-muted-foreground mt-1">
-              You are about to {mode === 'publish' ? 'publish' : 'schedule'} a new version of
+              You are about to {mode === 'revision' ? 'submit a revision of' : mode === 'publish' ? 'publish' : 'schedule'} a new version of
               <span className="font-semibold text-foreground"> {structure.className}</span> with a
               total of <span className="font-semibold text-foreground tabular-nums">{formatINR(newTotal, true)}</span>,
               affecting <span className="font-semibold text-foreground tabular-nums">{affectedStudents}</span> students,
@@ -473,7 +473,7 @@ function Step2Confirm({
         <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">What will happen</p>
         <ul className="text-[11px] space-y-1 text-muted-foreground">
           <li className="flex items-start gap-1.5"><Check className="h-3 w-3 text-emerald-600 shrink-0 mt-0.5" /> A new version (immutable snapshot) is created</li>
-          <li className="flex items-start gap-1.5"><Check className="h-3 w-3 text-emerald-600 shrink-0 mt-0.5" /> {mode === 'publish' ? 'Previous current version is archived' : 'Current version stays active until the effective date'}</li>
+          <li className="flex items-start gap-1.5"><Check className="h-3 w-3 text-emerald-600 shrink-0 mt-0.5" /> {mode === 'revision' ? 'Published version keeps applying until 60% of guardians approve' : mode === 'publish' ? 'Previous current version is archived' : 'Current version stays active until the effective date'}</li>
           <li className="flex items-start gap-1.5"><Check className="h-3 w-3 text-emerald-600 shrink-0 mt-0.5" /> An audit log entry is recorded (cannot be edited or deleted)</li>
           <li className="flex items-start gap-1.5"><Check className="h-3 w-3 text-emerald-600 shrink-0 mt-0.5" /> Affected parents are notified via Push + SMS + Email</li>
           <li className="flex items-start gap-1.5"><Check className="h-3 w-3 text-emerald-600 shrink-0 mt-0.5" /> <span><span className="font-semibold text-foreground">Future dues only</span> — only students who haven't paid yet are affected.</span></li>

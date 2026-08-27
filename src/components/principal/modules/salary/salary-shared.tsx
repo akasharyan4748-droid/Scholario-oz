@@ -22,6 +22,7 @@ import { Panel } from '../shared/panel'
 export type SalaryTab =
   | 'overview'
   | 'payments'
+  | 'accounts'
   | 'payslips'
   | 'reports'
   | 'history'

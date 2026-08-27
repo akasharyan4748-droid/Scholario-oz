@@ -21,6 +21,7 @@ import type { SalaryTab } from './salary-shared'
 import { SalaryUIProvider, useSalaryUI } from './salary-ui-context'
 import { SalaryOverviewSection } from './salary-overview'
 import { SalaryPaymentsSection } from './salary-payments'
+import { SalaryEmployeeAccountsSection } from './salary-employee-accounts'
 import { SalaryPayslipsSection } from './salary-payslips'
 import { SalaryReportsSection } from './salary-reports'
 import { SalaryHistorySection } from './salary-history'
@@ -30,7 +31,7 @@ import { SalaryEmployeeDrawer } from './salary-employee-drawer'
 import { RecordPaymentDialog } from './record-payment-dialog'
 
 const TAB_VALUES: SalaryTab[] = [
-  'overview', 'payments', 'payslips', 'reports', 'history', 'structures', 'settings',
+  'overview', 'payments', 'accounts', 'payslips', 'reports', 'history', 'structures', 'settings',
 ]
 
 function SalaryShellInner() {
@@ -40,6 +41,7 @@ function SalaryShellInner() {
   const tabs: SegmentedTab[] = [
     { value: 'overview', label: 'Overview' },
     { value: 'payments', label: 'Payments', badge: data.currentMonth.pending.count + data.pendingChangeRequests.length },
+    { value: 'accounts', label: 'Employee Accounts' },
     { value: 'payslips', label: 'Payslips' },
     { value: 'reports', label: 'Reports' },
     { value: 'history', label: 'History' },
@@ -67,6 +69,7 @@ function SalaryShellInner() {
         >
           {tab === 'overview' && <SalaryOverviewSection onNavigate={(t) => setTab(t as SalaryTab)} />}
           {tab === 'payments' && <SalaryPaymentsSection />}
+          {tab === 'accounts' && <SalaryEmployeeAccountsSection />}
           {tab === 'payslips' && <SalaryPayslipsSection />}
           {tab === 'reports' && <SalaryReportsSection />}
           {tab === 'history' && <SalaryHistorySection />}

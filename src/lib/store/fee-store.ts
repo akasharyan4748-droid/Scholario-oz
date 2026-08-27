@@ -435,6 +435,17 @@ export interface FeeStructureConfig {
    * field simply have no per-exam fees configured.
    */
   examFeeSchedule?: ExamFeeSchedule
+  /**
+   * SESSION-SPECIFIC BINDING (STRUCT-SESSION — additive): the academic
+   * session this structure belongs to (e.g. '2026-2027'). Class 10 ·
+   * 2026-27 and Class 10 · 2027-28 are SEPARATE structures — a new
+   * session never mutates the old one. Optional for backward compat:
+   * persisted pre-session structures default to the current session.
+   */
+  academicYear?: string
+  /** True when this structure was auto-created by the session class-sync
+   *  and has not been configured yet (empty heads). */
+  notConfigured?: boolean
 }
 
 // ─── Versioned Fee Structure (Phase 3 — version-aware data model) ──
@@ -484,6 +495,61 @@ export interface FeeChangeLog {
   reason?: string
   affectedStudents: number
 }
+
+// ─── MID-SESSION STRUCTURE REVISION (STRUCT-REV) ───────────────────────
+//
+// A published CURRENT-SESSION structure is LOCKED (fee stability for a
+// running session). Exceptional changes go through a controlled flow,
+// deliberately simple — no voting system, no discussion, no committees:
+//
+//   Locked structure → Request Edit (temporary window, salary-pattern)
+//     → make changes → Submit Revision (a PROPOSED new version — never
+//     an overwrite) → affected students/guardians acknowledge
+//     → ≥ 60% approval → Principal publishes the new version → notify.
+//
+// The currently published version keeps applying until the revision is
+// published. Historical transactions are NEVER recalculated.
+
+export type StructureRevisionStatus =
+  | 'Pending Approval' | 'Threshold Reached' | 'Published' | 'Cancelled'
+
+export interface StructureRevision {
+  id: string
+  structureId: string
+  className: string
+  classId?: string
+  academicYear: string
+  /** Version number of the currently published structure at proposal time. */
+  fromVersion: number
+  /** Version number the revision WILL become when published. */
+  toVersion: number
+  /** Snapshot of the currently published heads (for the approval card). */
+  previousHeads: FeeHead[]
+  /** The proposed head set. */
+  proposedHeads: FeeHead[]
+  previousTotal: number
+  proposedTotal: number
+  effectiveFrom: string
+  reason?: string
+  requestedBy: string
+  requestedAt: string
+  /** Canonical student ids affected (the structure's class roster). */
+  affectedStudentIds: string[]
+  /** studentId → 'Approved' | 'Declined' (acknowledgements received). */
+  responses: Record<string, 'Approved' | 'Declined'>
+  status: StructureRevisionStatus
+  publishedAt?: string
+  publishedVersionId?: string
+  cancelledAt?: string
+}
+
+/** Temporary editing window for ONE locked structure (salary-pattern). */
+export interface StructureEditWindow {
+  structureId: string | null
+  openedAt: number | null
+  expiresAt: number | null
+}
+
 
 export interface CashRequest {
   id: string
@@ -691,6 +757,45 @@ export function studentClassLevel(className: string): string {
     className.match(/Class [1-5]/) ? 'Primary' : 'Pre-Primary'
 }
 
+// ─── STRUCT-REV helpers ────────────────────────────────────────────────
+
+/** Acknowledgement threshold for mid-session revisions (PART 12): 60%. */
+export const STRUCTURE_APPROVAL_THRESHOLD = 0.6
+
+/**
+ * Returns the reason a structure cannot be edited in place, or null when
+ * editing is allowed. Rules (PART 7/8/9):
+ *   • draft / not-configured structures → editable freely
+ *   • historical (non-current) session → read-only, always
+ *   • published CURRENT-session structure → locked unless a temporary
+ *     editing window is open for it
+ */
+export function structureLockReason(
+  state: Pick<FeeState, 'versions' | 'structureEditWindow'>,
+  struct: Pick<FeeStructureConfig, 'id' | 'academicYear' | 'className'>,
+): string | null {
+  const isPublished = state.versions.some((v) => v.structureId === struct.id && v.status === 'current')
+  if (!isPublished) return null // draft — editable
+  const year = struct.academicYear ?? CURRENT_ACADEMIC_YEAR
+  if (year !== CURRENT_ACADEMIC_YEAR) {
+    return 'Historical session structures are read-only — the record stays historically intact.'
+  }
+  const w = state.structureEditWindow
+  const live = w.structureId === struct.id && !!w.expiresAt && Date.now() < w.expiresAt
+  if (live) return null
+  return `"${struct.className}" is locked — it is active for students. Request a temporary edit window to make exceptional changes.`
+}
+
+/** Is the temporary editing window live for the given structure? */
+export function structureEditWindowLive(
+  window: StructureEditWindow,
+  structureId: string,
+  now = Date.now(),
+): { live: boolean; msLeft: number } {
+  const live = window.structureId === structureId && !!window.expiresAt && now < window.expiresAt
+  return { live, msLeft: live ? Math.max(0, (window.expiresAt ?? 0) - now) : 0 }
+}
+
 // ─── Helper: find the FeeStructureConfig that applies to a student ──
 // FEE-PER-CLASS (Phase 5): tries an EXACT classId match first (using the
 // student's classId when available, derived from className via the
@@ -837,6 +942,10 @@ interface FeeState {
   versions: FeeStructureVersion[]
   /** Immutable audit trail for every version-affecting mutation (Phase 3). */
   changeLog: FeeChangeLog[]
+  /** STRUCT-REV — mid-session revision proposals + acknowledgements. */
+  structureRevisions: StructureRevision[]
+  /** STRUCT-REV — the single temporary editing window (salary-pattern). */
+  structureEditWindow: StructureEditWindow
   /** Event-based Additional Charges — INDEPENDENT of the standard annual
    *  class fee structures. Never mixed into core fee totals. */
   additionalCharges: AdditionalCharge[]
@@ -991,6 +1100,35 @@ interface FeeState {
    * deleted — the audit log preserves the deletion record forever.
    */
   deleteFeeStructure: (structureId: string, actor: string) => { success: boolean; error?: string }
+
+  // ─── STRUCT-SESSION / STRUCT-REV — session lifecycle mutations ─────
+  /** Auto-create one DRAFT / Not-Configured structure per active class
+   *  that has no structure bound for the CURRENT session. Idempotent —
+   *  call on module mount; it only fills the gaps (new classes too). */
+  syncFeeStructuresForSession: (actor?: string) => { created: number; classes: string[] }
+  /** Open a temporary editing window on a LOCKED current-session structure
+   *  (3 hours, salary-pattern). Required before any live edit. */
+  requestStructureEditWindow: (structureId: string, actor: string) => { success: boolean; error?: string; expiresAt?: number }
+  /** Close the editing window early. */
+  closeStructureEditWindow: (actor?: string) => void
+  /** Submit a PROPOSED new version for a locked current-session structure.
+   *  Never overwrites: the published version keeps applying. Sends
+   *  acknowledgement requests to the affected students/guardians. */
+  createStructureRevision: (input: {
+    structureId: string
+    proposedHeads: FeeHead[]
+    effectiveFrom: string
+    reason?: string
+    actor?: string
+  }) => { success: boolean; revision?: StructureRevision; error?: string }
+  /** Record a student/guardian acknowledgement. Flips the revision to
+   *  'Threshold Reached' when ≥ 60% of affected students approved. */
+  respondStructureRevision: (revisionId: string, studentId: string, accept: boolean) => { success: boolean; error?: string; thresholdReached?: boolean }
+  /** Publish an approved revision (only when the 60% threshold is met).
+   *  Creates the new version, supersedes the old one, notifies users. */
+  publishStructureRevision: (revisionId: string, actor?: string) => { success: boolean; error?: string; versionId?: string }
+  /** Cancel a pending/threshold revision. History preserved. */
+  cancelStructureRevision: (revisionId: string, actor?: string, reason?: string) => { success: boolean; error?: string }
 }
 
 export interface PaymentInput {
@@ -1069,6 +1207,8 @@ export const useFeeStore = create<FeeState>()(
   feeStructures: FEE_STRUCTURES,
   versions: SEED_VERSIONS,
   changeLog: [],
+  structureRevisions: [],
+  structureEditWindow: { structureId: null, openedAt: null, expiresAt: null },
   additionalCharges: SEED_ADDITIONAL_CHARGES,
   paymentModes: DEFAULT_PAYMENT_MODES,
   lateFeeRule: DEFAULT_LATE_FEE_RULE,
@@ -1428,6 +1568,10 @@ export const useFeeStore = create<FeeState>()(
 
     // ─── Fix 8 (FEE-CORRECT): validation ───────────────────────────
     if (!struct) return { success: false, error: 'Fee structure not found.' }
+    // STRUCT-REV lock: a published current-session structure (or any
+    // historical session) cannot be mutated in place — revision flow only.
+    const lockErr = structureLockReason(state, struct)
+    if (lockErr) return { success: false, error: lockErr }
     if (!head.name || !head.name.trim()) {
       return { success: false, error: 'Fee head name is required.' }
     }
@@ -1492,6 +1636,9 @@ export const useFeeStore = create<FeeState>()(
 
     // ─── Fix 8 (FEE-CORRECT): validation ───────────────────────────
     if (!struct) return { success: false, error: 'Fee structure not found.' }
+    // STRUCT-REV lock (see addFeeHead).
+    const lockErr = structureLockReason(state, struct)
+    if (lockErr) return { success: false, error: lockErr }
     if (!oldHead) return { success: false, error: 'Fee head not found.' }
     if (patch.name !== undefined && !patch.name.trim()) {
       return { success: false, error: 'Fee head name cannot be empty.' }
@@ -2148,6 +2295,265 @@ export const useFeeStore = create<FeeState>()(
     return { success: true }
   },
 
+  // ─── STRUCT-SESSION / STRUCT-REV implementations ────────────────────
+
+  syncFeeStructuresForSession: (actor) => {
+    const state = get()
+    const who = actor ?? 'System'
+    // One structure per active class for the CURRENT session. Anything
+    // already bound (even user-created custom drafts) is left untouched —
+    // this only fills the gaps, including classes added mid-year (PART 23).
+    const bound = new Set(
+      state.feeStructures
+        .filter((s) => (s.academicYear ?? CURRENT_ACADEMIC_YEAR) === CURRENT_ACADEMIC_YEAR)
+        .map((s) => s.classId),
+    )
+    const missing = ACADEMIC_CLASSES.filter((c) => !bound.has(c.id))
+    if (missing.length === 0) return { created: 0, classes: [] }
+
+    const sessionStart = `${CURRENT_ACADEMIC_YEAR.split('-')[0]}-04-01`
+    const created: string[] = []
+    let nextStructSeq = Math.floor(Date.now() / 1000)
+    const newStructs: FeeStructureConfig[] = missing.map((c) => {
+      const id = `FS-NEW-${(nextStructSeq += 1).toString(36)}`
+      created.push(c.name)
+      return {
+        id,
+        category: c.level,
+        className: c.name,
+        classLevel: c.level,
+        classId: c.id,
+        applicableClassIds: [c.id],
+        annual: 0,
+        components: [],
+        effectiveFrom: sessionStart,
+        version: 0,
+        academicYear: CURRENT_ACADEMIC_YEAR,
+        notConfigured: true,
+      }
+    })
+    set({
+      feeStructures: [...state.feeStructures, ...newStructs],
+      audit: pushAudit(state, {
+        action: 'fee_structure.changed',
+        actor: who,
+        entityId: 'session-sync',
+        entityType: 'fee_structure',
+        description: `Session sync auto-created ${created.length} draft structure(s) for ${CURRENT_ACADEMIC_YEAR}: ${created.join(', ')}. Configure amounts, then publish.`,
+      }),
+    })
+    return { created: created.length, classes: created }
+  },
+
+  requestStructureEditWindow: (structureId, actor) => {
+    const state = get()
+    const struct = state.feeStructures.find((s) => s.id === structureId)
+    if (!struct) return { success: false, error: 'Fee structure not found.' }
+    const year = struct.academicYear ?? CURRENT_ACADEMIC_YEAR
+    if (year !== CURRENT_ACADEMIC_YEAR) {
+      return { success: false, error: `This structure belongs to the ${year} session — historical sessions are read-only.` }
+    }
+    const isPublished = state.versions.some((v) => v.structureId === structureId && v.status === 'current')
+    if (!isPublished) {
+      return { success: false, error: 'This structure is still a draft — it can be edited directly.' }
+    }
+    const now = Date.now()
+    const existing = state.structureEditWindow
+    if (existing.structureId === structureId && existing.expiresAt && now < existing.expiresAt) {
+      return { success: true, expiresAt: existing.expiresAt }
+    }
+    const expiresAt = now + 3 * 60 * 60 * 1000 // 3 hours — salary-pattern window
+    set({
+      structureEditWindow: { structureId, openedAt: now, expiresAt },
+      audit: pushAudit(state, {
+        action: 'fee_structure.changed',
+        actor,
+        entityId: structureId,
+        entityType: 'fee_structure',
+        description: `Temporary editing window opened for "${struct.className}" (3 hours). The published version keeps applying to students until a revision is published.`,
+      }),
+    })
+    return { success: true, expiresAt }
+  },
+
+  closeStructureEditWindow: (actor) => {
+    const state = get()
+    if (!state.structureEditWindow.structureId) return
+    const struct = state.feeStructures.find((s) => s.id === state.structureEditWindow.structureId)
+    set({
+      structureEditWindow: { structureId: null, openedAt: null, expiresAt: null },
+      audit: pushAudit(state, {
+        action: 'fee_structure.changed',
+        actor: actor ?? 'Principal',
+        entityId: state.structureEditWindow.structureId,
+        entityType: 'fee_structure',
+        description: `Editing window closed${struct ? ` for "${struct.className}"` : ''}.`,
+      }),
+    })
+  },
+
+  createStructureRevision: (input) => {
+    const state = get()
+    const struct = state.feeStructures.find((s) => s.id === input.structureId)
+    if (!struct) return { success: false, error: 'Fee structure not found.' }
+    const year = struct.academicYear ?? CURRENT_ACADEMIC_YEAR
+    if (year !== CURRENT_ACADEMIC_YEAR) {
+      return { success: false, error: `Revisions apply only to the CURRENT session — "${struct.className}" belongs to ${year}.` }
+    }
+    // Window guard — the whole point of the controlled flow.
+    const w = state.structureEditWindow
+    const windowLive = w.structureId === input.structureId && !!w.expiresAt && Date.now() < w.expiresAt
+    if (!windowLive) {
+      return { success: false, error: 'No editing window is open for this structure. Request temporary edit access first.' }
+    }
+    // Must be a revision of a PUBLISHED structure.
+    const currentVersion = state.versions.find((v) => v.structureId === input.structureId && v.status === 'current')
+    if (!currentVersion) {
+      return { success: false, error: 'Only a published structure needs a revision — configure this draft and publish it instead.' }
+    }
+    // One active revision per structure.
+    const activeRev = state.structureRevisions.find(
+      (r) => r.structureId === input.structureId && (r.status === 'Pending Approval' || r.status === 'Threshold Reached'),
+    )
+    if (activeRev) {
+      return { success: false, error: `A revision (${activeRev.status}) is already awaiting acknowledgement for this class.` }
+    }
+    // No-op guard — identical head sets make the revision meaningless.
+    const same = (a: FeeHead[], b: FeeHead[]) =>
+      a.length === b.length && a.every((h) => { const m = b.find((x) => x.id === h.id); return m && m.amount === h.amount && m.frequency === h.frequency && m.active === h.active && m.mandatory === h.mandatory })
+    if (same(input.proposedHeads, currentVersion.heads)) {
+      return { success: false, error: 'No changes detected — adjust at least one fee head before submitting a revision.' }
+    }
+    if (!input.effectiveFrom) return { success: false, error: 'Set the effective-from date.' }
+
+    // Affected roster: the canonical students of the bound class (session
+    // roster — exactly the accounts this revision would touch).
+    const students = useStudentsStore.getState().students.filter((s) => s.status === 'Active')
+    const affected = struct.classId
+      ? students.filter((s) => s.classId === struct.classId)
+      : students.filter((s) => s.className === struct.className || studentClassLevel(s.className) === struct.classLevel)
+    const affectedStudentIds = affected.map((s) => s.id)
+    if (affectedStudentIds.length === 0) {
+      return { success: false, error: 'No active students are mapped to this class — nothing to acknowledge.' }
+    }
+
+    const nowIso = new Date().toISOString()
+    const revision: StructureRevision = {
+      id: `SREV-${Date.now().toString(36)}`,
+      structureId: struct.id,
+      className: struct.className,
+      classId: struct.classId,
+      academicYear: year,
+      fromVersion: struct.version,
+      toVersion: struct.version + 1,
+      previousHeads: currentVersion.heads.map((h) => ({ ...h })),
+      proposedHeads: input.proposedHeads.map((h) => ({ ...h })),
+      previousTotal: computeHeadsTotal(currentVersion.heads),
+      proposedTotal: computeHeadsTotal(input.proposedHeads),
+      effectiveFrom: input.effectiveFrom,
+      reason: input.reason?.trim() || undefined,
+      requestedBy: input.actor ?? 'Principal',
+      requestedAt: nowIso,
+      affectedStudentIds,
+      responses: {},
+      status: 'Pending Approval',
+    }
+    set({
+      structureRevisions: [revision, ...state.structureRevisions],
+      structureEditWindow: { structureId: null, openedAt: null, expiresAt: null },
+      audit: pushAudit(state, {
+        action: 'fee_structure.changed',
+        actor: input.actor ?? 'Principal',
+        entityId: input.structureId,
+        entityType: 'fee_structure',
+        description: `Revision v${revision.toVersion} proposed for "${struct.className}" (${formatINR(revision.proposedTotal, true)}/yr vs ${formatINR(revision.previousTotal, true)}/yr). Acknowledgement requested from ${affectedStudentIds.length} students/guardians. Published v${revision.fromVersion} continues to apply.`,
+      }),
+    })
+    return { success: true, revision }
+  },
+
+  respondStructureRevision: (revisionId, studentId, accept) => {
+    const state = get()
+    const rev = state.structureRevisions.find((r) => r.id === revisionId)
+    if (!rev) return { success: false, error: 'Revision not found.' }
+    if (rev.status !== 'Pending Approval' && rev.status !== 'Threshold Reached') {
+      return { success: false, error: `This revision is ${rev.status.toLowerCase()} — no further responses.` }
+    }
+    if (!rev.affectedStudentIds.includes(studentId)) {
+      return { success: false, error: 'This student is not affected by the revision.' }
+    }
+    const responses = { ...rev.responses, [studentId]: accept ? 'Approved' as const : 'Declined' as const }
+    const approved = Object.values(responses).filter((v) => v === 'Approved').length
+    const threshold = Math.ceil(rev.affectedStudentIds.length * 0.6)
+    const reached = approved >= threshold
+    set({
+      structureRevisions: state.structureRevisions.map((r) => r.id !== revisionId ? r : {
+        ...r,
+        responses,
+        status: reached ? 'Threshold Reached' as const : 'Pending Approval' as const,
+      }),
+      audit: pushAudit(state, {
+        action: 'fee_structure.changed',
+        actor: studentId,
+        entityId: rev.structureId,
+        entityType: 'fee_structure',
+        description: `${accept ? 'Acknowledgement APPROVED' : 'Revision DECLINED'} by student ${studentId} for "${rev.className}" revision v${rev.toVersion}. ${approved}/${rev.affectedStudentIds.length} approved (${threshold} needed).`,
+      }),
+    })
+    return { success: true, thresholdReached: reached }
+  },
+
+  publishStructureRevision: (revisionId, actor) => {
+    const state = get()
+    const rev = state.structureRevisions.find((r) => r.id === revisionId)
+    if (!rev) return { success: false, error: 'Revision not found.' }
+    if (rev.status !== 'Threshold Reached') {
+      return { success: false, error: `Approval threshold not reached — the revision is ${rev.status.toLowerCase()}.` }
+    }
+    // Reuse the versioned publish pipeline: creates v{n}, supersedes the
+    // old version, updates the live config, writes change-log + audit,
+    // and sends the standard fee-structure announcement.
+    const versionId = get().publishFeeStructureVersion(
+      rev.structureId, rev.proposedHeads, rev.effectiveFrom,
+      rev.reason ?? `Mid-session revision v${rev.toVersion} (approved by ${Object.values(rev.responses).filter((v) => v === 'Approved').length}/${rev.affectedStudentIds.length} guardians)`,
+      actor ?? 'Principal',
+    )
+    if (!versionId) return { success: false, error: 'Publishing failed.' }
+    set({
+      structureRevisions: get().structureRevisions.map((r) => r.id !== revisionId ? r : {
+        ...r,
+        status: 'Published' as const,
+        publishedAt: new Date().toISOString(),
+        publishedVersionId: versionId,
+      }),
+    })
+    return { success: true, versionId }
+  },
+
+  cancelStructureRevision: (revisionId, actor, reason) => {
+    const state = get()
+    const rev = state.structureRevisions.find((r) => r.id === revisionId)
+    if (!rev) return { success: false, error: 'Revision not found.' }
+    if (rev.status === 'Published') return { success: false, error: 'A published revision cannot be cancelled.' }
+    const struct = state.feeStructures.find((s) => s.id === rev.structureId)
+    set({
+      structureRevisions: state.structureRevisions.map((r) => r.id !== revisionId ? r : {
+        ...r,
+        status: 'Cancelled' as const,
+        cancelledAt: new Date().toISOString(),
+      }),
+      audit: pushAudit(state, {
+        action: 'fee_structure.changed',
+        actor: actor ?? 'Principal',
+        entityId: rev.structureId,
+        entityType: 'fee_structure',
+        description: `Revision v${rev.toVersion} for "${rev.className}" cancelled${reason ? ` — ${reason}` : ''}. The published v${rev.fromVersion} continues to apply. Proposal history preserved.`,
+      }),
+    })
+    void struct
+    return { success: true }
+  },
+
   togglePaymentMode: (id) => {
     const state = get()
     const mode = state.paymentModes.find((m) => m.id === id)
@@ -2484,7 +2890,7 @@ export const useFeeStore = create<FeeState>()(
   // `additionalCharges` array (event-based charges like the Class 8
   // Educational Tour) when the persisted state predates the key. Never
   // overwrites user-created charges; never touches transactions.
-  version: 5,
+  version: 6,
   migrate: (persistedState: any, fromVersion: number) => {
     // v5 — session rollover reset: the whole demo dataset moved from the
     // archived 2025-26 session into the live 2026-27 session (CURRENT_ACADEMIC_YEAR).
@@ -2515,6 +2921,20 @@ export const useFeeStore = create<FeeState>()(
         webhookEvents: SEED_WEBHOOK_EVENTS,
       }
     }
+    // v6 — STRUCT-SESSION: backfill academicYear on every persisted
+    // structure (pre-session structures belong to the current session),
+    // and seed the new revision/edit-window state keys.
+    if (fromVersion < 6 && persistedState && typeof persistedState === 'object') {
+      const st = persistedState as Record<string, any>
+      return {
+        ...st,
+        feeStructures: Array.isArray(st.feeStructures)
+          ? st.feeStructures.map((s: any) => ({ ...s, academicYear: s.academicYear ?? CURRENT_ACADEMIC_YEAR }))
+          : st.feeStructures,
+        structureRevisions: Array.isArray(st.structureRevisions) ? st.structureRevisions : [],
+        structureEditWindow: st.structureEditWindow ?? { structureId: null, openedAt: null, expiresAt: null },
+      }
+    }
     return persistedState
   },
   // Persist only DATA, never the mutation functions. Zustand re-binds
@@ -2526,6 +2946,8 @@ export const useFeeStore = create<FeeState>()(
     feeStructures: state.feeStructures,
     versions: state.versions,
     changeLog: state.changeLog,
+    structureRevisions: state.structureRevisions,
+    structureEditWindow: state.structureEditWindow,
     additionalCharges: state.additionalCharges,
     paymentModes: state.paymentModes,
     lateFeeRule: state.lateFeeRule,
@@ -2826,6 +3248,8 @@ export function useFeeData(academicYear: string = CURRENT_ACADEMIC_YEAR) {
   const feeStructures = useFeeStore((s) => s.feeStructures)
   const versions = useFeeStore((s) => s.versions)
   const changeLog = useFeeStore((s) => s.changeLog)
+  const structureRevisions = useFeeStore((s) => s.structureRevisions)
+  const structureEditWindow = useFeeStore((s) => s.structureEditWindow)
   const additionalCharges = useFeeStore((s) => s.additionalCharges)
   const paymentModes = useFeeStore((s) => s.paymentModes)
   const lateFeeRule = useFeeStore((s) => s.lateFeeRule)
@@ -3208,6 +3632,8 @@ export function useFeeData(academicYear: string = CURRENT_ACADEMIC_YEAR) {
       additionalCharges,
       versions,
       changeLog,
+      structureRevisions,
+      structureEditWindow,
       paymentModes,
       lateFeeRule,
       concessionRule,

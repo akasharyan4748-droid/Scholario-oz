@@ -154,6 +154,8 @@ function buildStructures(): FeeStructureConfig[] {
       annual: baseTotal,
       effectiveFrom: '2026-04-01',
       version: 1,
+      // STRUCT-SESSION: every seeded structure belongs to the live session.
+      academicYear: CURRENT_ACADEMIC_YEAR,
       components,
       examFeeSchedule: examRows.map((row, i) => ({
         id: `EF-FS-${c.id}-${String(i + 1).padStart(2, '0')}`,

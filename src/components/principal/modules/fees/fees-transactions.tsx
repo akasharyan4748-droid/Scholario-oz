@@ -5,7 +5,7 @@
  *
  * - Filters: session, date range, class, payment mode, status, fee head
  * - Search: student, receipt, transaction id
- * - Row actions: View Receipt, Print, Download, Reprint (no duplicate)
+ * - Row actions: View, Print, Download (with tooltips) — no redundant Reprint
  * - Row click: opens a slide-from-right Transaction Detail Drawer showing
  *   student info, fee info, payment info, gateway info (if available),
  *   offline info, balance before/after, receipt actions, and audit info.
@@ -37,7 +37,7 @@ import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Download, Printer, Eye,
-  Receipt as ReceiptIcon, RefreshCw, X, User, Calendar,
+  Receipt as ReceiptIcon, X, User, Calendar,
   CreditCard, Landmark, ArrowRightLeft, ShieldCheck, AlertCircle,
   FileText, Banknote, Smartphone, Wallet,
 } from 'lucide-react'
@@ -108,7 +108,6 @@ function TxStatTile({ label, value, sub, valueClassName }: { label: string; valu
 
 export function FeesTransactionsSection({ data }: Props) {
   const { transactions, accounts } = data
-  const reprintReceipt = useFeeStore((s) => s.reprintReceipt)
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
 
   const [search, setSearch] = useState('')
@@ -163,11 +162,6 @@ export function FeesTransactionsSection({ data }: Props) {
   // "Clear Filters" button cleared (search text intentionally untouched).
   const handleResetFilters = () => {
     setModeFilter('all'); setStatusFilter('all'); setClassFilter('all'); setFeeHeadFilter('all'); setTypeFilter('all')
-  }
-
-  const handleReprint = (t: FeeTransaction) => {
-    reprintReceipt(t.id, 'Principal')
-    toast.success('Receipt reprinted', { description: `${t.receiptNo} — no second transaction created.` })
   }
 
   const handleExport = () => {
@@ -301,22 +295,24 @@ export function FeesTransactionsSection({ data }: Props) {
       </div>
 
       {/* Transactions table — module ledger recipe: flush p-0 body inside the
-          rounded-xl bordered panel; muted/40 uppercase header row; py-2.5
-          text-xs cells; hover:bg-muted/30 rows */}
+          rounded-xl bordered panel; SOLID sticky header row (opaque bg so
+          scrolled rows never bleed through — the old muted/40 translucent
+          tint let the first row show through the header); py-2.5 text-xs
+          cells; hover:bg-muted/30 rows */}
       <FeePanel bodyClassName="p-0">
         <div className="overflow-x-auto max-h-[36rem]">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10 bg-muted/40 shadow-[0_1px_0_0_hsl(var(--border))]">
-              <tr className="h-10">
-                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap">Receipt</th>
-                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap">Student</th>
-                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap hidden lg:table-cell">Class</th>
-                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap hidden md:table-cell">Fee Head</th>
-                <th className="text-right px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap">Amount</th>
-                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">Mode</th>
-                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap">Status</th>
-                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap hidden lg:table-cell">Date</th>
-                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap">Actions</th>
+          <table className="w-full text-xs border-separate border-spacing-0">
+            <thead className="sticky top-0 z-10">
+              <tr className="h-10 bg-muted shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Receipt</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Student</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden lg:table-cell">Class</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden md:table-cell">Fee Head</th>
+                <th className="text-right px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Amount</th>
+                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden sm:table-cell">Mode</th>
+                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Status</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden lg:table-cell">Date</th>
+                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -356,17 +352,14 @@ export function FeesTransactionsSection({ data }: Props) {
                         className="inline-flex items-center gap-0.5"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <button onClick={() => setDetailTxn(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-primary hover:bg-primary/10 transition-colors" title="View Detail">
+                        <button onClick={() => setDetailTxn(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-primary hover:bg-primary/10 transition-colors" title="View details" aria-label={`View details of ${t.receiptNo}`}>
                           <Eye className="h-3 w-3" />
                         </button>
-                        <button onClick={() => printReceipt(t, receiptSettings)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Print">
+                        <button onClick={() => printReceipt(t, receiptSettings)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Print receipt" aria-label={`Print receipt ${t.receiptNo}`}>
                           <Printer className="h-3 w-3" />
                         </button>
-                        <button onClick={() => downloadReceiptHTML(t, receiptSettings)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Download">
+                        <button onClick={() => downloadReceiptHTML(t, receiptSettings)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Download receipt" aria-label={`Download receipt ${t.receiptNo}`}>
                           <Download className="h-3 w-3" />
-                        </button>
-                        <button onClick={() => handleReprint(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-amber-600 hover:bg-amber-500/10 transition-colors" title="Reprint (no duplicate)">
-                          <RefreshCw className="h-3 w-3" />
                         </button>
                       </div>
                     </td>
@@ -419,7 +412,6 @@ export function FeesTransactionsSection({ data }: Props) {
         onViewReceipt={(t) => setViewReceipt(t)}
         onPrint={(t) => { printReceipt(t, receiptSettings); toast.success('Print dialog opened') }}
         onDownload={(t) => { downloadReceiptHTML(t, receiptSettings); toast.success('Receipt downloaded', { description: `${t.receiptNo}.html` }) }}
-        onReprint={handleReprint}
       />
     </div>
   )
@@ -435,10 +427,9 @@ interface DrawerProps {
   onViewReceipt: (t: FeeTransaction) => void
   onPrint: (t: FeeTransaction) => void
   onDownload: (t: FeeTransaction) => void
-  onReprint: (t: FeeTransaction) => void
 }
 
-function TransactionDetailDrawer({ txn, accounts, onClose, onViewReceipt, onPrint, onDownload, onReprint }: DrawerProps) {
+function TransactionDetailDrawer({ txn, accounts, onClose, onViewReceipt, onPrint, onDownload }: DrawerProps) {
   if (!txn) return null
 
   // Look up the student account + ledger to compute balance before/after.
@@ -655,10 +646,7 @@ function TransactionDetailDrawer({ txn, accounts, onClose, onViewReceipt, onPrin
           <Button size="sm" variant="outline" className="gap-1" onClick={() => onDownload(txn)}>
             <Download className="h-3.5 w-3.5" /> Download
           </Button>
-          <Button size="sm" variant="ghost" className="gap-1 text-amber-600 ml-auto" onClick={() => { onReprint(txn); onClose() }}>
-            <RefreshCw className="h-3.5 w-3.5" /> Reprint
-          </Button>
-        </div>
+          </div>
       </SheetContent>
     </Sheet>
   )

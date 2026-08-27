@@ -33,7 +33,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Pencil, Plus, History, Copy, Trash2, X, Check,
   Layers, Calendar, User, RotateCcw, Archive, FileText, AlertCircle,
-  CheckCircle2, Save, Sparkles, ShieldAlert, AlertTriangle, Award,
+  CheckCircle2, Save, Sparkles, ShieldAlert, AlertTriangle, Award, Lock,
   // PHASE 7 — Re-link from catalogue row action icons.
   Link2, Link2Off, Search, ChevronDown,
 } from 'lucide-react'
@@ -59,6 +59,11 @@ import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import {
+  structureEditWindowLive,
+  STRUCTURE_APPROVAL_THRESHOLD,
+  type StructureRevision,
+} from '@/lib/store/fee-store'
 import { FeesStructuresConfirmDialog } from './fees-structures-confirm'
 import { FeesStructuresHistoryDialog } from './fees-structures-history'
 import { VersionStatusPill } from './fees-structures-shared'
@@ -92,6 +97,16 @@ import { toast } from 'sonner'
 
 type Frequency = FeeHead['frequency']
 const FREQUENCIES: Frequency[] = ['Annual', 'Half-Yearly', 'Quarterly', 'Monthly', 'Per Term', 'One-Time']
+
+/** Compact mm:ss / h m countdown for the temporary editing window badge. */
+function formatCountdownShort(ms: number): string {
+  if (ms <= 0) return '0m'
+  const totalMin = Math.floor(ms / 60000)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  if (h <= 0) return `${m}m`
+  return `${h}h ${m}m`
+}
 
 export interface DetailDrawerProps {
   open: boolean
@@ -161,6 +176,14 @@ function DetailDrawerInner({
   const createFeeStructure = useFeeStore((s) => s.createFeeStructure)
   // Fix 4 (FEE-CORRECT): wire the new deleteFeeStructure mutation.
   const deleteFeeStructure = useFeeStore((s) => s.deleteFeeStructure)
+  // STRUCT-REV — controlled mid-session revision workflow.
+  const structureEditWindow = useFeeStore((s) => s.structureEditWindow)
+  const structureRevisions = useFeeStore((s) => s.structureRevisions)
+  const requestStructureEditWindow = useFeeStore((s) => s.requestStructureEditWindow)
+  const closeStructureEditWindow = useFeeStore((s) => s.closeStructureEditWindow)
+  const createStructureRevision = useFeeStore((s) => s.createStructureRevision)
+  const publishStructureRevision = useFeeStore((s) => s.publishStructureRevision)
+  const cancelStructureRevision = useFeeStore((s) => s.cancelStructureRevision)
   // EXAM INTEGRATION — the exam types available to the Examination Fee
   // Schedule, fetched from the Examination module (source of truth).
   const { types: examTypeDefs, loading: examTypesLoading } = useExamTypeDefinitions()
@@ -184,7 +207,7 @@ function DetailDrawerInner({
   const [showAddExamFee, setShowAddExamFee] = useState(false)
 
   // Dialogs
-  const [confirmMode, setConfirmMode] = useState<'publish' | 'schedule' | null>(null)
+  const [confirmMode, setConfirmMode] = useState<'publish' | 'schedule' | 'revision' | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   // Fix 4 (FEE-CORRECT): delete confirmation dialog state.
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -309,6 +332,20 @@ function DetailDrawerInner({
   const draftVersions = structureVersions.filter((v) => v.status === 'draft')
   const archivedVersions = structureVersions.filter((v) => v.status === 'archived')
 
+  // ─── STRUCT-REV — locked-state derivation (PART 7/8/9) ─────────────
+  // A published CURRENT-session structure is locked: edits require a
+  // temporary editing window and publishing becomes a 60%-approval
+  // revision. Drafts and other-session structures use the normal flow.
+  const liveEditWindow = structureEditWindowLive(structureEditWindow, structure.id)
+  const isLockedCurrent = !isCreateMode
+    && !!currentVersion
+    && (structure.academicYear ?? CURRENT_ACADEMIC_YEAR) === CURRENT_ACADEMIC_YEAR
+  const structureRevision = useMemo(() => {
+    return structureRevisions.find(
+      (r) => r.structureId === structure.id && (r.status === 'Pending Approval' || r.status === 'Threshold Reached'),
+    )
+  }, [structureRevisions, structure.id])
+
   const structureChangeLog = useMemo(() => {
     return changeLog.filter((l) => l.structureId === structure.id)
   }, [changeLog, structure.id])
@@ -361,8 +398,21 @@ function DetailDrawerInner({
     setShowAddExamFee(false)
   }
 
-  const handlePublish = () => setConfirmMode('publish')
+  const handlePublish = () => setConfirmMode(isLockedCurrent ? 'revision' : 'publish')
   const handleSchedule = () => setConfirmMode('schedule')
+
+  // STRUCT-REV (PART 10) — open the temporary editing window with a clear
+  // explanation of WHY the structure is locked.
+  const handleRequestEdit = () => {
+    const res = requestStructureEditWindow(structure.id, 'Principal')
+    if (!res.success) {
+      toast.error('Cannot open editing window', { description: res.error })
+      return
+    }
+    toast.success('Temporary editing window open', {
+      description: 'You can now edit this structure for 3 hours. Saving creates a PROPOSED version that needs 60% guardian acknowledgement — it never overwrites the published one.',
+    })
+  }
 
   const handleConfirmPublish = (reason: string, effectiveFrom: string) => {
     if (!currentVersion) return
@@ -394,6 +444,30 @@ function DetailDrawerInner({
       toast.error('Failed to schedule new version')
       setConfirmMode(null)
     }
+  }
+
+  // STRUCT-REV (PART 9/11/12) — the mid-session path: the working heads
+  // become a PROPOSED version pending 60% guardian acknowledgement. The
+  // published version keeps applying; nothing is overwritten.
+  const handleConfirmRevision = (reason: string, effectiveFrom: string) => {
+    const res = createStructureRevision({
+      structureId: structure.id,
+      proposedHeads: workingHeads,
+      effectiveFrom,
+      reason,
+      actor: 'Principal',
+    })
+    if (!res.success) {
+      toast.error('Could not submit revision', { description: res.error })
+      setConfirmMode(null)
+      return
+    }
+    const rev = res.revision!
+    toast.success(`Revision v${rev.toVersion} submitted for acknowledgement`, {
+      description: `${rev.affectedStudentIds.length} students/guardians notified. The published v${rev.fromVersion} continues to apply until 60% approve.`,
+    })
+    setEditing(false)
+    setConfirmMode(null)
   }
 
   const handleDuplicate = () => {
@@ -824,9 +898,32 @@ function DetailDrawerInner({
             <div className="border-b border-border bg-muted/20 px-3 py-1.5 flex items-center gap-0.5 overflow-x-auto">
               {!editing ? (
                 <>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={handleStartEdit}>
-                    <Pencil className="h-3 w-3" /> Edit
-                  </Button>
+                  {isLockedCurrent && !liveEditWindow.live ? (
+                    // PART 8/10 — published current-session structure: no
+                    // unrestricted Edit. Request a temporary window instead.
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-7 text-xs gap-1 text-amber-600 hover:bg-amber-500/10"
+                      onClick={handleRequestEdit}
+                      title="Current fee structure is locked because it is already active for students"
+                    >
+                      <ShieldAlert className="h-3 w-3" /> Request Edit
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={handleStartEdit}>
+                      <Pencil className="h-3 w-3" /> Edit
+                    </Button>
+                  )}
+                  {isLockedCurrent && liveEditWindow.live && (
+                    <Badge variant="outline" className="text-[9px] h-5 gap-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20">
+                      <ShieldAlert className="h-2.5 w-2.5" /> Edit window {formatCountdownShort(liveEditWindow.msLeft)}
+                    </Badge>
+                  )}
+                  {isLockedCurrent && liveEditWindow.live && (
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => { closeStructureEditWindow('Principal'); toast.info('Editing window closed — the structure is locked again.') }}>
+                      <Lock className="h-3 w-3" /> End window
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setHistoryOpen(true)}>
                     <History className="h-3 w-3" /> History
                   </Button>
@@ -863,11 +960,13 @@ function DetailDrawerInner({
                   <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-rose-600" onClick={handleDiscard}>
                     <X className="h-3 w-3" /> Discard
                   </Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setConfirmMode('schedule')}>
-                    <Calendar className="h-3 w-3" /> Schedule
-                  </Button>
-                  <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handlePublish}>
-                    <Check className="h-3 w-3" /> Publish New Version
+                  {!isLockedCurrent && (
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setConfirmMode('schedule')}>
+                      <Calendar className="h-3 w-3" /> Schedule
+                    </Button>
+                  )}
+                  <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handlePublish} disabled={!hasEdits || validationIssues.length > 0}>
+                    <Check className="h-3 w-3" /> {isLockedCurrent ? 'Submit Revision' : 'Publish New Version'}
                   </Button>
                 </>
               )}
@@ -921,6 +1020,30 @@ function DetailDrawerInner({
                   )}
                 </div>
               </div>
+            )}
+
+            {/* STRUCT-REV — live revision panel (PART 12/14/15): progress
+                toward the 60% acknowledgement threshold, publish when
+                reached, cancel to keep the published structure active. */}
+            {structureRevision && (
+              <RevisionPanel
+                revision={structureRevision}
+                onPublish={() => {
+                  const res = publishStructureRevision(structureRevision.id, 'Principal')
+                  if (!res.success) {
+                    toast.error('Cannot publish revision', { description: res.error })
+                    return
+                  }
+                  toast.success(`Revision published — v${structureRevision.toVersion} is now current`, {
+                    description: `${structureRevision.className} guardians and staff notified. Historical transactions keep their original amounts.`,
+                  })
+                }}
+                onCancel={(reason) => {
+                  const res = cancelStructureRevision(structureRevision.id, 'Principal', reason)
+                  if (res.success) toast.info('Revision cancelled — the published version continues to apply.')
+                  else toast.error('Cannot cancel', { description: res.error })
+                }}
+              />
             )}
 
             {/* Fee Head Table */}
@@ -1303,7 +1426,8 @@ function DetailDrawerInner({
         effectiveFrom={new Date().toISOString().split('T')[0]}
         mode={confirmMode ?? 'publish'}
         onConfirm={(reason, eff) => {
-          if (confirmMode === 'publish') handleConfirmPublish(reason, eff)
+          if (confirmMode === 'revision') handleConfirmRevision(reason, eff)
+          else if (confirmMode === 'publish') handleConfirmPublish(reason, eff)
           else if (confirmMode === 'schedule') handleConfirmSchedule(reason, eff)
         }}
         onClose={() => setConfirmMode(null)}
@@ -2281,5 +2405,139 @@ function AddExamFeeForm({ existingTypes, availableTypes, loadingTypes, onAdd, on
         )}
       </div>
     </motion.div>
+  )
+}
+
+// ─── STRUCT-REV — RevisionPanel (PART 12/13/14/15) ──────────────────────
+//
+// Compact tracking panel for the live mid-session revision: what changed,
+// how many of the affected students/guardians have acknowledged, the 60%
+// threshold state, and the publish/cancel controls. Deliberately simple —
+// no discussion, no voting features, just acknowledgement tracking.
+
+function RevisionPanel({ revision, onPublish, onCancel }: {
+  revision: StructureRevision
+  onPublish: () => void
+  onCancel: (reason: string) => void
+}) {
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const approved = Object.values(revision.responses).filter((v) => v === 'Approved').length
+  const declined = Object.values(revision.responses).filter((v) => v === 'Declined').length
+  const pending = revision.affectedStudentIds.length - approved - declined
+  const pct = revision.affectedStudentIds.length > 0
+    ? Math.round((approved / revision.affectedStudentIds.length) * 1000) / 10
+    : 0
+  const thresholdPct = Math.ceil(revision.affectedStudentIds.length * STRUCTURE_APPROVAL_THRESHOLD)
+  const reached = revision.status === 'Threshold Reached'
+
+  // What changed — head-level diffs shown exactly as guardians see them.
+  const changes = revision.proposedHeads
+    .map((h) => {
+      const old = revision.previousHeads.find((x) => x.id === h.id)
+      if (!old) return { name: h.name, old: null as number | null, new: h.amount }
+      if (old.amount !== h.amount) return { name: h.name, old: old.amount, new: h.amount }
+      return null
+    })
+    .filter(Boolean) as Array<{ name: string; old: number | null; new: number | null }>
+  for (const old of revision.previousHeads) {
+    if (!revision.proposedHeads.some((h) => h.id === old.id)) {
+      changes.push({ name: old.name, old: old.amount, new: null })
+    }
+  }
+
+  return (
+    <div className={cn(
+      'rounded-lg border p-3 space-y-2.5',
+      reached ? 'border-emerald-500/30 bg-emerald-500/[0.06]' : 'border-amber-500/30 bg-amber-500/[0.06]',
+    )}>
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
+          <p className={cn('text-xs font-semibold flex items-center gap-1.5', reached ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300')}>
+            <ShieldAlert className="h-3.5 w-3.5" />
+            Proposed revision v{revision.toVersion} &middot; {revision.status}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            {revision.className} &middot; {revision.academicYear} &middot; effective {revision.effectiveFrom} &middot; requested by {revision.requestedBy}
+            {revision.reason ? ` — ${revision.reason}` : ''}
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {reached ? (
+            <Button size="sm" className="h-7 text-[11px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onPublish}>
+              <CheckCircle2 className="h-3 w-3" /> Publish New Version
+            </Button>
+          ) : (
+            <span className="text-[10px] text-muted-foreground italic">published v{revision.fromVersion} keeps applying</span>
+          )}
+          <Button size="sm" variant="ghost" className="h-7 text-[11px] text-muted-foreground" onClick={() => setCancelOpen(true)}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+
+      {/* What the guardians were asked to approve (PART 13) */}
+      {changes.length > 0 && (
+        <div className="rounded-md bg-card border border-border/60 px-2.5 py-2 space-y-1">
+          {changes.map((c) => (
+            <div key={c.name} className="flex items-center justify-between text-[11px] tabular-nums">
+              <span className="font-medium">{c.name}</span>
+              <span className="text-muted-foreground">
+                {formatINR(c.old ?? 0)}
+                {c.new !== null ? (
+                  <> → <span className={cn('font-semibold', (c.new ?? 0) > (c.old ?? 0) ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{formatINR(c.new)}</span></>
+                ) : (
+                  <span className="text-rose-600 dark:text-rose-400"> → removed</span>
+                )}
+              </span>
+            </div>
+          ))}
+          <p className="text-[9px] text-muted-foreground border-t border-dashed border-border pt-1">
+            Annual total {formatINR(revision.previousTotal, true)} → {formatINR(revision.proposedTotal, true)}
+          </p>
+        </div>
+      )}
+
+      {/* Acknowledgement progress (PART 12) */}
+      <div>
+        <div className="flex items-center justify-between text-[10px] mb-1">
+          <span className="font-medium">
+            {approved}/{revision.affectedStudentIds.length} approved &middot; {declined} declined &middot; {pending} pending
+          </span>
+          <span className={cn('font-bold tabular-nums', reached ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400')}>
+            {pct}% {reached ? '· threshold reached' : `· 60% needed (${thresholdPct})`}
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+          <div
+            className={cn('h-full rounded-full transition-all', reached ? 'bg-emerald-500/80' : 'bg-amber-500/80')}
+            style={{ width: `${Math.min(100, pct)}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Cancel with reason */}
+      {cancelOpen && (
+        <div className="rounded-md border border-border bg-card px-2.5 py-2 space-y-1.5">
+          <Input
+            className="h-7 text-xs"
+            placeholder="Reason for cancelling (recorded in audit)"
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            autoFocus
+          />
+          <div className="flex items-center justify-end gap-1">
+            <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => { setCancelOpen(false); setCancelReason('') }}>Keep revision</Button>
+            <Button
+              size="sm" variant="outline"
+              className="h-6 text-[10px] text-rose-600 border-rose-500/30"
+              onClick={() => { onCancel(cancelReason.trim() || 'No reason recorded'); setCancelOpen(false); setCancelReason('') }}
+            >
+              Confirm cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
