@@ -103,7 +103,7 @@ export function useCommandPalette({
   const searchResults = useMemo(() => {
     const local = searchEntities(query, role, groups)
     if (remoteResults === null) return local
-    const DB_TYPES = new Set(['student', 'teacher', 'fee', 'notice'])
+    const DB_TYPES = new Set(['student', 'teacher', 'fee', 'notice', 'parent'])
     const localExtras = local.filter((i) => !DB_TYPES.has(i.type))
     return [...remoteResults, ...localExtras]
   }, [query, role, groups, remoteResults])

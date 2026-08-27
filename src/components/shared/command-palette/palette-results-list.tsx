@@ -5,6 +5,21 @@ import { cn } from '@/lib/utils'
 import type { SearchResultItem } from '@/lib/search-service'
 import { renderItemIcon, getBadgeStyle } from './utils'
 
+// Highlights case-insensitive query matches inside text with a soft primary tint
+function HighlightMatch({ text, query }: { text: string; query: string }) {
+  const q = query.trim()
+  if (!q) return <>{text}</>
+  const idx = text.toLowerCase().indexOf(q.toLowerCase())
+  if (idx === -1) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-primary/15 text-primary rounded-sm px-0.5">{text.slice(idx, idx + q.length)}</mark>
+      {text.slice(idx + q.length)}
+    </>
+  )
+}
+
 interface PaletteResultsListProps {
   query: string
   groupedResults: [string, SearchResultItem[]][]
@@ -75,7 +90,9 @@ export function PaletteResultsList({
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="truncate font-semibold text-xs text-foreground">{item.title}</span>
+                        <span className="truncate font-semibold text-xs text-foreground">
+                          <HighlightMatch text={item.title} query={query} />
+                        </span>
                         {item.badge && (
                           <span
                             className={cn(
@@ -87,7 +104,9 @@ export function PaletteResultsList({
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">{item.subtitle}</p>
+                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        <HighlightMatch text={item.subtitle} query={query} />
+                      </p>
                     </div>
 
                     {isActive && (

@@ -20,6 +20,18 @@ export function SADashboardModule() {
   // Donut segment colors (avoiding blue/indigo as primary palette)
   const METHOD_COLORS = ['#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6']
 
+  // Human-friendly labels for payment channel codes
+  const METHOD_LABELS: Record<string, string> = {
+    UPI: 'UPI',
+    CARD: 'Card',
+    NETBANKING: 'Net Banking',
+    CASH: 'Cash',
+    CHEQUE: 'Cheque',
+    WALLET: 'Wallet',
+    UNKNOWN: 'Other',
+  }
+  const methodLabel = (m: string) => METHOD_LABELS[m] ?? m
+
   useEffect(() => {
     fetch('/api/dashboard')
       .then(async (r) => {
@@ -105,7 +117,7 @@ export function SADashboardModule() {
           >
             <Donut
               data={methodBreakdown.map((m: { method: string; amount: number }, i: number) => ({
-                name: m.method,
+                name: methodLabel(m.method),
                 value: Math.round(m.amount),
                 color: METHOD_COLORS[i % METHOD_COLORS.length],
               }))}
@@ -128,7 +140,7 @@ export function SADashboardModule() {
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: METHOD_COLORS[i % METHOD_COLORS.length] }} />
-                        <p className="text-sm font-bold text-foreground truncate">{m.method}</p>
+                        <p className="text-sm font-bold text-foreground truncate">{methodLabel(m.method)}</p>
                         <span className="text-[10px] text-muted-foreground font-mono">{m.count} txn{m.count > 1 ? 's' : ''}</span>
                       </div>
                       <div className="text-right shrink-0">

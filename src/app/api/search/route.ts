@@ -161,6 +161,36 @@ export async function GET(req: NextRequest) {
       })
     })
 
+    // 6. PARENTS & GUARDIANS — from Student.guardian* fields (replaces mock parentConversations)
+    const guardians = await db.student.findMany({
+      where: {
+        schoolId,
+        OR: [
+          { guardianName: { contains: q } },
+          { guardianPhone: { contains: q } },
+          { user: { name: { contains: q } } },
+        ],
+      },
+      take,
+      include: { user: { select: { name: true } } },
+    })
+    guardians.forEach((s) => {
+      const guardian = s.guardianName || 'Guardian'
+      const ward = s.user?.name ?? 'student'
+      results.push({
+        id: `grd-${s.id}`,
+        title: guardian,
+        subtitle: `Guardian of ${ward}${s.guardianPhone ? ` · ${s.guardianPhone}` : ''}`,
+        category: 'Parents & Guardians',
+        type: 'parent',
+        moduleKey: 'messaging',
+        iconName: 'MessageSquare',
+        badge: 'Guardian',
+        badgeVariant: 'info',
+        keywords: `${guardian} ${ward} ${s.guardianPhone ?? ''} parent guardian contact`,
+      })
+    })
+
     return { results }
   })
 }

@@ -58,13 +58,13 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
         const payload = j && typeof j === 'object' && 'data' in j ? (j as { data?: { feed?: unknown[] } }).data : j
         const feedArr = payload && Array.isArray(payload.feed) ? payload.feed : []
         if (cancelled || feedArr.length === 0) return
-        const mapped: NotificationItem[] = feedArr.map((f: { id: string; type?: string; title?: string; description?: string; timestamp?: string }) => ({
+        const mapped: NotificationItem[] = feedArr.map((f: { id: string; type?: string; title?: string; description?: string; timestamp?: string; read?: boolean }) => ({
           id: f.id,
           type: f.type,
           title: f.title,
           description: f.description,
           time: formatRelativeTime(f.timestamp),
-          unread: true,
+          unread: f.read === false, // respect persisted read state from the API
         }))
         setNotifList(mapped)
         setNotifSource('live')

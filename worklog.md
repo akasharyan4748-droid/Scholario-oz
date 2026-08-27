@@ -117,3 +117,40 @@ Stage Summary:
 2. (Medium) Announcement read-state is ephemeral (no per-user read table) — add `NotificationRead` join model if persistent announcement acks are needed.
 3. (Low) `db.payment.groupBy` on method returns raw strings ('UPI','CARD',...) — if methods become free-text, normalize labels in UI.
 4. (Feature ideas): WebSocket live-alert push; teacher-facing collection snapshots; search result deep-linking (open student profile drawer directly); i18n; PWA.
+---
+Task ID: 4
+Agent: Z.ai Code (webDevReview cron round)
+Task: Assess project, QA, then execute remaining priorities from Task 3 (guardian search migration, persistent announcement acks, payment label normalization) + styling polish.
+
+Work Log:
+- Health check passed (HTTP 200, lint clean). QA sweep: public site + principal login + palette — no errors.
+- FEATURE 1 — DB-backed Parents & Guardians search:
+  - `/api/search` now queries Student.guardianName/guardianPhone (+ ward name via User relation) and emits canonical `Parents & Guardians` items ("Sharma Family — Guardian of Aarav Sharma · +91 124 2323 4545").
+  - `use-command-palette.ts` DB_TYPES now includes 'parent' → mock `parentConversations` entries are fully replaced by DB rows when server results arrive. Last mock domain in the palette is gone.
+  - Verified: "Sharma Family" and "Diya" both return real guardian rows from DB.
+- FEATURE 2 — persistent announcement acknowledgements:
+  - Schema: new `NotificationRead` model (unique [notificationId, userId], cascade deletes) + `reads` relation on Notification + `notificationReads` on User. `bun run db:push` OK (client regenerated).
+  - `GET /api/notifications-feed`: announcements now carry per-user `read` (reads relation filtered by userId); unreadCount = unreadMessages + unreadAnnouncements (take raised 5→8).
+  - `PATCH`: ANNOUNCEMENT branch upserts NotificationRead with school-scope validation; returns persisted:true.
+  - app-shell feed mapping now respects `read` from API (`unread: f.read === false`) instead of forcing everything unread.
+  - GOTCHA: after db:push, the running dev server kept the OLD Prisma client → `include: { reads }` 500'd. Fix: restart dev server (killed next-server, rm -rf .next) → all green.
+  - Verified end-to-end: announcements read:false + unread 2 → clicked "Mid-Term Results Published" → PATCH 200 → NotificationRead row in DB (user principal@…) → after reload feed shows read:true, unreadCount 1.
+- FEATURE 3 — payment method labels normalized (superadmin ledger + donut): CARD→Card, NETBANKING→Net Banking, CASH→Cash, CHEQUE/WALLET/UNKNOWN mapped; verified raw "NETBANKING" no longer appears.
+- FEATURE 4 — palette match highlighting: `HighlightMatch` in palette-results-list wraps case-insensitive query matches in title+subtitle with soft primary <mark> tint. Verified "Mid-Term" highlighted in both title and description.
+- QA: mobile 390px fits; /api/search + /api/dashboard + GET/PATCH /api/notifications-feed all 200; lint exit 0; no console errors.
+- Screenshots: qa-guardian-search.png, qa-palette-highlight.png, qa-method-labels.png.
+
+Stage Summary:
+- Command palette is now 100% DB-authoritative for people/fees/notices/parents (only features/classes/settings remain local, by design).
+- Notification read-state is fully persistent for BOTH messages and announcements, with correct unread aggregation.
+- Dev server was restarted this round to load the regenerated Prisma client — note for future agents: after ANY `db:push` that adds models/relations, restart `bun run dev` or Prisma queries on new relations will 500.
+
+## Current State Assessment (after Task 4)
+- All prior mock→DB migrations for search & notifications are complete. Remaining mock usage is confined to module-level demo stores (classes timetables, library demo rows, etc.) which are presentation-data, not entity data.
+- Schema now has 2 migration artifacts this session: Payment backfill (Task 2) + NotificationRead table (Task 4). Fresh clones can reproduce with `bun run db:push && bun run db:seed`.
+
+## Unresolved Issues / Risks / Next-Phase Priorities
+1. (Medium) Search result deep-linking: clicking a student/fee currently navigates to the module top — consider a `selectedId` store so modules can auto-open the relevant profile/detail drawer.
+2. (Medium) Real-time: live-alerts store is simulated client-side; a socket.io mini-service could push genuine events (new admission, fee payment) to the bell.
+3. (Low) Announcement audience field ('ALL','PARENTS'…) is not filtered per viewer role — feed shows all announcements to everyone.
+4. (Feature ideas): i18n via next-intl (package already installed); PWA manifest + offline shell; per-method collection trend over time (needs payment createdAt-based series); export ledger CSV button.

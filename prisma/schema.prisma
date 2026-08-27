@@ -100,6 +100,7 @@ model User {
   receivedMessages   Message[]      @relation("MessageRecipient")
   createdEvents      SchoolEvent[]
   createdHomeworks   Homework[]
+  notificationReads  NotificationRead[]
 }
 
 model Teacher {
@@ -650,6 +651,21 @@ model Notification {
   senderId  String?
   sender    User?    @relation(fields: [senderId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
+
+  reads NotificationRead[]
+}
+
+// Per-user acknowledgement of school-wide announcements so read state
+// survives reloads (messages already have their own `read` column).
+model NotificationRead {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@unique([notificationId, userId])
 }
 
 model LibraryBook {
