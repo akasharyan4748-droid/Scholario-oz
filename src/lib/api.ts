@@ -6,6 +6,9 @@ export type Ctx = { user: AuthUser }
 export async function api(handler: () => Promise<unknown>) {
   try {
     const data = await handler()
+    // Raw Response passthrough — lets handlers stream files/CSVs with
+    // custom headers instead of the standard { ok, data } JSON envelope.
+    if (data instanceof Response) return data
     return NextResponse.json({ ok: true, data })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Internal error'

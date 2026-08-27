@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bell, ShieldAlert, IndianRupee, UserPlus, Clock, BookOpen, Coins,
@@ -39,6 +40,7 @@ type ShellRole = 'principal' | 'teacher' | 'student' | 'superadmin'
 
 export function NotificationsDropdown({
   open,
+  onClose,
   notifList,
   onMarkAllRead,
   onNotificationClick,
@@ -50,10 +52,39 @@ export function NotificationsDropdown({
   source = 'demo',
   children,
 }: NotificationsDropdownProps) {
+  // Close on outside click / Escape — the dropdown previously only closed via
+  // the bell toggle, which trapped keyboard & pointer users.
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node | null
+      if (t && rootRef.current && !rootRef.current.contains(t)) {
+        // ignore clicks on the bell trigger itself (it toggles via onClick)
+        const trigger = (t as HTMLElement)?.closest?.('button[aria-label^="Notifications"]')
+        if (!trigger) onClose()
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open, onClose])
+
   return (
     <AnimatePresence>
       {open && (
         <motion.div
+          ref={rootRef}
+          role="dialog"
+          aria-label="Notifications panel"
           initial={{ opacity: 0, y: 8, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.95 }}

@@ -1,12 +1,15 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, Menu, Plus, Globe } from 'lucide-react'
+import { io } from 'socket.io-client'
+import { toast } from 'sonner'
+import { Bell, Menu, Plus, Globe, Radio, Megaphone } from 'lucide-react'
 import { useAuth } from '@/lib/store/auth-store'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { school } from '@/lib/mock/school'
 import { cn } from '@/lib/utils'
+import { formatINR } from '@/lib/format'
 import { notifications as initialNotifications } from '@/lib/mock/operations'
 import { ThemeToggle } from '@/components/shared/theme-toggle'
 import { CommandPalette } from '@/components/shared/command-palette'
@@ -33,6 +36,22 @@ function formatRelativeTime(input?: string): string {
   return new Date(then).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
+// Human labels for payment channel codes (stream toasts)
+const STREAM_METHOD_LABELS: Record<string, string> = {
+  UPI: 'UPI', CARD: 'Card', NETBANKING: 'Net Banking', CASH: 'Cash', CHEQUE: 'Cheque', WALLET: 'Wallet',
+}
+
+// Shape of a `school-event` frame emitted by mini-services/event-stream
+interface StreamEvent {
+  kind: 'payment' | 'announcement'
+  schoolId: string
+  title: string
+  detail: string
+  amount?: number
+  method?: string
+  at: string
+}
+
 export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, children, quickAction }: ShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -42,6 +61,8 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
   const [notifList, setNotifList] = useState(initialNotifications)
   // 'live' = fetched from /api/notifications-feed, 'demo' = static mock fallback
   const [notifSource, setNotifSource] = useState<'live' | 'demo'>('demo')
+  // Real-time event stream status (socket.io mini-service :3003 via gateway)
+  const [streamLive, setStreamLive] = useState(false)
   const { user, logout, switchTo } = useAuth()
   void roleLabel
 
@@ -76,6 +97,97 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
     const timer = setInterval(load, 60_000)
     return () => { cancelled = true; clearInterval(timer) }
   }, [])
+
+  // ─── Real-time event stream (socket.io mini-service :3003 via gateway) ───
+  // Resolves the viewer's school scope from /api/auth/me first (the client
+  // session profile doesn't carry schoolId), then subscribes. Super admins
+  // (schoolId = null) receive the platform-wide stream; school-scoped roles
+  // only see events for their own school.
+  const streamScopeRef = useRef<string | null | undefined>(undefined) // undefined = resolving
+
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    let socket: ReturnType<typeof io> | null = null
+
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const me = j && typeof j === 'object' && 'data' in j ? (j as { data?: { user?: { schoolId?: string | null } } }).data?.user : null
+        return me?.schoolId ?? null
+      })
+      .catch(() => null)
+      .then((schoolId) => {
+        if (cancelled) return
+        streamScopeRef.current = schoolId
+        socket = io('/?XTransformPort=3003', {
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: 8,
+          reconnectionDelay: 1500,
+          timeout: 10000,
+        })
+        socket.on('connect', () => setStreamLive(true))
+        socket.on('disconnect', () => setStreamLive(false))
+        socket.on('connect_error', () => setStreamLive(false))
+        socket.on('school-event', (evt: StreamEvent) => {
+          // Scope filter — super admins see the whole platform
+          const scope = streamScopeRef.current
+          if (scope && evt.schoolId && evt.schoolId !== scope) return
+
+          const isPayment = evt.kind === 'payment'
+          const item: NotificationItem = {
+            id: `stream-${evt.kind}-${evt.at}-${Math.random().toString(36).slice(2, 7)}`,
+            type: isPayment ? 'PAYMENT' : 'ANNOUNCEMENT',
+            title: isPayment ? 'Fee payment received' : evt.title,
+            description: isPayment && evt.amount
+              ? `${evt.detail} · ${formatINR(evt.amount)} via ${STREAM_METHOD_LABELS[(evt.method || '').toUpperCase()] ?? evt.method ?? '—'}`
+              : evt.detail,
+            time: 'just now',
+            timestamp: evt.at,
+            unread: true,
+          }
+          setNotifList((prev) => [item, ...prev].slice(0, 30))
+
+          // Premium live toast — accent stripe + icon chip + LIVE pill
+          toast.custom(
+            (t) => (
+              <div
+                className={cn(
+                  'relative overflow-hidden w-[min(21rem,calc(100vw-2rem))] flex items-start gap-3 rounded-xl border bg-card/95 backdrop-blur p-3 pl-4 shadow-premium-lg transition-opacity',
+                  isPayment ? 'border-emerald-500/30' : 'border-violet-500/30',
+                  t ? 'opacity-100' : 'opacity-0'
+                )}
+              >
+                <span className={cn('absolute left-0 top-0 bottom-0 w-1', isPayment ? 'bg-emerald-500' : 'bg-violet-500')} />
+                <span className={cn(
+                  'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                  isPayment ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-violet-500/15 text-violet-600 dark:text-violet-400'
+                )}>
+                  {isPayment ? <span className="font-bold text-xs">₹</span> : <Megaphone className="h-4 w-4" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-foreground truncate">{item.title}</p>
+                    <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <Radio className="h-2 w-2 animate-pulse" /> Live
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{item.description}</p>
+                </div>
+              </div>
+            ),
+            { duration: 5000 }
+          )
+        })
+      })
+
+    return () => {
+      cancelled = true
+      socket?.close()
+      socket = null
+    }
+  }, [user?.id])
 
   const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups])
   const activeItem = flatItems.find((i) => i.key === activeKey)
@@ -185,9 +297,17 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
             <div className="relative">
               <button
                 onClick={() => setNotifOpen((o) => !o)}
+                aria-label={`Notifications${streamLive ? ' — live event stream connected' : ''}`}
                 className="relative p-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
                 <Bell className="h-5 w-5" />
+                {/* realtime stream indicator — emerald pulsing dot bottom-right */}
+                {streamLive && (
+                  <span className="absolute bottom-0.5 right-0.5 flex h-2 w-2" title="Live event stream connected">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 ring-1 ring-card" />
+                  </span>
+                )}
                 {totalBadgeCount > 0 && (
                   <span className={cn(
                     'absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full border-2 border-card flex items-center justify-center text-[9px] font-bold text-white',
@@ -211,6 +331,23 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
                 unreadCount={unreadCount}
                 source={notifSource}
               >
+                {/* realtime stream status — shown for every role when connected */}
+                {streamLive && (
+                  <div className="mx-1 mb-2 rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-2.5 py-2">
+                    <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                      <span className="relative flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                      </span>
+                      Live event stream connected
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                      {role === 'superadmin'
+                        ? 'Platform-wide — payments & announcements from every tenant arrive instantly.'
+                        : 'Payments & announcements from your school arrive instantly — no refresh needed.'}
+                    </p>
+                  </div>
+                )}
                 {role === 'superadmin' && notifSource === 'demo' && (
                   <div className="mx-1 mb-2 rounded-lg border border-violet-500/20 bg-violet-500/5 px-2.5 py-2">
                     <p className="text-[10px] font-bold text-violet-600 dark:text-violet-400 flex items-center gap-1">

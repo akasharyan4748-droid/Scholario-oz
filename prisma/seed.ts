@@ -195,14 +195,23 @@ async function main() {
     })
   }
 
-  // Fees (with matching Payment transaction rows so platform revenue reflects collections)
+  // Fees (with matching Payment transaction rows so platform revenue reflects collections).
+  // Payment createdAt is spread across the last 6 months so the platform
+  // "Monthly Collections by Channel" trend chart shows a realistic series.
   const feeMethods = ['UPI', 'CARD', 'NETBANKING', 'CASH']
+  const paidStudents: Array<{ idx: number }> = []
   for (const [idx, s] of students.entries()) {
     const paid = Math.random() > 0.4
+    if (paid) paidStudents.push({ idx })
     const fee = await db.fee.create({
       data: { schoolId: demoSchool.id, studentId: s.id, title: 'Tuition Fee Q1', amount: 25000, paid: paid ? 25000 : 0, type: 'TUITION', dueDate: new Date('2025-09-30'), status: paid ? 'PAID' : 'UNPAID', method: paid ? 'UPI' : null, paidDate: paid ? new Date('2025-09-20') : null },
     })
     if (paid) {
+      const monthsBack = 5 - Math.floor((paidStudents.length - 1) / Math.max(1, students.length / 5))
+      const when = new Date()
+      when.setMonth(when.getMonth() - Math.max(0, Math.min(5, monthsBack)))
+      when.setDate(3 + (idx % 25))
+      when.setHours(9 + (idx % 8), (idx * 11) % 60, 0, 0)
       await db.payment.create({
         data: {
           feeId: fee.id,
@@ -211,7 +220,7 @@ async function main() {
           status: 'SUCCESS',
           transactionId: `TXN-${fee.id.slice(-8).toUpperCase()}`,
           note: 'Tuition Fee Q1 collection',
-          createdAt: new Date('2025-09-20'),
+          createdAt: when,
         },
       })
     }

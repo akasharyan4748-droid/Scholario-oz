@@ -1,17 +1,165 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   Building2, Users, IndianRupee, TrendingUp, TrendingDown, Server,
   ShieldCheck, LifeBuoy, Activity, Zap, ArrowUpRight, ArrowDownRight,
-  Cloud, Globe, Star, Sparkles
+  Cloud, Globe, Star, Sparkles, Download, Check, Loader2, Wallet
 } from 'lucide-react'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { GlassCard, SectionHeading, StatusBadge } from '@/components/shared/ui'
 import { ChartCard, DualArea, Donut, ProgressBar, RadialGauge } from '@/components/shared/charts'
 import { formatINR, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
+
+// ────────────────────────────────────────────────────────────────────────────
+// StackedMethodColumns — monthly × payment-method stacked column chart.
+// Hand-rolled (vs recharts) so every segment gets donut-matched colors,
+// spring grow-in, hover isolation and a per-column breakdown popover.
+// ────────────────────────────────────────────────────────────────────────────
+function StackedMethodColumns({
+  rows,
+  series,
+}: {
+  rows: Array<Record<string, number | string>>
+  series: { key: string; name: string; color: string }[]
+}) {
+  const [hovered, setHovered] = useState<string | null>(null) // hovered month key
+  const [dimKey, setDimKey] = useState<string | null>(null) // legend isolation
+
+  const max = useMemo(
+    () =>
+      Math.max(
+        1,
+        ...rows.map((r) => series.reduce((s, sr) => s + (Number(r[sr.key]) || 0), 0))
+      ),
+    [rows, series]
+  )
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border p-8 text-center">
+        <Wallet className="mx-auto h-8 w-8 text-muted-foreground/60 mb-2" />
+        <p className="text-sm font-semibold">No transactions in the last 6 months</p>
+        <p className="text-xs text-muted-foreground">New payments will chart here in real time.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full">
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
+        {series.map((sr) => {
+          const total = rows.reduce((s, r) => s + (Number(r[sr.key]) || 0), 0)
+          const dimmed = dimKey !== null && dimKey !== sr.key
+          return (
+            <button
+              key={sr.key}
+              onMouseEnter={() => setDimKey(sr.key)}
+              onMouseLeave={() => setDimKey(null)}
+              onFocus={() => setDimKey(sr.key)}
+              onBlur={() => setDimKey(null)}
+              className={cn(
+                'flex items-center gap-1.5 rounded-full border border-border bg-card/60 px-2.5 py-1 text-[11px] font-semibold transition-all duration-200',
+                dimmed ? 'opacity-40' : 'opacity-100 hover:bg-accent/40'
+              )}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: sr.color }} />
+              {sr.name}
+              <span className="text-muted-foreground font-mono">{formatINR(total, true)}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Columns */}
+      <div className="flex items-end gap-2 sm:gap-4 h-44 sm:h-52">
+        {rows.map((r, ri) => {
+          const total = series.reduce((s, sr) => s + (Number(r[sr.key]) || 0), 0)
+          const isHover = hovered === String(r.month)
+          return (
+            <div
+              key={String(r.month)}
+              className="relative flex-1 h-full flex flex-col justify-end items-stretch group"
+              onMouseEnter={() => setHovered(String(r.month))}
+              onMouseLeave={() => setHovered(null)}
+            >
+              {/* breakdown popover */}
+              {isHover && total > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 z-20 mb-2 w-max max-w-[11rem] rounded-xl border border-border bg-popover/95 backdrop-blur px-3 py-2 shadow-premium"
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">
+                    {String(r.month)} · {formatINR(total, true)}
+                  </p>
+                  {series.map((sr) => {
+                    const v = Number(r[sr.key]) || 0
+                    if (v <= 0) return null
+                    return (
+                      <div key={sr.key} className="flex items-center justify-between gap-3 py-0.5">
+                        <span className="flex items-center gap-1.5 text-[11px] text-foreground">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: sr.color }} />
+                          {sr.name}
+                        </span>
+                        <span className="text-[11px] font-bold font-mono">{formatINR(v, true)}</span>
+                      </div>
+                    )
+                  })}
+                </motion.div>
+              )}
+
+              {/* stacked segments (flex-col-reverse → UPI at bottom).
+                  flex-1 + min-h-0 gives children a DEFINITE height so the
+                  per-segment percentage heights actually resolve. */}
+              <div className="flex-1 min-h-0 flex flex-col justify-end w-full max-w-24 mx-auto">
+                <div className="flex flex-col-reverse rounded-t-lg overflow-hidden cursor-pointer h-full">
+                  {series.map((sr, si) => {
+                    const v = Number(r[sr.key]) || 0
+                    if (v <= 0) return null
+                    const hPct = Math.max(2, (v / max) * 100)
+                    const dim = dimKey !== null && dimKey !== sr.key
+                    const isTop = series.slice(si + 1).every((s2) => (Number(r[s2.key]) || 0) <= 0)
+                    return (
+                      <motion.div
+                        key={sr.key}
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: `${hPct}%`, opacity: dim ? 0.25 : 1 }}
+                        transition={{
+                          height: { type: 'spring', stiffness: 120, damping: 20, delay: ri * 0.06 },
+                          opacity: { duration: 0.2 },
+                        }}
+                        className={cn('w-full shrink-0 transition-[filter] duration-200', isTop && 'rounded-t-lg')}
+                        style={{
+                          background: `linear-gradient(180deg, ${sr.color} 0%, ${sr.color}cc 100%)`,
+                          filter: isHover ? 'brightness(1.12)' : undefined,
+                        }}
+                        title={`${sr.name}: ${formatINR(v, true)}`}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* month label + total */}
+              <div className={cn(
+                'mt-2 text-center transition-colors',
+                isHover ? 'text-foreground' : 'text-muted-foreground'
+              )}>
+                <p className="text-[10px] sm:text-[11px] font-bold">{String(r.month)}</p>
+                <p className="text-[9px] font-mono opacity-70">{total > 0 ? formatINR(total, true) : '—'}</p>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 export function SADashboardModule() {
   const [data, setData] = useState<any>(null)
@@ -48,6 +196,31 @@ export function SADashboardModule() {
   const stats = data?.stats || { schools: 0, students: 0, teachers: 0, revenue: 0 }
   const recentSchools = data?.recentSchools || []
   const methodBreakdown = data?.methodBreakdown || []
+  const methodTrend: Array<Record<string, number | string>> = data?.methodTrend || []
+
+  // CSV ledger export — fetch → blob → download, with loading/success states
+  const [exportState, setExportState] = useState<'idle' | 'busy' | 'done'>('idle')
+  const handleExportCsv = async () => {
+    if (exportState === 'busy') return
+    setExportState('busy')
+    try {
+      const r = await fetch('/api/payments-export?limit=1000')
+      if (!r.ok) throw new Error('export failed')
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `scholario-transactions-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setExportState('done')
+      setTimeout(() => setExportState('idle'), 2200)
+    } catch {
+      setExportState('idle')
+    }
+  }
 
   // Skeleton while platform stats load
   if (loading && !data) {
@@ -126,20 +299,48 @@ export function SADashboardModule() {
             />
           </ChartCard>
           <GlassCard className="p-4 sm:p-5 lg:col-span-2">
-            <SectionHeading
-              icon={<IndianRupee className="h-4 w-4 text-cyan-500" />}
-              title="Transaction Ledger by Method"
-              subtitle="Every successful payment aggregated per channel"
-            />
+            <div className="flex items-start justify-between gap-3">
+              <SectionHeading
+                icon={<IndianRupee className="h-4 w-4 text-cyan-500" />}
+                title="Transaction Ledger by Method"
+                subtitle="Every successful payment aggregated per channel"
+              />
+              <button
+                onClick={handleExportCsv}
+                disabled={exportState === 'busy'}
+                aria-label="Export transaction ledger as CSV"
+                className={cn(
+                  'group relative shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all duration-200',
+                  'border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+                  'hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:shadow-[0_0_0_3px_rgba(16,185,129,0.12)]',
+                  'active:scale-95 disabled:opacity-60'
+                )}
+              >
+                {exportState === 'busy' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : exportState === 'done' ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Download className="h-3.5 w-3.5 transition-transform group-hover:translate-y-0.5" />
+                )}
+                {exportState === 'done' ? 'Saved' : 'Export CSV'}
+              </button>
+            </div>
             <div className="mt-4 space-y-2.5">
               {methodBreakdown.map((m: { method: string; amount: number; count: number }, i: number) => {
                 const total = methodBreakdown.reduce((s: number, x: { amount: number }) => s + x.amount, 0) || 1
                 const pct = Math.round((m.amount / total) * 100)
                 return (
-                  <div key={m.method} className="rounded-xl border border-border bg-card/40 p-3 hover:bg-accent/30 transition-colors">
+                  <div
+                    key={m.method}
+                    className="group rounded-xl border border-transparent bg-card/40 p-3 hover:bg-accent/30 hover:border-border hover:ring-1 hover:ring-emerald-500/20 transition-all duration-200"
+                  >
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: METHOD_COLORS[i % METHOD_COLORS.length] }} />
+                        <span
+                          className="h-2.5 w-2.5 rounded-full shrink-0 transition-transform duration-200 group-hover:scale-125"
+                          style={{ background: METHOD_COLORS[i % METHOD_COLORS.length] }}
+                        />
                         <p className="text-sm font-bold text-foreground truncate">{methodLabel(m.method)}</p>
                         <span className="text-[10px] text-muted-foreground font-mono">{m.count} txn{m.count > 1 ? 's' : ''}</span>
                       </div>
@@ -155,6 +356,29 @@ export function SADashboardModule() {
             </div>
           </GlassCard>
         </div>
+      )}
+
+      {/* Monthly collections trend by channel (stacked columns) */}
+      {methodTrend.length > 0 && (
+        <ChartCard
+          title="Monthly Collections by Channel"
+          subtitle="Successful transactions · last 6 months · live from Payment ledger"
+          height={300}
+          action={
+            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> 6M window
+            </span>
+          }
+        >
+          <StackedMethodColumns
+            rows={methodTrend}
+            series={methodBreakdown.map((m: { method: string }, i: number) => ({
+              key: String(m.method).toUpperCase(),
+              name: methodLabel(String(m.method).toUpperCase()),
+              color: METHOD_COLORS[i % METHOD_COLORS.length],
+            }))}
+          />
+        </ChartCard>
       )}
 
       {/* Recent schools list */}

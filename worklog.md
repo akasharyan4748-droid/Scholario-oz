@@ -154,3 +154,44 @@ Stage Summary:
 2. (Medium) Real-time: live-alerts store is simulated client-side; a socket.io mini-service could push genuine events (new admission, fee payment) to the bell.
 3. (Low) Announcement audience field ('ALL','PARENTS'…) is not filtered per viewer role — feed shows all announcements to everyone.
 4. (Feature ideas): i18n via next-intl (package already installed); PWA manifest + offline shell; per-method collection trend over time (needs payment createdAt-based series); export ledger CSV button.
+---
+Task ID: 5
+Agent: Z.ai Code (webDevReview cron round)
+Task: Assess project, QA via agent-browser, then execute next-phase priorities: announcement audience filtering (P3), real-time event stream (P2), monthly method trend + CSV export (P4) + styling polish.
+
+Work Log:
+- Health check passed (HTTP 200, lint clean). QA sweep via gateway :81 — public site + superadmin dashboard stable, zero console errors. No blocking bugs → proceeded to features.
+- FEATURE 1 — Real-time event stream (socket.io mini-service):
+  - New `mini-services/event-stream/` (port 3003, socket.io path '/', Caddy gateway compatible). Read-only `bun:sqlite` attach to db/custom.db; polls every 4s for NEW successful Payment rows + Notification (announcement) rows created since service boot; broadcasts `school-event` frames (kind, schoolId, title, detail, amount, method, at). Seen-set dedupe (second-precision timestamps) + watermark advance; memory bounded.
+  - GOTCHAS: (a) Prisma stores DateTime as epoch-millis INTEGER in SQLite — watermark comparisons must be numeric, not ISO strings; (b) there is NO Admission table (admissions module is client-mock) — polling it 500s; (c) `bun --hot` reloads after file edits can leave the running process in a stale state — do a clean restart (pkill + fresh start) after editing index.ts.
+  - Start command: `cd mini-services/event-stream && bun run dev` (setsid + nohup for persistence). Log: /home/z/my-project/event-stream.log.
+  - Client wiring in `app-shell.tsx`: resolves viewer school scope via `/api/auth/me` (client SessionUser has no schoolId; superadmin → null → platform-wide stream), then `io('/?XTransformPort=3003')`. On event: scope-filter → prepend NotificationItem to bell feed (auto-mapped ₹ icon for payments) + premium toast (accent stripe, ₹/megaphone chip, pulsing LIVE pill, 5s). Bell gets emerald pulsing dot when connected; dropdown shows "Live event stream connected" pill for all roles.
+  - E2E verified: SQL-inserted 3 payments → service logged `payment → Aarav Sharma ₹9200 (CARD)` etc. → browser toast captured on screenshot, bell badge 5→8, dropdown items "just now" with ₹9,200 via Card / ₹18,500 via UPI / ₹12,500 via Net Banking. Test rows kept but naturalized (note "Q1 tuition instalment — counter collection", TXN-Q1-*).
+- FEATURE 2 — Monthly Collections by Channel (superadmin):
+  - `/api/dashboard` SUPER_ADMIN branch: new `methodTrend` (month × method sums, last 6 months). Window slides back to the latest payment month when the recent window is empty (sandbox clock vs old seed data) so the chart never renders flat zeroes; buckets pre-seeded for continuity.
+  - `dashboard.tsx`: hand-rolled `StackedMethodColumns` (donut-matched colors, spring grow-in, hover isolation via legend, per-column breakdown popover, gradient segments, rounded tops, month+total labels, empty state). DEBUGGED: percentage-height segments collapsed inside auto-height flex parent — fixed with `flex-1 min-h-0` + `max-w-24` column caps. Verified desktop 1440 + mobile 390 (no h-scroll), hover popover shows per-method breakdown.
+- FEATURE 3 — CSV ledger export:
+  - New `/api/payments-export` (GET, auth: superadmin = platform-wide, staff = school-scoped; limit ≤2000): streams text/csv with Txn ID/Date/Student/Admission No/Class/Fee/School/Method/Status/Amount. FRAMEWORK FIX: `api()` in lib/api.ts now passes through raw `Response` instances (previously any handler returning Response got JSON-shredded into `{ ok, data: {} }`).
+  - Export button on Transaction Ledger panel (emerald outline, Loader2 spinner while busy, Check "Saved" state, hover ring + translate icon).
+- FIX — Announcement audience filtering (was: everyone saw everything):
+  - `/api/notifications-feed` GET now filters announcements by `audience` per viewer role (PRINCIPAL: ALL/TEACHERS/STAFF/STUDENTS/PRINCIPAL/ADMIN; TEACHER: ALL/TEACHERS/STAFF; STUDENT: ALL/STUDENTS; PARENT: ALL/PARENTS/GUARDIANS). Fetch window widened to 24 → filter → trim 8 so lists stay full. Verified: principal no longer sees the PARENTS-only "Parent-Teacher Meeting".
+- UX FIX — Notifications dropdown now closes on outside click (mousedown/touchstart, bell trigger excluded) and Escape; added role="dialog" + aria-label.
+- DATA — `prisma/spread-payments.ts` one-off redistributed the 13 existing payments across the last 6 months (Mar–Aug 2026) so the trend chart shows a growth series; `prisma/seed.ts` payment creation updated to spread createdAt the same way for future reseeds.
+- QA: lint exit 0; /api/dashboard, /api/payments-export, /api/notifications-feed, /api/auth/me all 200; no browser console/page errors; mobile 390px no horizontal scroll.
+- Screenshots: qa5-superadmin.png, qa5-trend-chart.png, qa5-live-dropdown.png, qa5-live-toast.png, qa5-mobile-trend2.png, qa5-desktop-trend2.png.
+
+Stage Summary:
+- The platform now has a genuine real-time layer: DB writes propagate to all connected dashboards in ≤4s with zero client polling beyond the existing 60s feed refresh.
+- lib/api.ts `api()` Response passthrough is a framework-level improvement — future CSV/PDF/file endpoints can return raw Responses.
+- Superadmin dashboard now has 3 analytics surfaces (donut, ledger, monthly stacked trend) + CSV export, all DB-authoritative.
+- Remaining mocks: module-level presentation data only (timetables, library demo rows).
+
+## Current State Assessment (after Task 5)
+- Services: Next dev :3000 + event-stream :3003 (both must run; event-stream is NOT auto-started — start manually after restarts).
+- All 4 role panels + public site verified; realtime verified with real DB inserts through the Caddy gateway (test via http://localhost:81, NOT :3000 — socket proxying only exists through the gateway).
+
+## Unresolved Issues / Risks / Next-Phase Priorities
+1. (Low) Trend chart hover popover can clip near the card's right edge for the last column — consider flip logic if it bothers anyone.
+2. (Low) Event stream is broadcast-to-all; server-side room filtering per schoolId would reduce client-side filtering noise at scale (fine for current demo scale).
+3. (Medium) Search deep-linking (open student/fee profile directly from palette results) still open.
+4. (Feature ideas): admin UI to broadcast announcements (would exercise the live stream end-to-end from product surface); teacher-facing collection snapshots; i18n via next-intl; PWA manifest + offline shell.

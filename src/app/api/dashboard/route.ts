@@ -35,6 +35,57 @@ export async function GET() {
         _count: { id: true },
       })
 
+      // Monthly × method collection trend (last 6 months) for the stacked chart.
+      // Window slides: ends "now" normally, but if the recent window has no
+      // payments (e.g. demo data is older), it ends at the latest payment month
+      // so the chart always tells a story instead of rendering flat zeroes.
+      const trendSince = new Date()
+      trendSince.setMonth(trendSince.getMonth() - 11) // wide fetch, trim to 6 buckets later
+      trendSince.setHours(0, 0, 0, 0)
+      const trendPayments = await db.payment.findMany({
+        where: { ...paymentWhere, status: 'SUCCESS', createdAt: { gte: trendSince } },
+        select: { amount: true, method: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+        take: 1000,
+      })
+      const MONTH_FMT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      const monthKey = (d: Date) => `${MONTH_FMT[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`
+
+      // determine window end: now, or latest payment month if recent window is empty
+      let windowEnd = new Date()
+      if (trendPayments.length > 0) {
+        const newest = trendPayments[trendPayments.length - 1].createdAt
+        // if no payment falls inside the last 6 calendar months, slide back
+        const sixAgo = new Date(windowEnd)
+        sixAgo.setMonth(sixAgo.getMonth() - 5)
+        sixAgo.setDate(1)
+        sixAgo.setHours(0, 0, 0, 0)
+        const hasRecent = trendPayments.some((p) => new Date(p.createdAt) >= sixAgo)
+        if (!hasRecent) {
+          windowEnd = new Date(newest)
+        }
+      }
+
+      const monthBuckets = new Map<string, Record<string, number>>()
+      // Pre-seed the 6 buckets ending at windowEnd (oldest → newest)
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(windowEnd)
+        d.setMonth(d.getMonth() - i)
+        monthBuckets.set(monthKey(d), {})
+      }
+      for (const p of trendPayments) {
+        const key = monthKey(new Date(p.createdAt))
+        if (!monthBuckets.has(key)) continue // outside the chosen window
+        const bucket = monthBuckets.get(key) || {}
+        const m = (p.method || 'UNKNOWN').toUpperCase()
+        bucket[m] = (bucket[m] || 0) + p.amount
+        monthBuckets.set(key, bucket)
+      }
+      const methodTrend = Array.from(monthBuckets.entries()).map(([month, byMethod]) => ({
+        month,
+        ...byMethod,
+      }))
+
       const recentSchools = await db.school.findMany({
         where: schoolWhere,
         orderBy: { createdAt: 'desc' },
@@ -62,6 +113,8 @@ export async function GET() {
           amount: m._sum.amount || 0,
           count: m._count.id,
         })),
+        // Monthly stacked trend: [{ month: 'Sep 25', UPI: 50000, CARD: 25000, … }]
+        methodTrend,
         recentSchools: recentSchools.map((s) => ({
           id: s.id,
           name: s.name,

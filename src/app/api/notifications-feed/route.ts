@@ -4,6 +4,21 @@ import { withUser } from '@/lib/api'
 
 export const runtime = 'nodejs'
 
+// Which announcement audiences each viewer role is allowed to see.
+// `ALL` is visible to everyone; other tags are matched case-insensitively.
+const AUDIENCE_BY_ROLE: Record<string, string[]> = {
+  PRINCIPAL: ['ALL', 'TEACHERS', 'STAFF', 'STUDENTS', 'PRINCIPAL', 'ADMIN'],
+  TEACHER: ['ALL', 'TEACHERS', 'STAFF'],
+  STUDENT: ['ALL', 'STUDENTS'],
+  PARENT: ['ALL', 'PARENTS', 'GUARDIANS'],
+}
+
+function audienceAllows(audience: string | null | undefined, role: string): boolean {
+  if (!audience) return true
+  const allowed = AUDIENCE_BY_ROLE[role] ?? ['ALL']
+  return allowed.includes(audience.toUpperCase())
+}
+
 // GET aggregated notifications feed: unread messages + recent announcements.
 // Announcement read-state is persisted per-user via the NotificationRead table,
 // so acknowledgements survive reloads (messages use their own `read` column).
@@ -24,13 +39,18 @@ export async function GET() {
       include: { sender: { select: { name: true, role: true } } },
     })
 
-    // Recent school announcements (last 8) with this user's read marks
-    const announcements = await db.notification.findMany({
+    // Recent school announcements (last 8 visible to this role) with read marks.
+    // Audience filtering happens app-side because audience tags are free-form
+    // (fetch a wider window, filter, then trim so the list stays full).
+    const announcementRows = await db.notification.findMany({
       where: { schoolId },
       orderBy: { createdAt: 'desc' },
-      take: 8,
+      take: 24,
       include: { reads: { where: { userId: user.id }, select: { id: true } } },
     })
+    const announcements = announcementRows
+      .filter((a) => audienceAllows(a.audience, user.role))
+      .slice(0, 8)
 
     // Combine into a unified feed
     const feed = [
