@@ -92,7 +92,15 @@ function StackedMethodColumns({
                   initial={{ opacity: 0, y: 6, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute bottom-full left-1/2 -translate-x-1/2 z-20 mb-2 w-max max-w-[11rem] rounded-xl border border-border bg-popover/95 backdrop-blur px-3 py-2 shadow-premium"
+                  className={cn(
+                    'absolute bottom-full z-20 mb-2 w-max max-w-[11rem] rounded-xl border border-border bg-popover/95 backdrop-blur px-3 py-2 shadow-premium',
+                    // Edge-aware anchoring so the popover never clips at the card boundary
+                    ri === 0
+                      ? 'left-0'
+                      : ri === rows.length - 1
+                        ? 'right-0'
+                        : 'left-1/2 -translate-x-1/2'
+                  )}
                 >
                   <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">
                     {String(r.month)} · {formatINR(total, true)}

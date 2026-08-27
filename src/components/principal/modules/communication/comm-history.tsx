@@ -117,6 +117,15 @@ export function HistorySection() {
                   <p className="text-[9px] text-muted-foreground truncate">{a.message}</p>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <CategoryBadge category={a.category} />
+                    {a.synced && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" title={`Persisted to school DB (${a.dbId ?? 'synced'}) · pushed on the live event stream`}>
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        </span>
+                        LIVE
+                      </span>
+                    )}
                     <span className="text-[9px] text-muted-foreground">by {a.author}</span>
                   </div>
                 </div>
@@ -206,6 +215,15 @@ function HistoryViewModal({ announcement: a, onClose }: { announcement: Announce
             <div className="flex justify-between"><span className="text-muted-foreground">Created</span><span className="font-medium">{formatDate(a.createdAt)}</span></div>
             {a.sentAt && <div className="flex justify-between"><span className="text-muted-foreground">Sent</span><span className="font-medium">{formatDate(a.sentAt)}</span></div>}
             {a.scheduledFor && <div className="flex justify-between"><span className="text-muted-foreground">Scheduled for</span><span className="font-medium text-amber-600">{formatDate(a.scheduledFor)}</span></div>}
+            {a.synced && (
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Platform broadcast</span>
+                <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Delivered live
+                </span>
+              </div>
+            )}
+            {a.dbId && <div className="flex justify-between"><span className="text-muted-foreground">DB record</span><span className="font-mono text-[10px] text-muted-foreground truncate max-w-[12rem]">{a.dbId}</span></div>}
             {a.deliveredCount !== undefined && <div className="flex justify-between"><span className="text-muted-foreground">Delivered</span><span className="font-medium tabular-nums text-emerald-600">{a.deliveredCount.toLocaleString('en-IN')}</span></div>}
             {a.failedCount !== undefined && a.failedCount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Failed</span><span className="font-medium tabular-nums text-rose-600">{a.failedCount.toLocaleString('en-IN')}</span></div>}
           </div>

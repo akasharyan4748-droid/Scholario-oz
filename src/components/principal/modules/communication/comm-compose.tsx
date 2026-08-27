@@ -4,22 +4,25 @@
  * comm-compose — unified composer for announcements.
  *
  * - Template picker (small practical set)
- * - Audience selector (global + classes + sections) with live recipient count
+ * - Audience selector (school-wide + DB-backed class roster) with live recipient count
  * - Title + message (with character count for SMS)
  * - Category picker
  * - Channel selector (Push / SMS / Email checkboxes)
  * - Live preview (updates based on selected channels)
  * - Schedule option (now or future)
  * - Confirmation modal before send
+ * - REAL platform broadcast: "Send Now" additionally POSTs to
+ *   /api/announcements — the row lands in the school DB and the live event
+ *   stream pushes it to every connected dashboard within seconds.
  *
  * No separate SMS/Email/Push tabs — channels live inside composer.
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Smartphone, MessageSquare, Mail, Send, Clock, FileText, X, Check,
-  Calendar, AlertCircle, ChevronDown, Users,
+  Calendar, AlertCircle, ChevronDown, Users, Loader2, RadioTower,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -49,12 +52,46 @@ const CATEGORY_ACCENTS: Record<AnnouncementCategory, string> = {
   Examination: 'bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30',
 }
 
+interface DbClass { id: string; name: string; section: string | null; students: number }
+
+type BroadcastState = 'idle' | 'sending' | 'sent' | 'failed'
+
 export function ComposeSection() {
   const createAnnouncement = useCommunicationStore((s) => s.createAnnouncement)
   const sendAnnouncement = useCommunicationStore((s) => s.sendAnnouncement)
   const scheduleAnnouncement = useCommunicationStore((s) => s.scheduleAnnouncement)
+  const markSynced = useCommunicationStore((s) => s.markSynced)
 
   const audienceOptions = useMemo(() => getAudienceOptions(), [])
+
+  // Real class roster from the school DB — used for class-targeted audiences
+  // so feed filtering (`CLASS:<name>`) matches actual enrollment.
+  const [dbClasses, setDbClasses] = useState<DbClass[]>([])
+  const [classesLoaded, setClassesLoaded] = useState(false)
+  const [broadcastState, setBroadcastState] = useState<BroadcastState>('idle')
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/classes?counts=1', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled) return
+        const rows = j && typeof j === 'object' && 'data' in j ? (j as { data?: unknown }).data : j
+        if (Array.isArray(rows)) {
+          setDbClasses(
+            rows.map((c: { id: string; name: string; section?: string | null; _count?: { students?: number } }) => ({
+              id: c.id,
+              name: c.name,
+              section: c.section ?? null,
+              students: c._count?.students ?? 0,
+            }))
+          )
+        }
+        setClassesLoaded(true)
+      })
+      .catch(() => { if (!cancelled) setClassesLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
 
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
@@ -67,20 +104,23 @@ export function ComposeSection() {
   const [showTemplates, setShowTemplates] = useState(false)
 
   // Audience selector expanded state
-  const [audienceExpanded, setAudienceExpanded] = useState<'global' | 'classes' | 'sections'>('global')
+  const [audienceExpanded, setAudienceExpanded] = useState<'global' | 'classes'>('global')
 
-  // Compute recipient count from canonical data
+  // Compute recipient count — DB counts for real classes, canonical estimates
+  // for school-wide audiences.
   const recipientCount = useMemo(() => {
     if (audience === 'All Parents') return audienceOptions.global[0].count
     if (audience === 'All Students') return audienceOptions.global[1].count
     if (audience === 'All Teachers') return audienceOptions.global[2].count
     if (audience === 'All Staff') return audienceOptions.global[3].count
+    const dbClass = dbClasses.find((c) => c.name === audience)
+    if (dbClass) return dbClass.students
     const cls = audienceOptions.classes.find((c) => c.value === audience)
     if (cls) return cls.count
     const sec = audienceOptions.sections.find((s) => s.value === audience)
     if (sec) return sec.count
     return 0
-  }, [audience, audienceOptions])
+  }, [audience, audienceOptions, dbClasses])
 
   const smsSegments = useMemo(() => {
     if (!channels.includes('SMS')) return 0
@@ -102,13 +142,13 @@ export function ComposeSection() {
     toast.success('Template applied', { description: template.name })
   }
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!title.trim()) { toast.error('Title required', { description: 'Please enter a title.' }); return }
     if (!message.trim()) { toast.error('Message required', { description: 'Please enter a message.' }); return }
     if (channels.length === 0) { toast.error('Select at least one channel', { description: 'Push, SMS or Email.' }); return }
     if (scheduleMode === 'later' && !scheduledFor) { toast.error('Schedule date required', { description: 'Pick a date and time.' }); return }
 
-    const id = createAnnouncement({
+    const localId = createAnnouncement({
       title,
       message,
       category,
@@ -119,12 +159,46 @@ export function ComposeSection() {
     })
 
     if (scheduleMode === 'now') {
-      sendAnnouncement(id)
-      toast.success('Announcement sent', {
-        description: `${recipientCount.toLocaleString('en-IN')} recipients via ${channels.join(' + ')}`,
-      })
+      sendAnnouncement(localId)
+      setBroadcastState('sending')
+
+      // REAL platform broadcast — persist to the school DB; the live event
+      // stream picks the row up (~4s) and pushes a toast to every dashboard.
+      let delivered = false
+      let deliveryNote = ''
+      try {
+        const r = await fetch('/api/announcements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: title.trim(), message: message.trim(), audience, category }),
+        })
+        const j = await r.json().catch(() => null)
+        const payload = j && typeof j === 'object' && 'data' in j ? (j as { data?: { id?: string; estimatedRecipients?: number | null } }).data : j as { id?: string } | null
+        if (r.ok && payload?.id) {
+          markSynced(localId, payload.id)
+          delivered = true
+        } else {
+          deliveryNote = (j as { error?: string })?.error === 'FORBIDDEN'
+            ? 'Platform broadcasts require the Principal role.'
+            : 'Platform broadcast service unavailable — announcement kept in this session.'
+        }
+      } catch {
+        deliveryNote = 'Platform broadcast unreachable — announcement kept in this session.'
+      }
+
+      if (delivered) {
+        setBroadcastState('sent')
+        toast.success('Announcement broadcast live', {
+          description: `${recipientCount.toLocaleString('en-IN')} recipients via ${channels.join(' + ')} · pushed to every connected dashboard in real time`,
+          icon: <RadioTower className="h-4 w-4 text-emerald-500" />,
+        })
+      } else {
+        setBroadcastState('failed')
+        toast.warning('Announcement sent (demo mode)', { description: deliveryNote || 'Delivery not confirmed.' })
+      }
+      setTimeout(() => setBroadcastState('idle'), 3200)
     } else {
-      scheduleAnnouncement(id, new Date(scheduledFor).toISOString())
+      scheduleAnnouncement(localId, new Date(scheduledFor).toISOString())
       toast.success('Announcement scheduled', {
         description: `${formatScheduledDate(scheduledFor)} · ${recipientCount.toLocaleString('en-IN')} recipients`,
       })
@@ -245,37 +319,61 @@ export function ComposeSection() {
               Audience · <span className="text-emerald-600 normal-case">{recipientCount.toLocaleString('en-IN')} recipients</span>
             </label>
             <div className="flex items-center gap-1 mb-1.5">
-              {[
-                { value: 'global', label: 'Global' },
-                { value: 'classes', label: 'By Class' },
-                { value: 'sections', label: 'By Section' },
-              ].map((g) => (
-                <button
-                  key={g.value}
-                  onClick={() => setAudienceExpanded(g.value as any)}
-                  className={cn(
-                    'px-2 py-1 text-[10px] font-medium rounded transition-colors',
-                    audienceExpanded === g.value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {g.label}
-                </button>
-              ))}
+              <button
+                onClick={() => setAudienceExpanded('global')}
+                className={cn(
+                  'px-2 py-1 text-[10px] font-medium rounded transition-colors',
+                  audienceExpanded === 'global' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground',
+                )}
+              >
+                School-wide
+              </button>
+              <button
+                onClick={() => setAudienceExpanded('classes')}
+                className={cn(
+                  'px-2 py-1 text-[10px] font-medium rounded transition-colors',
+                  audienceExpanded === 'classes' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Classes
+                {classesLoaded && dbClasses.length > 0 && (
+                  <span className={cn('ml-1 px-1 rounded text-[8px]', audienceExpanded === 'classes' ? 'bg-primary-foreground/20' : 'bg-emerald-500/15 text-emerald-600')}>DB</span>
+                )}
+              </button>
             </div>
             <select
               value={audience}
               onChange={(e) => setAudience(e.target.value as Audience)}
               className="w-full h-8 text-xs rounded-md border border-border bg-background px-2"
             >
-              {audienceExpanded === 'global' && audienceOptions.global.map((a) => (
-                <option key={a.value} value={a.value}>{a.label} ({a.count.toLocaleString('en-IN')})</option>
-              ))}
-              {audienceExpanded === 'classes' && audienceOptions.classes.map((c) => (
-                <option key={c.value} value={c.value}>{c.label} ({c.count.toLocaleString('en-IN')} students)</option>
-              ))}
-              {audienceExpanded === 'sections' && audienceOptions.sections.map((s) => (
-                <option key={s.value} value={s.value}>{s.label} ({s.count.toLocaleString('en-IN')} students)</option>
-              ))}
+              {audienceExpanded === 'global' && (
+                <>
+                  <optgroup label="School-wide audiences">
+                    {audienceOptions.global.map((a) => (
+                      <option key={a.value} value={a.value}>{a.label} ({a.count.toLocaleString('en-IN')})</option>
+                    ))}
+                  </optgroup>
+                  {audienceOptions.classes.length > 0 && (
+                    <optgroup label="Demo roster classes (local only)">
+                      {audienceOptions.classes.slice(0, 4).map((c) => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </>
+              )}
+              {audienceExpanded === 'classes' && (
+                <optgroup label={classesLoaded && dbClasses.length > 0 ? 'Classes — school database' : 'Classes (loading…)'}>
+                  {dbClasses.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name} · {c.students} enrolled
+                    </option>
+                  ))}
+                  {classesLoaded && dbClasses.length === 0 && audienceOptions.classes.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label} ({c.count.toLocaleString('en-IN')} students)</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 
@@ -344,17 +442,64 @@ export function ComposeSection() {
           {/* Send button */}
           <Button
             size="lg"
+            disabled={broadcastState === 'sending'}
             className={cn(
-              'w-full h-10 text-sm gap-2',
+              'w-full h-10 text-sm gap-2 transition-all',
               isEmergency
                 ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white'
                 : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white',
+              broadcastState === 'sent' && 'from-emerald-500 to-teal-500',
+              broadcastState === 'sending' && 'opacity-80 cursor-wait',
             )}
             onClick={openConfirm}
           >
-            <Send className="h-4 w-4" />
-            {scheduleMode === 'now' ? (isEmergency ? 'Send Emergency Alert' : 'Send Announcement') : 'Schedule Announcement'}
+            {broadcastState === 'sending' ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Broadcasting…
+              </>
+            ) : broadcastState === 'sent' ? (
+              <>
+                <RadioTower className="h-4 w-4" /> Broadcast delivered
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4" />
+                {scheduleMode === 'now' ? (isEmergency ? 'Send Emergency Alert' : 'Send Announcement') : 'Schedule Announcement'}
+              </>
+            )}
           </Button>
+
+          {/* Broadcast status strip */}
+          <AnimatePresence>
+            {(broadcastState === 'sent' || broadcastState === 'failed') && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className={cn(
+                  'flex items-center gap-2 rounded-lg border px-3 py-2 text-[11px]',
+                  broadcastState === 'sent'
+                    ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300'
+                    : 'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300',
+                )}
+              >
+                {broadcastState === 'sent' ? (
+                  <>
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    </span>
+                    Live broadcast confirmed — platform delivery succeeded. Connected dashboards received the push.
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    Kept in demo session — platform broadcast was not confirmed.
+                  </>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Live Preview (right) */}
@@ -536,6 +681,16 @@ function ConfirmModal({ title, audience, recipientCount, channels, scheduleMode,
             <span className="font-medium">{scheduleMode === 'now' ? 'Send now' : formatScheduledDate(scheduledFor)}</span>
           </div>
         </div>
+
+        {scheduleMode === 'now' && (
+          <div className="mt-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 p-2 flex items-start gap-1.5">
+            <RadioTower className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Live platform broadcast</p>
+              <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">The notice is persisted to the school database and pushed in real time to every connected dashboard.</p>
+            </div>
+          </div>
+        )}
 
         {isEmergency && (
           <div className="mt-2 rounded-md bg-rose-500/10 border border-rose-500/30 p-2 flex items-start gap-1.5">

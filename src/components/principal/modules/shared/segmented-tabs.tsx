@@ -48,6 +48,8 @@ export function SegmentedTabs<T extends string = string>({
     <div
       className={cn(
         'inline-flex h-9 p-1 gap-1 rounded-full bg-muted/60',
+        // Scrollable on narrow screens so long tab sets never overflow
+        'max-w-full overflow-x-auto custom-scrollbar',
         className,
       )}
     >

@@ -40,6 +40,8 @@ export interface Announcement {
   relatedModule?: string // e.g. 'Examination', 'Fee Management', 'Calendar'
   relatedItemId?: string
   attachmentRef?: string // circular reference
+  synced?: boolean // persisted to the platform DB + broadcast on the live event stream
+  dbId?: string // Notification.id in the school database (when synced)
 }
 
 export interface Circular {
@@ -274,6 +276,7 @@ interface CommunicationState {
   archiveAnnouncement: (id: string) => void
   duplicateAnnouncement: (id: string) => void
   archiveCircular: (id: string) => void
+  markSynced: (id: string, dbId: string) => void
 }
 
 function pushAudit(state: CommunicationState, record: Omit<CommunicationAudit, 'id' | 'timestamp'>): CommunicationAudit[] {
@@ -342,6 +345,23 @@ export const useCommunicationStore = create<CommunicationState>((set, get) => ({
         action: 'announcement.scheduled',
         actor: announcement.author,
         description: `"${announcement.title}" scheduled for ${new Date(scheduledFor).toLocaleString('en-IN')}`,
+      }),
+    })
+  },
+
+  // Marks an announcement as truly published: the POST /api/announcements
+  // write succeeded, so the row lives in the DB and the live event stream
+  // is pushing it to every connected dashboard.
+  markSynced: (id, dbId) => {
+    const state = get()
+    const announcement = state.announcements.find((a) => a.id === id)
+    if (!announcement) return
+    set({
+      announcements: state.announcements.map((a) => a.id === id ? { ...a, synced: true, dbId } : a),
+      audit: pushAudit(state, {
+        action: 'announcement.broadcast',
+        actor: announcement.author,
+        description: `"${announcement.title}" broadcast live — platform delivery confirmed`,
       }),
     })
   },

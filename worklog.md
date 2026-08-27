@@ -195,3 +195,46 @@ Stage Summary:
 2. (Low) Event stream is broadcast-to-all; server-side room filtering per schoolId would reduce client-side filtering noise at scale (fine for current demo scale).
 3. (Medium) Search deep-linking (open student/fee profile directly from palette results) still open.
 4. (Feature ideas): admin UI to broadcast announcements (would exercise the live stream end-to-end from product surface); teacher-facing collection snapshots; i18n via next-intl; PWA manifest + offline shell.
+---
+Task ID: 6
+Agent: Z.ai Code (webDevReview cron round)
+Task: Assess project, QA via agent-browser, then implement: real announcement broadcasting from the product surface, search deep-linking, styling/mobile polish.
+
+Work Log:
+- Health check: :3000 + :81 gateway + event-stream :3003 all healthy; lint clean; QA sweep (public site, superadmin platform overview incl. donut/ledger/trend/tenants) — zero console errors, no blocking bugs → proceeded to features.
+- BUG FIX — `/api/search` student results used `moduleKey: 'admission'` (wrong module; navigated to Admissions). Now `'students'` (Students & Classes).
+- FEATURE 1 — Real Announcement Broadcasting (flagship; closes Task-5 idea "admin UI to broadcast announcements"):
+  - New `POST /api/announcements` (PRINCIPAL-only, schoolScoped): maps composer audience → canonical DB tags (All Parents→PARENTS, All Students→STUDENTS, All Teachers→TEACHERS, All Staff→STAFF); class selections (matched by /class|grade|section/i) → `CLASS:<name>`; category → priority (Emergency→URGENT, Examination/Academic→HIGH, else NORMAL); attaches senderId; returns DB id + estimatedRecipients (real counts: students/teachers via Prisma count; CLASS: counts students in that class). `GET /api/announcements` returns last 20 with sender + ack counts (for future history wiring).
+  - Feed upgrade `/api/notifications-feed`: audienceAllows now async + supports `CLASS:` prefix — PRINCIPAL/TEACHER see all class notices (staff oversight); STUDENT sees a class notice only if it matches their class (exact name, shared grade base via section-strip regex, or prefix match); PARENT/others excluded. Loop breaks at 8 visible.
+  - Composer wiring (`comm-compose.tsx`): fetches `/api/classes?counts=1` on mount; audience tabs now "School-wide | Classes(DB)" (By-Section removed — DB classes carry section in name; mock global classes demoted to a secondary optgroup); recipientCount uses real DB class sizes; `handleSend` (async) additionally POSTs to the API on "Send Now" → on success `markSynced(localId, dbId)` + emerald "Announcement broadcast live · pushed to every connected dashboard" toast; on failure amber "Announcement sent (demo mode)" toast + explanatory strip (graceful demo-mode fallback). Send button has Broadcasting… spinner / "Broadcast delivered" states + animated status strip (pulsing dot / warning). Confirm modal shows a "Live platform broadcast" emerald panel. Communication store: Announcement.synced/dbId fields + `markSynced` action (writes audit entry 'announcement.broadcast').
+  - History tab: synced announcements show a pulsing emerald "LIVE" chip next to the category; view modal adds "Platform broadcast: Delivered live" row + DB record id row.
+  - E2E VERIFIED in browser: (a) demo-mode path — browser DB session was teacher while persona was principal → POST 403 → amber "demo mode" toast + strip (RBAC honest UX ✓); (b) real path — after re-login as principal@demoschool.edu: compose → confirm modal (8 real recipients) → "Broadcast delivered" → toast → event-stream log `announcement → Grade 10 - A: Field Trip to the Science Museum` → bell badge +3 → dropdown shows the new notice "just now" + earlier curl-posted notices at 6m; History shows LIVE chip + Delivered status.
+  - Audience filtering E2E via curl: student1 (Grade 9 - A) does NOT see CLASS:Grade 10 - A notice; student11 (Grade 10 - A) sees it + school-wide; teacher sees all class notices; teacher POST → 403.
+- FEATURE 2 — Search deep-linking:
+  - New `src/lib/store/focus-store.ts` (zustand: {type,id,title,moduleKey,ts}).
+  - Palette `handleSelect`: entity types (student/teacher/fee/notice/parent) emit a focus request before `onNavigate` (ts acts as retrigger).
+  - `StudentsClassesModule`: consumes focus — match by dbId → admissionNo-in-title → exact name → name prefix; hit ⇒ opens StudentProfilePage (back label "Global Search") + success toast; miss ⇒ switches to Directory tab + honest info toast ("Record synced from the school database…"). Verified: palette "Aarav" → click DEMO-2025-0001 result → lands in Students & Classes/Directory with toast.
+- STYLING/MOBILE fixes:
+  - Trend chart popover clipping (Task-5 known issue): edge-aware anchoring — first column popover anchors left, last column anchors right, middle stays centered. Verified by hovering Aug 26: popover fully inside card.
+  - ModuleHeader (principal shared): stacked layout on mobile (`flex-col-reverse` → row at sm+) — fixes "707 students" overlapping the Overview/Directory/… tab pill row at 390px; actions row horizontally scrollable.
+  - SegmentedTabs: `max-w-full overflow-x-auto custom-scrollbar` so long tab sets never overflow on narrow screens.
+- QA matrix: lint exit 0 (0 errors, 0 warnings); mobile 390px no horizontal scroll (Students & Classes + Dashboard verified post-fix); fresh page load zero console/page errors; POST /api/announcements 200 (x3) + 403 (RBAC test, expected); GET feed 200s; event-stream delivered announcement in <5s.
+- Screenshots: qa6-superadmin-home.png, qa6-trend5.png (dashboard), qa6-compose2.png (DB classes composer), qa6-confirm.png (live-broadcast confirm modal), qa6-broadcast2.png (delivered state + toast), qa6-bell-dropdown2.png (just-now announcement), qa6-history-live.png (LIVE chip + Delivered), qa6-palette-aarav2.png (DB search + highlight), qa6-deeplink.png (deep-link + toast), qa6-mobile-fixed.png / qa6-mobile-students.png (mobile header fix), qa6-popover-lastcol2.png (popover flip fix).
+
+Stage Summary:
+- The realtime loop is now closed from the PRODUCT surface: Communication → Compose → Send = DB write + live push to every connected dashboard (previously only possible via SQL/script inserts).
+- Class-targeted announcements are enforced end-to-end (composer DB classes → CLASS: tag → per-student feed filtering).
+- Palette results now deep-link into modules (student profiles open directly when the demo roster contains the name; otherwise honest directory fallback).
+- Demo-data note: 4 platform announcements now exist from testing (Hydroponics Club, Physics lab reschedule x2 via curl, Science Museum field trip) — realistic seed content, harmless.
+
+## Current State Assessment (after Task 6)
+- Services: Next dev :3000 + event-stream :3003 (event-stream must be started manually; it was already running this round).
+- Announcement pipeline: compose UI → POST /api/announcements (PRINCIPAL) → Notification row → stream broadcast ≤4s → bell + toast on all roles (school-scoped client-side; superadmin sees platform-wide).
+- All 4 role panels + public site verified; mobile 390px clean; lint clean.
+
+## Unresolved Issues / Risks / Next-Phase Priorities
+1. (Medium) GET /api/announcements exists but History still renders the local store only — wire a "Platform broadcasts" section (server rows with ack counts) into comm-history for a true cross-session history.
+2. (Medium) Deep-link covers students; teacher/fee/notice focus requests navigate but don't open entity detail — extend focus consumption to Teachers module (faculty profile) and Fee Management (fee account drawer).
+3. (Low) Event-stream still broadcast-to-all; per-school socket.io rooms would cut client-side filtering at scale.
+4. (Low) Scheduled announcements ('Schedule for Later') remain demo-only — a cron in event-stream could publish due scheduled rows for a full real path.
+5. (Feature ideas): i18n via next-intl; PWA manifest + offline shell; parent-facing digest; announcement templates with variable substitution; delivery analytics per channel.

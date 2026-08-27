@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { PageTransition } from '@/components/shared/ui'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -8,6 +8,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { StudentRecord, ClassRecord } from '@/lib/store/students-store'
+import { useFocusStore } from '@/lib/store/focus-store'
 import { ModuleHeader } from './shared/module-header'
 import { SegmentedTabs } from './shared/segmented-tabs'
 import { OverviewTab } from './students/overview-tab'
@@ -40,6 +41,33 @@ export function StudentsClassesModule({ initialTab = 'overview' }: { initialTab?
     setProfileBackLabel(backLabel || 'Students & Classes')
   }
   const closeProfile = () => setProfileStudent(null)
+
+  // Deep-link: command palette student results open the profile directly.
+  // DB ids don't exist in the demo roster, so match by id → admission no →
+  // name; fall back to the directory with an explanatory toast.
+  const focus = useFocusStore((s) => s.focus)
+  const clearFocus = useFocusStore((s) => s.clearFocus)
+  const handledFocusTs = useRef<number | null>(null)
+  useEffect(() => {
+    if (!focus || focus.type !== 'student' || handledFocusTs.current === focus.ts) return
+    handledFocusTs.current = focus.ts
+    clearFocus()
+    const dbId = focus.id.startsWith('stu-') ? focus.id.slice(4) : focus.id
+    const match =
+      store.students.find((st) => (st as StudentRecord & { dbId?: string }).dbId === dbId) ??
+      store.students.find((st) => focus.title.includes(st.admissionNo ?? '\u0000')) ??
+      store.students.find((st) => st.name.toLowerCase() === focus.title.toLowerCase()) ??
+      store.students.find((st) => focus.title.toLowerCase().startsWith(st.name.toLowerCase()))
+    if (match) {
+      openProfile(match, 'Global Search')
+      toast.success(`Opened ${match.name}'s profile`, { description: 'Deep-linked from global search' })
+    } else {
+      setActiveTab('directory')
+      toast.info(`${focus.title} — school directory`, {
+        description: 'Record synced from the school database. The interactive demo roster may not include every enrolled student.',
+      })
+    }
+  }, [focus?.ts])
 
   const confirmArchive = () => {
     if (!archiveTarget) return

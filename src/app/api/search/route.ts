@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
         subtitle: `${cls} · Adm: ${s.admissionNo ?? '—'} · Roll: ${s.rollNo ?? '—'}`,
         category: 'Students',
         type: 'student',
-        moduleKey: 'admission',
+        moduleKey: 'students',
         iconName: 'User',
         badge: s.user?.status === 'ACTIVE' ? cls : (s.user?.status ?? 'Unknown'),
         badgeVariant: s.user?.status === 'ACTIVE' ? 'success' : 'warning',

@@ -13,10 +13,39 @@ const AUDIENCE_BY_ROLE: Record<string, string[]> = {
   PARENT: ['ALL', 'PARENTS', 'GUARDIANS'],
 }
 
-function audienceAllows(audience: string | null | undefined, role: string): boolean {
-  if (!audience) return true
+function baseAudienceAllows(audience: string, role: string): boolean {
   const allowed = AUDIENCE_BY_ROLE[role] ?? ['ALL']
   return allowed.includes(audience.toUpperCase())
+}
+
+// `CLASS:<class name>` notices target a specific class roster. Staff roles
+// (principal/teacher) always see them for oversight; students only when the
+// class matches their own (exact name, shared grade base, or prefix match).
+async function audienceAllows(audience: string | null | undefined, user: {
+  id: string
+  role: string
+  schoolId: string | null
+}): Promise<boolean> {
+  if (!audience) return true
+  const aud = audience.trim()
+  if (!aud.toUpperCase().startsWith('CLASS:')) return baseAudienceAllows(aud, user.role)
+
+  // Staff oversight — principals & teachers see every class notice
+  if (user.role === 'PRINCIPAL' || user.role === 'TEACHER' || user.role === 'SUPER_ADMIN') return true
+  if (user.role !== 'STUDENT') return false
+
+  const student = await db.student.findUnique({
+    where: { userId: user.id },
+    include: { class: { select: { name: true } } },
+  })
+  if (!student?.class?.name) return false
+  const target = aud.slice(6).trim().toUpperCase()
+  const mine = student.class.name.trim().toUpperCase()
+  if (!target || !mine) return false
+  if (target === mine) return true
+  // "Grade 10" (grade-wide) should reach students of "Grade 10 - A"
+  const baseOf = (s: string) => s.replace(/[-–]\s*[A-Z]\s*$/, '').trim()
+  return baseOf(mine) === baseOf(target) || mine.startsWith(target) || target.startsWith(mine)
 }
 
 // GET aggregated notifications feed: unread messages + recent announcements.
@@ -48,9 +77,11 @@ export async function GET() {
       take: 24,
       include: { reads: { where: { userId: user.id }, select: { id: true } } },
     })
-    const announcements = announcementRows
-      .filter((a) => audienceAllows(a.audience, user.role))
-      .slice(0, 8)
+    const announcements: typeof announcementRows = []
+    for (const row of announcementRows) {
+      if (announcements.length >= 8) break
+      if (await audienceAllows(row.audience, user)) announcements.push(row)
+    }
 
     // Combine into a unified feed
     const feed = [

@@ -45,7 +45,8 @@ export function ModuleHeader({
   return (
     <div
       className={cn(
-        'flex items-center justify-between gap-3',
+        // Stack on mobile so meta never collides with tab actions; row from sm up
+        'flex flex-col-reverse items-stretch justify-between gap-2 sm:flex-row sm:items-center sm:gap-3',
         sticky && 'sticky top-0 z-20 bg-background/95 backdrop-blur py-3 -mt-3 mb-3',
         !sticky && 'mb-4',
         className
@@ -70,7 +71,7 @@ export function ModuleHeader({
         )}
       </div>
       {/* Right side: actions */}
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="flex items-center gap-2 shrink-0 overflow-x-auto sm:overflow-visible">{actions}</div>}
     </div>
   )
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '@/lib/store/auth-store'
 import { useTheme } from '@/lib/store/theme-store'
+import { useFocusStore } from '@/lib/store/focus-store'
 import type { NavGroup } from '@/components/shell/app-shell'
 import {
   searchEntities,
@@ -12,6 +13,10 @@ import {
   clearRecentSearches,
   type SearchResultItem,
 } from '@/lib/search-service'
+
+// Entity types that exist in the real database — selecting one emits a
+// deep-link focus request in addition to navigating to the module.
+const DB_ENTITY_TYPES = new Set(['student', 'teacher', 'fee', 'notice', 'parent'])
 
 export interface UseCommandPaletteArgs {
   open: boolean
@@ -194,6 +199,16 @@ export function useCommandPalette({
       logout()
     } else {
       saveRecentSearch(item)
+      // DB-backed entity results carry a deep-link focus request so the
+      // target module can open the relevant profile/detail view directly.
+      if (DB_ENTITY_TYPES.has(item.type)) {
+        useFocusStore.getState().setFocus({
+          type: item.type,
+          id: item.id,
+          title: item.title,
+          moduleKey: item.moduleKey,
+        })
+      }
       onNavigate(item.moduleKey)
     }
     onOpenChange(false)
