@@ -195,12 +195,26 @@ async function main() {
     })
   }
 
-  // Fees
-  for (const s of students) {
+  // Fees (with matching Payment transaction rows so platform revenue reflects collections)
+  const feeMethods = ['UPI', 'CARD', 'NETBANKING', 'CASH']
+  for (const [idx, s] of students.entries()) {
     const paid = Math.random() > 0.4
-    await db.fee.create({
+    const fee = await db.fee.create({
       data: { schoolId: demoSchool.id, studentId: s.id, title: 'Tuition Fee Q1', amount: 25000, paid: paid ? 25000 : 0, type: 'TUITION', dueDate: new Date('2025-09-30'), status: paid ? 'PAID' : 'UNPAID', method: paid ? 'UPI' : null, paidDate: paid ? new Date('2025-09-20') : null },
     })
+    if (paid) {
+      await db.payment.create({
+        data: {
+          feeId: fee.id,
+          amount: 25000,
+          method: feeMethods[idx % feeMethods.length],
+          status: 'SUCCESS',
+          transactionId: `TXN-${fee.id.slice(-8).toUpperCase()}`,
+          note: 'Tuition Fee Q1 collection',
+          createdAt: new Date('2025-09-20'),
+        },
+      })
+    }
   }
 
   // Assignments

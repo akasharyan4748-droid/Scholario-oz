@@ -12,10 +12,26 @@ import { ThemeToggle } from '@/components/shared/theme-toggle'
 import { CommandPalette } from '@/components/shared/command-palette'
 import type { ShellProps } from './app-shell/types'
 import { SidebarAside } from './app-shell/sidebar-aside'
-import { NotificationsDropdown } from './app-shell/notifications-dropdown'
+import { NotificationsDropdown, type NotificationItem } from './app-shell/notifications-dropdown'
 import { ProfileDropdownTrigger, ProfileDropdown } from './app-shell/profile-dropdown'
 
 export type { NavGroup, NavItem } from './app-shell/types'
+
+// Relative time formatter for notification timestamps
+function formatRelativeTime(input?: string): string {
+  if (!input) return ''
+  const then = new Date(input).getTime()
+  if (Number.isNaN(then)) return input
+  const diffSec = Math.floor((Date.now() - then) / 1000)
+  if (diffSec < 60) return 'just now'
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  const diffDay = Math.floor(diffHr / 24)
+  if (diffDay < 7) return `${diffDay}d ago`
+  return new Date(then).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
 
 export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, children, quickAction }: ShellProps) {
   const [collapsed, setCollapsed] = useState(false)
@@ -24,8 +40,42 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
   const [profileOpen, setProfileOpen] = useState(false)
   const [cmdOpen, setCmdOpen] = useState(false)
   const [notifList, setNotifList] = useState(initialNotifications)
+  // 'live' = fetched from /api/notifications-feed, 'demo' = static mock fallback
+  const [notifSource, setNotifSource] = useState<'live' | 'demo'>('demo')
   const { user, logout, switchTo } = useAuth()
   void roleLabel
+
+  // Wire notification bell to the real DB-backed feed (unread messages + announcements).
+  // Polls every 60s; falls back to demo mock data when the live feed is empty/unavailable.
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const r = await fetch('/api/notifications-feed', { cache: 'no-store' })
+        if (!r.ok || !r.headers.get('content-type')?.includes('application/json')) return
+        const j = await r.json().catch(() => null)
+        // API wraps payloads as { ok, data } — unwrap defensively
+        const payload = j && typeof j === 'object' && 'data' in j ? (j as { data?: { feed?: unknown[] } }).data : j
+        const feedArr = payload && Array.isArray(payload.feed) ? payload.feed : []
+        if (cancelled || feedArr.length === 0) return
+        const mapped: NotificationItem[] = feedArr.map((f: { id: string; type?: string; title?: string; description?: string; timestamp?: string }) => ({
+          id: f.id,
+          type: f.type,
+          title: f.title,
+          description: f.description,
+          time: formatRelativeTime(f.timestamp),
+          unread: true,
+        }))
+        setNotifList(mapped)
+        setNotifSource('live')
+      } catch {
+        /* keep mock fallback */
+      }
+    }
+    load()
+    const timer = setInterval(load, 60_000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [])
 
   const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups])
   const activeItem = flatItems.find((i) => i.key === activeKey)
@@ -145,6 +195,7 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
                 liveAlertCount={liveAlertCount}
                 totalBadgeCount={totalBadgeCount}
                 unreadCount={unreadCount}
+                source={notifSource}
               />
             </div>
 

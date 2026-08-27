@@ -35,7 +35,7 @@ export function searchPeople(q: string, role: Role): SearchResultItem[] {
         type: 'student',
         moduleKey: 'admission',
         iconName: 'User',
-        badge: s.status === 'Active' ? `Class ${s.className}-${s.section}` : s.status,
+        badge: s.status === 'Active' ? `${s.className}-${s.section}` : s.status,
         badgeVariant: s.feeStatus === 'Paid' ? 'success' : s.feeStatus === 'Pending' ? 'destructive' : 'warning',
         keywords: `${s.name} ${s.admissionNo} ${s.rollNo} student ${s.fatherName} ${s.guardianPhone}`,
       })

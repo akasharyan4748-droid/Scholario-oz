@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-interface NotificationItem {
+export interface NotificationItem {
   id: string
   type?: string
   title?: string
@@ -29,6 +29,8 @@ interface NotificationsDropdownProps {
   liveAlertCount: number
   totalBadgeCount: number
   unreadCount: number
+  /** 'live' = real DB feed, 'demo' = static demo data */
+  source?: 'live' | 'demo'
 }
 
 type ShellRole = 'principal' | 'teacher' | 'student' | 'superadmin'
@@ -43,6 +45,7 @@ export function NotificationsDropdown({
   liveAlertCount,
   totalBadgeCount,
   unreadCount,
+  source = 'demo',
 }: NotificationsDropdownProps) {
   return (
     <AnimatePresence>
@@ -51,12 +54,25 @@ export function NotificationsDropdown({
           initial={{ opacity: 0, y: 8, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.95 }}
-          className="absolute right-0 mt-2 w-88 rounded-xl bg-card border border-border shadow-xl p-3 z-50 text-card-foreground"
+          className="absolute right-0 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-xl bg-card border border-border shadow-xl p-3 z-50 text-card-foreground"
         >
           <div className="flex items-center justify-between pb-2 border-b border-border">
             <div className="flex items-center gap-1.5">
               <Bell className="h-4 w-4 text-primary" />
               <span className="font-bold text-xs text-foreground">Notifications</span>
+              {/* Feed source indicator */}
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide',
+                  source === 'live'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                )}
+                title={source === 'live' ? 'Synced from database' : 'Showing demo data'}
+              >
+                <span className={cn('h-1.5 w-1.5 rounded-full', source === 'live' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500')} />
+                {source === 'live' ? 'Live' : 'Demo'}
+              </span>
               {totalBadgeCount > 0 && (
                 <span className={cn(
                   'text-[10px] font-extrabold px-1.5 py-0.2 rounded-full',
@@ -95,8 +111,16 @@ export function NotificationsDropdown({
               </div>
             </button>
           )}
-          <div className="divide-y divide-border max-h-72 overflow-y-auto mt-1 space-y-1">
-            {notifList.slice(0, 8).map((n) => {
+          <div className="divide-y divide-border max-h-72 overflow-y-auto mt-1 space-y-1 custom-scrollbar">
+            {notifList.length === 0 ? (
+              <div className="py-8 text-center">
+                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 mb-2">
+                  <Bell className="h-4 w-4 text-primary" />
+                </div>
+                <p className="text-xs font-bold text-foreground">You&rsquo;re all caught up</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">No new notifications right now.</p>
+              </div>
+            ) : notifList.slice(0, 8).map((n) => {
               const notifType = (n.type || '').toLowerCase()
               const titleStr = (n.title || '').toLowerCase()
 
@@ -134,19 +158,22 @@ export function NotificationsDropdown({
                   key={n.id}
                   onClick={() => onNotificationClick(n.id)}
                   className={cn(
-                    'p-2.5 rounded-lg hover:bg-muted cursor-pointer transition-colors flex items-start gap-2.5',
-                    n.unread ? 'bg-primary/5 border-l-2 border-primary' : 'opacity-85'
+                    'p-2.5 rounded-lg hover:bg-muted cursor-pointer transition-all duration-150 flex items-start gap-2.5 group',
+                    n.unread ? 'bg-primary/5 border-l-2 border-primary' : 'opacity-85 border-l-2 border-transparent'
                   )}
                 >
-                  <div className={cn('p-1.5 rounded-lg shrink-0 mt-0.5 shadow-xs', iconBg)}>
+                  <div className={cn('p-1.5 rounded-lg shrink-0 mt-0.5 shadow-xs transition-transform duration-150 group-hover:scale-110', iconBg)}>
                     {iconNode}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
-                      <p className="font-bold text-xs text-foreground truncate">{n.title}</p>
+                      <p className="font-bold text-xs text-foreground truncate flex items-center gap-1.5">
+                        {n.title}
+                        {n.unread && <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse shrink-0" />}
+                      </p>
                       <span className="text-[9px] text-muted-foreground font-mono shrink-0">{n.time || n.timestamp}</span>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{n.description || n.message}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{n.description || n.message}</p>
                   </div>
                 </div>
               )

@@ -49,10 +49,35 @@ Stage Summary:
   - Many modules use client-side Zustand mock stores (`src/lib/mock/*`, `src/lib/store/*`) — real DB-backed routes exist for students, teachers, classes, exams, homework, fees, admissions, transport, library, etc.
   - `mini-services/dev-server` from repo auto-respawns `bun run dev` and writes /home/z/my-project/dev.log — it was NOT started in this session; the workspace runs `bun run dev` directly.
 
-## Unresolved Issues / Risks / Next-Phase Priorities
-1. (Low) Repo's bundled `mini-services/dev-server` is unused; decide whether to adopt it or remove to avoid port/log conflicts.
-2. (Low) `logs/dev.pid` and stale `dev.log` heritage from repo — cleaned; keep single log convention (dev-runtime.log).
-3. (Medium) Heavy client-mock data vs DB-backed data inconsistency across modules — next phase should audit which modules still read mocks and migrate to API routes.
-4. (Suggested features next phase): notification center wiring to notifications-feed API, AI question generation UX polish, WebSocket-based real-time alerts, i18n via next-intl, PWA offline support, per-module skeleton loading states.
+---
+Task ID: 2
+Agent: Z.ai Code (webDevReview cron round)
+Task: Assess project status, QA via agent-browser, fix bugs + add features/styling polish.
 
+Work Log:
+- Reviewed worklog; confirmed server healthy (HTTP 200) and lint clean.
+- Browser QA sweep: public site, teacher panel (dashboard + homework module), superadmin panel (platform overview + command palette search) — all functional, no console errors.
+- Bugs found & fixed:
+  1. Command palette showed duplicated label "Class Class 2-A" — `src/lib/search-service/search-people.ts` badge template prefixed "Class" onto className that already contains it. Removed the redundant prefix.
+  2. Superadmin platform KPIs ("Total Fee Collections" / "Gross Revenue") showed ₹0 — seed created Fee rows with paid amounts but zero Payment transaction rows, and the dashboard API sums Payment.amount. Fixed both: (a) `prisma/seed.ts` now creates a Payment row for every paid fee (rotating UPI/CARD/NETBANKING/CASH methods, TXN ids); (b) added `prisma/backfill-payments.ts` one-off script and ran it → 13 payment rows created. Verified in browser: revenue now shows ₹3.25 L (13 × ₹25,000 ✓).
+- Feature: notification bell now wired to the real DB-backed `/api/notifications-feed` (previously static mock only):
+  - `src/components/shell/app-shell.tsx` fetches feed on mount + polls every 60s, maps to NotificationItem with relative timestamps ("just now / Xm / Xh / Xd ago"); falls back to demo mock when feed empty/unavailable. Key gotcha handled: API wraps payloads as `{ ok, data }` — must read `data.feed` (first attempt read `j.feed` and silently stayed on mock).
+  - `notifications-dropdown.tsx`: added Live/Demo source badge (green pulsing dot = DB-synced, amber = demo fallback), proper empty state ("You're all caught up"), animated unread dots, icon hover scale, line-clamp descriptions, custom-scrollbar list, responsive width `w-[min(22rem,calc(100vw-2rem))]`.
+- Exported `NotificationItem` type from dropdown and imported into app-shell.
+- Verification (agent-browser): superadmin revenue ₹3.25 L ✓; palette badge "Class 2-A" ✓; principal dropdown shows ● LIVE + 2 real announcements ("Mid-Term Results Published", "Parent-Teacher Meeting") with relative times ✓; mobile 390px no horizontal overflow ✓; lint clean ✓; `/api/notifications-feed` returns 200 in dev log ✓.
+- Screenshots: download/qa-teacher-panel.png, qa-teacher-homework.png, qa-superadmin-panel.png, qa-superadmin-revenue.png, qa-command-palette.png, qa-palette-search.png, qa-notifications-live.png, qa-notifications-live3.png, qa-notifications-mobile.png
+
+Stage Summary:
+- Baseline remains stable; 2 bugs fixed, 1 feature wired (live notifications), several styling refinements shipped.
+- seed.ts changed — next full `bun run db:seed` will include Payment rows automatically; backfill script kept at prisma/backfill-payments.ts for existing DBs.
+
+## Current State Assessment (updated after Task 2)
+- All 4 role panels + public site verified again post-changes; server stable, lint clean.
+- Notifications: principal/teacher/student now see real DB announcements/messages with Live badge; superadmin intentionally gets empty DB feed → falls back to demo mock with Demo badge.
+
+## Unresolved Issues / Risks / Next-Phase Priorities
+1. (Medium) Search service (`search-people.ts`, `search-academic.ts`) still reads mock students/teachers — migrate to DB-backed search API for consistency.
+2. (Medium) Mark-as-read is client-side only; no API persists read state for MESSAGE notifications — add PATCH endpoint + call it on notification click.
+3. (Low) Superadmin dropdown always falls back to demo mock (API returns empty by design) — consider showing a real "no school scope" empty state instead.
+4. (Feature ideas): payment-method breakdown donut on superadmin dashboard (data now available in Payment table), WebSocket push for live alerts, i18n, PWA offline, skeleton loading states per module.
 ---
