@@ -252,6 +252,15 @@ export interface CreateExamInput {
    * pin which version of the fee schedule produced the recorded amount.
    */
   feeStructureVersionRef?: string
+  /**
+   * APPS-FORMS (PART 5): when true, creating the exam AUTO-GENERATES a
+   * connected Application/Form (source 'Examination') in Operations →
+   * Applications & Forms, permanently linked back to this exam.
+   */
+  requiresApplicationForm?: boolean
+  /** In-charge teacher for the generated application form. */
+  inChargeTeacherId?: string
+  inChargeTeacherName?: string
 }
 
 export interface SetMarkInput {

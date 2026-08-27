@@ -166,7 +166,9 @@ export function ApplicationPrintDocument({
       {/* ── Title band ── */}
       <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-2.5 flex items-center justify-between gap-3">
         <div>
-          <p className="text-[8.5px] uppercase tracking-[0.18em] text-slate-500">{app.category} · Application Form</p>
+          <p className="text-[8.5px] uppercase tracking-[0.18em] text-slate-500">
+            {app.category} · Application Form{app.sourceRef?.label ? ` · ${app.sourceRef.label}` : ''}
+          </p>
           <h1 className="text-[15px] font-bold leading-tight text-slate-900 mt-0.5">{app.title}</h1>
         </div>
         <div className="text-right shrink-0 space-y-0.5">
@@ -207,28 +209,42 @@ export function ApplicationPrintDocument({
         </div>
       </div>
 
-      {/* ── Answers ── */}
+      {/* ── Answers (grouped into the form's logical sections) ── */}
       {app.formFields.length > 0 && (
         <div className="mt-4">
           <SectionHeading>{sub ? 'Responses to Questions' : 'Questions (to be completed)'}</SectionHeading>
-          <table className="mt-1.5 w-full border-collapse overflow-hidden">
-            <tbody>
-              {app.formFields.map((f, idx) => (
-                <tr key={f.id} className={`align-top ${idx % 2 === 1 ? 'bg-slate-50/70' : ''}`}>
-                  <td className="w-[46%] border-t border-slate-100 py-2 pl-3 pr-4 text-[10.5px] text-slate-600">
-                    {f.label}
-                    {f.required && <span className="text-rose-500 ml-0.5">*</span>}
-                    {f.helpText && <p className="mt-0.5 text-[9px] text-slate-400">{f.helpText}</p>}
-                  </td>
-                  <td className="border-t border-l border-dashed border-slate-100 py-2 pl-3 pr-3 text-[10.5px] font-medium" style={{ minHeight: '28px' }}>
-                    {sub
-                      ? (answerToText(sub.answers[f.id]) || attachmentNameFor(sub, f.id) || (sub.mode === 'Physical' ? '— (see attached paper form)' : '—'))
-                      : <span className="block h-4 border-b border-dotted border-slate-300 w-full" />}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {(() => {
+            const groups = new Map<string, typeof app.formFields>()
+            for (const f of app.formFields) {
+              const key = f.section ?? 'Application Details'
+              const arr = groups.get(key) ?? []
+              arr.push(f)
+              groups.set(key, arr)
+            }
+            return Array.from(groups.entries()).map(([section, fields]) => (
+              <div key={section}>
+                <p className="mt-2.5 mb-1 text-[9px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-0.5">{section}</p>
+                <table className="w-full border-collapse overflow-hidden">
+                  <tbody>
+                    {fields.map((f, idx) => (
+                      <tr key={f.id} className={`align-top ${idx % 2 === 1 ? 'bg-slate-50/70' : ''}`}>
+                        <td className="w-[46%] border-t border-slate-100 py-2 pl-3 pr-4 text-[10.5px] text-slate-600">
+                          {f.label}
+                          {f.required && <span className="text-rose-500 ml-0.5">*</span>}
+                          {f.helpText && <p className="mt-0.5 text-[9px] text-slate-400">{f.helpText}</p>}
+                        </td>
+                        <td className="border-t border-l border-dashed border-slate-100 py-2 pl-3 pr-3 text-[10.5px] font-medium" style={{ minHeight: '28px' }}>
+                          {sub
+                            ? (answerToText(sub.answers[f.id]) || attachmentNameFor(sub, f.id) || (sub.mode === 'Physical' ? '— (see attached paper form)' : '—'))
+                            : <span className="block h-4 border-b border-dotted border-slate-300 w-full" />}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))
+          })()}
         </div>
       )}
 

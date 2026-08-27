@@ -60,7 +60,33 @@ export type ApplicationCategory =
   | 'Tour' | 'Trip' | 'Workshop' | 'Competition' | 'Camp' | 'Event'
   | 'Exam Application' | 'Board Form' | 'Transport' | 'Activity' | 'Custom'
 
-export type AppStatus = 'Draft' | 'Published' | 'Closed' | 'Archived'
+export type AppStatus =
+  | 'Draft' | 'Pending Approval' | 'Changes Requested' | 'Approved' | 'Rejected'
+  | 'Published' | 'Closed' | 'Archived'
+
+/**
+ * Where an application ORIGINATED (PART 6 — generic system). Every form is
+ * the same reusable entity; the source just records the originating module
+ * so lists can show "where each application came from".
+ */
+export type ApplicationSource = 'Examination' | 'Event' | 'Activity' | 'Custom'
+
+/** Pointer back to the originating module record (e.g. the Examination). */
+export interface ApplicationSourceRef {
+  module: string
+  id?: string
+  label?: string
+}
+
+/** Immutable approval-workflow trail between teacher and Principal. */
+export interface ApplicationApprovalNote {
+  id: string
+  at: string
+  by: string
+  role: 'Principal' | 'Teacher'
+  kind: 'submitted' | 'approval' | 'changes' | 'rejection' | 'note'
+  note: string
+}
 export type ParticipationMode = 'Optional' | 'Mandatory'
 export type PaymentModeConfig = 'None' | 'Required' | 'Optional'
 
@@ -68,7 +94,13 @@ export type PaymentModeConfig = 'None' | 'Required' | 'Optional'
 export type FormFieldType =
   | 'text' | 'longtext' | 'number' | 'date'
   | 'dropdown' | 'radio' | 'checkbox' | 'multiselect'
-  | 'yesno' | 'file' | 'emergency-contact' | 'signature'
+  | 'yesno' | 'file' | 'emergency-contact' | 'signature' | 'declaration'
+
+/** Canonical section presets (PART 13) — builder select + form/print grouping. */
+export const FORM_SECTIONS = [
+  'Student Details', 'Guardian Details', 'Application Details',
+  'Travel Details', 'Medical / Emergency Details', 'Consent', 'Payment', 'Declaration',
+] as const
 
 /**
  * One configurable field on a school form. The fill view ALWAYS renders the
@@ -83,6 +115,8 @@ export interface ApplicationFormField {
   required: boolean
   /** Option list for dropdown/radio/multiselect fields. */
   options?: string[]
+  /** Logical section this question belongs to (official form layout). */
+  section?: string
 }
 
 export interface ApplicationPaymentConfig {
@@ -120,6 +154,9 @@ export interface SchoolApplication {
   title: string
   description?: string
   category: ApplicationCategory
+  /** Originating module — exam-generated forms stay linked to their exam. */
+  source: ApplicationSource
+  sourceRef?: ApplicationSourceRef
   academicYear: string
   /**
    * Who can apply. targetStudentIds overrides class scoping entirely when
@@ -144,6 +181,9 @@ export interface SchoolApplication {
   formFields: ApplicationFormField[]
   status: AppStatus
   createdBy: string
+  createdByRole: 'Principal' | 'Teacher'
+  /** Approval workflow trail (teacher ⇄ Principal), immutable. */
+  approvalNotes: ApplicationApprovalNote[]
   createdAt: string
   updatedAt: string
 }
@@ -202,6 +242,8 @@ export interface ApplicationAuditEvent {
   actorRole: 'Principal' | 'Teacher' | 'Student' | 'Guardian' | 'Office' | 'System'
   action:
     | 'application.created' | 'application.updated' | 'application.published'
+    | 'application.submitted_approval' | 'application.changes_requested'
+    | 'application.approved' | 'application.rejected'
     | 'application.closed' | 'application.locked' | 'application.reopened'
     | 'application.archived' | 'application.duplicated' | 'application.note'
     | 'submission.recorded' | 'submission.submitted' | 'submission.resubmitted'
@@ -258,9 +300,14 @@ export function deriveSubmissionPayment(
 
 /** Contextual badge state — workflow-driven, never cosmetic. */
 export type EffectiveAppStatus =
-  | 'Draft' | 'Scheduled' | 'Open' | 'Closing Soon' | 'Closed' | 'Locked' | 'Archived'
+  | 'Draft' | 'Pending Approval' | 'Changes Requested' | 'Approved' | 'Rejected'
+  | 'Scheduled' | 'Open' | 'Closing Soon' | 'Closed' | 'Locked' | 'Archived'
 
 export function effectiveAppStatus(app: SchoolApplication, now: Date = new Date()): EffectiveAppStatus {
+  // Approval workflow states are themselves the effective display state —
+  // the form cannot be open/scheduled while it waits for the Principal.
+  if (app.status === 'Pending Approval' || app.status === 'Changes Requested'
+    || app.status === 'Approved' || app.status === 'Rejected') return app.status
   if (app.status === 'Draft') return 'Draft'
   if (app.status === 'Archived') return 'Archived'
   if (app.status === 'Closed') return 'Closed'
@@ -279,10 +326,13 @@ export function isSubmittable(app: SchoolApplication, now: Date = new Date()): b
   return st === 'Open' || st === 'Closing Soon'
 }
 
-/** Can the definition still be edited? Editing stops once closed/locked/archived. */
+/** Can the definition still be edited? Editing stops once closed/locked/archived.
+ *  Forms sitting in 'Pending Approval' or 'Approved' are frozen — material
+ *  edits would silently bypass the review that state represents. */
 export function isApplicationEditable(app: SchoolApplication, now: Date = new Date()): boolean {
   const st = effectiveAppStatus(app, now)
-  return st === 'Draft' || st === 'Open' || st === 'Closing Soon' || st === 'Scheduled'
+  return st === 'Draft' || st === 'Changes Requested' || st === 'Rejected'
+    || st === 'Open' || st === 'Closing Soon' || st === 'Scheduled'
 }
 
 /** Consent satisfied? Digital tick counts immediately; physical needs verification. */
@@ -344,6 +394,8 @@ export interface CreateApplicationInput {
   title: string
   description?: string
   category: ApplicationCategory
+  source?: ApplicationSource
+  sourceRef?: ApplicationSourceRef
   academicYear?: string
   targetClassIds: string[]
   targetSectionNames?: string[]
@@ -372,9 +424,14 @@ interface ApplicationsState {
   submissions: ApplicationSubmission[]
   audit: ApplicationAuditEvent[]
 
-  createApplication: (input: CreateApplicationInput, actor: string) => { success: boolean; application?: SchoolApplication; error?: string }
-  updateApplication: (id: string, patch: Partial<CreateApplicationInput>, actor: string) => { success: boolean; error?: string }
-  publishApplication: (id: string, actor: string) => { success: boolean; error?: string; chargeCreated?: boolean }
+  createApplication: (input: CreateApplicationInput, actor: string, opts?: { actorRole?: 'Principal' | 'Teacher'; teacherId?: string }) => { success: boolean; application?: SchoolApplication; error?: string }
+  updateApplication: (id: string, patch: Partial<CreateApplicationInput>, actor: string, opts?: { actorRole?: 'Principal' | 'Teacher'; teacherId?: string }) => { success: boolean; error?: string }
+  publishApplication: (id: string, actor: string, opts?: { actorRole?: 'Principal' | 'Teacher'; teacherId?: string }) => { success: boolean; error?: string; chargeCreated?: boolean }
+  /** TEACHER → PRINCIPAL workflow (PART 4/7). */
+  submitForApproval: (id: string, actor: string, actorRole: 'Principal' | 'Teacher', note?: string, opts?: { teacherId?: string }) => { success: boolean; error?: string }
+  requestApprovalChanges: (id: string, note: string, actor: string) => { success: boolean; error?: string }
+  approveApplication: (id: string, note: string, actor: string) => { success: boolean; error?: string }
+  rejectApplication: (id: string, note: string, actor: string) => { success: boolean; error?: string }
   closeApplication: (id: string, actor: string, reason?: string) => void
   lockApplication: (id: string, actor: string, reason?: string) => void
   reopenApplication: (id: string, actor: string) => { success: boolean; error?: string }
@@ -452,7 +509,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
       submissions: [],
       audit: [],
 
-      createApplication: (input, actor) => {
+      createApplication: (input, actor, opts) => {
         const state = get()
         const trimmed = input.title.trim()
         if (!trimmed) return { success: false, error: 'Title is required.' }
@@ -463,11 +520,21 @@ export const useApplicationsStore = create<ApplicationsState>()(
           return { success: false, error: `An application titled "${trimmed}" already exists this session.` }
         }
         const nowIso = new Date().toISOString()
+        const actorRole = opts?.actorRole ?? 'Principal'
+        // TEACHER PERMISSION (PART 4): a teacher creating a form is its
+        // in-charge by construction — the store FORCES the in-charge to the
+        // creating teacher so nobody can create a form assigned to someone
+        // else, and the Principal always sees the true owner.
+        const inChargeId = actorRole === 'Teacher' && opts?.teacherId
+          ? opts.teacherId
+          : (input.inChargeTeacherId || undefined)
         const app: SchoolApplication = {
           id: newId('APP'),
           title: trimmed,
           description: input.description?.trim() || undefined,
           category: input.category,
+          source: input.source ?? 'Custom',
+          sourceRef: input.sourceRef,
           academicYear: year,
           targetClassIds: [...input.targetClassIds],
           targetSectionNames: input.targetSectionNames?.length ? [...input.targetSectionNames] : undefined,
@@ -485,7 +552,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           },
           teacherApprovalRequired: input.teacherApprovalRequired,
           physicalSignatureRequired: input.physicalSignatureRequired,
-          inChargeTeacherId: input.inChargeTeacherId || undefined,
+          inChargeTeacherId: inChargeId,
           inChargeName: input.inChargeName || undefined,
           payment: {
             mode: input.paymentMode,
@@ -495,23 +562,46 @@ export const useApplicationsStore = create<ApplicationsState>()(
           formFields: input.formFields.map((f) => ({ ...f })),
           status: 'Draft',
           createdBy: actor,
+          createdByRole: actorRole,
+          approvalNotes: [],
           createdAt: nowIso,
           updatedAt: nowIso,
         }
         set({
           applications: [app, ...state.applications],
           audit: pushAudit(state, {
-            ts: nowIso, applicationId: app.id, actor, actorRole: 'Principal',
-            action: 'application.created', message: `Application "${app.title}" created as draft.`,
+            ts: nowIso, applicationId: app.id, actor, actorRole,
+            action: 'application.created', message: `Application "${app.title}" created as draft by ${actor} (${actorRole}).`,
           }),
         })
         return { success: true, application: app }
       },
 
-      updateApplication: (id, patch, actor) => {
+      updateApplication: (id, patch, actor, opts) => {
         const state = get()
         const app = state.applications.find((a) => a.id === id)
         if (!app) return { success: false, error: 'Application not found.' }
+        // TEACHER BOUNDARY (PART 4/15): only the assigned in-charge may edit
+        // their own draft-level forms, only before approval/publish, and
+        // NEVER the protected financial configuration.
+        if (opts?.actorRole === 'Teacher') {
+          if (app.createdByRole !== 'Teacher' || app.inChargeTeacherId !== opts.teacherId) {
+            return { success: false, error: 'You can only edit forms assigned to you.' }
+          }
+          if (!['Draft', 'Changes Requested', 'Rejected'].includes(app.status)) {
+            return { success: false, error: `This form is ${app.status.toLowerCase()} — editing is locked. Request changes via the Principal.` }
+          }
+          // Financial configuration is PROTECTED (PART 4/29): reject only
+          // when the patch would actually CHANGE it — the builder legitimately
+          // sends the whole form (unchanged values included) on every save.
+          const moneyChanged =
+            (patch.paymentMode !== undefined && patch.paymentMode !== app.payment.mode)
+            || (patch.paymentAmount !== undefined && Math.max(0, patch.paymentAmount) !== app.payment.amount)
+            || (patch.paymentFeeHeadLabel !== undefined && patch.paymentFeeHeadLabel.trim() !== app.payment.feeHeadLabel)
+          if (moneyChanged) {
+            return { success: false, error: 'Financial configuration is protected — only the school office can change charges.' }
+          }
+        }
         if (!isApplicationEditable(app)) {
           return { success: false, error: `"${app.title}" is ${effectiveAppStatus(app)} — editing is locked. Historical data stays preserved.` }
         }
@@ -557,11 +647,29 @@ export const useApplicationsStore = create<ApplicationsState>()(
         return { success: true }
       },
 
-      publishApplication: (id, actor) => {
+      publishApplication: (id, actor, opts) => {
         const state = get()
         const app = state.applications.find((a) => a.id === id)
+        const actorRole = opts?.actorRole ?? 'Principal'
         if (!app) return { success: false, error: 'Application not found.' }
-        if (app.status !== 'Draft') return { success: false, error: `Already ${app.status.toLowerCase()} — publishing happens from Draft only.` }
+        // PRINCIPAL APPROVAL ENFORCEMENT (PART 4/28): teacher-created forms
+        // publish ONLY after the Principal approved them. A teacher trying
+        // to publish a Draft/Pending/Changes-Requested/Rejected form is
+        // refused at the store level — not merely by a hidden button.
+        if (actorRole === 'Teacher') {
+          if (app.createdByRole !== 'Teacher' || app.inChargeTeacherId !== opts?.teacherId) {
+            return { success: false, error: 'You can only operate forms assigned to you.' }
+          }
+          if (app.status !== 'Approved') {
+            return { success: false, error: 'Principal approval is required before this form can be published.' }
+          }
+        }
+        // The Principal IS the approval authority — they may publish from
+        // any pre-publish state (incl. sending a requested-changes form
+        // live themselves). Teachers cannot.
+        if (!['Draft', 'Approved', 'Changes Requested', 'Rejected'].includes(app.status)) {
+          return { success: false, error: `Cannot publish from "${app.status}".` }
+        }
         if (!app.deadline) return { success: false, error: 'Set a submission deadline before publishing.' }
         if (!app.targetClassIds.length && !app.targetStudentIds?.length) {
           return { success: false, error: 'Select at least one target class or specific students.' }
@@ -620,12 +728,120 @@ export const useApplicationsStore = create<ApplicationsState>()(
             payment: { ...a.payment, chargeId },
           }),
           audit: pushAudit(state, {
-            ts: nowIso, applicationId: id, actor, actorRole: 'Principal',
+            ts: nowIso, applicationId: id, actor, actorRole,
             action: 'application.published',
-            message: `Application "${app.title}" published${chargeCreated ? ' — linked Additional Charge created' : chargeId ? ' — linked to existing Additional Charge' : ''}. Deadline ${app.deadline}.`,
+            message: `Application "${app.title}" published by ${actor} (${actorRole})${chargeCreated ? ' — linked Additional Charge created' : chargeId ? ' — linked to existing Additional Charge' : ''}. Deadline ${app.deadline}.`,
           }),
         })
         return { success: true, chargeCreated }
+      },
+
+      // ── TEACHER → PRINCIPAL approval workflow (PART 4/7/14) ─────────
+      submitForApproval: (id, actor, actorRole, note, opts) => {
+        const state = get()
+        const app = state.applications.find((a) => a.id === id)
+        if (!app) return { success: false, error: 'Application not found.' }
+        if (actorRole === 'Teacher' && (app.createdByRole !== 'Teacher' || app.inChargeTeacherId !== opts?.teacherId)) {
+          return { success: false, error: 'You can only submit your own forms for approval.' }
+        }
+        if (!['Draft', 'Changes Requested', 'Rejected'].includes(app.status)) {
+          return { success: false, error: `This form is already ${app.status.toLowerCase()}.` }
+        }
+        if (!app.deadline || !app.targetClassIds.length && !app.targetStudentIds?.length || !app.formFields.length) {
+          return { success: false, error: 'Complete the form first — title, target students, deadline and at least one question.' }
+        }
+        const nowIso = new Date().toISOString()
+        set({
+          applications: state.applications.map((a) => a.id !== id ? a : {
+            ...a,
+            status: 'Pending Approval' as const,
+            approvalNotes: note?.trim() ? [
+              ...a.approvalNotes,
+              { id: newId('AN'), at: nowIso, by: actor, role: actorRole, kind: 'submitted' as const, note: note.trim() },
+            ] : a.approvalNotes,
+            updatedAt: nowIso,
+          }),
+          audit: pushAudit(state, {
+            ts: nowIso, applicationId: id, actor, actorRole,
+            action: 'application.submitted_approval',
+            message: `"${app.title}" submitted for Principal approval by ${actor} (${actorRole}).`,
+          }),
+        })
+        return { success: true }
+      },
+
+      requestApprovalChanges: (id, note, actor) => {
+        const state = get()
+        const app = state.applications.find((a) => a.id === id)
+        if (!app) return { success: false, error: 'Application not found.' }
+        if (app.status !== 'Pending Approval') {
+          return { success: false, error: 'Only a form awaiting approval can be sent back for changes.' }
+        }
+        if (!note.trim()) return { success: false, error: 'Describe the changes you expect — the in-charge will act on your note.' }
+        const nowIso = new Date().toISOString()
+        set({
+          applications: state.applications.map((a) => a.id !== id ? a : {
+            ...a,
+            status: 'Changes Requested' as const,
+            approvalNotes: [...a.approvalNotes, { id: newId('AN'), at: nowIso, by: actor, role: 'Principal' as const, kind: 'changes' as const, note: note.trim() }],
+            updatedAt: nowIso,
+          }),
+          audit: pushAudit(state, {
+            ts: nowIso, applicationId: id, actor, actorRole: 'Principal',
+            action: 'application.changes_requested',
+            message: `Changes requested on "${app.title}" — ${note.trim()}`,
+          }),
+        })
+        return { success: true }
+      },
+
+      approveApplication: (id, note, actor) => {
+        const state = get()
+        const app = state.applications.find((a) => a.id === id)
+        if (!app) return { success: false, error: 'Application not found.' }
+        if (app.status !== 'Pending Approval') {
+          return { success: false, error: 'Only a form awaiting approval can be approved.' }
+        }
+        const nowIso = new Date().toISOString()
+        set({
+          applications: state.applications.map((a) => a.id !== id ? a : {
+            ...a,
+            status: 'Approved' as const,
+            approvalNotes: [...a.approvalNotes, { id: newId('AN'), at: nowIso, by: actor, role: 'Principal' as const, kind: 'approval' as const, note: note.trim() }],
+            updatedAt: nowIso,
+          }),
+          audit: pushAudit(state, {
+            ts: nowIso, applicationId: id, actor, actorRole: 'Principal',
+            action: 'application.approved',
+            message: `"${app.title}" APPROVED by Principal ${actor}${note.trim() ? ` — ${note.trim()}` : ''}. Ready to publish.`,
+          }),
+        })
+        return { success: true }
+      },
+
+      rejectApplication: (id, note, actor) => {
+        const state = get()
+        const app = state.applications.find((a) => a.id === id)
+        if (!app) return { success: false, error: 'Application not found.' }
+        if (app.status !== 'Pending Approval') {
+          return { success: false, error: 'Only a form awaiting approval can be rejected.' }
+        }
+        if (!note.trim()) return { success: false, error: 'State the reason for rejection.' }
+        const nowIso = new Date().toISOString()
+        set({
+          applications: state.applications.map((a) => a.id !== id ? a : {
+            ...a,
+            status: 'Rejected' as const,
+            approvalNotes: [...a.approvalNotes, { id: newId('AN'), at: nowIso, by: actor, role: 'Principal' as const, kind: 'rejection' as const, note: note.trim() }],
+            updatedAt: nowIso,
+          }),
+          audit: pushAudit(state, {
+            ts: nowIso, applicationId: id, actor, actorRole: 'Principal',
+            action: 'application.rejected',
+            message: `"${app.title}" rejected by Principal ${actor} — ${note.trim()}`,
+          }),
+        })
+        return { success: true }
       },
 
       closeApplication: (id, actor, reason) => {
@@ -709,6 +925,8 @@ export const useApplicationsStore = create<ApplicationsState>()(
           formFields: src.formFields.map((f) => ({ ...f })),
           status: 'Draft',
           createdBy: actor,
+          createdByRole: 'Principal',
+          approvalNotes: [],
           createdAt: nowIso,
           updatedAt: nowIso,
         }
@@ -995,10 +1213,11 @@ export const useApplicationsStore = create<ApplicationsState>()(
     }),
     {
       name: 'scholario-applications-v1',
-      version: 3,
-      // v2→v3: seed submissions for physical-signature applications must
-      // carry physicalDoc 'Pending' (the seed builder missed it). Also keep
-      // the v1→v2 canonical class-id retargeting.
+      version: 4,
+      // v3→v4: the approval workflow + source system (PART 4/6). Existing
+      // apps gain source 'Custom', createdByRole 'Principal' and an empty
+      // approval trail; every field gains an 'Application Details' section
+      // when unset so official-form grouping works everywhere.
       migrate: (persisted) => {
         const st = persisted as { applications?: SchoolApplication[]; submissions?: ApplicationSubmission[] } | undefined
         if (st?.applications) {
@@ -1006,7 +1225,15 @@ export const useApplicationsStore = create<ApplicationsState>()(
             'APP-SPORTSDAY-2026': ['C05', 'C07'],
             'APP-EYECAMP-2025': ['C01'],
           }
-          st.applications = st.applications.map((a) => retarget[a.id] ? { ...a, targetClassIds: retarget[a.id] } : a)
+          st.applications = st.applications.map((a) => ({
+            ...a,
+            source: a.source ?? 'Custom',
+            sourceRef: a.sourceRef,
+            createdByRole: a.createdByRole ?? 'Principal',
+            approvalNotes: a.approvalNotes ?? [],
+            formFields: (a.formFields ?? []).map((f) => ({ ...f, section: f.section ?? 'Application Details' })),
+            targetClassIds: retarget[a.id] ? retarget[a.id] : a.targetClassIds,
+          }))
         }
         if (st?.submissions && st.applications) {
           st.submissions = st.submissions.map((s) => {
@@ -1032,6 +1259,7 @@ function seedApplications(): SchoolApplication[] {
       title: 'Educational Tour — Jaipur',
       description: 'Three-day educational tour to Jaipur covering Amber Fort, City Palace and Jantar Mantar. Fee covers transport, boarding/lodging, entry tickets and insurance.',
       category: 'Tour',
+      source: 'Event',
       academicYear: YEAR,
       targetClassIds: ['C11'],
       deadline: '2026-09-15',
@@ -1048,15 +1276,17 @@ function seedApplications(): SchoolApplication[] {
       inChargeName: 'Rohan Mehta',
       payment: { mode: 'Required', amount: 2500, feeHeadLabel: 'Educational Tour — Jaipur', chargeId: 'AC-01' },
       formFields: [
-        { id: 'f-jp-emg', type: 'emergency-contact', label: 'Emergency Contact (relative)', helpText: 'Name and phone number of a contact besides parents.', required: true },
-        { id: 'f-jp-medical', type: 'longtext', label: 'Medical Notes / Allergies', helpText: 'Leave blank if none.', required: false },
-        { id: 'f-jp-meal', type: 'dropdown', label: 'Meal Preference', required: true, options: ['Vegetarian', 'Non-Vegetarian', 'Jain'] },
-        { id: 'f-jp-shirt', type: 'radio', label: 'Tour T-Shirt Size', required: true, options: ['S', 'M', 'L', 'XL'] },
-        { id: 'f-jp-photo', type: 'yesno', label: 'Photos allowed for school social media?', required: false },
-        { id: 'f-jp-sign', type: 'signature', label: 'Guardian Undertaking', helpText: 'Sign the printed form physically before the tour.', required: true },
+        { id: 'f-jp-emg', type: 'emergency-contact', label: 'Emergency Contact (relative)', helpText: 'Name and phone number of a contact besides parents.', required: true, section: 'Medical / Emergency Details' },
+        { id: 'f-jp-medical', type: 'longtext', label: 'Medical Notes / Allergies', helpText: 'Leave blank if none.', required: false, section: 'Medical / Emergency Details' },
+        { id: 'f-jp-meal', type: 'dropdown', label: 'Meal Preference', required: true, options: ['Vegetarian', 'Non-Vegetarian', 'Jain'], section: 'Travel Details' },
+        { id: 'f-jp-shirt', type: 'radio', label: 'Tour T-Shirt Size', required: true, options: ['S', 'M', 'L', 'XL'], section: 'Travel Details' },
+        { id: 'f-jp-photo', type: 'yesno', label: 'Photos allowed for school social media?', required: false, section: 'Consent' },
+        { id: 'f-jp-sign', type: 'signature', label: 'Guardian Undertaking', helpText: 'Sign the printed form physically before the tour.', required: true, section: 'Declaration' },
       ],
       status: 'Published',
       createdBy: 'Dr. Ananya Iyer',
+      createdByRole: 'Principal',
+      approvalNotes: [],
       createdAt: '2026-08-20T09:35:00Z',
       updatedAt: '2026-08-22T10:00:00Z',
     },
@@ -1065,6 +1295,7 @@ function seedApplications(): SchoolApplication[] {
       title: 'Robotics Workshop',
       description: 'Two-day hands-on robotics workshop with an external partner. Kit included. Mandatory for Class 12.',
       category: 'Workshop',
+      source: 'Custom',
       academicYear: YEAR,
       targetClassIds: ['C12'],
       deadline: '2026-10-30',
@@ -1075,12 +1306,14 @@ function seedApplications(): SchoolApplication[] {
       physicalSignatureRequired: false,
       payment: { mode: 'Required', amount: 1000, feeHeadLabel: 'Robotics Workshop', chargeId: 'AC-02' },
       formFields: [
-        { id: 'f-rb-team', type: 'yesno', label: 'Interested in the competitive track?', required: true },
-        { id: 'f-rb-exp', type: 'dropdown', label: 'Prior robotics experience', required: true, options: ['None', 'Beginner', 'Intermediate', 'Advanced'] },
-        { id: 'f-rb-contact', type: 'emergency-contact', label: 'Emergency Contact (relative)', required: true },
+        { id: 'f-rb-team', type: 'yesno', label: 'Interested in the competitive track?', required: true, section: 'Application Details' },
+        { id: 'f-rb-exp', type: 'dropdown', label: 'Prior robotics experience', required: true, options: ['None', 'Beginner', 'Intermediate', 'Advanced'], section: 'Application Details' },
+        { id: 'f-rb-contact', type: 'emergency-contact', label: 'Emergency Contact (relative)', required: true, section: 'Medical / Emergency Details' },
       ],
       status: 'Draft',
       createdBy: 'Dr. Ananya Iyer',
+      createdByRole: 'Principal',
+      approvalNotes: [],
       createdAt: '2026-08-21T11:05:00Z',
       updatedAt: '2026-08-21T11:05:00Z',
     },
@@ -1089,6 +1322,7 @@ function seedApplications(): SchoolApplication[] {
       title: 'Annual Sports Day Consent',
       description: 'Participation confirmation for the Annual Sports Day races. Consent needed for practice drills on Wednesday mornings.',
       category: 'Event',
+      source: 'Event',
       academicYear: YEAR,
       // Canonical (zero-padded) class ids: C05 = Class 2, C07 = Class 4.
       targetClassIds: ['C05', 'C07'],
@@ -1104,11 +1338,13 @@ function seedApplications(): SchoolApplication[] {
       physicalSignatureRequired: false,
       payment: { mode: 'None', amount: 0, feeHeadLabel: '' },
       formFields: [
-        { id: 'f-sd-track', type: 'checkbox', label: 'Events my ward wants to take part in', required: true, options: ['100m Run', 'Long Jump', 'Relay'] },
-        { id: 'f-sd-medical', type: 'longtext', label: 'Medical notes', required: false },
+        { id: 'f-sd-track', type: 'checkbox', label: 'Events my ward wants to take part in', required: true, options: ['100m Run', 'Long Jump', 'Relay'], section: 'Application Details' },
+        { id: 'f-sd-medical', type: 'longtext', label: 'Medical notes', required: false, section: 'Medical / Emergency Details' },
       ],
       status: 'Published',
       createdBy: 'Dr. Ananya Iyer',
+      createdByRole: 'Principal',
+      approvalNotes: [],
       createdAt: '2026-08-24T08:15:00Z',
       updatedAt: '2026-08-24T08:15:00Z',
     },
@@ -1118,6 +1354,7 @@ function seedApplications(): SchoolApplication[] {
       title: 'Vision Screening Camp 2025',
       description: 'Free eye screening conducted last term. Kept permanently as part of the session\u2019s record files.',
       category: 'Activity',
+      source: 'Activity',
       academicYear: '2025-2026',
       targetClassIds: ['C01'],
       deadline: '2025-12-01',
@@ -1128,12 +1365,82 @@ function seedApplications(): SchoolApplication[] {
       physicalSignatureRequired: false,
       payment: { mode: 'None', amount: 0, feeHeadLabel: '' },
       formFields: [
-        { id: 'f-es-glasses', type: 'yesno', label: 'Does your ward currently wear glasses?', required: false },
+        { id: 'f-es-glasses', type: 'yesno', label: 'Does your ward currently wear glasses?', required: false, section: 'Application Details' },
       ],
       status: 'Closed',
       createdBy: 'Dr. Ananya Iyer',
+      createdByRole: 'Principal',
+      approvalNotes: [],
       createdAt: '2025-11-10T08:00:00Z',
       updatedAt: '2025-12-02T09:00:00Z',
+    },
+    // TEACHER-CREATED form awaiting Principal approval — PART 4 workflow,
+    // gives the Principal's approval queue realistic live content.
+    {
+      id: 'APP-SCIENCEEXPO-2026',
+      title: 'Science Exhibition — Participation Form',
+      description: 'Inter-house Science Exhibition open to Classes 6 and 7. Exhibits judged by an external panel; winning house retains the rolling trophy.',
+      category: 'Competition',
+      source: 'Event',
+      sourceRef: { module: 'Events', label: 'Annual Science Exhibition 2026' },
+      academicYear: YEAR,
+      targetClassIds: ['C09', 'C10'],
+      deadline: '2026-10-05',
+      eventDate: '2026-10-24',
+      participation: 'Optional',
+      guardianConsent: {
+        required: true,
+        method: 'Digital',
+        statement: 'I permit my ward to take part in the Science Exhibition and stay back for the judging round if selected.',
+      },
+      teacherApprovalRequired: true,
+      physicalSignatureRequired: false,
+      inChargeTeacherId: 'T-014',
+      inChargeName: 'Rohan Mehta',
+      payment: { mode: 'None', amount: 0, feeHeadLabel: '' },
+      formFields: [
+        { id: 'f-se-project', type: 'text', label: 'Project Title', required: true, section: 'Application Details' },
+        { id: 'f-se-team', type: 'yesno', label: 'Participating as a team?', required: true, section: 'Application Details' },
+        { id: 'f-se-members', type: 'text', label: 'Team members (name & class)', helpText: 'Leave blank for a solo entry.', required: false, section: 'Application Details' },
+      ],
+      status: 'Pending Approval',
+      createdBy: 'Rohan Mehta',
+      createdByRole: 'Teacher',
+      approvalNotes: [{
+        id: 'AN-SEED-1', at: '2026-08-26T08:30:00Z', by: 'Rohan Mehta', role: 'Teacher', kind: 'submitted',
+        note: 'Exhibit space and the judging panel are confirmed — form is ready for your review.',
+      }],
+      createdAt: '2026-08-25T15:10:00Z',
+      updatedAt: '2026-08-26T08:30:00Z',
+    },
+    // EXAMINATION-GENERATED form (PART 5) — created automatically when an
+    // exam requiring an application form is set up; stays linked to its exam.
+    {
+      id: 'APP-BOARDFORM-2026',
+      title: 'Final Examination — Application Form',
+      description: 'Auto-generated from the Examinations module for "Final Examination". Confirmation of entry, answer-sheet medium and examination-day contact details.',
+      category: 'Exam Application',
+      source: 'Examination',
+      sourceRef: { module: 'Examinations', id: 'exam-seed-2', label: 'Final Examination' },
+      academicYear: YEAR,
+      targetClassIds: ['C13', 'C14', 'C15'],
+      deadline: '2026-09-25',
+      participation: 'Mandatory',
+      guardianConsent: { required: false, method: 'Digital' },
+      teacherApprovalRequired: true,
+      physicalSignatureRequired: false,
+      payment: { mode: 'None', amount: 0, feeHeadLabel: '' },
+      formFields: [
+        { id: 'f-be-board', type: 'text', label: 'Board Registration Number', helpText: 'Leave blank if not yet allotted.', required: false, section: 'Application Details' },
+        { id: 'f-be-medium', type: 'dropdown', label: 'Medium of answer sheet', required: true, options: ['English', 'Hindi'], section: 'Application Details' },
+        { id: 'f-be-emg', type: 'emergency-contact', label: 'Emergency Contact (examination days)', required: true, section: 'Medical / Emergency Details' },
+      ],
+      status: 'Draft',
+      createdBy: 'Dr. Ananya Iyer',
+      createdByRole: 'Principal',
+      approvalNotes: [],
+      createdAt: '2026-08-23T10:40:00Z',
+      updatedAt: '2026-08-23T10:40:00Z',
     },
   ]
 }
@@ -1244,6 +1551,21 @@ export function ensureApplicationSeedData(): void {
 function SEED_APP_AUDIT(): ApplicationAuditEvent[] {
   return [
     {
+      id: 'AEV-SEED-4', ts: '2026-08-25T15:10:00Z', applicationId: 'APP-SCIENCEEXPO-2026',
+      actor: 'Rohan Mehta', actorRole: 'Teacher', action: 'application.created',
+      message: 'Application "Science Exhibition — Participation Form" created as draft by Rohan Mehta (Teacher).',
+    },
+    {
+      id: 'AEV-SEED-5', ts: '2026-08-26T08:30:00Z', applicationId: 'APP-SCIENCEEXPO-2026',
+      actor: 'Rohan Mehta', actorRole: 'Teacher', action: 'application.submitted_approval',
+      message: '"Science Exhibition — Participation Form" submitted for Principal approval by Rohan Mehta (Teacher).',
+    },
+    {
+      id: 'AEV-SEED-6', ts: '2026-08-23T10:40:00Z', applicationId: 'APP-BOARDFORM-2026',
+      actor: 'Examinations module', actorRole: 'System', action: 'application.created',
+      message: 'Application form auto-generated from Examination "Final Examination" (linked source record exam-seed-2).',
+    },
+    {
       id: 'AEV-SEED-1', ts: '2026-08-22T09:00:00Z', applicationId: 'APP-JAIPUR-2026',
       actor: 'Dr. Ananya Iyer', actorRole: 'Principal', action: 'application.published',
       message: 'Linked to existing charge "Educational Tour — Jaipur" (₹2,500). Deadline 2026-09-15.',
@@ -1259,4 +1581,86 @@ function SEED_APP_AUDIT(): ApplicationAuditEvent[] {
       message: 'Screening completed — application closed. Records retained for the 2025-26 session file.',
     },
   ]
+}
+
+// ─── Examinations module integration (PART 5) ──────────────────────────
+//
+// Called automatically by the Examinations module when a created exam
+// REQUIRES an application form. The generated record is the SAME generic
+// SchoolApplication entity (never a special-cased implementation) with
+// source 'Examination' and a permanent sourceRef back to the exam, so:
+//   Examination → Application/Form → Submission → Approval → Payment →
+//   Documents → Permanent Record
+// Idempotent: re-creating the same exam (or a duplicate call) re-links the
+// existing generated form instead of duplicating it.
+
+export interface ExaminationFormRequest {
+  examId: string
+  examName: string
+  examType?: string
+  classIds: string[]
+  classLabel?: string
+  endDate?: string | null
+  inChargeTeacherId?: string
+  inChargeName?: string
+  actor?: string
+}
+
+export function createExaminationFormApplication(
+  input: ExaminationFormRequest,
+): { success: boolean; applicationId?: string; error?: string; alreadyLinked?: boolean } {
+  try {
+    const state = useApplicationsStore.getState()
+    // IDEMPOTENT — an application for this exam already exists → keep it.
+    const existing = state.applications.find(
+      (a) => a.source === 'Examination' && a.sourceRef?.id === input.examId,
+    )
+    if (existing) return { success: true, applicationId: existing.id, alreadyLinked: true }
+
+    // Deadline: two weeks after the exam ends (or 30 days out when the exam
+    // has no end date) — always a real, future, editable date.
+    const base = input.endDate ? new Date(`${input.endDate}T00:00:00Z`) : new Date()
+    if (Number.isNaN(base.getTime())) base.setTime(Date.now())
+    if (!input.endDate) base.setTime(Date.now() + 30 * 86_400_000)
+    const deadline = new Date(base.getTime() + 14 * 86_400_000).toISOString().slice(0, 10)
+
+    const title = `${input.examName} — Application Form`
+    const actor = input.actor ?? 'Dr. Ananya Iyer'
+    const res = useApplicationsStore.getState().createApplication(
+      {
+        title,
+        description: `Auto-generated from the Examinations module for "${input.examName}"${input.examType ? ` (${input.examType})` : ''}. Confirmation of entry, answer-sheet medium and examination-day contact details. This form remains linked to its examination.`,
+        category: 'Exam Application',
+        source: 'Examination',
+        sourceRef: { module: 'Examinations', id: input.examId, label: input.examName },
+        academicYear: CURRENT_ACADEMIC_YEAR,
+        targetClassIds: [...input.classIds],
+        deadline,
+        participation: 'Mandatory',
+        guardianConsentRequired: false,
+        guardianConsentMethod: 'Digital',
+        teacherApprovalRequired: true,
+        physicalSignatureRequired: false,
+        inChargeTeacherId: input.inChargeTeacherId,
+        inChargeName: input.inChargeName,
+        // Exam fees are governed by the Fee Structure (examFeeSchedule) —
+        // the generated form starts free so no double-charge can occur.
+        // The office may configure a charge BEFORE publishing if needed.
+        paymentMode: 'None',
+        paymentAmount: 0,
+        paymentFeeHeadLabel: '',
+        formFields: [
+          { id: `f-xm-${Math.random().toString(36).slice(2, 7)}`, type: 'text', label: 'Board Registration Number', helpText: 'Leave blank if not yet allotted.', required: false, section: 'Application Details' },
+          { id: `f-xm-${Math.random().toString(36).slice(2, 7)}`, type: 'dropdown', label: 'Medium of answer sheet', required: true, options: ['English', 'Hindi'], section: 'Application Details' },
+          { id: `f-xm-${Math.random().toString(36).slice(2, 7)}`, type: 'emergency-contact', label: 'Emergency Contact (examination days)', required: true, section: 'Medical / Emergency Details' },
+        ],
+      },
+      actor,
+      { actorRole: 'Principal' },
+    )
+    if (!res.success || !res.application) return { success: false, error: res.error }
+    return { success: true, applicationId: res.application.id }
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Could not generate the examination form.' }
+  }
 }

@@ -34,7 +34,9 @@ import { useAuth } from '@/lib/store/auth-store'
 import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PageTransition } from '@/components/shared/ui'
+import { SegmentedTabs } from '@/components/principal/modules/shared/segmented-tabs'
 import { AppStatusBadge, ApplicationReviewDetail } from './review-detail'
+import { MyFormsView } from './my-forms'
 
 export const CATEGORY_ICON: Record<ApplicationCategory, LucideIcon> = {
   Tour: Bus,
@@ -55,6 +57,9 @@ export function ApplicationReviewsModule() {
   const applications = useApplicationsStore((s) => s.applications)
   const submissions = useApplicationsStore((s) => s.submissions)
   const classes = useStudentsStore((s) => s.classes)
+
+  // Top-level workspace switch — reviews (assigned forms) vs my own forms.
+  const [workspace, setWorkspace] = useState<'reviews' | 'my-forms'>('reviews')
 
   // Hydrate the shared demo data (idempotent — only acts while empty) so a
   // teacher who never opened the Principal panel still sees seeded records.
@@ -98,6 +103,28 @@ export function ApplicationReviewsModule() {
 
   return (
     <PageTransition className="space-y-4">
+      {workspace === 'my-forms' ? (
+        <>
+          <SegmentedTabs<'reviews' | 'my-forms'>
+            value={workspace}
+            onValueChange={setWorkspace}
+            tabs={[
+              { value: 'reviews', label: 'Reviews' },
+              { value: 'my-forms', label: 'My Forms & Drafts' },
+            ]}
+          />
+          <MyFormsView />
+        </>
+      ) : (
+      <>
+      <SegmentedTabs<'reviews' | 'my-forms'>
+        value={workspace}
+        onValueChange={setWorkspace}
+        tabs={[
+          { value: 'reviews', label: 'Reviews' },
+          { value: 'my-forms', label: 'My Forms & Drafts' },
+        ]}
+      />
       {openApp ? (
         <ApplicationReviewDetail app={openApp} onBack={() => setOpenAppId(null)} />
       ) : (
@@ -163,6 +190,8 @@ export function ApplicationReviewsModule() {
             </>
           )}
         </>
+      )}
+      </>
       )}
     </PageTransition>
   )

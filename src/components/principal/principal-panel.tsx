@@ -94,7 +94,6 @@ const navGroups: NavGroup[] = [
     label: 'Finance',
     items: [
       { key: 'fees', label: 'Fee Management', icon: <IndianRupee className="h-4.5 w-4.5" /> },
-      { key: 'applications', label: 'Applications & Forms', icon: <ClipboardList className="h-4.5 w-4.5" /> },
       { key: 'salary', label: 'Salary & Payroll', icon: <Wallet className="h-4.5 w-4.5" /> },
       { key: 'finance', label: 'Finance Dashboard', icon: <PieChart className="h-4.5 w-4.5" /> },
     ],
@@ -103,6 +102,7 @@ const navGroups: NavGroup[] = [
     label: 'Operations',
     items: [
       { key: 'communication', label: 'Communication', icon: <Megaphone className="h-4.5 w-4.5" /> },
+      { key: 'applications', label: 'Applications & Forms', icon: <ClipboardList className="h-4.5 w-4.5" /> },
       { key: 'messaging', label: 'Messages', icon: <MessageSquare className="h-4.5 w-4.5" /> },
       { key: 'calendar', label: 'Calendar', icon: <CalendarDays className="h-4.5 w-4.5" /> },
       { key: 'library', label: 'Library', icon: <BookMarked className="h-4.5 w-4.5" /> },

@@ -41,6 +41,7 @@ import {
   type ApplicationFormField, type ApplicationSubmission, type SchoolApplication,
 } from '@/lib/store/applications-store'
 import { useFeeStore } from '@/lib/store/fee-store'
+import { school } from '@/lib/mock/school'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -141,7 +142,7 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
         if (f.required && !attachments[f.id]) errs[f.id] = 'Please attach a file.'
         continue
       }
-      if (f.type === 'signature') {
+      if (f.type === 'signature' || f.type === 'declaration') {
         if (f.required && v !== true) errs[f.id] = 'Tick the acknowledgement to continue.'
         continue
       }
@@ -317,13 +318,33 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
 
             {step === 'form' ? (
               <div className="min-h-0 flex-1 overflow-y-auto -mx-1 px-1 space-y-4">
+                {/* ── Official document header (PART 9) — the form reads as a
+                    real school-issued document, not a SaaS card. ── */}
+                <div className="rounded-lg border border-border bg-card px-3.5 py-3">
+                  <div className="flex items-start justify-between gap-3 border-b border-dashed border-border pb-2.5">
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-extrabold tracking-tight text-foreground leading-tight">{school.name}</p>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">{school.affiliation}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[8px] uppercase tracking-[0.18em] text-muted-foreground">Form No.</p>
+                      <p className="text-[10px] font-mono font-semibold">APPF-{app.id.slice(-8).toUpperCase()}</p>
+                      <p className="text-[8px] uppercase tracking-[0.18em] text-muted-foreground mt-1">Session</p>
+                      <p className="text-[10px] font-semibold">{app.academicYear}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[8.5px] uppercase tracking-[0.2em] text-muted-foreground">Official Application Form · {app.category}</p>
+                  <p className="text-sm font-bold leading-tight mt-0.5">{app.title}</p>
+                  {app.sourceRef?.label && <p className="text-[10px] text-muted-foreground mt-0.5">for {app.sourceRef.label}</p>}
+                </div>
+
                 {app.description && (
-                  <p className="text-xs leading-relaxed text-muted-foreground border-l-2 border-border pl-3">{app.description}</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground border-l-2 border-border pl-3"><span className="font-semibold text-foreground">Instructions: </span>{app.description}</p>
                 )}
 
                 {/* ── Student particulars (read-only, canonical record) ── */}
                 <section className="rounded-lg border border-border bg-muted/25 px-3.5 py-3">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Student particulars</p>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">1. Student particulars</p>
                   <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
                     <Particular label="Name" value={identity.canonical.name} />
                     <Particular label="Admission no." value={identity.canonical.admissionNo} mono />
@@ -334,38 +355,55 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                   <p className="mt-2 text-[9.5px] text-muted-foreground">Taken from the school record — corrections go through the office.</p>
                 </section>
 
-                {/* ── Dynamic form fields ── */}
+                {/* ── Dynamic form fields, grouped into their logical
+                    sections (PART 13) with continuing numbering ── */}
                 {app.formFields.length > 0 && (
-                  <section className="space-y-3.5">
-                    {app.formFields.map((f) => (
-                      <FieldRenderer
-                        key={f.id}
-                        field={f}
-                        value={answers[f.id]}
-                        attachment={attachments[f.id]}
-                        emergency={emergency[f.id] ?? { name: '', phone: '' }}
-                        error={errors[f.id]}
-                        onAnswer={(v) => {
-                          setAnswers((prev) => ({ ...prev, [f.id]: v }))
-                          setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
-                        }}
-                        onEmergency={(v) => {
-                          setEmergency((prev) => ({ ...prev, [f.id]: v }))
-                          setAnswers((prev) => ({ ...prev, [f.id]: [v.name.trim(), v.phone.trim()].filter(Boolean).join(EM_DASH) }))
-                          setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
-                        }}
-                        onAttachment={(file) => {
-                          setAttachments((prev) => {
-                            const next = { ...prev }
-                            if (file) next[f.id] = { name: file.name, size: file.size }
-                            else delete next[f.id]
-                            return next
-                          })
-                          setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
-                        }}
-                      />
-                    ))}
-                  </section>
+                  <>{(() => {
+                    const groups = new Map<string, typeof app.formFields>()
+                    for (const f of app.formFields) {
+                      const key = f.section ?? 'Application Details'
+                      const arr = groups.get(key) ?? []
+                      arr.push(f)
+                      groups.set(key, arr)
+                    }
+                    let sectionNo = 1
+                    return Array.from(groups.entries()).map(([section, fields]) => {
+                      sectionNo += 1
+                      return (
+                        <section key={section} className="space-y-3.5">
+                          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{sectionNo}. {section}</p>
+                          {fields.map((f) => (
+                            <FieldRenderer
+                              key={f.id}
+                              field={f}
+                              value={answers[f.id]}
+                              attachment={attachments[f.id]}
+                              emergency={emergency[f.id] ?? { name: '', phone: '' }}
+                              error={errors[f.id]}
+                              onAnswer={(v) => {
+                                setAnswers((prev) => ({ ...prev, [f.id]: v }))
+                                setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
+                              }}
+                              onEmergency={(v) => {
+                                setEmergency((prev) => ({ ...prev, [f.id]: v }))
+                                setAnswers((prev) => ({ ...prev, [f.id]: [v.name.trim(), v.phone.trim()].filter(Boolean).join(EM_DASH) }))
+                                setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
+                              }}
+                              onAttachment={(file) => {
+                                setAttachments((prev) => {
+                                  const next = { ...prev }
+                                  if (file) next[f.id] = { name: file.name, size: file.size }
+                                  else delete next[f.id]
+                                  return next
+                                })
+                                setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
+                              }}
+                            />
+                          ))}
+                        </section>
+                      )
+                    })
+                  })()}</>
                 )}
 
                 {/* ── Guardian consent ── */}
@@ -665,6 +703,21 @@ function FieldRenderer({ field, value, attachment, emergency, error, onAnswer, o
               I understand a physical signature is required
             </label>
           </div>
+        )}
+
+        {field.type === 'declaration' && (
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-dashed border-border px-3 py-2.5">
+            <Checkbox
+              checked={value === true}
+              onCheckedChange={(c) => onAnswer(c === true)}
+              className="mt-0.5"
+              aria-label={field.label}
+            />
+            <span className="text-xs leading-relaxed">
+              {field.label}
+              {field.helpText && <span className="block text-[9.5px] text-muted-foreground mt-0.5">{field.helpText}</span>}
+            </span>
+          </label>
         )}
       </div>
       <ErrorLine msg={error} />

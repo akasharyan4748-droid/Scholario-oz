@@ -139,7 +139,7 @@ export function FeesShell({ onNavigate }: { onNavigate?: (moduleKey: string) => 
             {tab === 'overview' && <FeesOverviewSection data={data} onNavigate={setTab} />}
             {tab === 'accounts' && <FeesStudentAccountsSection data={data} onCollect={(id) => openCollect(id)} focusStudent={feeFocusStudent} />}
             {tab === 'structures' && <FeesStructuresSection data={data} onNavigate={onNavigate} />}
-            {tab === 'payments' && <PaymentsSection data={data} onCollect={() => openCollect()} onOpenApplications={onNavigate ? () => onNavigate('applications') : undefined} />}
+            {tab === 'payments' && <PaymentsSection data={data} onCollect={() => openCollect()} />}
             {tab === 'transactions' && <FeesTransactionsSection data={data} />}
             {tab === 'settings' && <FeesSettingsSection />}
           </motion.div>

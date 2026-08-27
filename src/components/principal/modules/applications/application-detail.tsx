@@ -48,7 +48,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { ApplicationPrintDocument, printApplicationDocument, downloadApplicationDocument, applicationDocFileName } from './application-print'
 
-type DetailTab = 'overview' | 'submissions' | 'payments' | 'documents' | 'activity'
+type DetailTab = 'overview' | 'form' | 'submissions' | 'payments' | 'documents' | 'activity'
 
 interface Props {
   app: SchoolApplication
@@ -64,6 +64,10 @@ export function AppStatusBadge({ status }: { status: ReturnType<typeof effective
     status === 'Closing Soon' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
     status === 'Scheduled' && 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
     status === 'Draft' && 'bg-violet-500/10 text-violet-600 dark:text-violet-300',
+    status === 'Pending Approval' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    status === 'Changes Requested' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    status === 'Approved' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    status === 'Rejected' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
     (status === 'Closed' || status === 'Locked') && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
     status === 'Archived' && 'bg-muted text-muted-foreground',
   )
@@ -117,7 +121,7 @@ export function ApplicationDetail({ app: liveAppRef, onBack }: Props) {
   const [offlineOpen, setOfflineOpen] = useState(false)
 
   const status = effectiveAppStatus(app)
-  const editingAllowed = status === 'Draft' || status === 'Open' || status === 'Closing Soon' || status === 'Scheduled'
+  const editingAllowed = status === 'Draft' || status === 'Open' || status === 'Closing Soon' || status === 'Scheduled' || status === 'Changes Requested' || status === 'Rejected'
 
   // Micro-stats (live).
   const approvedCount = submissions.filter((s) => s.status === 'Approved').length
@@ -157,6 +161,7 @@ export function ApplicationDetail({ app: liveAppRef, onBack }: Props) {
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-bold tracking-tight text-foreground truncate">{app.title}</h2>
               <Badge variant="outline" className="text-[9px] h-4 px-1.5 shrink-0">{app.category}</Badge>
+              <Badge variant="outline" className="text-[9px] h-4 px-1.5 shrink-0 bg-slate-500/5 text-muted-foreground border-border">Source: {app.source}</Badge>
               <AppStatusBadge status={status} />
               {app.participation === 'Mandatory' && (
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Mandatory</Badge>
@@ -171,6 +176,12 @@ export function ApplicationDetail({ app: liveAppRef, onBack }: Props) {
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
           {app.status === 'Draft' && (
             <PublishButton appId={app.id} />
+          )}
+          {app.status === 'Approved' && (
+            <PublishButton appId={app.id} />
+          )}
+          {app.status === 'Pending Approval' && (
+            <ApprovalDecision appId={app.id} />
           )}
           {app.status === 'Published' && (status === 'Open' || status === 'Closing Soon') && (
             <>
@@ -219,6 +230,7 @@ export function ApplicationDetail({ app: liveAppRef, onBack }: Props) {
         onValueChange={setTab}
         tabs={[
           { value: 'overview', label: 'Overview' },
+          { value: 'form', label: 'Form', badge: app.formFields.length || undefined },
           { value: 'submissions', label: 'Submissions', badge: submissions.length || undefined },
           { value: 'payments', label: 'Payments', badge: pendingVerifyApp > 0 ? pendingVerifyApp : undefined },
           { value: 'documents', label: 'Documents', badge: submissions.filter((s) => s.physicalDoc.status === 'Received').length || undefined },
@@ -229,6 +241,7 @@ export function ApplicationDetail({ app: liveAppRef, onBack }: Props) {
       {tab === 'overview' && (
         <OverviewPanel app={app} submissions={submissions} charge={charge} collectedApp={collectedApp} />
       )}
+      {tab === 'form' && <FormPanel appId={app.id} />}
       {tab === 'submissions' && (
         <SubmissionsPanel
           app={app}
@@ -311,6 +324,150 @@ function PublishButton({ appId }: { appId: string }) {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+// ─── Principal approval decision (PART 14) ─────────────────────────────
+// The review screen actions for a teacher-created form: Request Changes /
+// Reject / Approve. Every action takes a mandatory note except approve.
+
+function ApprovalDecision({ appId }: { appId: string }) {
+  const requestChanges = useApplicationsStore((s) => s.requestApprovalChanges)
+  const approveApplication = useApplicationsStore((s) => s.approveApplication)
+  const rejectApplication = useApplicationsStore((s) => s.rejectApplication)
+  const [dialog, setDialog] = useState<null | 'approve' | 'changes' | 'reject'>(null)
+  const [note, setNote] = useState('')
+  const app = useApplicationsStore((s) => s.applications.find((a) => a.id === appId))
+  if (!app) return null
+
+  const submit = (kind: 'approve' | 'changes' | 'reject') => {
+    const res = kind === 'approve'
+      ? approveApplication(appId, note, 'Dr. Ananya Iyer')
+      : kind === 'changes'
+        ? requestChanges(appId, note, 'Dr. Ananya Iyer')
+        : rejectApplication(appId, note, 'Dr. Ananya Iyer')
+    if (!res.success) {
+      toast.error(kind === 'approve' ? 'Cannot approve' : kind === 'changes' ? 'Cannot send back' : 'Cannot reject', { description: res.error })
+      return
+    }
+    toast.success(
+      kind === 'approve' ? 'Form APPROVED' : kind === 'changes' ? 'Sent back for changes' : 'Form rejected',
+      {
+        description: kind === 'approve'
+          ? 'The in-charge can now publish and operate it.'
+          : kind === 'changes'
+            ? `${app.inChargeName ?? 'The in-charge'} can edit and resubmit.`
+            : 'The in-charge is notified via the form record.',
+      },
+    )
+    setDialog(null)
+    setNote('')
+  }
+
+  return (
+    <>
+      <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => { setDialog('changes'); setNote('') }}>
+        <Undo2 className="h-3 w-3" /> Request changes
+      </Button>
+      <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 text-rose-600 border-rose-500/30 hover:bg-rose-500/10" onClick={() => { setDialog('reject'); setNote('') }}>
+        <XCircle className="h-3 w-3" /> Reject
+      </Button>
+      <Button size="sm" className="h-7 text-[11px] gap-1" onClick={() => { setDialog('approve'); setNote('') }}>
+        <CheckCircle2 className="h-3 w-3" /> Approve
+      </Button>
+      <Dialog open={dialog !== null} onOpenChange={(o) => { if (!o) setDialog(null) }}>
+        <DialogContent className="max-w-md z-[70]">
+          <DialogHeader>
+            <DialogTitle className="text-sm">
+              {dialog === 'approve' ? `Approve "${app.title}"?` : dialog === 'changes' ? 'Request changes' : `Reject "${app.title}"?`}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {dialog === 'approve'
+                ? 'The form is frozen as reviewed and can be published by you or the in-charge.'
+                : dialog === 'changes'
+                  ? 'The form returns to the in-charge with your note. They edit and resubmit.'
+                  : 'The form returns to the in-charge as rejected. Your reason is recorded permanently.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <Label className="text-[10px] text-muted-foreground">
+              Note to {app.inChargeName ?? 'in-charge'} {dialog !== 'approve' && <span className="text-rose-500">*</span>}
+            </Label>
+            <textarea
+              className="mt-1 w-full min-h-[64px] rounded-md border border-border bg-transparent px-2.5 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              placeholder={dialog === 'approve' ? 'Optional — e.g. approved as submitted.' : 'Be specific — e.g. add a medical section, move the deadline after the unit tests…'}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDialog(null)}>Cancel</Button>
+            <Button
+              size="sm"
+              className={cn('h-8 text-xs', dialog === 'reject' && 'bg-rose-600 hover:bg-rose-700 text-white')}
+              onClick={() => dialog && submit(dialog)}
+            >
+              {dialog === 'approve' ? 'Confirm approval' : dialog === 'changes' ? 'Send for changes' : 'Confirm rejection'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+// ─── Form tab (PART 16) — the official form definition ─────────────────
+
+function FormPanel({ appId }: { appId: string }) {
+  const app = useApplicationsStore((s) => s.applications.find((a) => a.id === appId))
+  if (!app) return null
+  const sections = new Map<string, typeof app.formFields>()
+  for (const f of app.formFields) {
+    const key = f.section ?? 'Application Details'
+    const arr = sections.get(key) ?? []
+    arr.push(f)
+    sections.set(key, arr)
+  }
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+      <Panel title="Form structure" subtitle={`${app.formFields.length} questions across ${sections.size} section${sections.size === 1 ? '' : 's'}`} className="lg:col-span-2" bodyClassName="pt-1 pb-3">
+        {app.formFields.length === 0 ? (
+          <p className="text-xs text-muted-foreground px-1">No questions configured yet.</p>
+        ) : (
+          <div className="space-y-4 px-1">
+            {Array.from(sections.entries()).map(([section, fields]) => (
+              <div key={section}>
+                <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">{section}</p>
+                <div className="space-y-1.5">
+                  {fields.map((f, i) => (
+                    <div key={f.id} className="flex items-start gap-2 text-xs rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+                      <span className="text-[10px] tabular-nums text-muted-foreground mt-0.5 w-4 shrink-0">{i + 1}.</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{f.label}{f.required && <span className="text-rose-500"> *</span>}</p>
+                        {f.helpText && <p className="text-[10px] text-muted-foreground mt-0.5">{f.helpText}</p>}
+                      </div>
+                      <Badge variant="outline" className="text-[8px] h-4 px-1.5 shrink-0 uppercase">{f.type}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+      <div className="space-y-4">
+        <Panel title="Blank official form" subtitle="for offline distribution" bodyClassName="pt-2">
+          <BlankFormMenu />
+        </Panel>
+        <Panel title="Student identity sections" subtitle="auto-filled at submission" bodyClassName="pt-2 pb-3">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Every generated form opens with <span className="font-medium text-foreground">Student Particulars</span> (name, admission no., class, section)
+            and <span className="font-medium text-foreground">Parent / Guardian Details</span> pulled straight from the school record —
+            applicants never re-type what the ERP already knows.
+          </p>
+        </Panel>
+      </div>
+    </div>
   )
 }
 
@@ -399,6 +556,52 @@ function OverviewPanel({ app, submissions, charge, collectedApp }: {
             {app.description ?? 'No description provided.'}
           </p>
         </Panel>
+
+        {/* Linked source record (PART 16) — exam-generated forms stay
+            connected to their examination permanently. */}
+        {app.sourceRef && (
+          <Panel title={`Linked ${app.sourceRef.module}`} bodyClassName="pt-2 pb-3">
+            <div className="flex items-center gap-2.5 px-1">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-1 ring-violet-500/20">
+                <FileText className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold truncate">{app.sourceRef.label ?? app.sourceRef.module}</p>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  Generated automatically from the {app.sourceRef.module} module{app.sourceRef.id ? ` · record ${app.sourceRef.id}` : ''}
+                </p>
+              </div>
+              <Badge variant="outline" className="text-[9px] h-4 px-1.5 shrink-0">Source: {app.source}</Badge>
+            </div>
+          </Panel>
+        )}
+
+        {/* Approval workflow trail (PART 14) — the immutable teacher ⇄
+            Principal conversation that governs this form. */}
+        {app.approvalNotes.length > 0 && (
+          <Panel title="Approval trail" subtitle={`${app.createdByRole === 'Teacher' ? 'Teacher-created' : 'Principal-created'} · ${app.approvalNotes.length} entr${app.approvalNotes.length === 1 ? 'y' : 'ies'}`} bodyClassName="p-0">
+            <div className="divide-y divide-border max-h-52 overflow-y-auto custom-scrollbar">
+              {app.approvalNotes.map((n) => (
+                <div key={n.id} className="px-4 py-2 flex items-start gap-2.5">
+                  <span className={cn(
+                    'mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold uppercase shrink-0',
+                    n.kind === 'approval' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                    n.kind === 'changes' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                    n.kind === 'rejection' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+                    n.kind === 'submitted' && 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
+                    n.kind === 'note' && 'bg-muted text-muted-foreground',
+                  )}>
+                    {n.kind}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs leading-relaxed">{n.note}</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">{n.by} · {n.role} · {formatDate(n.at)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        )}
 
         <Panel title="Workflow configuration" bodyClassName="pt-2 pb-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 px-1">

@@ -12,8 +12,8 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Bus, CalendarDays, ChevronDown, ClipboardList, Copy, FlaskConical, FileText,
-  Landmark, Lock, Archive, PencilLine, Plus, Search, Sparkles,
+  Bus, CalendarDays, CheckCircle2, ChevronDown, ClipboardList, Copy, FlaskConical, FileText,
+  Landmark, Lock, Archive, PencilLine, Plus, Search, Send, Sparkles,
   Tag, Trophy, Tent, XCircle, Undo2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -47,23 +47,32 @@ export const CATEGORY_ICON: Record<ApplicationCategory, LucideIcon> = {
   Custom: Tag,
 }
 
+/** Source chip tone — where the form came from (PART 17). */
+export const SOURCE_TONE: Record<string, string> = {
+  Examination: 'bg-violet-500/10 text-violet-600 dark:text-violet-300',
+  Event: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
+  Activity: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
+  Custom: 'bg-muted text-muted-foreground',
+}
+
 interface Props {
   onOpenApplication: (id: string) => void
   onStartCreate: () => void
   onStartEdit: (id: string) => void
 }
 
-type StatusFilter = 'all' | 'active' | 'Draft' | 'Locked' | 'Closed' | 'Archived'
+type StatusFilter = 'all' | 'active' | 'Pending Approval' | 'Draft' | 'Approved' | 'Locked' | 'Closed' | 'Archived'
 
 export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStartEdit }: Props) {
   const applications = useApplicationsStore((s) => s.applications)
   const submissions = useApplicationsStore((s) => s.submissions)
-  const transactions = useApplicationsStore((s) => s.applications).length // keep store subscription cheap
-  void transactions
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [sourceFilter, setSourceFilter] = useState<string>('all')
+  const [inChargeFilter, setInChargeFilter] = useState<string>('all')
+  const [sessionFilter, setSessionFilter] = useState<string>('all')
 
   const subsByApp = useMemo(() => {
     const m = new Map<string, typeof submissions>()
@@ -80,10 +89,12 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
     let closing = 0
     let pendingReview = 0
     let awaitingMoney = 0
+    let awaitingApproval = 0
     for (const a of applications) {
       const st = effectiveAppStatus(a)
       if (st === 'Open') active++
       if (st === 'Closing Soon') { active++; closing++ }
+      if (st === 'Pending Approval') awaitingApproval++
       if (st === 'Closed' || st === 'Locked') continue
       const subs = subsByApp.get(a.id) ?? []
       for (const s of subs) {
@@ -96,8 +107,18 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
         if (cs === 'Awaiting Payment' || cs === 'Awaiting Verification') awaitingMoney++
       }
     }
-    return { active, closing, pendingReview, awaitingMoney }
+    return { active, closing, pendingReview, awaitingMoney, awaitingApproval }
   }, [applications, subsByApp])
+
+  // Filter option pools — derived from real data, never hardcoded.
+  const inChargeOptions = useMemo(
+    () => Array.from(new Set(applications.map((a) => a.inChargeName).filter(Boolean) as string[])).sort(),
+    [applications],
+  )
+  const sessionOptions = useMemo(
+    () => Array.from(new Set(applications.map((a) => a.academicYear))).sort().reverse(),
+    [applications],
+  )
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -105,44 +126,47 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
       .filter((a) => {
         const eff = effectiveAppStatus(a)
         if (statusFilter === 'active' && !(['Open', 'Closing Soon'] as string[]).includes(eff as string)) return false
-        if (['Draft', 'Archived'].includes(statusFilter) && effectiveAppStatus(a) !== statusFilter && a.status !== statusFilter) return false
+        if (['Draft', 'Archived', 'Pending Approval', 'Approved'].includes(statusFilter) && a.status !== statusFilter) return false
         if ((statusFilter === 'Locked' || statusFilter === 'Closed') && eff !== statusFilter) return false
         if (categoryFilter !== 'all' && a.category !== categoryFilter) return false
+        if (sourceFilter !== 'all' && a.source !== sourceFilter) return false
+        if (inChargeFilter !== 'all' && a.inChargeName !== inChargeFilter) return false
+        if (sessionFilter !== 'all' && a.academicYear !== sessionFilter) return false
         if (q && !(a.title.toLowerCase().includes(q))) return false
         return true
       })
       .sort((a, b) => {
         const rank = (app: SchoolApplication) => {
           switch (effectiveAppStatus(app)) {
+            case 'Pending Approval': return -1 // approval queue on top
             case 'Open': case 'Closing Soon': return 0
-            case 'Draft': case 'Scheduled': return 1
+            case 'Draft': case 'Changes Requested': case 'Rejected': case 'Approved': case 'Scheduled': return 1
             case 'Locked': case 'Closed': return 2
             default: return 3
           }
         }
         return rank(a) - rank(b) || b.createdAt.localeCompare(a.createdAt)
       })
-  }, [applications, search, statusFilter, categoryFilter])
+  }, [applications, search, statusFilter, categoryFilter, sourceFilter, inChargeFilter, sessionFilter])
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
+      {/* Toolbar — ONE page title lives in the app shell header; this row
+          is context + action only (PART 3: no duplicate giant heading). */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <h2 className="text-base font-bold tracking-tight text-foreground">Applications &amp; Forms</h2>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">
-            Tours · workshops · competitions · consents — application → payment → approval → record
-          </p>
-        </div>
+        <p className="text-xs text-muted-foreground min-w-0 truncate">
+          Examination · Event · Activity · Custom — application → approval → payment → official record
+        </p>
         <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={onStartCreate}>
           <Plus className="h-3 w-3" /> New Application
         </Button>
       </div>
 
       {/* Metric strip */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <MetricTile label="Active forms" value={metrics.active} hint={metrics.closing ? `${metrics.closing} closing soon` : undefined} />
-        <MetricTile label="Pending review" value={metrics.pendingReview} tone="amber" hint="await your or teacher's call" />
+        <MetricTile label="Awaiting approval" value={metrics.awaitingApproval} tone="amber" hint="teacher-created drafts" />
+        <MetricTile label="Pending review" value={metrics.pendingReview} tone="amber" hint="student submissions" />
         <MetricTile label="Awaiting money" value={metrics.awaitingMoney} tone="amber" hint="pay or cash verify" />
         <MetricTile label="Total forms" value={applications.length} />
       </div>
@@ -158,7 +182,9 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
           <SelectContent className="z-[70]">
             <SelectItem value="all" className="text-xs">All statuses</SelectItem>
             <SelectItem value="active" className="text-xs">Active now</SelectItem>
+            <SelectItem value="Pending Approval" className="text-xs">Pending approval</SelectItem>
             <SelectItem value="Draft" className="text-xs">Drafts</SelectItem>
+            <SelectItem value="Approved" className="text-xs">Approved</SelectItem>
             <SelectItem value="Locked" className="text-xs">Locked</SelectItem>
             <SelectItem value="Closed" className="text-xs">Closed</SelectItem>
             <SelectItem value="Archived" className="text-xs">Archived</SelectItem>
@@ -173,13 +199,40 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
             ))}
           </SelectContent>
         </Select>
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="h-8 w-[120px] text-xs" aria-label="Source filter"><SelectValue /></SelectTrigger>
+          <SelectContent className="z-[70]">
+            <SelectItem value="all" className="text-xs">All sources</SelectItem>
+            {['Examination', 'Event', 'Activity', 'Custom'].map((s) => (
+              <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={inChargeFilter} onValueChange={setInChargeFilter}>
+          <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="In-charge filter"><SelectValue /></SelectTrigger>
+          <SelectContent className="z-[70]">
+            <SelectItem value="all" className="text-xs">All in-charge</SelectItem>
+            {inChargeOptions.map((n) => (
+              <SelectItem key={n} value={n} className="text-xs">{n}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={sessionFilter} onValueChange={setSessionFilter}>
+          <SelectTrigger className="h-8 w-[140px] text-xs" aria-label="Session filter"><SelectValue /></SelectTrigger>
+          <SelectContent className="z-[70]">
+            <SelectItem value="all" className="text-xs">All sessions</SelectItem>
+            {sessionOptions.map((y) => (
+              <SelectItem key={y} value={y} className="text-xs">{y}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-
-      {/* List */}
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-b border-border/60 bg-muted/30 text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">
           <span className="flex-1">Application</span>
-          <span className="w-28 shrink-0">Deadline</span>
+          <span className="w-20 shrink-0">Source</span>
+          <span className="w-32 shrink-0 hidden lg:block">In-charge</span>
+          <span className="w-24 shrink-0">Deadline</span>
           <span className="w-20 shrink-0 text-right">Responses</span>
           <span className="w-36 shrink-0 text-right">Money</span>
           <span className="w-24 shrink-0 text-right">Status</span>
@@ -250,6 +303,18 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
   const anyPendingCash = submissions.some((s) => deriveSubmissionPayment(app, s).status === 'Awaiting Verification')
 
   const actionItems: Array<{ label: string; icon: React.ReactNode; onSelect?: () => void; danger?: boolean }> = []
+  if (app.status === 'Pending Approval') {
+    actionItems.push({ label: 'Review & approve', icon: <CheckCircle2 className="h-3.5 w-3.5" />, onSelect: onOpen })
+  }
+  if (app.status === 'Approved') {
+    actionItems.push({ label: 'Publish now', icon: <Send className="h-3.5 w-3.5" />, onSelect: () => {
+      const r = publishApplication(app.id, 'Dr. Ananya Iyer')
+      toast[r.success ? 'success' : 'error'](r.success ? 'Published' : 'Publish failed', r.success ? { description: 'Live for eligible students.' } : { description: r.error })
+    } })
+  }
+  if (app.status === 'Changes Requested' || app.status === 'Rejected') {
+    actionItems.push({ label: 'Edit & review note', icon: <PencilLine className="h-3.5 w-3.5" />, onSelect: onEdit })
+  }
   if (app.status === 'Published' && (status === 'Open' || status === 'Closing Soon')) {
     // Editable while open (pre-deadline): targets, dates, in-charge, form
     // fields. Money config stays frozen — the linked charge owns it.
@@ -291,12 +356,23 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
             )}
           </div>
           <p className="text-[10px] text-muted-foreground truncate">
-            {app.category}{app.inChargeName ? ` · ${app.inChargeName}` : ''}
-            {app.payment.mode !== 'None' ? ` · ${formatINR(app.payment.amount)}` : ' · free'}
-            {' · '}
-            {approved}/{submissions.length || 0} approved
+            {app.category} · {formatINR(app.payment.amount)}{app.payment.mode === 'None' ? ' · free' : ''}
+            {' · '}{approved}/{submissions.length || 0} approved
           </p>
         </button>
+
+        {/* Source — where this form came from (PART 17) */}
+        <div className="w-20 shrink-0 hidden sm:block relative z-10">
+          <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold', SOURCE_TONE[app.source])}>
+            {app.source}
+          </span>
+        </div>
+
+        {/* In-charge — operational owner (PART 17) */}
+        <div className="w-32 shrink-0 hidden lg:block relative z-10">
+          <p className="text-[11px] font-medium truncate">{app.inChargeName ?? '—'}</p>
+          <p className="text-[9px] text-muted-foreground">{app.createdByRole === 'Teacher' ? 'teacher-created' : 'principal'}</p>
+        </div>
 
         {/* Deadline */}
         <div className="w-28 shrink-0 hidden sm:block relative z-10">

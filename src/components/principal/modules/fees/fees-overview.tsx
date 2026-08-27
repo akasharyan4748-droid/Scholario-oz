@@ -6,17 +6,16 @@
  *
  *   1. Four KPI cards (Total Expected · Collected · Outstanding ·
  *      Students With Dues) — clickable, wired to Accounts/Transactions.
- *   2. Collection Trend (OPEN chart — sits directly on the page surface,
- *      no card/container — same pattern as Analytics/Dashboard/Finance)
- *      + Breakdown (expected obligation by fee head, thin CSS bars) beside
- *      it in a bordered panel.
- *   3. Class-wise Collection — one compact panel that fills the space the
- *      oversized chart container used to waste: horizontal progress bars
- *      (same visual philosophy as Payment Modes), collected/expected/
- *      percentage per class straight off the live student fee accounts.
- *   4. Outstanding Dues + Needs Attention — one two-column grid of
+ *   2. LEFT COLUMN (2/3): Collection Trend (OPEN chart — sits directly on
+ *      the page surface, same pattern as Analytics/Dashboard/Finance) with
+ *      Class-wise Collection DIRECTLY UNDERNEATH — the class rows occupy
+ *      exactly the vertical space the oversized chart container used to
+ *      waste. RIGHT COLUMN (1/3): Breakdown (expected obligation by fee
+ *      head, thin CSS bars). One intelligently composed dashboard row —
+ *      no full-width stacking, no wasted space, no extra page height.
+ *   3. Outstanding Dues + Needs Attention — one two-column grid of
  *      ACTIONABLE panels.
- *   5. Recent Payments (summary only) + Payment Modes mix.
+ *   4. Recent Payments (summary only) + Payment Modes mix.
  *
  * All numbers derive from useFeeData() — the same single calculation path
  * the Payments page, Transactions ledger, and Student Accounts consume.
@@ -135,7 +134,10 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
   // balance at top (the store's order). Initially the top 8 rows keep the
   // section compact; "View all" expands every class with a scroll cap.
   const [allClasses, setAllClasses] = useState(false)
-  const CLASSWISE_PREVIEW = 8
+  // Compact subset that fits the LEFT column beneath the trend chart —
+  // the section borrows the previously-wasted vertical space instead of
+  // lengthening the page. Expanded view scrolls inside a capped column.
+  const CLASSWISE_PREVIEW = 5
   const classRows = analytics.classWise
   const visibleClassRows = allClasses ? classRows : classRows.slice(0, CLASSWISE_PREVIEW)
   const hiddenClassCount = Math.max(0, classRows.length - visibleClassRows.length)
@@ -189,35 +191,122 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
         />
       </SummaryCardGrid>
 
-      {/* 2 — Collection Trend + Breakdown (one command-centre row).
-          The trend is an OPEN chart section — NO card, NO oversized empty
-          container: it sits directly on the page using only its natural
-          height (shared OpenChartSection recipe). ONE legend — action slot,
-          colored to exactly match the chart's series. items-start keeps
-          each column at its own natural height so neither the chart nor
-          the Breakdown panel forces extra empty space into the row. */}
+      {/* 2 — ONE composed dashboard row. LEFT (2/3): Collection Trend
+          (open chart, trimmed height) + Class-wise Collection packed
+          DIRECTLY underneath — the class rows use the vertical space the
+          chart used to waste. RIGHT (1/3): Breakdown panel. items-start
+          keeps each column at its natural height; the row never grows
+          taller than its content demands. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        <OpenChartSection
-          title="Collection Trend"
-          subtitle={`${yearLabel} · collected vs pending`}
-          className="lg:col-span-2 min-w-0"
-          action={
-            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.collected }} /> Collected
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.pending }} /> Pending
-              </span>
-            </div>
-          }
-        >
-          {trendHasData ? (
-            <MiniAreaChart data={analytics.monthly} height={180} format={(n) => formatINR(n, true)} showArea />
-          ) : (
-            <p className="text-xs text-muted-foreground py-6 text-center">No collections yet — record a payment to see the trend.</p>
-          )}
-        </OpenChartSection>
+        {/* LEFT column — trend + class-wise, stacked with no dead space */}
+        <div className="lg:col-span-2 min-w-0 space-y-4">
+          <OpenChartSection
+            title="Collection Trend"
+            subtitle={`${yearLabel} · collected vs pending`}
+            className="min-w-0"
+            action={
+              <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.collected }} /> Collected
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: FEES_CHART_PALETTE.pending }} /> Pending
+                </span>
+              </div>
+            }
+          >
+            {trendHasData ? (
+              <MiniAreaChart data={analytics.monthly} height={150} format={(n) => formatINR(n, true)} showArea />
+            ) : (
+              <p className="text-xs text-muted-foreground py-6 text-center">No collections yet — record a payment to see the trend.</p>
+            )}
+          </OpenChartSection>
+
+          {/* Class-wise Collection — fills the previously wasted vertical
+              space under the chart. Same visual philosophy as Payment
+              Modes: compact Panel, horizontal bars, no giant cards. Bars
+              are relative to each class's own expected amount (collected /
+              expected share), amounts come from the live fee accounts. */}
+          <Panel
+            title="Class-wise Collection"
+            subtitle={`${yearLabel} · ${classRows.length} classes · collected vs expected`}
+            action={
+              classRows.length > CLASSWISE_PREVIEW ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] gap-1.5"
+                  onClick={() => setAllClasses((v) => !v)}
+                  aria-expanded={allClasses}
+                >
+                  {allClasses ? 'Show less' : `View all ${classRows.length} classes`} <ArrowRight className="h-3 w-3" />
+                </Button>
+              ) : undefined
+            }
+            bodyClassName="p-0"
+          >
+            {visibleClassRows.length > 0 ? (
+              <div className={cn('divide-y divide-border py-1', allClasses && 'max-h-[280px] overflow-y-auto custom-scrollbar')}>
+                {visibleClassRows.map((c, i) => (
+                  <motion.div
+                    key={c.classId}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.03, 0.25) }}
+                    className="px-4 py-2 hover:bg-muted/20 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      {/* Class identity */}
+                      <div className="min-w-0 w-[150px] shrink-0">
+                        <p className="text-xs font-semibold truncate">{classDisplayName(c.className, c.classId)}</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums">{c.students} student{c.students === 1 ? '' : 's'}</p>
+                      </div>
+                      {/* Progress bar — collected share of this class's expectation */}
+                      <div className="flex-1 min-w-0 h-1.5 rounded-full bg-muted overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.max(c.collectionRate > 0 ? 2 : 0, Math.min(100, c.collectionRate))}%` }}
+                          transition={{ duration: 0.5, delay: Math.min(i * 0.04, 0.3) }}
+                          className={cn(
+                            'h-full rounded-full',
+                            c.collectionRate >= 75 ? 'bg-emerald-500/80'
+                              : c.collectionRate >= 40 ? 'bg-amber-500/80'
+                                : c.expected === 0 ? 'bg-slate-300/60 dark:bg-slate-600/40'
+                                  : 'bg-rose-500/70',
+                          )}
+                        />
+                      </div>
+                      {/* Amounts + rate — right-aligned mono rhythm like Payment Modes */}
+                      <div className="hidden sm:block w-[200px] shrink-0 text-right text-[11px] tabular-nums text-muted-foreground truncate">
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatINR(c.collected, true)}</span>
+                        {' / '}{formatINR(c.expected, true)}
+                      </div>
+                      <span className="w-[52px] shrink-0 text-right text-xs font-semibold tabular-nums">{Math.round(c.collectionRate)}%</span>
+                    </div>
+                    {/* Mobile compact second line (amounts hidden above) */}
+                    <p className="sm:hidden mt-1 text-[10px] tabular-nums text-muted-foreground">
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatINR(c.collected, true)}</span>
+                      {' / '}{formatINR(c.expected, true)}{c.outstanding > 0 ? ` · ${formatINR(c.outstanding, true)} due` : ''}
+                    </p>
+                  </motion.div>
+                ))}
+                {hiddenClassCount > 0 && !allClasses && (
+                  <button
+                    type="button"
+                    onClick={() => setAllClasses(true)}
+                    className="w-full px-4 py-2 text-left text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    +{hiddenClassCount} more classes — view all
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="py-6">
+                <FeeEmptyState icon={<Users className="h-5 w-5" />} title="No classes yet." description="Enrol students and assign fee structures to see class-wise collections." />
+              </div>
+            )}
+          </Panel>
+        </div>
 
         {/* Expected obligation per fee head — honest policy view (bars are
             relative to the largest head, share % is of total expected). */}
@@ -265,92 +354,7 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
         </Panel>
       </div>
 
-      {/* 3 — Class-wise Collection — real financial signal in place of the
-          empty space under the chart. Same visual philosophy as Payment
-          Modes: one compact Panel, horizontal bars, no giant cards.
-          Bars are relative to each class's own expected amount (collected /
-          expected share), amounts come from the live fee accounts. */}
-      <Panel
-        title="Class-wise Collection"
-        subtitle={`${yearLabel} · ${classRows.length} classes · collected vs expected`}
-        action={
-          classRows.length > CLASSWISE_PREVIEW ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-[11px] gap-1.5"
-              onClick={() => setAllClasses((v) => !v)}
-              aria-expanded={allClasses}
-            >
-              {allClasses ? 'Show less' : `View all ${classRows.length} classes`} <ArrowRight className="h-3 w-3" />
-            </Button>
-          ) : undefined
-        }
-        bodyClassName="p-0"
-      >
-        {visibleClassRows.length > 0 ? (
-          <div className={cn('divide-y divide-border py-1', allClasses && 'max-h-96 overflow-y-auto custom-scrollbar')}>
-            {visibleClassRows.map((c, i) => (
-              <motion.div
-                key={c.classId}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i * 0.03, 0.25) }}
-                className="px-4 py-2 hover:bg-muted/20 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  {/* Class identity */}
-                  <div className="min-w-0 w-[150px] shrink-0">
-                    <p className="text-xs font-semibold truncate">{classDisplayName(c.className, c.classId)}</p>
-                    <p className="text-[10px] text-muted-foreground tabular-nums">{c.students} student{c.students === 1 ? '' : 's'}</p>
-                  </div>
-                  {/* Progress bar — collected share of this class's expectation */}
-                  <div className="flex-1 min-w-0 h-1.5 rounded-full bg-muted overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${Math.max(c.collectionRate > 0 ? 2 : 0, Math.min(100, c.collectionRate))}%` }}
-                      transition={{ duration: 0.5, delay: Math.min(i * 0.04, 0.3) }}
-                      className={cn(
-                        'h-full rounded-full',
-                        c.collectionRate >= 75 ? 'bg-emerald-500/80'
-                          : c.collectionRate >= 40 ? 'bg-amber-500/80'
-                            : c.expected === 0 ? 'bg-slate-300/60 dark:bg-slate-600/40'
-                              : 'bg-rose-500/70',
-                      )}
-                    />
-                  </div>
-                  {/* Amounts + rate — right-aligned mono rhythm like Payment Modes */}
-                  <div className="hidden sm:block w-[200px] shrink-0 text-right text-[11px] tabular-nums text-muted-foreground truncate">
-                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatINR(c.collected, true)}</span>
-                    {' / '}{formatINR(c.expected, true)}
-                  </div>
-                  <span className="w-[52px] shrink-0 text-right text-xs font-semibold tabular-nums">{Math.round(c.collectionRate)}%</span>
-                </div>
-                {/* Mobile compact second line (amounts hidden above) */}
-                <p className="sm:hidden mt-1 text-[10px] tabular-nums text-muted-foreground">
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatINR(c.collected, true)}</span>
-                  {' / '}{formatINR(c.expected, true)}{c.outstanding > 0 ? ` · ${formatINR(c.outstanding, true)} due` : ''}
-                </p>
-              </motion.div>
-            ))}
-            {hiddenClassCount > 0 && !allClasses && (
-              <button
-                type="button"
-                onClick={() => setAllClasses(true)}
-                className="w-full px-4 py-2 text-left text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                +{hiddenClassCount} more classes — view all
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="py-6">
-            <FeeEmptyState icon={<Users className="h-5 w-5" />} title="No classes yet." description="Enrol students and assign fee structures to see class-wise collections." />
-          </div>
-        )}
-      </Panel>
-
-      {/* 4 — Outstanding Dues + Needs Attention (merged actionable pair).
+      {/* 3 — Outstanding Dues + Needs Attention (merged actionable pair).
           Every row navigates to Student Accounts; chips carry the aging
           signal inline so no separate buckets section is needed. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -452,7 +456,7 @@ export function FeesOverviewSection({ data, onNavigate }: Props) {
         </Panel>
       </div>
 
-      {/* 5 — Recent Payments + Payment Modes (concise activity summary).
+      {/* 4 — Recent Payments + Payment Modes (concise activity summary).
           Recent Payments is a SUMMARY only — "All transactions" goes to the
           authoritative ledger. Payment Modes is the analytical mix. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

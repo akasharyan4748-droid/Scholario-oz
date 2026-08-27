@@ -36,12 +36,16 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Check, AlertTriangle, Pencil, Award, RotateCcw, Info } from 'lucide-react'
+import { ArrowLeft, Check, AlertTriangle, Pencil, Award, RotateCcw, Info, ClipboardList } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useTeachersStore } from '@/lib/store/teachers-store'
 
 import { useCreateExamMock } from '@/lib/exams/use-exams-mock'
 import { TemplateSelection } from './tabs/template-selection'
@@ -511,6 +515,18 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
   // DB creation happens ONLY on Step 3 "Create Examination" (Spec §9 STEP 3).
   const [step, setStep] = useState<1 | 2 | 3>(1)
 
+  // APPS-FORMS (PART 5): does this examination need an application form?
+  // When on, creating the exam auto-generates a connected Application/Form
+  // in Operations → Applications & Forms (source 'Examination') with the
+  // chosen in-charge teacher as operational owner.
+  const [needsApplicationForm, setNeedsApplicationForm] = useState(false)
+  const [formInChargeTeacherId, setFormInChargeTeacherId] = useState('')
+  const teacherOptions = useTeachersStore((s) => s.teachers ?? [])
+  const formInChargeName = useMemo(
+    () => teacherOptions.find((t) => t.teacherId === formInChargeTeacherId)?.name,
+    [teacherOptions, formInChargeTeacherId],
+  )
+
   // ─── Consolidated timetable (Spec §1 / §3 / §14) ──────────────────────
   // Merge same-grade stream columns into one (e.g. Class 11 PCM + PCB → "Class 11").
   // The grade mapping is built from the selected exam classes.
@@ -654,10 +670,15 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
         ...(examFeeOverride === null && resolvedExamFee && resolvedExamFee.versionRef
           ? { feeStructureVersionRef: resolvedExamFee.versionRef }
           : {}),
+        // APPS-FORMS (PART 5) — generate the connected application form.
+        requiresApplicationForm: needsApplicationForm,
+        ...(needsApplicationForm && formInChargeTeacherId ? { inChargeTeacherId: formInChargeTeacherId, inChargeTeacherName: formInChargeName } : {}),
       })
 
       toast.success('Examination created as Draft', {
-        description: `${effectiveSubjects.length} subjects scheduled across ${selectedClassIds.length} classes. Review and publish when ready.`,
+        description: needsApplicationForm
+          ? `${effectiveSubjects.length} subjects scheduled across ${selectedClassIds.length} classes. Application form generated — see Operations → Applications & Forms.`
+          : `${effectiveSubjects.length} subjects scheduled across ${selectedClassIds.length} classes. Review and publish when ready.`,
       })
       onCreated(exam)
     } catch (e: any) {
@@ -933,6 +954,65 @@ export function CreateExamFullScreen({ classes, academicYear, onBack, onCreated 
                             </div>
                           </div>
                         </motion.div>
+                      )}
+                    </div>
+                  </Section>
+                )}
+
+                {/* APPS-FORMS (PART 5) — Application Form requirement.
+                    When enabled, creating this examination auto-generates a
+                    connected Application/Form under Operations → Applications
+                    & Forms (source 'Examination'), permanently linked back
+                    to this exam, with the chosen in-charge teacher as the
+                    operational owner (Principal approval still gates
+                    publishing). */}
+                {selectedTemplate && selectedExamClasses.length > 0 && (
+                  <Section
+                    label="Application Form"
+                    hint={needsApplicationForm ? 'A connected form will be generated' : 'Optional'}
+                  >
+                    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1 ${needsApplicationForm ? 'bg-violet-500/10 text-violet-600 ring-violet-500/20' : 'bg-muted text-muted-foreground ring-border'}`}>
+                            <ClipboardList className="h-3.5 w-3.5" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-medium text-foreground">This examination requires an application form</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {needsApplicationForm
+                                ? 'On creation, an official examination form is generated in Applications & Forms — linked to this exam, ready to review, publish and collect submissions.'
+                                : 'Students/guardians will not need to submit any form for this examination.'}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setNeedsApplicationForm((v) => !v)}
+                          role="switch"
+                          aria-checked={needsApplicationForm}
+                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${needsApplicationForm ? 'bg-violet-600' : 'bg-muted-foreground/30'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${needsApplicationForm ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                        </button>
+                      </div>
+                      {needsApplicationForm && (
+                        <div className="mt-2.5 pt-2.5 border-t border-border">
+                          <div className="max-w-xs">
+                            <Label className="text-[10px] text-muted-foreground">Form in-charge (optional)</Label>
+                            <Select value={formInChargeTeacherId} onValueChange={setFormInChargeTeacherId}>
+                              <SelectTrigger className="h-8 text-xs mt-0.5"><SelectValue placeholder="Assign a teacher" /></SelectTrigger>
+                              <SelectContent className="z-[80] max-h-56">
+                                {teacherOptions.slice(0, 60).map((t) => (
+                                  <SelectItem key={t.teacherId} value={t.teacherId} className="text-xs">{t.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-muted-foreground mt-1.5">
+                              The in-charge reviews submissions and manages the operational side. Publishing still requires your approval flow.
+                            </p>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </Section>

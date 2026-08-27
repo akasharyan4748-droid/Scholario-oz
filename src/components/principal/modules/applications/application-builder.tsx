@@ -22,7 +22,7 @@ import { useMemo, useState } from 'react'
 import {
   ChevronDown, ChevronUp, Copy, GripVertical, Plus, Trash2, Type,
   AlignLeft, Hash, CalendarDays, ChevronsUpDown, ListChecks, CheckSquare,
-  CircleDot, FileUp, PhoneCall, PenLine,
+  CircleDot, FileUp, PhoneCall, PenLine, ShieldCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,7 +33,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { useApplicationsStore, type SchoolApplication, type ApplicationFormField, type FormFieldType, type ApplicationCategory, type PaymentModeConfig } from '@/lib/store/applications-store'
+import { useApplicationsStore, FORM_SECTIONS, type SchoolApplication, type ApplicationFormField, type FormFieldType, type ApplicationCategory, type PaymentModeConfig } from '@/lib/store/applications-store'
 import { useTeachersStore } from '@/lib/store/teachers-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
@@ -88,8 +88,9 @@ const PALETTE: PaletteDef[] = [
   { type: 'multiselect', label: 'Multiple select', icon: ListChecks, defaults: { label: 'Multiple choice', options: ['Option A', 'Option B'] } },
   { type: 'yesno', label: 'Yes / No', icon: CheckSquare, defaults: { label: 'Yes or no question' } },
   { type: 'file', label: 'File upload', icon: FileUp, defaults: { label: 'Document upload', helpText: 'Scan/photo kept on record.' } },
-  { type: 'emergency-contact', label: 'Emergency contact', icon: PhoneCall, defaults: { label: 'Emergency contact (name + phone)' } },
-  { type: 'signature', label: 'Signature slot', icon: PenLine, defaults: { label: 'Signature undertaking', helpText: 'Signed on the printed form.' } },
+  { type: 'emergency-contact', label: 'Emergency contact', icon: PhoneCall, defaults: { label: 'Emergency contact (name + phone)', section: 'Medical / Emergency Details' } },
+  { type: 'signature', label: 'Signature slot', icon: PenLine, defaults: { label: 'Signature undertaking', helpText: 'Signed on the printed form.', section: 'Declaration' } },
+  { type: 'declaration', label: 'Declaration tick', icon: ShieldCheck, defaults: { label: 'I confirm the information above is true', helpText: 'Tick to accept the declaration.', section: 'Declaration' } },
 ]
 
 function fieldTypeMeta(t: FormFieldType): PaletteDef {
@@ -155,9 +156,13 @@ interface Props {
   editing?: SchoolApplication
   onClose: () => void
   onSaved: () => void
+  /** TEACHER mode (PART 4/15): the creator is the in-charge — the ownership
+   *  select is locked and saving goes through the teacher permission path. */
+  teacherMode?: boolean
+  fixedInCharge?: { id: string; name: string }
 }
 
-export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
+export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fixedInCharge }: Props) {
   const createApplication = useApplicationsStore((s) => s.createApplication)
   const updateApplication = useApplicationsStore((s) => s.updateApplication)
   // In-charge options — canonical teachers registry (stable within session).
@@ -179,6 +184,8 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
       consentStatement: '',
       teacherApprovalRequired: true,
       physicalSignatureRequired: false,
+      inChargeTeacherId: fixedInCharge?.id,
+      inChargeName: fixedInCharge?.name,
       paymentMode: 'None',
       paymentAmount: 0,
       paymentFeeHeadLabel: '',
@@ -250,7 +257,8 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
       return
     }
     if (editing) {
-      const res = updateApplication(editing.id, form, 'Dr. Ananya Iyer')
+      const res = updateApplication(editing.id, form, teacherMode ? (fixedInCharge?.name ?? '') : 'Dr. Ananya Iyer',
+        teacherMode ? { actorRole: 'Teacher', teacherId: fixedInCharge?.id } : undefined)
       if (!res.success) {
         toast.error('Could not save changes', { description: res.error })
         return
@@ -259,13 +267,16 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
       onSaved()
       return
     }
-    const res = createApplication(form, 'Dr. Ananya Iyer')
+    const res = createApplication(form, teacherMode ? (fixedInCharge?.name ?? '') : 'Dr. Ananya Iyer',
+      teacherMode ? { actorRole: 'Teacher', teacherId: fixedInCharge?.id } : undefined)
     if (!res.success || !res.application) {
       toast.error('Could not create application', { description: res.error })
       return
     }
-    toast.success('Draft created', {
-      description: `Open "${res.application.title}" to review, then Publish when ready.`,
+    toast.success(teacherMode ? 'Draft created — submit it for Principal approval' : 'Draft created', {
+      description: teacherMode
+        ? 'Your form needs Principal approval before it can be published.'
+        : `Open "${res.application.title}" to review, then Publish when ready.`,
     })
     onSaved()
   }
@@ -360,28 +371,33 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
             selectedIds={form.targetStudentIds ?? []}
             onChange={(ids) => patch({ targetStudentIds: ids })}
           />
-          {/* In-charge */}
+          {/* In-charge — in TEACHER mode this is locked to the signed-in
+              teacher (store enforces ownership too). */}
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div className="space-y-1">
               <Label className="text-xs">In-charge teacher</Label>
-              <Select
-                value={form.inChargeTeacherId ?? ''}
-                onValueChange={(v) => {
-                  const t = teachers.find((x) => x.teacherId === v)
-                  patch({ inChargeTeacherId: v || undefined, inChargeName: t?.name })
-                }}
-              >
-                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Assign…" /></SelectTrigger>
-                <SelectContent className="z-[70] max-h-60">
-                  {teachers.map((t) => (
-                    <SelectItem key={t.teacherId} value={t.teacherId} className="text-xs">{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {teacherMode ? (
+                <Input className="h-9 text-xs" value={fixedInCharge?.name ?? ''} readOnly aria-label="In-charge (you)" />
+              ) : (
+                <Select
+                  value={form.inChargeTeacherId ?? ''}
+                  onValueChange={(v) => {
+                    const t = teachers.find((x) => x.teacherId === v)
+                    patch({ inChargeTeacherId: v || undefined, inChargeName: t?.name })
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Assign…" /></SelectTrigger>
+                  <SelectContent className="z-[70] max-h-60">
+                    {teachers.map((t) => (
+                      <SelectItem key={t.teacherId} value={t.teacherId} className="text-xs">{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-1 flex flex-col justify-end pb-0.5">
               <span className="text-[10px] text-muted-foreground">
-                Reviews submissions from their own account.
+                {teacherMode ? 'You are the in-charge — submissions appear under Application Reviews.' : 'Reviews submissions from their own account.'}
               </span>
             </div>
           </div>
@@ -569,6 +585,7 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
                       <p className="text-[10px] text-muted-foreground">
                         {fieldTypeMeta(f.type).label}{needsOptions && f.options?.length ? ` · ${f.options.length} options` : ''}
                         {f.required ? ' · required' : ''}
+                        {' · '}{f.section ?? 'Application Details'}
                       </p>
                     </button>
                     {!publishedMoneyLocked && (
@@ -597,6 +614,34 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
                         <div className="sm:col-span-3 space-y-1">
                           <Label className="text-[11px]">Help text</Label>
                           <Input className="h-8 text-xs" placeholder="Shown under the question" value={f.helpText ?? ''} onChange={(e) => editField(idx, { helpText: e.target.value || undefined })} />
+                        </div>
+                        {/* Section (PART 13) — logical grouping used by the
+                            official online form + printed document. */}
+                        <div className="sm:col-span-3 space-y-1.5">
+                          <Label className="text-[11px]">Form section</Label>
+                          <div className="flex flex-wrap gap-1">
+                            {Array.from(new Set([...FORM_SECTIONS, f.section ?? 'Application Details'].filter(Boolean) as string[])).map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => editField(idx, { section: s })}
+                                className={cn(
+                                  'px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors',
+                                  (f.section ?? 'Application Details') === s
+                                    ? 'bg-foreground text-primary-foreground border-foreground'
+                                    : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40',
+                                )}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                          <Input
+                            className="h-8 text-xs max-w-xs"
+                            placeholder="…or type a custom section name"
+                            value={f.section ?? ''}
+                            onChange={(e) => editField(idx, { section: e.target.value || undefined })}
+                          />
                         </div>
                         {needsOptions && (
                           <div className="sm:col-span-3 space-y-1.5">

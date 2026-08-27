@@ -18,6 +18,7 @@
 import { create } from 'zustand'
 import type { ExamDTO, CreateExamInput, ExamClassDTO, ExamSubjectConfigDTO, ScheduleItemDTO } from './types'
 import { buildSeedClassesAndSubjects, buildSeedSchedule, SEED_CLASS_DEFS } from './seed-helpers'
+import { createExaminationFormApplication } from '@/lib/store/applications-store'
 
 // ─── Sample exams (seed) ────────────────────────────────────────────────
 // These give the Examination list a non-empty default state so the UI
@@ -160,6 +161,29 @@ export const useMockExamsStore = create<MockExamsState>()((set, get) => ({
       markSummary: { total: 0, entered: 0, locked: 0, submitted: 0, verified: 0, pct: 0 },
     }
     set((state) => ({ exams: [exam, ...state.exams] }))
+
+    // APPS-FORMS (PART 5): an exam that requires an application form
+    // AUTO-GENERATES the connected form in Operations → Applications &
+    // Forms. The form stays permanently linked to this exam (sourceRef)
+    // and the assigned in-charge teacher becomes its operational owner,
+    // subject to the normal Principal approval/publishing workflow.
+    if (input.requiresApplicationForm && exam.classes.length > 0) {
+      // Best-effort: form generation must never break exam creation.
+      try {
+        createExaminationFormApplication({
+          examId: exam.id,
+          examName: exam.name,
+          examType: exam.type,
+          classIds: exam.classes.map((c) => c.classId),
+          endDate: exam.endDate,
+          inChargeTeacherId: input.inChargeTeacherId,
+          inChargeName: input.inChargeTeacherName,
+        })
+      } catch {
+        /* non-fatal */
+      }
+    }
+
     return exam
   },
   deleteExam: (id) => set((state) => ({ exams: state.exams.filter((e) => e.id !== id) })),
