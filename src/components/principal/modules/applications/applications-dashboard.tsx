@@ -13,7 +13,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Bus, CalendarDays, ChevronDown, ClipboardList, Copy, FlaskConical, FileText,
-  Landmark, Lock, Archive, PencilLine, Search, Sparkles,
+  Landmark, Lock, Archive, PencilLine, Plus, Search, Sparkles,
   Tag, Trophy, Tent, XCircle, Undo2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -251,6 +251,9 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
 
   const actionItems: Array<{ label: string; icon: React.ReactNode; onSelect?: () => void; danger?: boolean }> = []
   if (app.status === 'Published' && (status === 'Open' || status === 'Closing Soon')) {
+    // Editable while open (pre-deadline): targets, dates, in-charge, form
+    // fields. Money config stays frozen — the linked charge owns it.
+    actionItems.push({ label: 'Edit details', icon: <PencilLine className="h-3.5 w-3.5" />, onSelect: onEdit })
     actionItems.push({ label: 'Close now', icon: <XCircle className="h-3.5 w-3.5" />, onSelect: () => { closeApplication(app.id, 'Dr. Ananya Iyer'); toast.success('Closed — records preserved.') } })
     actionItems.push({ label: 'Lock immediately', icon: <Lock className="h-3.5 w-3.5" />, onSelect: () => { lockApplication(app.id, 'Dr. Ananya Iyer'); toast.info('Locked.') } })
   }

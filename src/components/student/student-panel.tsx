@@ -13,6 +13,7 @@ import { HomeworkModule } from './modules/homework'
 import { AssignmentsModule } from './modules/assignments'
 import { ResultsModule } from './modules/results'
 import { FeesModule } from './modules/fees'
+import { StudentApplicationsModule } from './modules/applications'
 import { TimetableModule } from './modules/timetable'
 import { CalendarModule } from './modules/calendar'
 import { AnnouncementsModule } from './modules/announcements'
@@ -61,6 +62,7 @@ const navGroups: NavGroup[] = [
     label: 'Finance & Info',
     items: [
       { key: 'fees', label: 'Fees', icon: <IndianRupee className="h-4.5 w-4.5" />, badge: 1 },
+      { key: 'applications', label: 'Applications', icon: <ClipboardList className="h-4.5 w-4.5" /> },
       { key: 'bus', label: 'My Bus', icon: <Bus className="h-4.5 w-4.5" />, badge: 14 },
       { key: 'calendar', label: 'Calendar', icon: <CalendarDays className="h-4.5 w-4.5" /> },
       { key: 'announcements', label: 'Announcements', icon: <Megaphone className="h-4.5 w-4.5" /> },
@@ -85,6 +87,7 @@ const staticModules: Record<string, React.ReactNode> = {
   diary: <DigitalDiaryModule />,
   wellness: <WellnessModule />,
   fees: <FeesModule />,
+  applications: <StudentApplicationsModule />,
   bus: <BusTrackingModule />,
   calendar: <CalendarModule />,
   announcements: <AnnouncementsModule />,

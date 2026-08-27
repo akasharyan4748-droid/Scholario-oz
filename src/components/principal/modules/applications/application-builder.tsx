@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/select'
 import { useApplicationsStore, type SchoolApplication, type ApplicationFormField, type FormFieldType, type ApplicationCategory, type PaymentModeConfig } from '@/lib/store/applications-store'
 import { useTeachersStore } from '@/lib/store/teachers-store'
+import { useStudentsStore } from '@/lib/store/students-store'
 import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
 import { MoneyInput } from '../fees/money-input'
 import { formatINR } from '@/lib/format'
@@ -103,6 +104,7 @@ export interface BuilderResult {
   category: ApplicationCategory
   targetClassIds: string[]
   targetSectionNames: string[]
+  targetStudentIds: string[]
   startDate?: string
   deadline: string
   eventDate?: string
@@ -128,6 +130,7 @@ function fromApp(app: SchoolApplication): BuilderResult {
     category: app.category,
     targetClassIds: app.targetClassIds,
     targetSectionNames: app.targetSectionNames ?? [],
+    targetStudentIds: app.targetStudentIds ?? [],
     startDate: app.startDate,
     deadline: app.deadline,
     eventDate: app.eventDate,
@@ -168,6 +171,7 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
       category: 'Custom',
       targetClassIds: [],
       targetSectionNames: [],
+      targetStudentIds: [],
       deadline: '',
       participation: 'Optional',
       guardianConsentRequired: false,
@@ -193,12 +197,12 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
   }
 
   const addField = (def: PaletteDef) => {
-    const f: ApplicationFormField = {
+    const f = {
+      ...def.defaults,
       id: `fld-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       type: def.type,
       required: false,
-      ...(def.defaults as object),
-    }
+    } as ApplicationFormField
     patch({ formFields: [...form.formFields, f] })
     setExpandedFieldId(f.id)
   }
@@ -233,8 +237,8 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
       toast.error('Give this application a title.')
       return
     }
-    if (!form.targetClassIds.length) {
-      toast.error('Select at least one target class.')
+    if (!form.targetClassIds.length && !form.targetStudentIds.length) {
+      toast.error('Select at least one target class or specific students.')
       return
     }
     if (!form.deadline) {
@@ -350,6 +354,12 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
           {form.targetClassIds.length > 0 && (
             <p className="text-[10px] text-muted-foreground">{form.targetClassIds.length} class{form.targetClassIds.length === 1 ? '' : 'es'} selected</p>
           )}
+          {/* Specific students (§2B "applicable students where needed") —
+              overrides class scoping when non-empty. */}
+          <SpecificStudentsPicker
+            selectedIds={form.targetStudentIds ?? []}
+            onChange={(ids) => patch({ targetStudentIds: ids })}
+          />
           {/* In-charge */}
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div className="space-y-1">
@@ -472,8 +482,9 @@ export function ApplicationBuilder({ editing, onClose, onSaved }: Props) {
           >
             <Segmented
               value={form.paymentMode}
-              options={['None', 'Required', 'Optional']}
-              onChange={(v) => patch({ paymentMode: v as PaymentModeConfig, paymentAmount: v === 'None' ? 0 : Math.max(500, form.paymentAmount || 0) })}
+              options={['None', 'Required', 'Optional'] as const}
+              labelFor={(o) => o === 'None' ? 'No Payment' : o === 'Required' ? 'Payment Required' : 'Optional Payment'}
+              onChange={(v) => patch({ paymentMode: v, paymentAmount: v === 'None' ? 0 : Math.max(500, form.paymentAmount || 0) })}
             />
           </ToggleRow>
           {form.paymentMode !== 'None' && !publishedMoneyLocked && (
@@ -627,10 +638,12 @@ function ToggleRow({ label, hint, children }: { label: string; hint: string; chi
   )
 }
 
-function Segmented<T extends string>({ value, options, onChange }: {
+function Segmented<T extends string>({ value, options, onChange, labelFor }: {
   value: T
   options: readonly T[]
   onChange: (v: T) => void
+  /** Optional display-label override (money rows use friendlier text). */
+  labelFor?: (o: T) => string
 }) {
   return (
     <div className="inline-flex h-8 items-center rounded-full bg-muted/70 p-0.5">
@@ -644,7 +657,7 @@ function Segmented<T extends string>({ value, options, onChange }: {
             value === o ? 'bg-white dark:bg-white/10 shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground',
           )}
         >
-          {o === 'None' ? 'No Payment' : o === 'Required' ? 'Payment Required' : o === 'Optional' ? 'Optional Payment' : o}
+          {labelFor ? labelFor(o) : o}
         </button>
       ))}
     </div>
@@ -677,11 +690,113 @@ function IconBtn({ children, onClick, disabled, label, danger }: {
   )
 }
 
-/** Live in-charge options come straight from the canonical teachers store. */
+/** Live in-charge options come straight from the canonical teachers store.
+ *  (zustand v5: select the raw array — derive via useMemo, never map in the
+ *  selector or getSnapshot() returns a fresh ref every time and loops.) */
 function useTeachersOptions(): Array<{ teacherId: string; name: string }> {
-  return useTeachersStore(
-    (s) => s.teachers?.slice(0, 60).map((t) => ({ teacherId: t.teacherId, name: t.name })) ?? EMPTY_TEACHERS,
+  const raw = useTeachersStore((s) => s.teachers)
+  return useMemo(
+    () => (raw ?? EMPTY_TEACHERS).slice(0, 60).map((t) => ({ teacherId: t.teacherId, name: t.name })),
+    [raw],
   )
 }
 
 const EMPTY_TEACHERS: Array<{ teacherId: string; name: string }> = []
+
+// ─── Specific-students picker (§2B) ────────────────────────────────────
+
+type RosterRow = { id: string; name: string; className: string; section: string; admissionNo: string }
+
+function useRosterLite(): RosterRow[] {
+  const students = useStudentsStore((s) => s.students)
+  return useMemo(
+    () => students
+      .filter((st) => st.status === 'Active')
+      .map((st) => ({ id: st.id, name: st.name, className: st.className, section: st.section, admissionNo: st.admissionNo })),
+    [students],
+  )
+}
+
+function SpecificStudentsPicker({ selectedIds, onChange }: {
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
+}) {
+  const roster = useRosterLite()
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    const base = needle
+      ? roster.filter((s) => s.name.toLowerCase().includes(needle) || s.admissionNo.toLowerCase().includes(needle))
+      : roster
+    return base.slice(0, 30)
+  }, [roster, q])
+
+  const selectedRows = useMemo(
+    () => selectedIds
+      .map((id) => roster.find((s) => s.id === id))
+      .filter((s): s is RosterRow => !!s),
+    [selectedIds, roster],
+  )
+
+  const toggle = (id: string) => {
+    onChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id])
+  }
+
+  return (
+    <div className="pt-1 space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs">Specific students <span className="text-muted-foreground">(optional)</span></Label>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-[11px] font-medium text-primary hover:underline"
+          aria-expanded={open}
+        >
+          {open ? 'Hide list' : selectedIds.length ? `${selectedIds.length} selected — edit` : 'Pick students'}
+        </button>
+      </div>
+      {selectedRows.length > 0 && !open && (
+        <p className="text-[10px] text-muted-foreground truncate">
+          Overrides classes: {selectedRows.map((s) => s.name).slice(0, 3).join(', ')}{selectedRows.length > 3 ? ` +${selectedRows.length - 3} more` : ''}
+        </p>
+      )}
+      {open && (
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="p-2 border-b border-border/60">
+            <Input className="h-8 text-xs" placeholder="Search name / admission no…" value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+          <div className="max-h-40 overflow-y-auto custom-scrollbar divide-y divide-border/50">
+            {filtered.map((s) => {
+              const on = selectedIds.includes(s.id)
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => toggle(s.id)}
+                  className={cn(
+                    'w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-left text-[11px] hover:bg-muted/40 transition-colors',
+                    on && 'bg-primary/5',
+                  )}
+                  aria-pressed={on}
+                >
+                  <span className="truncate font-medium">{s.name}</span>
+                  <span className="text-muted-foreground shrink-0 tabular-nums">{s.className}-{s.section} · {s.admissionNo}</span>
+                </button>
+              )
+            })}
+            {filtered.length === 0 && <p className="px-2.5 py-2 text-[11px] text-muted-foreground">No students match.</p>}
+          </div>
+          {selectedIds.length > 0 && (
+            <div className="p-2 border-t border-border/60">
+              <button type="button" onClick={() => onChange([])} className="text-[10px] text-muted-foreground hover:text-foreground underline">
+                Clear selection ({selectedIds.length})
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

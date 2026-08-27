@@ -50,7 +50,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { useFeeStore } from './fee-store'
 import { useStudentsStore } from '@/lib/store/students-store'
-import type { AdditionalChargeCategory } from './fee-store-data'
+import type { AdditionalChargeCategory } from './fee-store'
 import { CURRENT_ACADEMIC_YEAR } from './fee-store-data'
 
 // ─── Types ─────────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ export interface ApplicationAuditEvent {
   submissionId?: string
   ts: string
   actor: string
-  actorRole: 'Principal' | 'Teacher' | 'Student' | 'Guardian' | 'System'
+  actorRole: 'Principal' | 'Teacher' | 'Student' | 'Guardian' | 'Office' | 'System'
   action:
     | 'application.created' | 'application.updated' | 'application.published'
     | 'application.closed' | 'application.locked' | 'application.reopened'
@@ -441,10 +441,14 @@ function chargeCategoryOf(c: ApplicationCategory): AdditionalChargeCategory {
 
 // ─── Store ─────────────────────────────────────────────────────────────
 
+/** Session year used by the seed data — declared BEFORE the store so the
+ *  initializer's seedApplications() call can never hit a TDZ error. */
+const YEAR = CURRENT_ACADEMIC_YEAR
+
 export const useApplicationsStore = create<ApplicationsState>()(
   persist(
     (set, get) => ({
-      applications: SEED_APPLICATIONS(),
+      applications: seedApplications(),
       submissions: [],
       audit: [],
 
@@ -597,7 +601,8 @@ export const useApplicationsStore = create<ApplicationsState>()(
               mandatory: app.payment.mode === 'Required',
               description: app.description ?? app.title,
               reference: app.title,
-            }, actor)
+              actor,
+            })
             if (!created.success || !created.charge) {
               return { success: false, error: created.error ?? 'Could not create the linked charge.' }
             }
@@ -990,14 +995,35 @@ export const useApplicationsStore = create<ApplicationsState>()(
     }),
     {
       name: 'scholario-applications-v1',
-      version: 1,
+      version: 3,
+      // v2→v3: seed submissions for physical-signature applications must
+      // carry physicalDoc 'Pending' (the seed builder missed it). Also keep
+      // the v1→v2 canonical class-id retargeting.
+      migrate: (persisted) => {
+        const st = persisted as { applications?: SchoolApplication[]; submissions?: ApplicationSubmission[] } | undefined
+        if (st?.applications) {
+          const retarget: Record<string, string[]> = {
+            'APP-SPORTSDAY-2026': ['C05', 'C07'],
+            'APP-EYECAMP-2025': ['C01'],
+          }
+          st.applications = st.applications.map((a) => retarget[a.id] ? { ...a, targetClassIds: retarget[a.id] } : a)
+        }
+        if (st?.submissions && st.applications) {
+          st.submissions = st.submissions.map((s) => {
+            const a = st.applications!.find((x) => x.id === s.applicationId)
+            if (a?.physicalSignatureRequired && a.guardianConsent.method === 'Physical Signature' && s.physicalDoc.status === 'Not Required' && s.mode === 'Digital') {
+              return { ...s, physicalDoc: { status: 'Pending' as const } }
+            }
+            return s
+          })
+        }
+        return st
+      },
     },
   ),
 )
 
 // ─── Seed data (realistic demo scenarios, stable IDs) ─────────────────
-
-const YEAR = CURRENT_ACADEMIC_YEAR
 
 function seedApplications(): SchoolApplication[] {
   return [
@@ -1064,7 +1090,8 @@ function seedApplications(): SchoolApplication[] {
       description: 'Participation confirmation for the Annual Sports Day races. Consent needed for practice drills on Wednesday mornings.',
       category: 'Event',
       academicYear: YEAR,
-      targetClassIds: ['C1', 'C2'],
+      // Canonical (zero-padded) class ids: C05 = Class 2, C07 = Class 4.
+      targetClassIds: ['C05', 'C07'],
       deadline: '2026-09-30',
       eventDate: '2026-11-20',
       participation: 'Optional',
@@ -1092,7 +1119,7 @@ function seedApplications(): SchoolApplication[] {
       description: 'Free eye screening conducted last term. Kept permanently as part of the session\u2019s record files.',
       category: 'Activity',
       academicYear: '2025-2026',
-      targetClassIds: ['C1'],
+      targetClassIds: ['C01'],
       deadline: '2025-12-01',
       eventDate: '2025-12-10',
       participation: 'Optional',
@@ -1157,29 +1184,42 @@ export function ensureApplicationSeedData(): void {
     }
 
     const out: ApplicationSubmission[] = []
+    // Post-pass: honor each app's physical-signature config on its seeds.
+    const applyPhysical = (s: ApplicationSubmission | null) => {
+      if (!s) return null
+      const a = apps.find((x) => x.id === s.applicationId)
+      if (a?.physicalSignatureRequired && a.guardianConsent.method === 'Physical Signature' && s.physicalDoc.status === 'Not Required') {
+        return { ...s, physicalDoc: { status: 'Pending' as const } }
+      }
+      return s
+    }
     if (jaipur) {
       const c11 = students.filter((s) => s.classId === 'C11').slice(0, 4)
       c11.forEach((stu, i) => {
-        out.push(mkSub({ id: `SUB-SEED-JP-${i + 1}`, app: jaipur, stu }, i === 2 ? {
+        const s = applyPhysical(mkSub({ id: `SUB-SEED-JP-${i + 1}`, app: jaipur, stu }, i === 2 ? {
           status: 'Correction Required' as const,
           reviewNotes: [{
             id: 'RN-SEED-1', at: '2026-08-25T10:30:00Z', by: 'Rohan Mehta', role: 'Teacher' as const,
             note: 'Emergency contact number looks incomplete — please re-enter the full 10-digit mobile number.', kind: 'correction' as const,
           }],
         } : {}))
+        if (s) out.push(s)
       })
     }
     if (sports) {
-      const c2 = students.filter((s) => s.classId === 'C2').slice(0, 3)
-      c2.slice(0, 2).forEach((stu, i) => {
-        out.push(mkSub({ id: `SUB-SEED-SD-${i + 1}`, app: sports, stu }, {
+      // Class 4 (C07) roster — deliberately EXCLUDES the demo twin so a live
+      // application can be submitted end-to-end during testing.
+      const c07 = students.filter((s) => s.classId === 'C07').slice(0, 2)
+      c07.slice(0, 2).forEach((stu, i) => {
+        const s = applyPhysical(mkSub({ id: `SUB-SEED-SD-${i + 1}`, app: sports, stu }, {
           answers: { 'f-sd-track': i === 0 ? ['100m Run', 'Relay'] : ['Long Jump'], 'f-sd-medical': '' },
           consentGivenAt: '2026-08-24T09:05:00Z',
         }))
+        if (s) out.push(s)
       })
       // Historical record from last session — approved participant retained.
-      if (eyecamp && c2[2]) {
-        out.push(mkSub({ id: 'SUB-SEED-ES-1', app: eyecamp, stu: c2[2] }, {
+      if (eyecamp && c07[0]) {
+        const s = applyPhysical(mkSub({ id: 'SUB-SEED-ES-1', app: eyecamp, stu: c07[0] }, {
           answers: { 'f-es-glasses': false },
           consentGivenAt: '2025-11-15T09:00:00Z',
           status: 'Approved' as const,
@@ -1188,6 +1228,7 @@ export function ensureApplicationSeedData(): void {
           submittedAt: '2025-11-15T09:00:00Z',
           updatedAt: '2025-11-16T09:00:00Z',
         }))
+        if (s) out.push(s)
       }
     }
     const valid = out.filter(Boolean) as ApplicationSubmission[]

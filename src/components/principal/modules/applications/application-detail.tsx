@@ -95,9 +95,16 @@ export function SubmissionStatusChip({ status }: { status: CombinedSubmissionSta
 // ─── Component ─────────────────────────────────────────────────────────
 
 export function ApplicationDetail({ app: liveAppRef, onBack }: Props) {
-  // Subscribe by id so status flips re-render instantly.
+  // Subscribe by id so status flips re-render instantly. NOTE (zustand v5):
+  // selectors must return STABLE references — filter in useMemo, never in
+  // the selector (a fresh array each getSnapshot() triggers the infinite
+  // "result of getSnapshot should be cached" loop).
   const app = useApplicationsStore((s) => s.applications.find((a) => a.id === liveAppRef.id)) ?? liveAppRef
-  const submissions = useApplicationsStore((s) => s.submissions.filter((x) => x.applicationId === liveAppRef.id))
+  const allSubmissions = useApplicationsStore((s) => s.submissions)
+  const submissions = useMemo(
+    () => allSubmissions.filter((x) => x.applicationId === liveAppRef.id),
+    [allSubmissions, liveAppRef.id],
+  )
   const auditAll = useApplicationsStore((s) => s.audit)
   const closeApplication = useApplicationsStore((s) => s.closeApplication)
   const reopenApplication = useApplicationsStore((s) => s.reopenApplication)
@@ -636,14 +643,18 @@ function PaymentsPanel({ app, submissions, charge }: {
     )
   }
   const expectedApp = app.payment.amount * Math.max(1, submissions.length)
-  let paid = 0
-  let pendingCash = 0
-  const rows = submissions.map((s) => {
-    const pay = deriveSubmissionPayment(app, s)
-    paid += pay.paidAmount
-    if (pay.status === 'Awaiting Verification') pendingCash += pay.expectedAmount
-    return { sub: s, pay }
-  })
+  const roll = submissions.reduce(
+    (acc, s) => {
+      const pay = deriveSubmissionPayment(app, s)
+      acc.paid += pay.paidAmount
+      if (pay.status === 'Awaiting Verification') acc.pendingCash += pay.expectedAmount
+      return acc
+    },
+    { paid: 0, pendingCash: 0 },
+  )
+  const paid = roll.paid
+  const pendingCash = roll.pendingCash
+  const rows = submissions.map((s) => ({ sub: s, pay: deriveSubmissionPayment(app, s) }))
 
   return (
     <div className="space-y-4">
@@ -706,7 +717,7 @@ function DocumentsPanel({ app, submissions, onView }: {
   onView: (id: string) => void
 }) {
   const verifyDoc = useApplicationsStore((s) => s.verifyPhysicalDocument)
-  const markReceived = useApplicationsStore((s) => s.markDocumentReceived)
+  const markDocumentReceived = useApplicationsStore((s) => s.markDocumentReceived)
   const [fileName, setFileName] = useState<Record<string, string>>({})
   const needsPhysical = app.physicalSignatureRequired || app.guardianConsent.method === 'Physical Signature'
 
@@ -759,7 +770,6 @@ function DocumentsPanel({ app, submissions, onView }: {
                         placeholder="scan file name…"
                         value={fileName[s.id] ?? ''}
                         onChange={(e) => setFileName((m) => ({ ...m, [s.id]: e.target.value }))}
-                        disabled={s.physicalDoc.status === 'Verified'}
                       />
                       <Button
                         variant="outline"
@@ -1082,9 +1092,14 @@ type RosterEntry = {
 }
 
 function useActiveStudents(): RosterEntry[] {
-  return useStudentsStore((s) =>
-    s.students.filter((st) => st.status === 'Active').map((st) => ({
-      id: st.id, name: st.name, admissionNo: st.admissionNo, className: st.className, classId: st.classId, section: st.section, guardianName: st.guardianName, guardianPhone: st.guardianPhone,
-    })),
+  // zustand v5: raw array from the selector; project via useMemo (stable refs).
+  const students = useStudentsStore((s) => s.students)
+  return useMemo(
+    () => students
+      .filter((st) => st.status === 'Active')
+      .map((st) => ({
+        id: st.id, name: st.name, admissionNo: st.admissionNo, className: st.className, classId: st.classId, section: st.section, guardianName: st.guardianName, guardianPhone: st.guardianPhone,
+      })),
+    [students],
   )
 }

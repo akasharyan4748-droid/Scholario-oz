@@ -315,6 +315,12 @@ export interface FeeTransaction {
   reconciliationStatus?: ReconciliationStatus
   refundedAmount?: number
   refundReason?: string
+  /** Principal's note when rejecting a direct cash verification. */
+  verificationNote?: string
+  /** When this payment belongs to an Applications & Forms submission, the
+   *  application id — kept alongside additionalChargeId so the permanent
+   *  record chain (application → charge → txn → receipt) stays explicit. */
+  applicationId?: string
 }
 
 export interface StudentFeeAccount {
@@ -855,6 +861,14 @@ interface FeeState {
   rejectCashRequest: (id: string, actor: string, reason: string) => void
   requestClarification: (id: string, actor: string, reason: string) => void
   reprintReceipt: (transactionId: string, actor: string) => void
+  /** Principal verifies a cash transaction that was recorded DIRECTLY
+   *  (e.g. student self-service / application payment) and is sitting at
+   *  'Under Verification'. Flips to Success + issues the receipt no it
+   *  already carries. Additive — does not touch the cashRequests queue. */
+  approveDirectCashTxn: (transactionId: string, actor: string) => { success: boolean; error?: string }
+  /** Principal rejects a direct cash entry — status becomes 'Failed' with
+   *  the reason preserved on the transaction. No money ever moved. */
+  rejectDirectCashTxn: (transactionId: string, actor: string, reason: string) => { success: boolean; error?: string }
   // ─── Additional Charge mutations (event-based collections) ─────────
   /** Create an Additional Charge (event-based collection) for the given
    *  classes/students. Does NOT touch any class fee structure. Emits an
@@ -994,6 +1008,9 @@ export interface PaymentInput {
   /** When collecting against an Additional Charge — its id. The payment
    *  then reduces the student's ADDITIONAL outstanding, never core. */
   additionalChargeId?: string
+  /** When collecting against an Applications & Forms submission — the
+   *  application id, stamped on the transaction for permanent linkage. */
+  applicationId?: string
 }
 
 function pushAudit(state: FeeState, record: Omit<AuditRecord, 'id' | 'timestamp' | '_immutable'>): AuditRecord[] {
@@ -1155,6 +1172,7 @@ export const useFeeStore = create<FeeState>()(
       academicYear: CURRENT_ACADEMIC_YEAR,
       category: resolvedCategory,
       ...(input.additionalChargeId ? { additionalChargeId: input.additionalChargeId } : {}),
+      ...(input.applicationId ? { applicationId: input.applicationId } : {}),
       meta: input.meta,
     }
     set({
@@ -1263,6 +1281,58 @@ export const useFeeStore = create<FeeState>()(
         description: `Receipt ${txn.receiptNo} reprinted (no second transaction created)`,
       }),
     })
+  },
+
+  // ─── Direct cash verification (student/application self-service path) ──
+  approveDirectCashTxn: (transactionId, actor) => {
+    const state = get()
+    const txn = state.transactions.find((t) => t.id === transactionId)
+    if (!txn) return { success: false, error: 'Transaction not found.' }
+    if (txn.status !== 'Under Verification') {
+      return { success: false, error: `Transaction is ${txn.status} — only Under Verification entries can be approved.` }
+    }
+    set({
+      transactions: state.transactions.map((t) => t.id !== transactionId ? t : {
+        ...t,
+        status: 'Success' as const,
+        verifiedBy: actor,
+        verifiedAt: new Date().toISOString(),
+      }),
+      audit: pushAudit(state, {
+        action: 'cash.approved',
+        actor,
+        entityId: transactionId,
+        entityType: 'transaction',
+        description: `Direct cash ${txn.receiptNo} (₹${txn.amount.toLocaleString('en-IN')}, ${txn.feeHead}) verified by ${actor} for ${txn.studentName}.`,
+      }),
+    })
+    return { success: true }
+  },
+
+  rejectDirectCashTxn: (transactionId, actor, reason) => {
+    const state = get()
+    const txn = state.transactions.find((t) => t.id === transactionId)
+    if (!txn) return { success: false, error: 'Transaction not found.' }
+    if (txn.status !== 'Under Verification') {
+      return { success: false, error: `Transaction is ${txn.status} — nothing to reject.` }
+    }
+    set({
+      transactions: state.transactions.map((t) => t.id !== transactionId ? t : {
+        ...t,
+        status: 'Failed' as const,
+        verificationNote: reason,
+        verifiedBy: actor,
+        verifiedAt: new Date().toISOString(),
+      }),
+      audit: pushAudit(state, {
+        action: 'cash.rejected',
+        actor,
+        entityId: transactionId,
+        entityType: 'transaction',
+        description: `Direct cash ${txn.receiptNo} (₹${txn.amount.toLocaleString('en-IN')}) REJECTED by ${actor} for ${txn.studentName} — ${reason}. No money recorded.`,
+      }),
+    })
+    return { success: true }
   },
 
   // ─── Additional Charges (event-based collections) ───────────────────

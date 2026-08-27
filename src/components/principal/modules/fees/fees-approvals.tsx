@@ -32,10 +32,14 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Check, X, AlertCircle, MessageSquare, Loader2, History, ChevronDown, ArrowRight,
+  Check, X, AlertCircle, MessageSquare, Loader2, History, ChevronDown, ArrowRight, Banknote,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useFeeData, useFeeStore, type CashRequest } from '@/lib/store/fee-store'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { useFeeData, useFeeStore, type CashRequest, type FeeTransaction } from '@/lib/store/fee-store'
 import { formatINR, formatDate, initials } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Panel } from '../shared/panel'
@@ -81,10 +85,12 @@ function QueueStatusChip({ status }: { status: CashRequest['status'] }) {
 }
 
 export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFeeData> }) {
-  const { cashRequests, accounts, analytics } = data
+  const { cashRequests, accounts, analytics, transactions } = data
   const approveCashRequest = useFeeStore((s) => s.approveCashRequest)
   const rejectCashRequest = useFeeStore((s) => s.rejectCashRequest)
   const requestClarification = useFeeStore((s) => s.requestClarification)
+  const approveDirectCashTxn = useFeeStore((s) => s.approveDirectCashTxn)
+  const rejectDirectCashTxn = useFeeStore((s) => s.rejectDirectCashTxn)
 
   // Modal state
   const [approvingReq, setApprovingReq] = useState<CashRequest | null>(null)
@@ -94,6 +100,12 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
   const [rejectNote, setRejectNote] = useState<string>('')
   const [clarifyMessage, setClarifyMessage] = useState<string>('')
   const [actionLoading, setActionLoading] = useState(false)
+
+  // DIRECT cash entries — cash recorded straight into the ledger (student
+  // self-service / application payments) that still awaits verification.
+  const directPending = transactions.filter((t) => t.status === 'Under Verification').slice(0, 8)
+  const [rejectingDirect, setRejectingDirect] = useState<FeeTransaction | null>(null)
+  const [rejectingDirectReason, setRejectingDirectReason] = useState('')
 
   const pending = cashRequests.filter((r) => r.status === 'Pending Principal Acceptance' || r.status === 'Collected by Teacher' || r.status === 'Clarification Requested')
   const resolved = cashRequests.filter((r) => r.status === 'Confirmed by Principal' || r.status === 'Rejected')
@@ -307,6 +319,55 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
           </div>
         )}
 
+        {/* ── Direct cash entries (recorded straight to the ledger, e.g.
+            student application payments) awaiting the same verification ── */}
+        {directPending.length > 0 && (
+          <div className="border-t border-border/60">
+            <p className="px-4 pt-2.5 pb-1 text-[9px] uppercase tracking-wider font-semibold text-muted-foreground flex items-center gap-1.5">
+              <Banknote className="h-3 w-3" /> Direct cash entries · self-service
+            </p>
+            <div className="divide-y divide-border pb-1">
+              {directPending.map((t) => (
+                <div key={t.id} className="px-4 py-2 flex items-center gap-3 hover:bg-muted/25 transition-colors">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-500/10 text-sky-700 dark:text-sky-300 ring-1 ring-sky-500/20">
+                    <Banknote className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate">{t.studentName}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {t.className} · {t.feeHead} · {formatDate(t.date)}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-bold tabular-nums">{formatINR(t.amount, true)}</p>
+                    <p className="text-[9px] text-muted-foreground font-mono">{t.receiptNo}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-7 text-[10px] gap-1 border-rose-500/30 text-rose-600 hover:bg-rose-500/10 hover:text-rose-600"
+                      onClick={() => { setRejectingDirect(t); setRejectingDirectReason('') }}
+                    >
+                      <X className="h-3 w-3" /> Reject
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => {
+                        const r = approveDirectCashTxn(t.id, 'Principal')
+                        if (r.success) toast.success('Cash verified', { description: `${t.receiptNo} posted as successful for ${t.studentName}.` })
+                        else toast.error('Could not verify', { description: r.error })
+                      }}
+                    >
+                      <Check className="h-3 w-3" /> Verify
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── Recently resolved — collapsed audit inside the same panel ── */}
         {resolved.length > 0 && (
           <details className="border-t border-border/60">
@@ -386,6 +447,41 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
           />
         )}
       </AnimatePresence>
+
+      {/* ── Direct cash reject (mandatory reason, no money recorded) ── */}
+      <Dialog open={!!rejectingDirect} onOpenChange={(o) => !o && setRejectingDirect(null)}>
+        <DialogContent className="max-w-sm z-[70]">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Reject direct cash entry</DialogTitle>
+            <DialogDescription className="text-xs">
+              {rejectingDirect && `${rejectingDirect.studentName} · ${formatINR(rejectingDirect.amount, true)} · ${rejectingDirect.receiptNo}. Nothing has been posted; the entry becomes Failed with your reason on record.`}
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            className="min-h-[64px] text-xs"
+            placeholder="Reason (required) — shown in the audit trail"
+            value={rejectingDirectReason}
+            onChange={(e) => setRejectingDirectReason(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setRejectingDirect(null)}>Cancel</Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs"
+              disabled={!rejectingDirectReason.trim()}
+              onClick={() => {
+                if (!rejectingDirect) return
+                const r = rejectDirectCashTxn(rejectingDirect.id, 'Principal', rejectingDirectReason.trim())
+                if (r.success) toast.error('Direct cash rejected', { description: `${rejectingDirect.receiptNo} — ${rejectingDirectReason.trim()}` })
+                else toast.error('Could not reject', { description: r.error })
+                setRejectingDirect(null)
+              }}
+            >
+              Reject entry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

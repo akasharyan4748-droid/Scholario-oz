@@ -18,8 +18,8 @@
  * printing, restore on afterprint. A4 portrait default.
  */
 
-import { useEffect } from 'react'
-import type { ReactNode, Fragment } from 'react'
+import { useEffect, Fragment } from 'react'
+import type { ReactNode } from 'react'
 import { school } from '@/lib/mock/school'
 import type {
   SchoolApplication, ApplicationSubmission, ReviewNote,

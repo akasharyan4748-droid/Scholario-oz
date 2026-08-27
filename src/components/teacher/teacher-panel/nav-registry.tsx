@@ -50,6 +50,13 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions }: NavRegi
         { key: 'resources', label: 'Resource Library', icon: <FolderOpen className="h-4.5 w-4.5" /> },
       ],
     },
+    {
+      // Applications & Forms assigned to this teacher (Application / Event In-charge)
+      label: 'In-charge Duties',
+      items: [
+        { key: 'app-reviews', label: 'Application Reviews', icon: <ClipboardList className="h-4.5 w-4.5" /> },
+      ],
+    },
   ]
 
   // Add Class Teacher Special Module Group if permitted

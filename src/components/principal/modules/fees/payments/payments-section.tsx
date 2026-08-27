@@ -28,7 +28,7 @@
  */
 
 import { motion } from 'framer-motion'
-import { Wallet } from 'lucide-react'
+import { Wallet, ClipboardList } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFeeData } from '@/lib/store/fee-store'
 import { formatINR } from '@/lib/format'
@@ -39,9 +39,11 @@ import { FeesAdditionalCharges } from '../fees-additional-charges'
 interface Props {
   data: ReturnType<typeof useFeeData>
   onCollect: () => void
+  /** Cross-module navigation (Fees → Applications & Forms deep link). */
+  onOpenApplications?: () => void
 }
 
-export function PaymentsSection({ data, onCollect }: Props) {
+export function PaymentsSection({ data, onCollect, onOpenApplications }: Props) {
   const { analytics } = data
 
   // Human month label for the subtitle ("October 2025") — purely presentational.
@@ -68,15 +70,28 @@ export function PaymentsSection({ data, onCollect }: Props) {
         {/* Primary action — same treatment as Salary & Payroll → Payments'
             "Record Payment" (white outline, subtle border, Wallet icon,
             identical height/typography/radius): one shared enterprise
-            design system across money modules. */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-[11px] gap-1 shrink-0"
-          onClick={onCollect}
-        >
-          <Wallet className="h-3 w-3" /> Collect Fee
-        </Button>
+            design system across money modules. Applications & Forms sits
+            beside it — the dedicated module this charge family now lives in. */}
+        <div className="flex items-center gap-2 shrink-0">
+          {onOpenApplications && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px] gap-1"
+              onClick={onOpenApplications}
+            >
+              <ClipboardList className="h-3 w-3" /> Applications &amp; Forms
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-[11px] gap-1"
+            onClick={onCollect}
+          >
+            <Wallet className="h-3 w-3" /> Collect Fee
+          </Button>
+        </div>
       </div>
 
       {/* 2 — Collection activity tiles (micro-stat recipe; amber ring marks a

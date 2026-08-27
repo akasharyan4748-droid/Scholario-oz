@@ -19,6 +19,7 @@ import { ParentConnectModule } from '../modules/parent-connect'
 import { MentoringModule } from '../modules/mentoring'
 import { ExamProctoringModule } from '../modules/exam-proctoring'
 import { ClassroomResourcesModule } from '../modules/classroom-resources'
+import { ApplicationReviewsModule } from '../modules/applications'
 
 interface ModuleRouterProps {
   active: string
@@ -40,6 +41,7 @@ export function ModuleRouter({ active, onNavigate }: ModuleRouterProps) {
       {active === 'proctoring' && <ExamProctoringModule />}
       {active === 'students' && <StudentsModule />}
       {active === 'resources' && <TeacherResourceLibraryModule />}
+      {active === 'app-reviews' && <ApplicationReviewsModule />}
       {active === 'ptm' && <PTMSchedulerModule />}
       {active === 'behavior' && <StudentBehaviorModule />}
       {active === 'parent-connect' && <ParentConnectModule />}
