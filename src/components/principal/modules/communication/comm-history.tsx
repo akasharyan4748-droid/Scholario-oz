@@ -7,7 +7,7 @@
  * Filters: All · Push · SMS · Email · Scheduled · Sent · Failed · Archived
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   History as HistoryIcon, Search, Archive, Eye, Pin, PinOff, RotateCcw,
@@ -39,13 +39,23 @@ const FILTER_OPTIONS: Array<{ value: FilterType; label: string }> = [
   { value: 'archived', label: 'Archived' },
 ]
 
-export function HistorySection() {
+export function HistorySection({ focusNotice, onNoticeConsumed }: {
+  focusNotice?: { id: string; title: string; ts: number } | null
+  onNoticeConsumed?: () => void
+}) {
   const announcements = useCommunicationStore((s) => s.announcements)
   const archiveAnnouncement = useCommunicationStore((s) => s.archiveAnnouncement)
   const pinAnnouncement = useCommunicationStore((s) => s.pinAnnouncement)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FilterType>('all')
   const [viewing, setViewing] = useState<Announcement | null>(null)
+
+  // Notice deep-link: pre-fill the search box so local history filters to
+  // the notice; PlatformBroadcasts consumes the same request and auto-opens
+  // the matching live record when the rows have loaded.
+  useEffect(() => {
+    if (focusNotice?.title) setSearch(focusNotice.title)
+  }, [focusNotice?.ts])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -88,8 +98,9 @@ export function HistorySection() {
       </div>
 
       {/* Platform broadcasts — authoritative DB rows (server-side) with
-          acknowledgement counts; filters along with the search box. */}
-      <PlatformBroadcasts search={search} />
+          acknowledgement counts + delivery rates; filters along with the
+          search box and auto-opens on notice deep-links. */}
+      <PlatformBroadcasts search={search} focusNotice={focusNotice} onNoticeConsumed={onNoticeConsumed} />
 
       {/* Local history list */}
       {filtered.length > 0 ? (

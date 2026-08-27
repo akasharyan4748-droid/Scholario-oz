@@ -119,6 +119,14 @@ export async function GET() {
         _count: { select: { reads: true } },
       },
     })
+    // Estimated audience size per broadcast powers the delivery-rate bar in
+    // the History tab (acks ÷ estimated recipients). Distinct audiences are
+    // resolved once each and reused across rows sharing the same audience.
+    const audiences = [...new Set(rows.map((n) => n.audience))]
+    const resolved = new Map<string, number | null>()
+    for (const a of audiences) {
+      resolved.set(a, await estimateRecipients(schoolId, a))
+    }
     return {
       announcements: rows.map((n) => ({
         id: n.id,
@@ -129,6 +137,7 @@ export async function GET() {
         sender: n.sender?.name ?? 'Unknown',
         createdAt: n.createdAt,
         acknowledgedBy: n._count.reads,
+        estimatedRecipients: resolved.get(n.audience) ?? null,
       })),
     }
   })

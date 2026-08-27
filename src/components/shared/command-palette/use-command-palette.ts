@@ -103,14 +103,20 @@ export function useCommandPalette({
   }, [query, open])
 
   // Real-time search: merge instant local matches with DB-backed results.
-  // When the server responds, mock-derived people/fee/notice items are replaced
-  // by authoritative DB rows (dedupe by type) to avoid duplicates.
+  // When the server responds, DB-backed entity types (student, teacher, fee,
+  // notice, parent) are replaced by authoritative DB rows — but only when the
+  // server actually returned results of that type. Mock-only notices (which
+  // never reach the DB) would otherwise vanish from search entirely.
   const searchResults = useMemo(() => {
     const local = searchEntities(query, role, groups)
     if (remoteResults === null) return local
     const DB_TYPES = new Set(['student', 'teacher', 'fee', 'notice', 'parent'])
-    const localExtras = local.filter((i) => !DB_TYPES.has(i.type))
-    return [...remoteResults, ...localExtras]
+    const remoteTypes = new Set(remoteResults.map((r) => r.type))
+    // DB-backed locals are superseded by server rows of the same type;
+    // locals of types the server did NOT return survive, so mock-only
+    // notices stay searchable even while /api/search is authoritative.
+    const localKept = local.filter((i) => !DB_TYPES.has(i.type) || !remoteTypes.has(i.type))
+    return [...remoteResults, ...localKept]
   }, [query, role, groups, remoteResults])
 
   // Group search results by category

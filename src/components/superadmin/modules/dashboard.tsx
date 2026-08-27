@@ -5,7 +5,8 @@ import { motion } from 'framer-motion'
 import {
   Building2, Users, IndianRupee, TrendingUp, TrendingDown, Server,
   ShieldCheck, LifeBuoy, Activity, Zap, ArrowUpRight, ArrowDownRight,
-  Cloud, Globe, Star, Sparkles, Download, Check, Loader2, Wallet
+  Cloud, Globe, Star, Sparkles, Download, Check, Loader2, Wallet,
+  ShieldAlert
 } from 'lucide-react'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { GlassCard, SectionHeading, StatusBadge } from '@/components/shared/ui'
@@ -201,7 +202,17 @@ export function SADashboardModule() {
       .finally(() => setLoading(false))
   }, [])
 
-  const stats = data?.stats || { schools: 0, students: 0, teachers: 0, revenue: 0 }
+  // Normalize platform stats — coerce missing/undefined numeric fields to 0
+  // so a scope-mismatched payload (e.g. a school-scoped session viewing the
+  // platform dashboard) degrades to honest zeros instead of NaN.
+  const rawStats = data?.stats
+  const stats = {
+    schools: Number(rawStats?.schools ?? 0) || 0,
+    students: Number(rawStats?.students ?? 0) || 0,
+    teachers: Number(rawStats?.teachers ?? 0) || 0,
+    revenue: Number(rawStats?.revenue ?? 0) || 0,
+  }
+  const scopeMismatch = Boolean(data && (data as { scope?: string }).scope && (data as { scope?: string }).scope !== 'PLATFORM')
   const recentSchools = data?.recentSchools || []
   const methodBreakdown = data?.methodBreakdown || []
   const methodTrend: Array<Record<string, number | string>> = data?.methodTrend || []
@@ -278,6 +289,19 @@ export function SADashboardModule() {
           </div>
         </div>
       </motion.div>
+
+      {/* Scope-mismatch guard — the session cookie identifies a school-scoped
+          user while this surface expects the platform admin. Never silently
+          render NaN; explain and point at the fix. */}
+      {scopeMismatch && (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.07] px-4 py-2.5 flex items-start gap-2.5">
+          <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Session is school-scoped — platform metrics unavailable</p>
+            <p className="text-[11px] text-muted-foreground">This browser is authenticated as a school user. Sign out and log in as the platform admin (admin@scholario.cloud) to view live tenant analytics.</p>
+          </div>
+        </div>
+      )}
 
       {/* KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

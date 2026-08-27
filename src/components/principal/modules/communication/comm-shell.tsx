@@ -24,6 +24,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs } from '../shared/segmented-tabs'
 import { useCommunicationStore } from '@/lib/store/communication-store'
+import { useFocusStore } from '@/lib/store/focus-store'
 import type { CommTab } from './comm-shared'
 import { COMM_GLOBAL_STYLES } from './comm-shared'
 import { AnnouncementsSection } from './comm-announcements'
@@ -41,6 +42,17 @@ const TABS = [
 export function CommShell() {
   const [tab, setTab] = useState<CommTab>('announcements')
   const announcements = useCommunicationStore((s) => s.announcements)
+
+  // Notice deep-link from the command palette: jump straight to History and
+  // hand the notice title down so the search pre-fills and the matching
+  // platform broadcast auto-opens.
+  const focus = useFocusStore((s) => s.focus)
+  const [noticeFocus, setNoticeFocus] = useState<{ id: string; title: string; ts: number } | null>(null)
+  useEffect(() => {
+    if (!focus || focus.type !== 'notice') return
+    setNoticeFocus({ id: focus.id, title: focus.title, ts: focus.ts })
+    setTab('history')
+  }, [focus?.ts, focus?.type])
 
   const scheduledCount = announcements.filter((a) => a.status === 'Scheduled').length
   const draftCount = announcements.filter((a) => a.status === 'Draft' && !a.archived).length
@@ -98,7 +110,12 @@ export function CommShell() {
           {tab === 'announcements' && <AnnouncementsSection onNavigate={setTab} />}
           {tab === 'circulars' && <CircularsSection />}
           {tab === 'compose' && <ComposeSection />}
-          {tab === 'history' && <HistorySection />}
+          {tab === 'history' && (
+            <HistorySection
+              focusNotice={noticeFocus}
+              onNoticeConsumed={() => setNoticeFocus(null)}
+            />
+          )}
         </motion.div>
       </AnimatePresence>
     </PageTransition>
