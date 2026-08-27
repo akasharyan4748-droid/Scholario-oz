@@ -383,3 +383,19 @@ Stage Summary:
 2. (Low) Teacher role has no 'messaging' nav key — palette guardian/notice results no-op navigate there (pre-existing convention for all DB types on non-principal panels; teacher equivalent would be 'parent-connect').
 3. (Low) estimateRecipients for STAFF is +8 hardcoded; could count Administration/Support employees from a staff table if one lands in the schema.
 4. (Carried) socket.io per-school rooms; i18n via next-intl; PWA manifest; teacher-facing collection snapshots.
+
+---
+Task ID: GIT-PUSH-1
+Agent: Z.ai Code (main orchestrator)
+Task: Push current project version to GitHub branches `development` and `main` of akasharyan4748-droid/Scholario-oz (explicitly excluding `stable`), using user-provided PAT.
+
+Work Log:
+- Read worklog handover history; confirmed local working tree clean on branch `main` @ commit 978376f (no changes needed committing).
+- `git ls-remote` (token used transiently, never written to .git/config): remote main & development both at 7c795a4 (original import snapshot); stable at e1c9ed4.
+- Local history had diverged from remote base, so pushed with lease-pinned safety: `git push --force-with-lease=refs/heads/main:7c795a46... HEAD:refs/heads/main` and same pinned lease for development — overwrites only if remote still matched expected SHA.
+- Verified post-push ls-remote: `development` = 978376f, `main` = 978376f, `stable` = e1c9ed4 (**untouched**).
+
+Stage Summary:
+- Current version (978376f "SALARY & PAYROLL state + all prior panels") is now live on BOTH `development` and `main`.
+- `stable` intentionally left at e1c9ed4 per user instruction.
+- Reminder for future agents: the 4 payroll micro-changes (auto cash reference numbers, Payslips tab filtering confirmed/paid-only, toast contrast, A5 payslip redesign/print) remain NOT implemented — scope them before any new commit, and after implementing push ONLY to main + development (never stable).
