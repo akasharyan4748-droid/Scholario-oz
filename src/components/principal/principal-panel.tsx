@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   LayoutDashboard, UserPlus, GraduationCap, School, CalendarCheck, IndianRupee,
-  Wallet, FileText, Megaphone, CalendarDays,
+  Wallet, FileText, Megaphone, CalendarDays, ClipboardList,
   BookMarked, Bus, Package, Award, Settings, MessageSquare,
   PieChart, Truck, Download, LayoutGrid, Users, Layers, Clock
 } from 'lucide-react'
 import { AppShell, type NavGroup } from '@/components/shell/app-shell'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { useAdmissionStore } from '@/lib/store/admission-store'
+import { ensureApplicationSeedData } from '@/lib/store/applications-store'
 
 
 import { PrincipalDashboard } from './modules/dashboard'
@@ -19,6 +20,7 @@ import { StudentsClassesModule, type UnifiedTab } from './modules/students-class
 import { TimetableModule } from './modules/timetable'
 import { AttendanceModule } from './modules/attendance'
 import { FeesModule } from './modules/fees'
+import { ApplicationsModule } from './modules/applications/applications-module'
 import { SalaryModule } from './modules/salary'
 import { ExamsModule } from './modules/exams'
 // Wave 1 scope: Homework & Assignments are intentionally deferred from the
@@ -50,6 +52,7 @@ const moduleRegistry: Record<string, React.ComponentType<any>> = {
   timetable: TimetableModule,
   attendance: AttendanceModule,
   fees: FeesModule,
+  applications: ApplicationsModule,
   salary: SalaryModule,
   finance: FinanceDashboardModule,
   exams: ExamsModule,
@@ -91,6 +94,7 @@ const navGroups: NavGroup[] = [
     label: 'Finance',
     items: [
       { key: 'fees', label: 'Fee Management', icon: <IndianRupee className="h-4.5 w-4.5" /> },
+      { key: 'applications', label: 'Applications & Forms', icon: <ClipboardList className="h-4.5 w-4.5" /> },
       { key: 'salary', label: 'Salary & Payroll', icon: <Wallet className="h-4.5 w-4.5" /> },
       { key: 'finance', label: 'Finance Dashboard', icon: <PieChart className="h-4.5 w-4.5" /> },
     ],
@@ -125,6 +129,9 @@ export function PrincipalPanel() {
       a.status === 'Submitted' || a.status === 'Under Review' || a.status === 'Need Correction'
     ).length
   )
+
+  // Seed applications demo data once per session (idempotent).
+  useEffect(() => { ensureApplicationSeedData() }, [])
 
   const groups: NavGroup[] = useMemo(() => navGroups.map((g) => {
     if (g.label === 'Overview') {
