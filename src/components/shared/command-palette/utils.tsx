@@ -1,7 +1,7 @@
 'use client'
 
 import {
-  Search, User, GraduationCap, School, BookOpen, MessageSquare, FileText,
+  Search, User, Users, GraduationCap, School, BookOpen, MessageSquare, FileText,
   Megaphone, BookMarked, IndianRupee, Sparkles, Settings, LogOut,
 } from 'lucide-react'
 
@@ -9,6 +9,8 @@ export function renderItemIcon(iconName: string) {
   switch (iconName) {
     case 'User':
       return <User className="h-4 w-4" />
+    case 'Users':
+      return <Users className="h-4 w-4" />
     case 'GraduationCap':
       return <GraduationCap className="h-4 w-4" />
     case 'School':

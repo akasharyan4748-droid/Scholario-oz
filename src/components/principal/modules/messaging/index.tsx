@@ -53,11 +53,17 @@ export function MessagingModule() {
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list')
 
   // Parent deep-link from the command palette: focus.type 'parent' carries
-  // the guardian's name. If a parent conversation already exists for that
-  // guardian (matched by name — exact → prefix → contains), open it
-  // directly; otherwise pre-address a fresh compose so the principal can
-  // reach out without hunting for the thread. Cleared after handling so
-  // re-mounts never replay the request.
+  // the guardian's name (DB results may be family-style, e.g. "Sharma
+  // Family") plus an optional subtitle like "Guardian of Aarav Sharma ·
+  // +91…". Matching order:
+  //   1. conversation name (guardian) — exact → prefix → contains
+  //   2. ward bridge — ward name parsed from the subtitle, matched against
+  //      the conversation's linked student (e.g. "Sharma Family" → ward
+  //      "Aarav Sharma" → the "Vikram Sharma · Parent of Aarav Sharma"
+  //      thread)
+  //   3. fallback — pre-addressed compose so the principal can still reach
+  //      out without hunting for the thread.
+  // Cleared after handling so re-mounts never replay the request.
   const focus = useFocusStore((s) => s.focus)
   const handledParentTs = useRef<number | null>(null)
   useEffect(() => {
@@ -70,9 +76,24 @@ export function MessagingModule() {
       parents.find((c) => c.name.toLowerCase().trim() === name) ??
       parents.find((c) => name.startsWith(c.name.toLowerCase().trim())) ??
       parents.find((c) => c.name.toLowerCase().includes(name) || name.includes(c.name.toLowerCase().trim()))
-    if (match) {
-      openConversation(match.id)
-      toast.success(`Opened ${match.name}'s conversation`, { description: 'Deep-linked from global search' })
+    // Ward bridge: "Guardian of <ward>[ · phone]" → thread linked to <ward>.
+    let wardMatch = null as typeof parents[number] | null
+    const ward = /guardian of\s+(.+?)(?:\s*[·•]|\s*\+91|$)/i.exec(focus.subtitle ?? '')?.[1]?.toLowerCase().trim()
+    if (ward && !match) {
+      wardMatch =
+        parents.find((c) => c.studentName?.toLowerCase().trim() === ward) ??
+        parents.find((c) => ward.includes(c.studentName?.toLowerCase().trim() ?? '\u0000')) ??
+        parents.find((c) => c.studentName?.toLowerCase().includes(ward) || ward.includes(c.studentName?.toLowerCase().split(' ')[0] ?? '\u0000')) ??
+        null
+    }
+    if (match || wardMatch) {
+      const hit = match ?? wardMatch!
+      openConversation(hit.id)
+      toast.success(`Opened ${hit.name}'s conversation`, {
+        description: match
+          ? 'Deep-linked from global search'
+          : `Matched via ward ${hit.studentName} · deep-linked from global search`,
+      })
     } else {
       setComposeRecipient(focus.title)
       setComposeOpen(true)
@@ -81,7 +102,7 @@ export function MessagingModule() {
       })
     }
     useFocusStore.getState().clearFocus()
-  }, [focus?.ts, focus?.type, focus?.title, conversations, openConversation])
+  }, [focus?.ts, focus?.type, focus?.title, focus?.subtitle, conversations, openConversation])
 
   // Switch to thread view on mobile when conversation opened
   useEffect(() => {

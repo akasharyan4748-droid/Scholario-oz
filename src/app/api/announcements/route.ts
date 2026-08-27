@@ -32,8 +32,17 @@ function mapPriority(category: string): string {
 // possible). Returns null when we cannot estimate.
 async function estimateRecipients(schoolId: string, audience: string): Promise<number | null> {
   try {
-    if (audience === 'ALL' || audience === 'STUDENTS' || audience === 'PARENTS') {
+    if (audience === 'ALL' || audience === 'STUDENTS') {
       return await db.student.count({ where: { schoolId, user: { status: 'ACTIVE' } } })
+    }
+    // Parents are counted as distinct guardian phone numbers (a family with
+    // two enrolled children is ONE household), not as students.
+    if (audience === 'PARENTS') {
+      const households = await db.student.groupBy({
+        by: ['guardianPhone'],
+        where: { schoolId, user: { status: 'ACTIVE' }, guardianPhone: { not: null } },
+      })
+      return households.length
     }
     if (audience === 'TEACHERS') {
       return await db.teacher.count({ where: { schoolId, user: { status: 'ACTIVE' } } })

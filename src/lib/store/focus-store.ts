@@ -16,6 +16,9 @@ export interface FocusRequest {
   type: string
   id: string
   title: string
+  /** Optional secondary line (e.g. "Guardian of Aarav Sharma · +91…") so
+   * target modules can match entities by related names, not just the title. */
+  subtitle?: string
   moduleKey: string
   ts: number
 }

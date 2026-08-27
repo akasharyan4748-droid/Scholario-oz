@@ -210,7 +210,7 @@ export function PlatformBroadcasts({ search, refreshSignal, focusNotice, onNotic
           only) and the current top-performing broadcast. Updates live with
           the search filter so it doubles as a filtered-set summary. */}
       {!error && rows !== null && rows.length > 0 && (
-        <DeliveryInsights rows={visible} totalRows={rows.length} totalAcksAll={rows.reduce((s, a) => s + a.acknowledgedBy, 0)} />
+        <DeliveryInsights rows={visible} totalRows={rows.length} totalAcksAll={rows.reduce((s, a) => s + a.acknowledgedBy, 0)} onOpenTop={setViewing} />
       )}
 
       {/* Body */}
@@ -336,8 +336,9 @@ export function PlatformBroadcasts({ search, refreshSignal, focusNotice, onNotic
 
 // Delivery insights strip — aggregated analytics over the visible rows.
 // Only audience-estimated rows participate in the rate average; the top
-// broadcast is the highest-rate row with at least one ack.
-function DeliveryInsights({ rows, totalRows, totalAcksAll }: { rows: PlatformAnnouncement[]; totalRows: number; totalAcksAll: number }) {
+// broadcast is the highest-rate row with at least one ack. Clicking the
+// top-broadcast cell opens that broadcast's detail modal.
+function DeliveryInsights({ rows, totalRows, totalAcksAll, onOpenTop }: { rows: PlatformAnnouncement[]; totalRows: number; totalAcksAll: number; onOpenTop: (a: PlatformAnnouncement) => void }) {
   const totalAcks = rows.reduce((s, a) => s + a.acknowledgedBy, 0)
   const rated = rows.filter((a) => typeof a.estimatedRecipients === 'number' && a.estimatedRecipients > 0)
   const avgRate = rated.length > 0
@@ -376,16 +377,23 @@ function DeliveryInsights({ rows, totalRows, totalAcksAll }: { rows: PlatformAnn
           {avgRate !== null ? `${avgRate}%` : '—'}
         </p>
       </div>
-      {/* Top-performing broadcast */}
+      {/* Top-performing broadcast — clickable shortcut into the modal */}
       <div className="px-3 py-2 min-w-0">
         <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
           <Crown className="h-2.5 w-2.5" /> Top Broadcast
         </div>
         {top ? (
-          <p className="text-[10px] font-semibold leading-tight mt-0.5 truncate" title={`${top.title} — ${topRate}%`}>
-            <span className={cn('tabular-nums', rateTone(topRate ?? 0).text)}>{topRate}%</span>
-            <span className="text-muted-foreground"> · {top.title}</span>
-          </p>
+          <button
+            type="button"
+            onClick={() => onOpenTop(top)}
+            title={`Open “${top.title}” acknowledgement details`}
+            className="text-left w-full mt-0.5 rounded px-0.5 -mx-0.5 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 transition-colors"
+          >
+            <p className="text-[10px] font-semibold leading-tight truncate">
+              <span className={cn('tabular-nums', rateTone(topRate ?? 0).text)}>{topRate}%</span>
+              <span className="text-muted-foreground"> · {top.title}</span>
+            </p>
+          </button>
         ) : (
           <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">No acks yet</p>
         )}

@@ -347,3 +347,39 @@ Stage Summary:
 1. (Low) Payslips for part-paid months (one confirmed part-payment + pending remainder) open the slip; slip's Payment Details uses the Confirmed payment as primary and lists others — acceptable per "keep existing workflow", revisit if partial-pay slip semantics are ever specified.
 2. (Low) @page A5 is honored by Chrome/Edge/Firefox print preview defaults; Safari ignores @page size (uses user paper choice) — graceful degradation, nothing to fix in-app.
 3. (Carried) search-service mock→DB migration, notification PATCH persistence, per-school socket rooms, scheduled-announcement cron, i18n/PWA ideas.
+---
+Task ID: 10
+Agent: Z.ai Code (webDevReview cron round, trace web-cron-review-202608271539)
+Task: QA assessment → discovered the codebase was AHEAD of the worklog (parents DB search, messaging parent deep-link, ack CSV export existed but were never E2E-verified or logged). This round: verify those live, close the real remaining gap in the parent chain (ward bridge + polish), fix PARENTS audience estimate, add styling details.
+
+Work Log:
+- QA assessment first: :3000 HTTP 200, lint clean, dev log clean. Swept public site → principal panel → Communication History (Task-8 delivery analytics intact: 5 broadcasts · 28 acks · 44% avg).
+- VERIFIED EXISTING (previously unverified, built in a lost context segment — worklog was stale):
+  - Ack-report CSV export: clicked Export CSV in the broadcast modal → real download `ack-report-grade-10-a-field-trip-….csv` (5 commented meta lines + 6 read receipts) + success toast. Endpoint `/api/announcements/[id]/reads/export` exists (401 unauth).
+  - Parents & Guardians DB search: `/api/search` section 6 already queried Student.guardian* fields.
+- FEATURE — Ward bridge completes the parent deep-link chain (the real remaining gap):
+  - Problem: DB guardians are family-style ("Sharma Family") while messaging threads are personal ("Vikram Sharma · Parent · Aarav Sharma") → name matcher missed → fell through to pre-addressed compose.
+  - FocusRequest now carries optional `subtitle` (focus-store.ts); palette passes item.subtitle through (use-command-palette.ts).
+  - Messaging matcher upgraded (messaging/index.tsx): (1) guardian-name exact → prefix → contains, (2) NEW ward bridge — parses "Guardian of <ward>[ · phone]" from subtitle and matches the conversation's linked student (exact → contains → first-name), (3) pre-addressed compose fallback stays for genuinely unknown guardians. Toast now explains the match ("Matched via ward Aarav Sharma · deep-linked from global search").
+  - Search route hardened: guardians section role-gated (STUDENT/PARENT roles no longer enumerate family contacts), ward-name matching removed from the guardian query (searching a student no longer floods results with duplicate guardian rows), subtitle now includes the ward's class, message-inbox moduleKey fixed 'messages' → 'messaging' (dead nav key).
+- BUGFIX — PARENTS audience estimate counted students: estimateRecipients now computes distinct guardianPhone households (groupBy) for PARENTS audiences — a family with two enrolled children is ONE household. Demo data has 19 distinct phones / 19 students so the number coincides, but semantics are now correct.
+- STYLING details:
+  - Guardian palette results get the distinct `Users` icon (new case in palette utils) instead of MessageSquare, + class in subtitle.
+  - DeliveryInsights "Top Broadcast" cell is now a real button: hover tint + focus ring, title tooltip "Open … acknowledgement details", click opens that broadcast's modal (wired via onOpenTop=setViewing). Verified: click → ACKNOWLEDGEMENT FEED modal opens.
+- E2E (agent-browser): palette "sharma family" → DB guardian row (Users icon, "Guardian of Aarav Sharma · Grade 9 -A · +91 124 2323 4545") → click → Messages → Vikram Sharma thread ACTIVE with composer ("Message Vikram Sharma…") ✓ screenshot qa10-parent-deeplink.png. Mock path intact: "vikram" → mock parent row → exact-name match → same thread ✓. Mobile 390px: deep-link opens straight into the thread view, zero horizontal overflow ✓ qa10-mobile-msg.png.
+- QA matrix: lint exit 0 · GET / 200 · dev log clean · GET /api/announcements PARENTS est=19 (households) · export CSV re-verified earlier this session.
+
+Stage Summary:
+- The parent chain is now fully real end-to-end: DB guardians → palette (Users icon) → focus(subtitle) → ward bridge → correct personal thread; honest compose fallback only when no household matches.
+- Delivery insights got their last interaction gap closed (Top Broadcast → modal).
+- Worklog debt paid: the unlogged parent-search/CSV-export features are now documented and verified.
+
+## Current State Assessment (after Task 10)
+- Services: Next dev :3000 healthy, lint clean. All verified surfaces: public site, principal dashboard/communication/messages/salary, mobile 390px.
+- The command palette is now DB-authoritative for ALL person entities (students, teachers, guardians) with mock fallback only where the API has no match of that type.
+
+## Unresolved Issues / Risks / Next-Phase Priorities
+1. (Medium) Scheduled announcements remain demo-only — needs a `scheduledFor` field on Notification (schema push) + an event-stream cron to flip due rows live. Compose UI side needs a schedule picker state check.
+2. (Low) Teacher role has no 'messaging' nav key — palette guardian/notice results no-op navigate there (pre-existing convention for all DB types on non-principal panels; teacher equivalent would be 'parent-connect').
+3. (Low) estimateRecipients for STAFF is +8 hardcoded; could count Administration/Support employees from a staff table if one lands in the schema.
+4. (Carried) socket.io per-school rooms; i18n via next-intl; PWA manifest; teacher-facing collection snapshots.

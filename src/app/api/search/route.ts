@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
         subtitle: `From ${m.sender?.name ?? 'Unknown'}${m.body ? ` · ${m.body.slice(0, 70)}…` : ''}`,
         category: 'Notices & Announcements',
         type: 'notice',
-        moduleKey: 'messages',
+        moduleKey: 'messaging',
         iconName: 'Mail',
         badge: m.read ? 'Read' : 'Unread',
         badgeVariant: m.read ? 'outline' : 'default',
@@ -161,35 +161,42 @@ export async function GET(req: NextRequest) {
       })
     })
 
-    // 6. PARENTS & GUARDIANS — from Student.guardian* fields (replaces mock parentConversations)
-    const guardians = await db.student.findMany({
-      where: {
-        schoolId,
-        OR: [
-          { guardianName: { contains: q } },
-          { guardianPhone: { contains: q } },
-          { user: { name: { contains: q } } },
-        ],
-      },
-      take,
-      include: { user: { select: { name: true } } },
-    })
-    guardians.forEach((s) => {
-      const guardian = s.guardianName || 'Guardian'
-      const ward = s.user?.name ?? 'student'
-      results.push({
-        id: `grd-${s.id}`,
-        title: guardian,
-        subtitle: `Guardian of ${ward}${s.guardianPhone ? ` · ${s.guardianPhone}` : ''}`,
-        category: 'Parents & Guardians',
-        type: 'parent',
-        moduleKey: 'messaging',
-        iconName: 'MessageSquare',
-        badge: 'Guardian',
-        badgeVariant: 'info',
-        keywords: `${guardian} ${ward} ${s.guardianPhone ?? ''} parent guardian contact`,
+    // 6. PARENTS & GUARDIANS — from Student.guardian* fields (replaces mock
+    // parentConversations). Staff-only: students/parents must not enumerate
+    // other families' contact details.
+    if (user.role !== 'STUDENT' && user.role !== 'PARENT') {
+      const guardians = await db.student.findMany({
+        where: {
+          schoolId,
+          OR: [
+            { guardianName: { contains: q } },
+            { guardianPhone: { contains: q } },
+          ],
+        },
+        take,
+        include: {
+          user: { select: { name: true } },
+          class: { select: { name: true, section: true } },
+        },
       })
-    })
+      guardians.forEach((s) => {
+        if (!s.guardianName) return
+        const ward = s.user?.name ?? 'student'
+        const cls = s.class ? `${s.class.name}${s.class.section ? `-${s.class.section}` : ''}` : null
+        results.push({
+          id: `grd-${s.id}`,
+          title: s.guardianName,
+          subtitle: `Guardian of ${ward}${cls ? ` · ${cls}` : ''}${s.guardianPhone ? ` · ${s.guardianPhone}` : ''}`,
+          category: 'Parents & Guardians',
+          type: 'parent',
+          moduleKey: 'messaging',
+          iconName: 'Users',
+          badge: 'Guardian',
+          badgeVariant: 'info',
+          keywords: `${s.guardianName} ${ward} ${s.guardianPhone ?? ''} parent guardian contact`,
+        })
+      })
+    }
 
     return { results }
   })

@@ -212,6 +212,7 @@ export function useCommandPalette({
           type: item.type,
           id: item.id,
           title: item.title,
+          subtitle: item.subtitle,
           moduleKey: item.moduleKey,
         })
       }
