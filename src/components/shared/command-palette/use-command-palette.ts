@@ -50,6 +50,8 @@ export function useCommandPalette({
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const [recentList, setRecentList] = useState<SearchResultItem[]>([])
+  // DB-backed results from /api/search. null = not fetched/failed → mock fallback
+  const [remoteResults, setRemoteResults] = useState<SearchResultItem[] | null>(null)
   const { switchTo, logout } = useAuth()
   const { toggle: toggleTheme } = useTheme()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -68,10 +70,43 @@ export function useCommandPalette({
   // Reset active index when query changes
   useEffect(() => setActive(0), [query])
 
-  // Real-time search entities matching
+  // Debounced server-side search against the real database (students, teachers,
+  // fees, notices, messages). Mock-derived local results remain as fallback.
+  useEffect(() => {
+    const q = query.trim()
+    if (!open || q.length < 2) {
+      setRemoteResults(null)
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { cache: 'no-store' })
+        if (!r.ok || !r.headers.get('content-type')?.includes('application/json')) {
+          if (!cancelled) setRemoteResults(null)
+          return
+        }
+        const j = await r.json().catch(() => null)
+        if (cancelled) return
+        const payload = j && typeof j === 'object' && 'data' in j ? (j as { data?: { results?: SearchResultItem[] } }).data : j as { results?: SearchResultItem[] } | null
+        setRemoteResults(Array.isArray(payload?.results) ? payload!.results! : [])
+      } catch {
+        if (!cancelled) setRemoteResults(null)
+      }
+    }, 250)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [query, open])
+
+  // Real-time search: merge instant local matches with DB-backed results.
+  // When the server responds, mock-derived people/fee/notice items are replaced
+  // by authoritative DB rows (dedupe by type) to avoid duplicates.
   const searchResults = useMemo(() => {
-    return searchEntities(query, role, groups)
-  }, [query, role, groups])
+    const local = searchEntities(query, role, groups)
+    if (remoteResults === null) return local
+    const DB_TYPES = new Set(['student', 'teacher', 'fee', 'notice'])
+    const localExtras = local.filter((i) => !DB_TYPES.has(i.type))
+    return [...remoteResults, ...localExtras]
+  }, [query, role, groups, remoteResults])
 
   // Group search results by category
   const groupedResults = useMemo(() => {

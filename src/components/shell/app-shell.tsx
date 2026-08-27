@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, Menu, Plus } from 'lucide-react'
+import { Bell, Menu, Plus, Globe } from 'lucide-react'
 import { useAuth } from '@/lib/store/auth-store'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { school } from '@/lib/mock/school'
@@ -97,11 +97,25 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  const persistRead = (id: string, type?: string) => {
+    // Fire-and-forget persistence; mock/demo items simply get persisted=false
+    fetch('/api/notifications-feed', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, type }),
+    }).catch(() => {})
+  }
+
   const handleMarkAllRead = () => {
+    if (notifSource === 'live') {
+      notifList.filter((n) => n.unread).forEach((n) => persistRead(n.id, n.type))
+    }
     setNotifList((prev) => prev.map((n) => ({ ...n, unread: false })))
   }
 
   const handleNotificationClick = (id: string) => {
+    const target = notifList.find((n) => n.id === id)
+    if (target && notifSource === 'live') persistRead(id, target.type)
     setNotifList((prev) =>
       prev.map((n) => (n.id === id ? { ...n, unread: false } : n))
     )
@@ -196,7 +210,18 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
                 totalBadgeCount={totalBadgeCount}
                 unreadCount={unreadCount}
                 source={notifSource}
-              />
+              >
+                {role === 'superadmin' && notifSource === 'demo' && (
+                  <div className="mx-1 mb-2 rounded-lg border border-violet-500/20 bg-violet-500/5 px-2.5 py-2">
+                    <p className="text-[10px] font-bold text-violet-600 dark:text-violet-400 flex items-center gap-1">
+                      <Globe className="h-3 w-3" /> Platform scope
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                      Super admins manage tenants across schools — no personal school inbox. Showing demo feed.
+                    </p>
+                  </div>
+                )}
+              </NotificationsDropdown>
             </div>
 
             {/* User Profile Dropdown */}

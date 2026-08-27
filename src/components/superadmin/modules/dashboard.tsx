@@ -17,6 +17,9 @@ export function SADashboardModule() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
+  // Donut segment colors (avoiding blue/indigo as primary palette)
+  const METHOD_COLORS = ['#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6']
+
   useEffect(() => {
     fetch('/api/dashboard')
       .then(async (r) => {
@@ -32,6 +35,22 @@ export function SADashboardModule() {
 
   const stats = data?.stats || { schools: 0, students: 0, teachers: 0, revenue: 0 }
   const recentSchools = data?.recentSchools || []
+  const methodBreakdown = data?.methodBreakdown || []
+
+  // Skeleton while platform stats load
+  if (loading && !data) {
+    return (
+      <div className="space-y-6" aria-busy="true" aria-label="Loading platform overview">
+        <div className="h-40 rounded-3xl bg-gradient-to-br from-muted via-muted/60 to-muted animate-pulse" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-28 rounded-2xl border border-border bg-muted/40 animate-pulse" style={{ animationDelay: `${i * 120}ms` }} />
+          ))}
+        </div>
+        <div className="h-64 rounded-2xl border border-border bg-muted/30 animate-pulse" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -74,6 +93,57 @@ export function SADashboardModule() {
         <KpiCard label="Verified Teachers" value={stats.teachers} icon={<Users className="h-5 w-5" />} trendLabel="faculty members" accent="amber" delay={0.1} />
         <KpiCard label="Gross Revenue" value={stats.revenue} format={(n) => formatINR(n, true)} icon={<IndianRupee className="h-5 w-5" />} trendLabel="real collections" accent="cyan" delay={0.15} />
       </div>
+
+      {/* Collections by Payment Method */}
+      {methodBreakdown.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+          <ChartCard
+            title="Collections by Payment Method"
+            subtitle="Successful transactions across all tenants"
+            height={260}
+            className="lg:col-span-1"
+          >
+            <Donut
+              data={methodBreakdown.map((m: { method: string; amount: number }, i: number) => ({
+                name: m.method,
+                value: Math.round(m.amount),
+                color: METHOD_COLORS[i % METHOD_COLORS.length],
+              }))}
+              centerLabel="Total"
+              centerValue={formatINR(methodBreakdown.reduce((s: number, m: { amount: number }) => s + m.amount, 0), true)}
+            />
+          </ChartCard>
+          <GlassCard className="p-4 sm:p-5 lg:col-span-2">
+            <SectionHeading
+              icon={<IndianRupee className="h-4 w-4 text-cyan-500" />}
+              title="Transaction Ledger by Method"
+              subtitle="Every successful payment aggregated per channel"
+            />
+            <div className="mt-4 space-y-2.5">
+              {methodBreakdown.map((m: { method: string; amount: number; count: number }, i: number) => {
+                const total = methodBreakdown.reduce((s: number, x: { amount: number }) => s + x.amount, 0) || 1
+                const pct = Math.round((m.amount / total) * 100)
+                return (
+                  <div key={m.method} className="rounded-xl border border-border bg-card/40 p-3 hover:bg-accent/30 transition-colors">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: METHOD_COLORS[i % METHOD_COLORS.length] }} />
+                        <p className="text-sm font-bold text-foreground truncate">{m.method}</p>
+                        <span className="text-[10px] text-muted-foreground font-mono">{m.count} txn{m.count > 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-bold text-foreground">{formatINR(m.amount, true)}</p>
+                        <p className="text-[10px] text-muted-foreground">{pct}% of collections</p>
+                      </div>
+                    </div>
+                    <ProgressBar value={pct} color={METHOD_COLORS[i % METHOD_COLORS.length]} />
+                  </div>
+                )
+              })}
+            </div>
+          </GlassCard>
+        </div>
+      )}
 
       {/* Recent schools list */}
       <GlassCard className="p-4 sm:p-5">

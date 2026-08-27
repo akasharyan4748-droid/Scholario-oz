@@ -81,3 +81,39 @@ Stage Summary:
 3. (Low) Superadmin dropdown always falls back to demo mock (API returns empty by design) — consider showing a real "no school scope" empty state instead.
 4. (Feature ideas): payment-method breakdown donut on superadmin dashboard (data now available in Payment table), WebSocket push for live alerts, i18n, PWA offline, skeleton loading states per module.
 ---
+---
+Task ID: 3
+Agent: Z.ai Code (webDevReview cron round)
+Task: Assess project, QA via agent-browser, then implement the 4 next-phase priorities from Task 2 (DB-backed search, read persistence, superadmin scope UX, payment-method donut).
+
+Work Log:
+- Health check: HTTP 200, lint clean, no console errors. Quick QA sweep of public site passed.
+- FEATURE 1 — DB-backed global search (`/api/search`):
+  - New route `src/app/api/search/route.ts`: `withUser` + schoolId-scoped Prisma queries across students (User.name/admissionNo/rollNo), teachers (name/employeeId/department), fees (title/student name; TEACHER role excluded), announcements, and inbox messages. Returns canonical `SearchResultItem[]` with badges (fee status, priority, read state).
+  - `use-command-palette.ts`: 250ms debounced fetch when query >= 2 chars; merges remote results and REPLACES mock-derived student/teacher/fee/notice items (dedupe by type) while keeping local feature/class/settings results; on fetch failure falls back to the old all-mock behavior. Parents remain mock (documented).
+  - Verified: "Tuition" → 6 real fee rows w/ PAID/UNPAID badges + collected %; "Aarav" → 2 real DB students (DEMO-2025-0001, GWS2024018) + 1 fee — mock duplicates GONE (mock students use DSO* ids, DB uses DEMO-2025-*/GWS* ids — easy tell).
+- FEATURE 2 — read persistence:
+  - `PATCH /api/notifications-feed` — persists `read:true` for MESSAGE items (validates recipient ownership; announcements intentionally ephemeral, returns persisted:false).
+  - app-shell: `persistRead()` fire-and-forget on notification click + mark-all-read (only when source==='live').
+  - Verified end-to-end: created test message via script → appeared as unread in LIVE feed → clicked → dev log shows PATCH 200 → DB row now `read:true`.
+- FEATURE 3 — superadmin "Platform scope" banner:
+  - NotificationsDropdown now accepts children; app-shell renders violet info banner for role=superadmin + demo fallback: "Super admins manage tenants across schools — no personal school inbox. Showing demo feed." Verified in browser.
+- FEATURE 4 — superadmin payment-method donut:
+  - `/api/dashboard` SUPER_ADMIN branch: added `methodBreakdown` (payment.groupBy method, SUCCESS only, sum+count).
+  - `dashboard.tsx`: new "Collections by Payment Method" premium Donut (center total ₹3.25 L, emerald/amber/violet/pink palette) + "Transaction Ledger by Method" panel with per-method rows (txn count, INR amount, % of collections, ProgressBar). Also wired the previously-unused `loading` state into an animated skeleton (banner + KPI grid + panel shimmer, staggered delays, aria-busy).
+- QA: mobile 390px fits (no h-overflow); /api/search, /api/dashboard, PATCH/GET /api/notifications-feed all 200 in dev log; lint exit 0.
+
+Stage Summary:
+- All 4 next-phase priorities from Task 2 are DONE and verified in-browser. Screenshots: qa-dbsearch-fees.png, qa-dbsearch-students.png, qa-msg-notif.png, qa-superadmin-donut7.png, qa-superadmin-scope-banner.png.
+- Test message "Syllabus completion report — August" left in DB (read:true) — harmless, realistic demo data.
+
+## Current State Assessment (after Task 3)
+- Search: authoritative DB results for people/fees/notices/messages; instant local results for features/classes/settings; graceful mock fallback.
+- Notifications: live feed + persisted read state (messages) + honest superadmin scope UX.
+- Platform dashboard: real collections analytics (donut + ledger + skeleton loading).
+
+## Unresolved Issues / Risks / Next-Phase Priorities
+1. (Medium) Parents & Guardians palette results still come from mock (`parentConversations`) — DB has guardianName/guardianPhone on Student; migrate when touching search next.
+2. (Medium) Announcement read-state is ephemeral (no per-user read table) — add `NotificationRead` join model if persistent announcement acks are needed.
+3. (Low) `db.payment.groupBy` on method returns raw strings ('UPI','CARD',...) — if methods become free-text, normalize labels in UI.
+4. (Feature ideas): WebSocket live-alert push; teacher-facing collection snapshots; search result deep-linking (open student profile drawer directly); i18n; PWA.

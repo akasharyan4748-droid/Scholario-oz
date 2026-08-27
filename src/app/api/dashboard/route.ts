@@ -16,11 +16,17 @@ export async function GET() {
       const teacherWhere = showDemo ? {} : { school: { isDemo: false } }
       const paymentWhere = showDemo ? {} : { fee: { school: { isDemo: false } } }
 
-      const [schoolsCount, studentsCount, teachersCount, revenueAgg] = await Promise.all([
+      const [schoolsCount, studentsCount, teachersCount, revenueAgg, methodAgg] = await Promise.all([
         db.school.count({ where: schoolWhere }),
         db.student.count({ where: studentWhere }),
         db.teacher.count({ where: teacherWhere }),
         db.payment.aggregate({ where: paymentWhere, _sum: { amount: true } }),
+        db.payment.groupBy({
+          by: ['method'],
+          where: { ...paymentWhere, status: 'SUCCESS' },
+          _sum: { amount: true },
+          _count: { id: true },
+        }),
       ])
 
       const byPlan = await db.school.groupBy({
@@ -50,6 +56,12 @@ export async function GET() {
           revenue: revenueAgg._sum.amount || 0,
         },
         byPlan,
+        // Payment method breakdown for the collections donut (UPI/CARD/…)
+        methodBreakdown: methodAgg.map((m) => ({
+          method: m.method || 'UNKNOWN',
+          amount: m._sum.amount || 0,
+          count: m._count.id,
+        })),
         recentSchools: recentSchools.map((s) => ({
           id: s.id,
           name: s.name,

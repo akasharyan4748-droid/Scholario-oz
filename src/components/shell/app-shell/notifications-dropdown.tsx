@@ -31,6 +31,8 @@ interface NotificationsDropdownProps {
   unreadCount: number
   /** 'live' = real DB feed, 'demo' = static demo data */
   source?: 'live' | 'demo'
+  /** Optional banner content rendered above the list (e.g. platform-scope note) */
+  children?: React.ReactNode
 }
 
 type ShellRole = 'principal' | 'teacher' | 'student' | 'superadmin'
@@ -46,6 +48,7 @@ export function NotificationsDropdown({
   totalBadgeCount,
   unreadCount,
   source = 'demo',
+  children,
 }: NotificationsDropdownProps) {
   return (
     <AnimatePresence>
@@ -111,6 +114,7 @@ export function NotificationsDropdown({
               </div>
             </button>
           )}
+          {children}
           <div className="divide-y divide-border max-h-72 overflow-y-auto mt-1 space-y-1 custom-scrollbar">
             {notifList.length === 0 ? (
               <div className="py-8 text-center">

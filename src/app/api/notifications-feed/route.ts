@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { withUser } from '@/lib/api'
 
@@ -53,5 +54,27 @@ export async function GET() {
       feed: feed.slice(0, 15),
       unreadCount: unreadMessages.length,
     }
+  })
+}
+
+// PATCH — persist read state. Only MESSAGE items have per-user read state in
+// the DB (announcements are school-wide broadcasts and stay ephemeral).
+export async function PATCH(req: NextRequest) {
+  return withUser(async (user) => {
+    const body = await req.json().catch(() => null)
+    const id = body?.id
+    const type = (body?.type || 'MESSAGE').toUpperCase()
+    if (!id || typeof id !== 'string') throw new Error('BAD_REQUEST')
+
+    if (type === 'MESSAGE') {
+      // Ensure the message belongs to this user before marking read
+      const msg = await db.message.findUnique({ where: { id }, select: { recipientId: true } })
+      if (!msg || msg.recipientId !== user.id) throw new Error('NOT_FOUND')
+      await db.message.update({ where: { id }, data: { read: true } })
+      return { ok: true, persisted: true }
+    }
+
+    // Announcements: nothing to persist server-side (acknowledged client-side only)
+    return { ok: true, persisted: false }
   })
 }
