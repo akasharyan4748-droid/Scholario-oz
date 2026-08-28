@@ -46,6 +46,43 @@ export function DualAreaChart({
   )
 }
 
+// InVsOutChart: adapts { month, in, out } → dual trend of REAL money in
+// (fees collected, from the fee store's session monthly series) vs money
+// out (payroll paid, from the salary store's confirmed payments). Both
+// series come from the live operational stores — the same numbers the
+// Fee Management and Salary & Payroll modules show.
+export function InVsOutChart({
+  data,
+  height = 180,
+  format,
+  primaryColor,
+  secondaryColor,
+  showArea,
+}: {
+  data: Array<{ month: string; in: number; out: number }>
+  height?: number
+  format?: (n: number) => string
+  primaryColor?: string
+  secondaryColor?: string
+  showArea?: boolean
+}) {
+  return (
+    <RawAreaTrend
+      data={data}
+      height={height}
+      formatValue={format}
+      labelKey="month"
+      primaryKey="in"
+      secondaryKey="out"
+      primaryLabel="Fees In"
+      secondaryLabel="Salary Out"
+      primaryColor={primaryColor}
+      secondaryColor={secondaryColor}
+      showArea={showArea}
+    />
+  )
+}
+
 // HorizontalBars: direct passthrough
 export { HorizontalBarChart as HorizontalBars }
 

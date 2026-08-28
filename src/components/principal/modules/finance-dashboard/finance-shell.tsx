@@ -22,7 +22,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs, type SegmentedTab } from '../shared/segmented-tabs'
-import { useFinanceData, FINANCE_PERIODS } from '@/lib/store/finance-store'
+import { useFinanceData, useFinanceAttention, FINANCE_PERIODS } from '@/lib/store/finance-store'
 import { FinanceOverviewSection } from './finance-overview'
 import { FinanceStatementsSection } from './finance-statements'
 import { FinanceReportsSection } from './finance-reports'
@@ -37,12 +37,11 @@ export function FinanceShell({ onModuleNavigate }: { onModuleNavigate?: (moduleK
   const [periodId, setPeriodId] = useState('fy25-26')
   const [periodOpen, setPeriodOpen] = useState(false)
   const data = useFinanceData(periodId)
-
-  const pendingAlerts = data.alerts.length
+  const attention = useFinanceAttention()
 
   // Build tab list with optional alerts badge on the Overview tab.
   const tabs: SegmentedTab[] = [
-    { value: 'overview', label: 'Overview', badge: pendingAlerts },
+    { value: 'overview', label: 'Overview', badge: attention.length },
     { value: 'statements', label: 'Statements' },
     { value: 'reports', label: 'Reports' },
   ]

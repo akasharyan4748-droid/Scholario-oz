@@ -365,3 +365,138 @@ export function formatINRCompact(n: number): string {
 }
 
 export { formatDate, formatRelativeTime } from '@/lib/format'
+
+// ─── Unified "Needs Attention" feed ──────────────────────────────────
+// One actionable list assembled from the LIVE operational stores — the
+// same items the Fee Management and Salary & Payroll overviews surface,
+// deduplicated and ordered by severity (critical → warning → info).
+// Consumed by the Finance shell (Overview tab badge) and the Overview's
+// Needs Attention panel.
+
+export interface FinanceAttentionItem {
+  id: string
+  severity: 'critical' | 'warning' | 'info'
+  title: string
+  description: string
+  cta: string
+  /** Where the CTA lands: an AppShell module key, or a finance tab. */
+  module?: 'fees' | 'salary' | 'statements' | 'reports'
+}
+
+export function useFinanceAttention(): FinanceAttentionItem[] {
+  const feeData = useFeeData(CURRENT_ACADEMIC_YEAR)
+  const salaryData = useSalaryData()
+
+  return useMemo(() => {
+    const items: FinanceAttentionItem[] = []
+    const { analytics } = feeData
+
+    // 1 — Payroll still unpaid for the current month (money the school owes its staff).
+    const payrollBalance = salaryData.rows.reduce((s, r) => s + r.balance, 0)
+    const unpaidStaff = salaryData.rows.filter((r) => r.balance > 0).length
+    if (payrollBalance > 0) {
+      items.push({
+        id: 'payroll-unpaid',
+        severity: 'critical',
+        title: 'Payroll unpaid',
+        description: `${formatINR(payrollBalance, true)} still unpaid for ${salaryData.monthLabel} · ${unpaidStaff} staff`,
+        cta: 'Open Payroll',
+        module: 'salary',
+      })
+    }
+
+    // 2 — Salary change requests waiting on the Principal.
+    if (salaryData.pendingChangeRequests.length > 0) {
+      items.push({
+        id: 'salary-changes',
+        severity: 'warning',
+        title: 'Salary changes awaiting approval',
+        description: `${salaryData.pendingChangeRequests.length} request${salaryData.pendingChangeRequests.length > 1 ? 's' : ''} pending — applies to next payroll once approved`,
+        cta: 'Review',
+        module: 'salary',
+      })
+    }
+
+    // 3 — Cash/cheque handed out, receipt not confirmed yet.
+    if (salaryData.currentMonth.pending.count > 0) {
+      items.push({
+        id: 'salary-receipts',
+        severity: 'warning',
+        title: 'Salary receipts pending',
+        description: `${salaryData.currentMonth.pending.count} payment${salaryData.currentMonth.pending.count > 1 ? 's' : ''} (${formatINR(salaryData.currentMonth.pending.amount, true)}) awaiting confirmation`,
+        cta: 'Confirm',
+        module: 'salary',
+      })
+    }
+
+    // 4 — Online fee payments sitting under verification.
+    if (analytics.pendingVerification > 0) {
+      items.push({
+        id: 'fee-verification',
+        severity: 'warning',
+        title: 'Fee payments to verify',
+        description: `${analytics.pendingVerification} payment${analytics.pendingVerification > 1 ? 's' : ''} under verification — receipts finalize after this`,
+        cta: 'Verify',
+        module: 'fees',
+      })
+    }
+
+    // 5 — Parent cash-deposit requests needing Principal acceptance.
+    if (analytics.pendingCashRequests > 0) {
+      items.push({
+        id: 'fee-cash-requests',
+        severity: 'warning',
+        title: 'Cash requests need acceptance',
+        description: `${analytics.pendingCashRequests} cash collection request${analytics.pendingCashRequests > 1 ? 's' : ''} waiting for your acceptance`,
+        cta: 'Review',
+        module: 'fees',
+      })
+    }
+
+    // 6 — Overdue student accounts (collection worklist).
+    if (analytics.overdueCount > 0) {
+      items.push({
+        id: 'fee-overdue',
+        severity: 'warning',
+        title: 'Overdue student accounts',
+        description: `${analytics.overdueCount} account${analytics.overdueCount > 1 ? 's' : ''} past due · ${formatINR(analytics.totalOutstanding, true)} outstanding overall`,
+        cta: 'Open Accounts',
+        module: 'fees',
+      })
+    }
+
+    // 7 — Class fee plans not yet published for the active session.
+    const total = feeData.feeStructures.length
+    const published = feeData.feeStructures.filter((st) =>
+      feeData.versions.some((v) => v.structureId === st.id && v.status === 'current'),
+    ).length
+    if (total > 0 && published < total) {
+      items.push({
+        id: 'fee-plans',
+        severity: 'info',
+        title: 'Fee plans not published',
+        description: `${total - published} of ${total} classes not configured for ${CURRENT_ACADEMIC_YEAR}`,
+        cta: 'Open Fee Structures',
+        module: 'fees',
+      })
+    }
+
+    // 8 — Reserves below the 3-month operating target.
+    const cashAvailable = balanceSheet.find((b) => b.account === 'Cash & Bank Balance')?.amount ?? 0
+    const monthlyOperatingExpense = financeStats.monthlyRevenue.reduce((s, m) => s + m.expense, 0) / 12
+    const reserveCoverage = monthlyOperatingExpense > 0 ? Math.round((cashAvailable / monthlyOperatingExpense) * 10) / 10 : 0
+    if (reserveCoverage < 3) {
+      items.push({
+        id: 'reserve-low',
+        severity: 'info',
+        title: 'Reserves below target',
+        description: `${reserveCoverage} months of costs in bank — target is 3+ months`,
+        cta: 'View Statements',
+        module: 'statements',
+      })
+    }
+
+    const order: Record<FinanceAttentionItem['severity'], number> = { critical: 0, warning: 1, info: 2 }
+    return items.sort((a, b) => order[a.severity] - order[b.severity])
+  }, [feeData, salaryData])
+}
