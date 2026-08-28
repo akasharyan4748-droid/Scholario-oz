@@ -3,38 +3,29 @@
 /**
  * FeesPaymentCollectionSettings — Payment Collection configuration.
  *
- * The "School Finance Configuration" surface — wires the new payment
- * infrastructure added to fee-store.ts (Phase 4) to the Settings tab:
+ * UX-SAL-1 (presentation-only rebuild): the previous 5 sub-tab navigation
+ * (Accepted Methods / Bank & Settlement / UPI / QR / Gateway /
+ * Reconciliation) is flattened into ONE stack of compact cards, in the
+ * Salary & Payroll Settings anatomy — the Principal sees the whole
+ * collection configuration in a single scroll instead of clicking through
+ * two navigation levels. Card order = practical order:
  *
- *   A. Accepted Payment Methods  → paymentModes[] + togglePaymentMode
- *   B. Bank & Settlement          → bankAccounts[] + addBankAccount / updateBankAccount /
- *                                   setPrimaryBankAccount / deactivateBankAccount
- *   C. UPI / QR                   → upiQrConfigs[] + addUpiQrConfig / updateUpiQrConfig
- *   D. Payment Gateway            → gatewayConfig + connectGateway / disconnectGateway /
- *                                   updateGatewayStatus
- *   E. Reconciliation             → webhookEvents + settlements + reconciliationRecords
+ *   A. Payment Methods  → paymentModes[] + togglePaymentMode
+ *   B. Bank Accounts    → bankAccounts[] + addBankAccount / updateBankAccount /
+ *                         setPrimaryBankAccount / deactivateBankAccount
+ *   C. UPI / QR         → upiQrConfigs[] + addUpiQrConfig / updateUpiQrConfig
+ *   D. Payment Gateway  → gatewayConfig + connectGateway / disconnectGateway /
+ *                         updateGatewayStatus / recordWebhookEvent
+ *   E. Reconciliation   → webhookEvents + settlements + reconciliationRecords
  *
  * Secret keys are NEVER stored client-side. The Connect Gateway form only
  * captures merchantId + apiKeyId (the public key ID). The webhook secret
  * is configured server-side — we surface a note instead of an input.
- *
- * Phase 2-e polish (presentation-only): sub-nav labels read "Accepted
- * Methods · Bank & Settlement · UPI / QR · Gateway · Reconciliation" (same
- * order/values) and each section's panels carry a uniform icon-chip + title
- * + one-line subtitle header; payment-method rows compacted with truncated
- * one-line availability notes and requiresReference/requiresChequeDetails
- * hint chips; bank cards show a logo-ish letter chip + holder name + masked
- * ••••-last4 account number (maskAccount) + IFSC/branch, Primary/Active chips
- * — manage/set-primary/deactivate handlers untouched; gateway state became
- * four status tiles (connection · webhook health · failed-webhook count rose
- * when >0 · settlement link) with API Key ID shown via maskMerchant only;
- * reconciliation keeps its tables but with the tightened module table
- * recipe and rose-tinted left border on exception rows. No connect/
- * disconnect/webhook-test flow or masking guarantee changed.
+ * All availability logic, masks, dialogs, handlers and store mutations
+ * are behaviour-identical to the previous version.
  */
 
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   Smartphone, CreditCard, Building2, Banknote, FileText, Wallet,
   Landmark, QrCode, Plug, Unplug, ShieldCheck, ShieldAlert,
@@ -44,6 +35,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -54,106 +46,31 @@ import type {
 } from '@/lib/store/fee-store'
 import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { FeePanel, FeeStatusBadge } from './fees-shared'
+import { SettingsCard, FeeStatusBadge, modeAccent } from './fees-shared'
 import { toast } from 'sonner'
 
-// ─── Sub-section navigation ──────────────────────────────────────
-
-type Section = 'methods' | 'bank' | 'upi' | 'gateway' | 'recon'
-
-const SECTIONS: Array<{ value: Section; label: string; icon: React.ReactNode }> = [
-  { value: 'methods', label: 'Accepted Methods', icon: <Smartphone className="h-3 w-3" /> },
-  { value: 'bank', label: 'Bank & Settlement', icon: <Landmark className="h-3 w-3" /> },
-  { value: 'upi', label: 'UPI / QR', icon: <QrCode className="h-3 w-3" /> },
-  { value: 'gateway', label: 'Gateway', icon: <Plug className="h-3 w-3" /> },
-  { value: 'recon', label: 'Reconciliation', icon: <ArrowRightLeft className="h-3 w-3" /> },
-]
-
-// Uniform section-panel header (2-e): icon chip + bold title. The Panel's
-// subtitle slot renders the one-line description underneath.
-function PanelHeading({ icon, tone, children }: { icon: React.ReactNode; tone: string; children: React.ReactNode }) {
-  return (
-    <span className="flex items-center gap-2 min-w-0">
-      <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', tone)}>
-        {icon}
-      </span>
-      <span className="truncate">{children}</span>
-    </span>
-  )
-}
-
-// Benchmark micro-stat tile (same recipe as the Transactions ledger tiles):
-// muted chrome, 9px uppercase label, bold tabular value slot, optional sub.
-function MiniTile({ label, sub, className, children }: { label: string; sub?: React.ReactNode; className?: string; children?: React.ReactNode }) {
-  return (
-    <div className={cn('rounded-lg bg-muted/40 px-2.5 py-1.5 min-w-0', className)}>
-      <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider truncate">{label}</p>
-      <div className="text-sm font-bold tabular-nums mt-0.5 flex items-center gap-1.5 min-w-0">{children}</div>
-      {sub && <p className="text-[9px] text-muted-foreground mt-0.5 truncate">{sub}</p>}
-    </div>
-  )
-}
-
 export function FeesPaymentCollectionSettings() {
-  const [section, setSection] = useState<Section>('methods')
-
   return (
-    <div className="space-y-3">
-      {/* Sub-navigation strip */}
-      <div className="flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 overflow-x-auto">
-        {SECTIONS.map((s) => (
-          <button
-            key={s.value}
-            onClick={() => setSection(s.value)}
-            className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap',
-              section === s.value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {s.icon}
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={section}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.15 }}
-        >
-          {section === 'methods' && <AcceptedPaymentMethods />}
-          {section === 'bank' && <BankAndSettlement />}
-          {section === 'upi' && <UpiQrConfigSection />}
-          {section === 'gateway' && <PaymentGatewaySection />}
-          {section === 'recon' && <ReconciliationSection />}
-        </motion.div>
-      </AnimatePresence>
-    </div>
+    <>
+      <AcceptedPaymentMethods />
+      <BankAndSettlement />
+      <UpiQrConfigSection />
+      <PaymentGatewaySection />
+      <ReconciliationSection />
+    </>
   )
 }
 
-// ─── A. Accepted Payment Methods ────────────────────────────────────
+// ─── A. Payment Methods ─────────────────────────────────────────────
 
 interface MethodGroup {
   label: string
-  badge: string
   modes: PaymentMode[]
 }
 
 const METHOD_GROUPS: MethodGroup[] = [
-  {
-    label: 'Online Methods',
-    badge: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/20',
-    modes: ['UPI', 'Card', 'Net Banking'],
-  },
-  {
-    label: 'Offline Methods',
-    badge: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/20',
-    modes: ['Cash', 'Cheque', 'Bank Transfer'],
-  },
+  { label: 'Online', modes: ['UPI', 'Card', 'Net Banking'] },
+  { label: 'Offline', modes: ['Cash', 'Cheque', 'Bank Transfer'] },
 ]
 
 const METHOD_DESCRIPTION: Record<PaymentMode, string> = {
@@ -179,23 +96,15 @@ function AcceptedPaymentMethods() {
   const togglePaymentMode = useFeeStore((s) => s.togglePaymentMode)
   const gatewayConfig = useFeeStore((s) => s.gatewayConfig)
   const upiQrConfigs = useFeeStore((s) => s.upiQrConfigs)
-  // Fix 3 (FEE-ARCH): Bank Transfer availability depends on whether at
-  // least one bank account is active (the parent needs an account to
-  // NEFT/RTGS to). The previous implementation treated Bank Transfer as
-  // always-available offline — but without a configured account the
-  // parent has nowhere to send the money.
+  // Bank Transfer availability depends on whether at least one bank account
+  // is active (the parent needs an account to NEFT/RTGS to).
   const bankAccounts = useFeeStore((s) => s.bankAccounts)
 
-  // ─── Availability (Fix 3 — FEE-ARCH) ──────────────────────────────
   // Per-method "is this method actually available to parents?" check.
-  //   UPI          → gateway connected/test_mode  OR  an active UPI QR
-  //   Card         → gateway connected/test_mode
-  //   Net Banking  → gateway connected/test_mode
-  //   Cash         → always (offline, no infrastructure required)
-  //   Cheque       → always (offline, no infrastructure required)
-  //   Bank Transfer → at least one active BankAccount
-  //
-  // The toggle logic is unchanged — this only drives the status badge.
+  //   Cash / Cheque  → always (offline, no infrastructure required)
+  //   Bank Transfer  → at least one active BankAccount
+  //   UPI            → active UPI QR OR gateway connected/test_mode
+  //   Card / NetBank → gateway connected/test_mode
   const isAvailable = (mode: PaymentMode): boolean => {
     switch (mode) {
       case 'Cash':
@@ -214,10 +123,6 @@ function AcceptedPaymentMethods() {
     }
   }
 
-  // Status badge for a method:
-  //   !config.active → "Disabled" (muted)
-  //    config.active + isAvailable → "Available" (emerald)
-  //    config.active + !isAvailable → "Configuration required" (amber)
   const getStatusBadge = (mode: PaymentMode) => {
     const config = paymentModes.find((m) => m.id === mode)
     if (!config) return null
@@ -257,24 +162,21 @@ function AcceptedPaymentMethods() {
     }
   }
 
+  const enabledCount = paymentModes.filter((m) => m.active).length
+
   return (
-    <FeePanel
-      title={
-        <PanelHeading icon={<Smartphone className="h-4 w-4" />} tone="bg-emerald-500/15 text-emerald-600">
-          Accepted Payment Methods
-        </PanelHeading>
-      }
-      subtitle="Choose how parents can pay — availability reflects gateway, UPI QR & bank configuration"
+    <SettingsCard
+      label="Payment Methods"
+      icon={<CreditCard />}
+      summary={`${enabledCount} of ${paymentModes.length} enabled`}
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         {METHOD_GROUPS.map((group) => (
           <div key={group.label}>
-            <div className="flex items-center gap-2 mb-2">
-              <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold ring-1', group.badge)}>
-                {group.label}
-              </span>
-            </div>
-            <div className="space-y-1.5">
+            <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground mb-1 px-0.5">
+              {group.label}
+            </p>
+            <div className="divide-y divide-border/70 rounded-lg border border-border/60">
               {group.modes.map((modeId) => {
                 const config = paymentModes.find((m) => m.id === modeId)
                 if (!config) return null
@@ -286,18 +188,18 @@ function AcceptedPaymentMethods() {
                   <div
                     key={modeId}
                     className={cn(
-                      'flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors',
-                      config.active ? 'border-border/60 bg-card' : 'border-border/40 bg-muted/20',
+                      'flex items-center gap-3 px-2.5 py-2.5 transition-colors',
+                      !config.active && 'opacity-70',
                     )}
                   >
                     <div className={cn(
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-md ring-1',
-                      config.active ? 'bg-emerald-500/10 text-emerald-600 ring-emerald-500/20' : 'bg-muted text-muted-foreground ring-border',
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1',
+                      config.active && available ? modeAccent(modeId) : 'bg-muted text-muted-foreground ring-border',
                     )}>
-                      <Icon className="h-4 w-4" />
+                      <Icon className="h-3.5 w-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="text-xs font-semibold">{config.label}</p>
                         {statusBadge}
                         {config.requiresReference && (
@@ -316,22 +218,14 @@ function AcceptedPaymentMethods() {
                         </p>
                       )}
                     </div>
-                    <button
-                      onClick={() => {
+                    <Switch
+                      checked={config.active}
+                      onCheckedChange={() => {
                         togglePaymentMode(modeId)
                         toast.success(`${config.label} ${config.active ? 'disabled' : 'enabled'}`)
                       }}
                       aria-label={`Toggle ${config.label}`}
-                      className={cn(
-                        'relative h-5 w-9 rounded-full transition-colors shrink-0 self-center',
-                        config.active ? 'bg-emerald-600' : 'bg-muted-foreground/30',
-                      )}
-                    >
-                      <span
-                        className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
-                        style={{ left: config.active ? '1.125rem' : '0.125rem' }}
-                      />
-                    </button>
+                    />
                   </div>
                 )
               })}
@@ -339,11 +233,11 @@ function AcceptedPaymentMethods() {
           </div>
         ))}
       </div>
-    </FeePanel>
+    </SettingsCard>
   )
 }
 
-// ─── B. Bank & Settlement ───────────────────────────────────────────
+// ─── B. Bank Accounts ───────────────────────────────────────────────
 
 function maskAccount(num: string): string {
   if (num.length <= 4) return `••••${num}`
@@ -360,73 +254,57 @@ function BankAndSettlement() {
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
 
+  const primary = bankAccounts.find((b) => b.isPrimary) ?? bankAccounts[0]
+  const sorted = [...bankAccounts].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
+
   return (
-    <div className="space-y-3">
-      <FeePanel
-        title={
-          <PanelHeading icon={<Landmark className="h-4 w-4" />} tone="bg-sky-500/15 text-sky-600">
-            Bank & Settlement Accounts
-          </PanelHeading>
-        }
-        subtitle={`${bankAccounts.length} account(s) · ${bankAccounts.filter((b) => b.isPrimary).length} primary`}
-        action={<Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowAdd(true)}><Plus className="h-3 w-3" /> Add Account</Button>}
-      >
-        {bankAccounts.length === 0 ? (
-          <div className="text-center py-8 text-xs text-muted-foreground">
-            No bank accounts configured. Add one to enable settlement tracking.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {bankAccounts.map((b) => (
-              <div
-                key={b.id}
-                className={cn(
-                  'rounded-lg border p-3 space-y-2 transition-colors',
-                  b.isPrimary ? 'border-emerald-500/30 bg-emerald-500/[0.04]' : 'border-border bg-card',
-                  b.status === 'inactive' && 'opacity-60',
-                )}
-              >
-                {/* Identity row — logo-ish letter chip + holder + Primary/Active chips */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300 text-xs font-bold uppercase">
-                      {(b.bankName || '?').charAt(0)}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-xs font-semibold truncate">{b.holderName}</p>
-                        {b.isPrimary && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20">
-                            <Star className="h-2.5 w-2.5 fill-current" /> Primary
-                          </span>
-                        )}
-                        <FeeStatusBadge status={b.status === 'active' ? 'Active' : 'Inactive'} />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground truncate">{b.bankName} · <span className="capitalize">{b.accountType}</span></p>
+    <SettingsCard
+      label="Bank Accounts"
+      icon={<Landmark />}
+      summary={`${bankAccounts.length} account(s) · ${bankAccounts.filter((b) => b.isPrimary).length} primary`}
+      action={
+        <Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowAdd(true)}>
+          <Plus className="h-3 w-3" /> Add Account
+        </Button>
+      }
+    >
+      {bankAccounts.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground text-center py-6">
+          No bank accounts configured. Add one to enable settlement tracking.
+        </p>
+      ) : (
+        <div className="divide-y divide-border/70 rounded-lg border border-border/60">
+          {sorted.map((b) => (
+            <div key={b.id} className={cn('px-2.5 py-3', b.status === 'inactive' && 'opacity-60')}>
+              {/* Identity row — letter chip + holder + Primary/Active pills + actions */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300 text-xs font-bold uppercase">
+                    {(b.bankName || '?').charAt(0)}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-xs font-semibold truncate">{b.holderName}</p>
+                      {b.isPrimary && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20">
+                          <Star className="h-2.5 w-2.5 fill-current" /> Primary
+                        </span>
+                      )}
+                      <FeeStatusBadge status={b.status === 'active' ? 'Active' : 'Inactive'} />
                     </div>
+                    <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                      {b.bankName} · <span className="capitalize">{b.accountType}</span> · {b.branch}
+                    </p>
                   </div>
-                  <p className="hidden sm:block text-[9px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">IFSC {b.ifsc}</p>
                 </div>
-                {/* Sensitive fields row — masked A/C mono · IFSC mono · branch muted */}
-                <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-[10px] rounded-md border border-border/50 bg-muted/30 px-2.5 py-1.5">
-                  <span className="min-w-0"><span className="text-muted-foreground">A/C:</span> <span className="font-mono font-medium">{maskAccount(b.accountNumber)}</span></span>
-                  <span className="sm:hidden"><span className="text-muted-foreground">IFSC:</span> <span className="font-mono font-medium">{b.ifsc}</span></span>
-                  <span className="min-w-0"><span className="text-muted-foreground">Branch:</span> <span className="font-medium">{b.branch}</span></span>
-                </div>
-                {b.parentDisplayInstructions && (
-                  <div className="rounded-md bg-muted/30 border border-border/60 px-2 py-1.5">
-                    <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Parent Instructions</p>
-                    <p className="text-[10px] mt-0.5">{b.parentDisplayInstructions}</p>
-                  </div>
-                )}
-                <div className="flex items-center gap-1 pt-1.5 border-t border-border/40">
-                  <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1" onClick={() => setEditing(b.id)}>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1" onClick={() => setEditing(b.id)}>
                     <Pencil className="h-3 w-3" /> Edit
                   </Button>
                   {!b.isPrimary && b.status === 'active' && (
                     <Button
                       size="sm" variant="ghost"
-                      className="h-6 text-[10px] gap-1 text-emerald-600"
+                      className="h-7 text-[10px] gap-1 text-emerald-600"
                       onClick={() => {
                         setPrimaryBankAccount(b.id)
                         toast.success('Primary account updated', { description: `${b.bankName} ••••${b.accountNumber.slice(-4)} is now the primary settlement account.` })
@@ -438,7 +316,7 @@ function BankAndSettlement() {
                   {b.status === 'active' && (
                     <Button
                       size="sm" variant="ghost"
-                      className="h-6 text-[10px] gap-1 text-rose-600"
+                      className="h-7 text-[10px] gap-1 text-rose-600"
                       onClick={() => {
                         deactivateBankAccount(b.id)
                         toast.success('Account deactivated', { description: `${b.bankName} ••••${b.accountNumber.slice(-4)} deactivated.` })
@@ -449,14 +327,22 @@ function BankAndSettlement() {
                   )}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </FeePanel>
+              {/* Sensitive fields — masked A/C mono + IFSC mono */}
+              <p className="text-[10px] font-mono mt-1.5 ml-[42px] truncate">
+                <span className="text-muted-foreground">A/C</span> {maskAccount(b.accountNumber)}
+                <span className="text-muted-foreground"> · IFSC </span> {b.ifsc}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <FeePanel title="Parent Payment Instructions" subtitle="shown on the parent payment page for offline transfers">
-        <ParentInstructionsEditor />
-      </FeePanel>
+      {/* Parent-facing instructions for the primary account */}
+      {primary && (
+        <div className="border-t border-border/60 pt-3 space-y-2">
+          <ParentInstructionsEditor primary={primary} />
+        </div>
+      )}
 
       {(showAdd || editing) && (
         <BankAccountDialog
@@ -476,45 +362,44 @@ function BankAndSettlement() {
           }}
         />
       )}
-    </div>
+    </SettingsCard>
   )
 }
 
-function ParentInstructionsEditor() {
-  const bankAccounts = useFeeStore((s) => s.bankAccounts)
+function ParentInstructionsEditor({ primary }: { primary: { id: string; bankName: string; accountNumber: string; parentDisplayInstructions?: string } }) {
   const updateBankAccount = useFeeStore((s) => s.updateBankAccount)
-  const primary = bankAccounts.find((b) => b.isPrimary) ?? bankAccounts[0]
   const [text, setText] = useState(primary?.parentDisplayInstructions ?? '')
   const dirty = text !== (primary?.parentDisplayInstructions ?? '')
 
-  if (!primary) {
-    return <p className="text-[11px] text-muted-foreground">Add a bank account first to configure parent-facing instructions.</p>
-  }
-
   return (
     <div className="space-y-2">
-      <p className="text-[10px] text-muted-foreground">
-        Editing instructions for primary account <span className="font-medium">{primary.bankName} ••••{primary.accountNumber.slice(-4)}</span>.
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Parent Payment Instructions</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+            Shown on the parent payment page · primary account {primary.bankName} ••••{primary.accountNumber.slice(-4)}
+          </p>
+        </div>
+        {dirty && (
+          <Button
+            size="sm"
+            className="h-7 text-xs gap-1 shrink-0"
+            onClick={() => {
+              updateBankAccount(primary.id, { parentDisplayInstructions: text })
+              toast.success('Parent instructions updated')
+            }}
+          >
+            <Check className="h-3 w-3" /> Save
+          </Button>
+        )}
+      </div>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        rows={3}
+        rows={2}
         className="w-full rounded-md border border-border bg-background px-2.5 py-2 text-xs resize-y"
         placeholder="e.g. Use this account for NEFT/RTGS transfers. Email the transfer reference to accounts@scholario.edu for verification."
       />
-      {dirty && (
-        <Button
-          size="sm"
-          className="h-7 text-xs gap-1"
-          onClick={() => {
-            updateBankAccount(primary.id, { parentDisplayInstructions: text })
-            toast.success('Parent instructions updated')
-          }}
-        >
-          <Check className="h-3 w-3" /> Save Instructions
-        </Button>
-      )}
     </div>
   )
 }
@@ -607,7 +492,7 @@ function BankAccountDialog({ mode, accountId, onClose, onSave }: BankAccountDial
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button
             size="sm"
-            className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+            className="gap-1"
             disabled={!valid}
             onClick={() => onSave({ holderName, bankName, accountNumber, ifsc, branch, accountType, parentDisplayInstructions })}
           >
@@ -630,63 +515,66 @@ function UpiQrConfigSection() {
   const [editing, setEditing] = useState<string | null>(null)
 
   return (
-    <FeePanel
-      title={
-        <PanelHeading icon={<QrCode className="h-4 w-4" />} tone="bg-emerald-500/15 text-emerald-600">
-          UPI / QR Configurations
-        </PanelHeading>
+    <SettingsCard
+      label="UPI / QR"
+      icon={<QrCode />}
+      summary={`${upiQrConfigs.filter((c) => c.status === 'active').length} of ${upiQrConfigs.length} active`}
+      action={
+        <Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowAdd(true)}>
+          <Plus className="h-3 w-3" /> Add Config
+        </Button>
       }
-      subtitle={`${upiQrConfigs.length} config(s) · ${upiQrConfigs.filter((c) => c.status === 'active').length} active`}
-      action={<Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowAdd(true)}><Plus className="h-3 w-3" /> Add UPI Config</Button>}
     >
       {upiQrConfigs.length === 0 ? (
-        <div className="text-center py-8 text-xs text-muted-foreground">
+        <p className="text-[11px] text-muted-foreground text-center py-6">
           No UPI / QR configurations. Add one to accept UPI payments without a gateway.
-        </div>
+        </p>
       ) : (
-        <div className="space-y-2">
-          {/* NOTE (2-e): no QR image is rendered here — no QR mechanism/library exists
-              on this surface today, so we keep the QrCode icon chip and deliberately
+        <div className="divide-y divide-border/70 rounded-lg border border-border/60">
+          {/* No QR image is rendered here — no QR mechanism/library exists on
+              this surface, so we keep the QrCode icon chip and deliberately
               avoid adding any dependency. */}
           {upiQrConfigs.map((c) => (
-            <div key={c.id} className={cn('rounded-lg border px-3 py-2.5 transition-colors', c.status === 'active' ? 'border-border bg-card' : 'border-border/40 bg-muted/20 opacity-70')}>
+            <div key={c.id} className={cn('px-2.5 py-3', c.status !== 'active' && 'opacity-70')}>
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600 shrink-0">
-                      <QrCode className="h-3.5 w-3.5" />
-                    </span>
-                    <p className="text-xs font-semibold truncate">{c.name}</p>
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-muted text-muted-foreground ring-1 ring-border capitalize">
-                      {c.qrType} QR
-                    </span>
-                    <FeeStatusBadge status={c.status === 'active' ? 'Active' : 'Inactive'} />
-                  </div>
-                  <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
-                    <div className="min-w-0"><span className="text-muted-foreground">UPI ID:</span> <span className="font-mono font-medium">{c.upiId}</span></div>
-                    <div className="min-w-0"><span className="text-muted-foreground">Payee:</span> <span className="font-medium truncate">{c.payeeName}</span></div>
-                    {c.provider && <div><span className="text-muted-foreground">Provider:</span> <span className="font-medium capitalize">{c.provider}</span></div>}
-                    {c.notes && <div className="col-span-2 min-w-0"><span className="text-muted-foreground">Notes:</span> <span className="font-medium truncate">{c.notes}</span></div>}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600">
+                    <QrCode className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-xs font-semibold truncate">{c.name}</p>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-muted text-muted-foreground ring-1 ring-border capitalize whitespace-nowrap">
+                        {c.qrType} QR
+                      </span>
+                      <FeeStatusBadge status={c.status === 'active' ? 'Active' : 'Inactive'} />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                      <span className="font-mono">{c.upiId}</span> · {c.payeeName}{c.provider ? ` · ${c.provider}` : ''}
+                    </p>
+                    {c.notes && (
+                      <p className="text-[10px] text-muted-foreground/80 truncate mt-0.5" title={c.notes}>{c.notes}</p>
+                    )}
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/40">
-                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1" onClick={() => setEditing(c.id)}>
-                  <Pencil className="h-3 w-3" /> Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={cn('h-6 text-[10px] gap-1', c.status === 'active' ? 'text-rose-600' : 'text-emerald-600')}
-                  onClick={() => {
-                    const newStatus = c.status === 'active' ? 'inactive' : 'active'
-                    updateUpiQrConfig(c.id, { status: newStatus })
-                    toast.success(`UPI config ${newStatus === 'active' ? 'activated' : 'deactivated'}`, { description: c.name })
-                  }}
-                >
-                  {c.status === 'active' ? <Ban className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                  {c.status === 'active' ? 'Deactivate' : 'Activate'}
-                </Button>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1" onClick={() => setEditing(c.id)}>
+                    <Pencil className="h-3 w-3" /> Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={cn('h-7 text-[10px] gap-1', c.status === 'active' ? 'text-rose-600' : 'text-emerald-600')}
+                    onClick={() => {
+                      const newStatus = c.status === 'active' ? 'inactive' : 'active'
+                      updateUpiQrConfig(c.id, { status: newStatus })
+                      toast.success(`UPI config ${newStatus === 'active' ? 'activated' : 'deactivated'}`, { description: c.name })
+                    }}
+                  >
+                    {c.status === 'active' ? <Ban className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                    {c.status === 'active' ? 'Deactivate' : 'Activate'}
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
@@ -711,7 +599,7 @@ function UpiQrConfigSection() {
           }}
         />
       )}
-    </FeePanel>
+    </SettingsCard>
   )
 }
 
@@ -784,7 +672,7 @@ function UpiQrDialog({ mode, configId, onClose, onSave }: UpiQrDialogProps) {
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button
             size="sm"
-            className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+            className="gap-1"
             disabled={!valid}
             onClick={() => onSave({ name, upiId, payeeName, qrType, provider: provider || undefined, notes: notes || undefined })}
           >
@@ -796,7 +684,7 @@ function UpiQrDialog({ mode, configId, onClose, onSave }: UpiQrDialogProps) {
   )
 }
 
-// ─── D. Payment Gateway ──────────────────────────────────────────────
+// ─── D. Payment Gateway ─────────────────────────────────────────────
 
 const GATEWAY_PROVIDERS: Array<{ value: GatewayProvider; label: string; note: string }> = [
   { value: 'razorpay', label: 'Razorpay', note: 'Most popular for schools. Webhook signature support.' },
@@ -808,6 +696,15 @@ function maskMerchant(id: string): string {
   if (!id) return '—'
   if (id.length <= 8) return id
   return `${id.slice(0, 4)}••••${id.slice(-4)}`
+}
+
+function ConfigCell({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
+  return (
+    <div className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 min-w-0">
+      <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider truncate">{label}</p>
+      <p className={cn('text-xs font-medium mt-0.5 truncate', mono && 'font-mono')}>{value}</p>
+    </div>
+  )
 }
 
 function PaymentGatewaySection() {
@@ -840,20 +737,18 @@ function PaymentGatewaySection() {
 
   if (!gatewayConfig) {
     return (
-      <FeePanel
-        title="Payment Gateway"
-        subtitle="connect an online payment gateway"
-        action={<Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowConnect(true)}><Plug className="h-3 w-3" /> Connect Gateway</Button>}
+      <SettingsCard
+        label="Payment Gateway"
+        icon={<Plug />}
+        action={
+          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowConnect(true)}>
+            <Plug className="h-3 w-3" /> Connect Gateway
+          </Button>
+        }
       >
-        <div className="flex flex-col items-center justify-center py-10 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted/40 text-muted-foreground/60 mb-3">
-            <Plug className="h-6 w-6" />
-          </div>
-          <p className="text-sm font-semibold text-muted-foreground">No gateway connected</p>
-          <p className="text-xs text-muted-foreground/70 mt-1 max-w-xs">
-            Connect a payment gateway to accept UPI / Card / Net Banking online. Offline methods continue to work without one.
-          </p>
-        </div>
+        <p className="text-[11px] text-muted-foreground text-center py-4">
+          No gateway connected — offline methods continue to work. Connect one to accept UPI / Card / Net Banking online.
+        </p>
         {showConnect && (
           <ConnectGatewayDialog
             onClose={() => setShowConnect(false)}
@@ -864,7 +759,7 @@ function PaymentGatewaySection() {
             }}
           />
         )}
-      </FeePanel>
+      </SettingsCard>
     )
   }
 
@@ -873,123 +768,116 @@ function PaymentGatewaySection() {
   const isTestMode = gatewayConfig.status === 'test_mode'
 
   return (
-    <div className="space-y-3">
-      <FeePanel
-        title="Payment Gateway"
-        subtitle={`${gatewayConfig.provider} · ${gatewayConfig.environment} environment`}
-        action={
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs gap-1 text-rose-600"
-            onClick={() => {
-              if (confirm('Disconnect gateway? Historical transactions remain on record. New online payments will be disabled.')) {
-                disconnectGateway()
-                toast.success('Gateway disconnected', { description: 'Online payment methods are now disabled.' })
-              }
-            }}
-          >
-            <Unplug className="h-3 w-3" /> Disconnect
-          </Button>
-        }
-      >
-        <div className="space-y-3">
-          {/* Status banner */}
-          <div className={cn(
-            'rounded-lg border p-3 flex items-start gap-3',
-            connected
-              ? (isLive ? 'bg-emerald-500/[0.04] border-emerald-500/20' : 'bg-amber-500/[0.04] border-amber-500/20')
-              : 'bg-rose-500/[0.04] border-rose-500/20',
-          )}>
-            {connected ? <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" /> : <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />}
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-xs font-semibold capitalize">{gatewayConfig.provider} — {gatewayConfig.status.replace('_', ' ')}</p>
-                {isTestMode && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/20">
-                    TEST MODE
-                  </span>
-                )}
-              </div>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                {isLive
-                  ? 'Live mode — real payments are being processed.'
-                  : isTestMode
-                    ? 'Test mode — only test transactions will succeed. Switch to live before opening to parents.'
-                    : 'Gateway inactive. Verify credentials or reconnect.'}
-              </p>
-            </div>
-          </div>
-
-          {/* Config grid */}
-          <div className="grid grid-cols-2 gap-3">
-            <ConfigCell label="Merchant ID" value={maskMerchant(gatewayConfig.merchantId ?? '')} mono />
-            <ConfigCell label="API Key ID" value={gatewayConfig.apiKeyId ?? '—'} mono />
-            <ConfigCell label="Webhook URL" value={gatewayConfig.webhookUrl ?? '—'} mono />
-            <ConfigCell
-              label="Webhook Status"
-              value={
-                <span className={cn(
-                  'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold',
-                  gatewayConfig.webhookStatus === 'healthy' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                  gatewayConfig.webhookStatus === 'not_configured' && 'bg-muted text-muted-foreground',
-                  gatewayConfig.webhookStatus === 'error' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
-                )}>
-                  {gatewayConfig.webhookStatus.replace('_', ' ')}
+    <SettingsCard
+      label="Payment Gateway"
+      icon={<Plug />}
+      summary={`${gatewayConfig.provider} · ${gatewayConfig.environment}`}
+      action={
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 text-xs gap-1 text-rose-600"
+          onClick={() => {
+            if (confirm('Disconnect gateway? Historical transactions remain on record. New online payments will be disabled.')) {
+              disconnectGateway()
+              toast.success('Gateway disconnected', { description: 'Online payment methods are now disabled.' })
+            }
+          }}
+        >
+          <Unplug className="h-3 w-3" /> Disconnect
+        </Button>
+      }
+    >
+      <div className="space-y-3">
+        {/* Status line */}
+        <div className={cn(
+          'rounded-lg border px-2.5 py-2 flex items-start gap-2.5',
+          connected
+            ? (isLive ? 'bg-emerald-500/[0.04] border-emerald-500/20' : 'bg-amber-500/[0.04] border-amber-500/20')
+            : 'bg-rose-500/[0.04] border-rose-500/20',
+        )}>
+          {connected ? <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" /> : <ShieldAlert className="h-3.5 w-3.5 text-rose-600 shrink-0 mt-0.5" />}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-xs font-semibold capitalize">{gatewayConfig.provider} — {gatewayConfig.status.replace('_', ' ')}</p>
+              {isTestMode && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/20">
+                  TEST MODE
                 </span>
-              }
-            />
-            <ConfigCell label="Last Webhook" value={gatewayConfig.lastWebhookAt ? `${formatDate(gatewayConfig.lastWebhookAt)} · ${formatRelativeTime(gatewayConfig.lastWebhookAt)}` : 'never'} />
-            <ConfigCell label="Failed Webhooks" value={String(gatewayConfig.failedWebhookCount)} />
-            <ConfigCell label="Settlement Account" value={settlementAccount ? `${settlementAccount.bankName} ****${settlementAccount.accountNumber.slice(-4)}` : 'not linked'} />
-            <ConfigCell label="Connected By" value={`${gatewayConfig.connectedBy ?? '—'} · ${gatewayConfig.connectedAt ? formatDate(gatewayConfig.connectedAt) : ''}`} />
-          </div>
-
-          {/* Secret-key note */}
-          <div className="rounded-md bg-sky-500/5 border border-sky-500/20 p-2 flex items-start gap-2">
-            <ShieldCheck className="h-3.5 w-3.5 text-sky-600 shrink-0 mt-0.5" />
-            <p className="text-[10px] text-muted-foreground">
-              <span className="font-semibold text-sky-700 dark:text-sky-300">Secret key is stored securely on the server.</span>{' '}
-              The API key ID is shown here for identification only — the matching secret is held in server environment variables and never exposed in the browser.
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {isLive
+                ? 'Live mode — real payments are being processed.'
+                : isTestMode
+                  ? 'Test mode — only test transactions succeed. Switch to live before opening to parents.'
+                  : 'Gateway inactive. Verify credentials or reconnect.'}
             </p>
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2 flex-wrap pt-1">
+        {/* Config grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <ConfigCell label="Merchant ID" value={maskMerchant(gatewayConfig.merchantId ?? '')} mono />
+          <ConfigCell label="API Key ID" value={gatewayConfig.apiKeyId ?? '—'} mono />
+          <ConfigCell label="Webhook URL" value={gatewayConfig.webhookUrl ?? '—'} mono />
+          <ConfigCell
+            label="Webhook Status"
+            value={
+              <span className={cn(
+                'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold',
+                gatewayConfig.webhookStatus === 'healthy' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                gatewayConfig.webhookStatus === 'not_configured' && 'bg-muted text-muted-foreground',
+                gatewayConfig.webhookStatus === 'error' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+              )}>
+                {gatewayConfig.webhookStatus.replace('_', ' ')}
+              </span>
+            }
+          />
+          <ConfigCell label="Last Webhook" value={gatewayConfig.lastWebhookAt ? `${formatDate(gatewayConfig.lastWebhookAt)} · ${formatRelativeTime(gatewayConfig.lastWebhookAt)}` : 'never'} />
+          <ConfigCell label="Failed Webhooks" value={String(gatewayConfig.failedWebhookCount)} />
+          <ConfigCell label="Settlement Account" value={settlementAccount ? `${settlementAccount.bankName} ****${settlementAccount.accountNumber.slice(-4)}` : 'not linked'} />
+          <ConfigCell label="Connected By" value={`${gatewayConfig.connectedBy ?? '—'} · ${gatewayConfig.connectedAt ? formatDate(gatewayConfig.connectedAt) : ''}`} />
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-wrap border-t border-border/60 pt-2.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            onClick={() => {
+              updateGatewayStatus('connected', gatewayConfig.lastWebhookAt)
+              toast.success('Connection test passed', { description: `${gatewayConfig.provider} reachable. Webhook URL active.` })
+            }}
+          >
+            <RefreshCw className="h-3 w-3" /> Test Connection
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            onClick={handleTestWebhook}
+          >
+            <Webhook className="h-3 w-3" /> Test Webhook
+          </Button>
+          {isTestMode && (
             <Button
               size="sm"
-              variant="outline"
-              className="h-8 text-xs gap-1"
+              className="h-7 text-xs gap-1"
               onClick={() => {
-                updateGatewayStatus('connected', gatewayConfig.lastWebhookAt)
-                toast.success('Connection test passed', { description: `${gatewayConfig.provider} reachable. Webhook URL active.` })
+                connectGateway(gatewayConfig.provider, gatewayConfig.merchantId ?? '', gatewayConfig.apiKeyId ?? '', 'live')
+                toast.success('Switched to LIVE mode', { description: 'Real payments will now be processed.' })
               }}
             >
-              <RefreshCw className="h-3.5 w-3.5" /> Test Connection
+              <Check className="h-3 w-3" /> Switch to Live
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs gap-1"
-              onClick={handleTestWebhook}
-            >
-              <Webhook className="h-3.5 w-3.5" /> Test Webhook
-            </Button>
-            {isTestMode && (
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700"
-                onClick={() => {
-                  connectGateway(gatewayConfig.provider, gatewayConfig.merchantId ?? '', gatewayConfig.apiKeyId ?? '', 'live')
-                  toast.success('Switched to LIVE mode', { description: 'Real payments will now be processed.' })
-                }}
-              >
-                <Check className="h-3.5 w-3.5" /> Switch to Live
-              </Button>
-            )}
-          </div>
+          )}
+          <p className="text-[9px] text-muted-foreground ml-auto hidden md:block">
+            Secret key stored server-side — never exposed in the browser.
+          </p>
         </div>
-      </FeePanel>
+      </div>
 
       {showConnect && (
         <ConnectGatewayDialog
@@ -1001,16 +889,7 @@ function PaymentGatewaySection() {
           }}
         />
       )}
-    </div>
-  )
-}
-
-function ConfigCell({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
-  return (
-    <div className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5">
-      <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">{label}</p>
-      <p className={cn('text-xs font-medium mt-0.5 truncate', mono && 'font-mono')}>{value}</p>
-    </div>
+    </SettingsCard>
   )
 }
 
@@ -1085,7 +964,7 @@ function ConnectGatewayDialog({ onClose, onConnect }: ConnectGatewayDialogProps)
           <div className="rounded-md bg-sky-500/5 border border-sky-500/20 p-2 flex items-start gap-2">
             <ShieldCheck className="h-3.5 w-3.5 text-sky-600 shrink-0 mt-0.5" />
             <p className="text-[10px] text-muted-foreground">
-              The <span className="font-semibold">webhook secret</span> is configured server-side via environment variable. It is never stored in browser state. Contact your developer to set <span className="font-mono">{provider.toUpperCase()}_WEBHOOK_SECRET</span> in the server env.
+              The <span className="font-semibold">webhook secret</span> is configured server-side via environment variable — never stored in browser state. Set <span className="font-mono">{provider.toUpperCase()}_WEBHOOK_SECRET</span> on the server.
             </p>
           </div>
         </div>
@@ -1093,7 +972,7 @@ function ConnectGatewayDialog({ onClose, onConnect }: ConnectGatewayDialogProps)
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button
             size="sm"
-            className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+            className="gap-1"
             disabled={!valid}
             onClick={() => onConnect(provider, merchantId.trim(), apiKeyId.trim(), environment)}
           >
@@ -1112,7 +991,6 @@ function ReconciliationSection() {
   const settlements = useFeeStore((s) => s.settlements)
   const reconciliationRecords = useFeeStore((s) => s.reconciliationRecords)
   const transactions = useFeeStore((s) => s.transactions)
-  const bankAccounts = useFeeStore((s) => s.bankAccounts)
 
   // Reconciliation summary
   const reconciled = reconciliationRecords.filter((r) => r.reconciliationStatus === 'reconciled').length
@@ -1122,91 +1000,98 @@ function ReconciliationSection() {
   const recentWebhooks = webhookEvents.slice(0, 5)
 
   return (
-    <div className="space-y-3">
-      {/* Summary strip */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg border border-border bg-card p-2.5">
-          <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Reconciled</p>
-          <p className="text-base font-bold tabular-nums mt-0.5 text-emerald-600">{reconciled}</p>
-          <p className="text-[9px] text-muted-foreground">transactions matched</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-2.5">
-          <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Pending</p>
-          <p className="text-base font-bold tabular-nums mt-0.5 text-amber-600">{pending}</p>
-          <p className="text-[9px] text-muted-foreground">awaiting settlement</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-2.5">
-          <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Exceptions</p>
-          <p className="text-base font-bold tabular-nums mt-0.5 text-rose-600">{exceptions}</p>
-          <p className="text-[9px] text-muted-foreground">failed / refunded</p>
-        </div>
-      </div>
-
-      {/* Recent webhooks */}
-      <FeePanel title="Recent Webhook Events" subtitle={`last ${recentWebhooks.length} of ${webhookEvents.length} total`}>
-        {recentWebhooks.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground text-center py-6">No webhook events received yet.</p>
-        ) : (
-          <div className="space-y-1.5">
-            {recentWebhooks.map((w) => (
-              <div key={w.id} className="flex items-center gap-3 rounded-md border border-border/60 px-2.5 py-2">
-                <span className={cn(
-                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
-                  w.status === 'processed' ? 'bg-emerald-500/10 text-emerald-600' :
-                  w.status === 'failed' ? 'bg-rose-500/10 text-rose-600' :
-                  'bg-amber-500/10 text-amber-600',
-                )}>
-                  <Webhook className="h-3.5 w-3.5" />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-xs font-mono font-semibold">{w.eventType}</p>
-                    <span className="text-[9px] text-muted-foreground capitalize">{w.provider}</span>
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">
-                    {formatDate(w.receivedAt)} · {formatRelativeTime(w.receivedAt)}
-                    {w.transactionId && ` · ${w.transactionId}`}
-                  </p>
-                </div>
-                <span className={cn(
-                  'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold',
-                  w.status === 'processed' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                  w.status === 'failed' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
-                  w.status === 'duplicate' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-                )}>
-                  {w.status}
-                </span>
-              </div>
-            ))}
+    <SettingsCard
+      label="Reconciliation"
+      icon={<ArrowRightLeft />}
+      summary={`${reconciled} matched · auto from webhook + settlement data`}
+    >
+      <div className="space-y-3">
+        {/* Summary tiles */}
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="rounded-lg bg-muted/40 px-2.5 py-1.5 min-w-0">
+            <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider truncate">Reconciled</p>
+            <p className="text-base font-bold tabular-nums mt-0.5 text-emerald-600">{reconciled}</p>
+            <p className="text-[9px] text-muted-foreground truncate">transactions matched</p>
           </div>
-        )}
-      </FeePanel>
+          <div className="rounded-lg bg-muted/40 px-2.5 py-1.5 min-w-0">
+            <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider truncate">Pending</p>
+            <p className="text-base font-bold tabular-nums mt-0.5 text-amber-600">{pending}</p>
+            <p className="text-[9px] text-muted-foreground truncate">awaiting settlement</p>
+          </div>
+          <div className="rounded-lg bg-muted/40 px-2.5 py-1.5 min-w-0">
+            <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider truncate">Exceptions</p>
+            <p className="text-base font-bold tabular-nums mt-0.5 text-rose-600">{exceptions}</p>
+            <p className="text-[9px] text-muted-foreground truncate">failed / refunded</p>
+          </div>
+        </div>
 
-      {/* Settlements */}
-      <FeePanel title="Settlements" subtitle={`${settlements.length} payout(s) recorded`}>
-        {settlements.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground text-center py-6">No settlements recorded yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/40">
-                <tr>
-                  <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Settlement ID</th>
-                  <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Gateway</th>
-                  <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Date</th>
-                  <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Gross</th>
-                  <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Fee</th>
-                  <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Tax</th>
-                  <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Net</th>
-                  <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">UTR</th>
-                  <th className="text-center px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Txns</th>
-                  <th className="text-center px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {settlements.map((s) => {
-                  const bank = bankAccounts.find((b) => b.id === s.bankAccountId)
-                  return (
+        {/* Recent webhooks */}
+        <div>
+          <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground mb-1.5">Recent Webhook Events</p>
+          {recentWebhooks.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground text-center py-4">No webhook events received yet.</p>
+          ) : (
+            <div className="divide-y divide-border/70 rounded-lg border border-border/60">
+              {recentWebhooks.map((w) => (
+                <div key={w.id} className="flex items-center gap-3 px-2.5 py-2">
+                  <span className={cn(
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+                    w.status === 'processed' ? 'bg-emerald-500/10 text-emerald-600' :
+                    w.status === 'failed' ? 'bg-rose-500/10 text-rose-600' :
+                    'bg-amber-500/10 text-amber-600',
+                  )}>
+                    <Webhook className="h-3 w-3" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-mono font-semibold">{w.eventType}</p>
+                      <span className="text-[9px] text-muted-foreground capitalize">{w.provider}</span>
+                    </div>
+                    <p className="text-[9px] text-muted-foreground truncate">
+                      {formatDate(w.receivedAt)} · {formatRelativeTime(w.receivedAt)}
+                      {w.transactionId && ` · ${w.transactionId}`}
+                    </p>
+                  </div>
+                  <span className={cn(
+                    'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap',
+                    w.status === 'processed' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                    w.status === 'failed' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+                    w.status === 'duplicate' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                  )}>
+                    {w.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Settlements */}
+        <div>
+          <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground mb-1.5">
+            Settlements · {settlements.length} payout(s)
+          </p>
+          {settlements.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground text-center py-4">No settlements recorded yet.</p>
+          ) : (
+            <div className="rounded-lg border border-border/60 overflow-hidden overflow-x-auto">
+              <table className="w-full text-xs min-w-[760px]">
+                <thead className="bg-muted/40">
+                  <tr>
+                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Settlement ID</th>
+                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Gateway</th>
+                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Date</th>
+                    <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Gross</th>
+                    <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Fee</th>
+                    <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Tax</th>
+                    <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Net</th>
+                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">UTR</th>
+                    <th className="text-center px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Txns</th>
+                    <th className="text-center px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {settlements.map((s) => (
                     <tr key={s.id} className="border-t border-border/30 hover:bg-muted/20">
                       <td className="px-2.5 py-2 font-mono text-[10px]">{s.id}</td>
                       <td className="px-2.5 py-2 capitalize text-muted-foreground">{s.gateway}</td>
@@ -1219,7 +1104,7 @@ function ReconciliationSection() {
                       <td className="px-2.5 py-2 text-center tabular-nums">{s.transactionIds.length}</td>
                       <td className="px-2.5 py-2 text-center">
                         <span className={cn(
-                          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold capitalize',
+                          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold capitalize whitespace-nowrap',
                           s.status === 'settled' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
                           s.status === 'pending' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
                           s.status === 'failed' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
@@ -1229,62 +1114,56 @@ function ReconciliationSection() {
                         </span>
                       </td>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </FeePanel>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
-      {/* Reconciliation ledger */}
-      <FeePanel
-        title="Reconciliation Ledger"
-        subtitle={`${reconciliationRecords.length} matched transaction(s)`}
-        action={
-          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-            <ArrowRightLeft className="h-3 w-3" />
-            auto-matched from webhook + settlement data
-          </span>
-        }
-      >
-        {reconciliationRecords.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground text-center py-6">No reconciliation records yet.</p>
-        ) : (
-          <div className="overflow-x-auto max-h-80 overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-muted/40">
-                <tr>
-                  <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Rec ID</th>
-                  <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Transaction</th>
-                  <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Settlement</th>
-                  <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Gateway Payment ID</th>
-                  <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">UTR</th>
-                  <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Reconciled By</th>
-                  <th className="text-center px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reconciliationRecords.map((r) => (
-                  <tr key={r.id} className="border-t border-border/30 hover:bg-muted/20">
-                    <td className="px-2.5 py-2 font-mono text-[10px]">{r.id}</td>
-                    <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.transactionId}</td>
-                    <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.settlementId ?? '—'}</td>
-                    <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.gatewayPaymentId ?? '—'}</td>
-                    <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.utr ?? '—'}</td>
-                    <td className="px-2.5 py-2 text-muted-foreground text-[10px]">{r.reconciledBy ?? '—'}</td>
-                    <td className="px-2.5 py-2 text-center">
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold capitalize bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                        {r.reconciliationStatus}
-                      </span>
-                    </td>
+        {/* Reconciliation ledger */}
+        <div>
+          <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground mb-1.5">
+            Matched Transactions · {reconciliationRecords.length}
+          </p>
+          {reconciliationRecords.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground text-center py-4">No reconciliation records yet.</p>
+          ) : (
+            <div className="rounded-lg border border-border/60 overflow-hidden overflow-x-auto max-h-72 overflow-y-auto custom-scrollbar">
+              <table className="w-full text-xs min-w-[620px]">
+                <thead className="sticky top-0 bg-muted/40">
+                  <tr>
+                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Rec ID</th>
+                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Transaction</th>
+                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Settlement</th>
+                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Gateway Payment ID</th>
+                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">UTR</th>
+                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Reconciled By</th>
+                    <th className="text-center px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </FeePanel>
-    </div>
+                </thead>
+                <tbody>
+                  {reconciliationRecords.map((r) => (
+                    <tr key={r.id} className="border-t border-border/30 hover:bg-muted/20">
+                      <td className="px-2.5 py-2 font-mono text-[10px]">{r.id}</td>
+                      <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.transactionId}</td>
+                      <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.settlementId ?? '—'}</td>
+                      <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.gatewayPaymentId ?? '—'}</td>
+                      <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.utr ?? '—'}</td>
+                      <td className="px-2.5 py-2 text-muted-foreground text-[10px]">{r.reconciledBy ?? '—'}</td>
+                      <td className="px-2.5 py-2 text-center">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold capitalize bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                          {r.reconciliationStatus}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </SettingsCard>
   )
 }

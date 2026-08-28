@@ -3,33 +3,30 @@
 /**
  * FeesSettingsSection — Fee Management administrative settings.
  *
- * Tabs (5 main):
- *   1. Fee Heads           — create / archive (wired to addFeeHead / archiveFeeHead)
- *   2. Payment Collection  — Payment Methods, Bank & Settlement, UPI/QR,
- *                            Payment Gateway, Reconciliation (Phase 4 infra)
- *   3. Late Fee Rules      — per-month amount, grace period, max
- *   4. Concession Rules    — sibling / staff ward / scholarship discount %
- *   5. Receipt Settings    — prefix, start number, footer message, signature
+ * UX-SAL-1 (presentation-only rebuild): the settings page now follows the
+ * Salary & Payroll Settings benchmark — ONE flat stack of compact cards,
+ * no inner tab bar, no nested sub-navigation, no dev banners. The previous
+ * 6-tab layout (with Payment Collection nesting 5 more sub-tabs) forced
+ * two navigation levels for what is a preferences surface; every section
+ * is now visible in one scroll, in practical order:
  *
- * Phase 4 — the legacy "Payment Modes" tab is now the first sub-section of
- * Payment Collection ("Accepted Payment Methods"). It uses the same
- * paymentModes[] state + togglePaymentMode mutation as before; it just lives
- * alongside the new gateway / bank / UPI / reconciliation configuration so
- * the Principal sees the whole "School Finance Configuration" in one place.
+ *   1. Fee Heads            — master catalogue + Add Head (addFeeHead /
+ *                             archiveFeeHead / updateFeeHead)
+ *   2. Payment Collection   — methods · bank accounts · UPI/QR · gateway ·
+ *                             reconciliation (see fees-settings-payment.tsx)
+ *   3. Late Fee Rules       — per-month amount, grace period, max
+ *   4. Concession Rules     — sibling / staff ward / scholarship %
+ *   5. One-Time Entry Fees  — admission policy snapshot (read-only values)
+ *   6. Receipt Settings     — prefix, paper, next number, footer, signature
+ *   7. Controlled-Edit Policy + Notifications
  *
- * Phase 2-e polish (presentation-only): version-safety banner condensed to a
- * single Lock-icon line; Fee Heads rows tightened (py-2.5 rhythm, normalized
- * chips); Late Fee / Concession rules restructured into 2-col labeled grids
- * topped by icon chips with live value-summary chips; NEW "One-Time Entry
- * Fees" informational card on the Concession Rules tab reading admissionPolicy
- * from the store ({enabled,boysAmount,girlsFreeAboveGrade}) with a Switch
- * bound to the existing updateAdmissionPolicy({enabled}) action; Receipt
- * Settings field grid tidied. All five sub-tabs, handlers and store mutations
- * are behaviour-identical.
+ * Card anatomy mirrors Salary Settings: rounded-xl border bg-card p-4,
+ * [10px] uppercase muted label + small muted icon, right-aligned action,
+ * shadcn Switch toggles, label-left/control-right rows. All store
+ * mutations, dirty-state Save flows and dialogs are behaviour-identical.
  */
 
 import { useState, useMemo } from 'react'
-import { motion } from 'framer-motion'
 import {
   IndianRupee, Landmark, AlertTriangle, Gift,
   Receipt, Check, Plus, Archive,
@@ -40,6 +37,7 @@ import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -49,27 +47,11 @@ import {
 } from '@/lib/store/fee-store'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { FeePanel } from './fees-shared'
+import { SettingsCard } from './fees-shared'
 import { FeesPaymentCollectionSettings } from './fees-settings-payment'
 import { toast } from 'sonner'
 
-type SettingsTab = 'fee-heads' | 'payment-collection' | 'late-fee' | 'concession' | 'receipt' | 'policies'
-
-// Shared micro-primitives for the settings cards (2-e):
-// ChipTitle — icon-chip + title used at the top of rule cards.
-// RuleChip  — tiny mono value chip summarising the live rule values.
-// SwitchField — labeled toggle field matching the house switch visual.
-function ChipTitle({ icon, tone, children }: { icon: React.ReactNode; tone: string; children: React.ReactNode }) {
-  return (
-    <span className="flex items-center gap-2 min-w-0">
-      <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', tone)}>
-        {icon}
-      </span>
-      <span className="truncate">{children}</span>
-    </span>
-  )
-}
-
+// RuleChip — tiny mono value chip summarising the live rule values.
 function RuleChip({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center rounded-md border border-border/50 bg-muted/60 px-2 py-0.5 text-[10px] font-medium tabular-nums whitespace-nowrap">
@@ -78,90 +60,30 @@ function RuleChip({ children }: { children: React.ReactNode }) {
   )
 }
 
-function SwitchField({ label, checked, onToggle, className }: { label: string; checked: boolean; onToggle: () => void; className?: string }) {
-  return (
-    <div className={cn('flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2', className)}>
-      <p className="text-[11px] font-medium">{label}</p>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-label={label}
-        aria-pressed={checked}
-        className={cn('relative h-5 w-9 rounded-full transition-colors shrink-0', checked ? 'bg-emerald-600' : 'bg-muted-foreground/30')}
-      >
-        <span
-          className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
-          style={{ left: checked ? '1.125rem' : '0.125rem' }}
-        />
-      </button>
-    </div>
-  )
-}
-
 export function FeesSettingsSection() {
-  const [tab, setTab] = useState<SettingsTab>('fee-heads')
-
-  const TABS: Array<{ value: SettingsTab; label: string; icon: React.ReactNode }> = [
-    { value: 'fee-heads', label: 'Fee Heads', icon: <IndianRupee className="h-3.5 w-3.5" /> },
-    { value: 'payment-collection', label: 'Payment Collection', icon: <Landmark className="h-3.5 w-3.5" /> },
-    { value: 'late-fee', label: 'Late Fee Rules', icon: <AlertTriangle className="h-3.5 w-3.5" /> },
-    { value: 'concession', label: 'Concession Rules', icon: <Gift className="h-3.5 w-3.5" /> },
-    { value: 'receipt', label: 'Receipt Settings', icon: <Receipt className="h-3.5 w-3.5" /> },
-    { value: 'policies', label: 'Policies', icon: <ShieldCheck className="h-3.5 w-3.5" /> },
-  ]
-
   return (
-    <div className="space-y-4 max-w-5xl mx-auto">
-      {/* Version safety banner — one short line (2-e); guidance behaviour unchanged */}
-      <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 px-2.5 py-1.5 flex items-center gap-2">
-        <Lock className="h-3 w-3 text-sky-600 shrink-0" />
-        <p className="text-[11px] text-muted-foreground truncate">
-          <span className="font-semibold text-sky-700 dark:text-sky-300">Version-safe:</span> new fee plans will use the updated settings · previous payments remain unchanged.
-        </p>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-0.5 rounded-lg bg-muted/40 p-0.5 overflow-x-auto">
-        {TABS.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setTab(t.value)}
-            className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap',
-              tab === t.value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'fee-heads' && <FeeHeadsSettings />}
-      {tab === 'payment-collection' && <FeesPaymentCollectionSettings />}
-      {tab === 'late-fee' && <LateFeeSettings />}
-      {tab === 'concession' && <ConcessionSettings />}
-      {tab === 'receipt' && <ReceiptSettings />}
-      {tab === 'policies' && <PoliciesSettings />}
+    // No page heading / banner — the "Settings" tab establishes context and
+    // content starts immediately (Salary Settings benchmark).
+    <div className="space-y-4">
+      <FeeHeadsSettings />
+      <FeesPaymentCollectionSettings />
+      <LateFeeSettings />
+      <ConcessionSettings />
+      <AdmissionFeesCard />
+      <ReceiptSettings />
+      <PoliciesSettings />
+      <NotificationsSettings />
     </div>
   )
 }
 
 // ─── Fee Heads ──────────────────────────────────────────────────────
 //
-// FIX 2 (FEE-ARCH): the previous implementation built `allHeads` by
-// `feeStructures.flatMap(s => s.components)`, which produced a per-structure
-// duplicate row for every shared head name (e.g. "Tuition" appeared 5
-// times — once per class level, suffixed "(Nursery–UKG)", "(Class 1–5)",
-// etc.). That mixed the master fee head catalogue with structure-specific
-// pricing.
-//
-// This new implementation shows a MASTER FEE HEAD CATALOGUE: unique fee
-// head names extracted from all structures, with a per-row breakdown of
-// which structures use the head, the frequencies observed, and an
-// "Active / Archived / Mixed" status. The Add Head + Archive All /
-// Restore All actions still call the same store mutations (addFeeHead,
-// archiveFeeHead, updateFeeHead) — no store changes were needed.
+// Master fee head catalogue: unique fee head names extracted from all
+// structures, with a per-row breakdown of which structures use the head,
+// the frequencies observed, and an "Active / Archived / Mixed" status.
+// Add Head + Archive All / Restore All call the same store mutations
+// (addFeeHead, archiveFeeHead, updateFeeHead) as before.
 
 function FeeHeadsSettings() {
   const feeStructures = useFeeStore((s) => s.feeStructures)
@@ -169,13 +91,9 @@ function FeeHeadsSettings() {
   const archiveFeeHead = useFeeStore((s) => s.archiveFeeHead)
   // updateFeeHead is used by "Restore All" — the existing mutation already
   // accepts a `Partial<FeeHead>` patch, so restoring = `{ active: true }`.
-  // No store change required.
   const updateFeeHead = useFeeStore((s) => s.updateFeeHead)
 
-  // ─── Master fee head catalogue (Fix 2 — FEE-ARCH) ──────────────────
-  // Unique fee head names across all structures, deduplicated by name,
-  // tracking which structures use the name + whether each instance is
-  // active + the set of frequencies observed.
+  // Unique fee head names across all structures, deduplicated by name.
   const masterHeads = useMemo(() => {
     const nameMap = new Map<string, {
       name: string
@@ -210,9 +128,7 @@ function FeeHeadsSettings() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [showAdd, setShowAdd] = useState(false)
 
-  // Look up the per-structure head instances for a given name so the
-  // expanded "View Details" panel can show class name + amount + frequency
-  // + mandatory + status. This is computed lazily (only for expanded rows).
+  // Per-structure head instances for a given name (expanded breakdown).
   const getInstances = (name: string) => {
     const out: Array<{
       structureId: string
@@ -263,8 +179,7 @@ function FeeHeadsSettings() {
     })
   }
 
-  // Archive All: archive every active instance of this head name across
-  // all structures. Calls the existing archiveFeeHead mutation in a loop.
+  // Archive All: archive every active instance across all structures.
   const handleArchiveAll = (name: string) => {
     const instances = getInstances(name).filter((i) => i.active)
     if (instances.length === 0) return
@@ -274,9 +189,7 @@ function FeeHeadsSettings() {
     })
   }
 
-  // Restore All: restore every archived instance of this head name across
-  // all structures. Calls the existing updateFeeHead mutation with the
-  // patch `{ active: true }` in a loop.
+  // Restore All: restore every archived instance across all structures.
   const handleRestoreAll = (name: string) => {
     const instances = getInstances(name).filter((i) => !i.active)
     if (instances.length === 0) return
@@ -291,15 +204,19 @@ function FeeHeadsSettings() {
   }
 
   return (
-    <FeePanel
-      title="Fee Heads"
-      subtitle={`${activeCount} active · ${archivedCount} archived · ${masterHeads.length} unique head names`}
-      action={<Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowAdd(true)}><Plus className="h-3 w-3" /> Add Head</Button>}
+    <SettingsCard
+      label="Fee Heads"
+      icon={<IndianRupee />}
+      summary={`${activeCount} active · ${archivedCount} archived`}
+      action={
+        <Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowAdd(true)}>
+          <Plus className="h-3 w-3" /> Add Head
+        </Button>
+      }
     >
-      {/* Tab filter — [All] [Active] [Archived]. A "Mixed" head (active in
-          some structures, archived in others) appears in BOTH the Active
-          and Archived tabs. */}
-      <div className="flex items-center gap-1 mb-3">
+      {/* Filter — [All] [Active] [Archived]. A "Mixed" head appears in BOTH
+          the Active and Archived views. */}
+      <div className="flex items-center gap-1">
         {[
           { value: 'all' as const, label: 'All', count: masterHeads.length },
           { value: 'active' as const, label: 'Active', count: activeCount },
@@ -310,7 +227,9 @@ function FeeHeadsSettings() {
             onClick={() => setFilter(t.value)}
             className={cn(
               'inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors',
-              filter === t.value ? 'bg-card text-foreground border border-border shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              filter === t.value
+                ? 'bg-muted/60 text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {t.label}
@@ -319,7 +238,7 @@ function FeeHeadsSettings() {
         ))}
       </div>
 
-      <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
+      <div className="rounded-lg border border-border divide-y divide-border/70 max-h-96 overflow-y-auto custom-scrollbar">
         {filteredHeads.length === 0 ? (
           <div className="text-center py-8 text-xs text-muted-foreground">
             No fee heads match this filter.
@@ -339,14 +258,13 @@ function FeeHeadsSettings() {
             const frequenciesStr = Array.from(h.frequencies).sort().join(', ')
             const uniqueStructureNames = Array.from(new Set(h.structures))
             return (
-              <div key={h.name} className="rounded-md border border-border/60 bg-card overflow-hidden">
-                {/* Row — unified py-2.5 rhythm (2-e) */}
-                <div className="flex items-center gap-2 px-2.5 py-2.5 hover:bg-muted/30">
+              <div key={h.name}>
+                <div className="flex items-center gap-2.5 px-2.5 py-2.5 hover:bg-muted/30">
                   <span className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-md shrink-0',
+                    'flex h-7 w-7 items-center justify-center rounded-md shrink-0',
                     h.anyActive ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground',
                   )}>
-                    <IndianRupee className="h-3.5 w-3.5" />
+                    <IndianRupee className="h-3 w-3" />
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -356,15 +274,15 @@ function FeeHeadsSettings() {
                       </span>
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                      Used in <span className="font-medium text-foreground">{uniqueStructureNames.length}</span> structure(s) · Frequencies: {frequenciesStr}
+                      Used in <span className="font-medium text-foreground">{uniqueStructureNames.length}</span> structure(s) · {frequenciesStr}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-0.5 shrink-0">
                     {h.anyActive && (
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 text-[10px] gap-1 text-amber-600 hover:text-amber-700"
+                        className="h-7 text-[10px] gap-1 text-amber-600 hover:text-amber-700"
                         onClick={() => handleArchiveAll(h.name)}
                         title={`Archive "${h.name}" across all structures where it is currently active`}
                       >
@@ -375,7 +293,7 @@ function FeeHeadsSettings() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 text-[10px] gap-1 text-emerald-600 hover:text-emerald-700"
+                        className="h-7 text-[10px] gap-1 text-emerald-600 hover:text-emerald-700"
                         onClick={() => handleRestoreAll(h.name)}
                         title={`Restore "${h.name}" across all structures where it is currently archived`}
                       >
@@ -385,12 +303,12 @@ function FeeHeadsSettings() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-6 w-6 p-0"
+                      className="h-7 w-7 p-0 text-muted-foreground"
                       onClick={() => toggleExpand(h.name)}
                       aria-label={isExpanded ? 'Hide details' : 'View details'}
                       title={isExpanded ? 'Hide details' : 'View details'}
                     >
-                      {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                     </Button>
                   </div>
                 </div>
@@ -444,7 +362,7 @@ function FeeHeadsSettings() {
           }}
         />
       )}
-    </FeePanel>
+    </SettingsCard>
   )
 }
 
@@ -511,27 +429,19 @@ function AddFeeHeadDialog({ structureIds, onClose, onSave }: AddFeeHeadDialogPro
               <option value="One-Time">One-Time</option>
             </select>
           </div>
-          <label className="col-span-2 flex items-center justify-between rounded-md border border-border px-2.5 py-2">
+          <div className="col-span-2 flex items-center justify-between rounded-md border border-border px-2.5 py-2">
             <div>
               <p className="text-xs font-semibold">Mandatory Head</p>
               <p className="text-[10px] text-muted-foreground">Mandatory heads apply to every student in this structure</p>
             </div>
-            <button
-              onClick={() => setMandatory((v) => !v)}
-              className={cn('relative h-5 w-9 rounded-full transition-colors shrink-0', mandatory ? 'bg-emerald-600' : 'bg-muted-foreground/30')}
-            >
-              <span
-                className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
-                style={{ left: mandatory ? '1.125rem' : '0.125rem' }}
-              />
-            </button>
-          </label>
+            <Switch checked={mandatory} onCheckedChange={setMandatory} aria-label="Mandatory head" />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button
             size="sm"
-            className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+            className="gap-1"
             disabled={!valid}
             onClick={() => onSave(structureId, { name: name.trim(), amount, frequency, mandatory, active: true })}
           >
@@ -552,31 +462,25 @@ function LateFeeSettings() {
   const dirty = JSON.stringify(local) !== JSON.stringify(rule)
 
   return (
-    <FeePanel
-      title={
-        <ChipTitle icon={<AlertTriangle className="h-4 w-4" />} tone="bg-amber-500/15 text-amber-600">
-          Late Fee Rules
-        </ChipTitle>
-      }
-      subtitle="Automatic late fee calculation policy"
+    <SettingsCard
+      label="Late Fee Rules"
+      icon={<AlertTriangle />}
+      summary={local.enabled ? 'on' : 'off'}
       action={
-        dirty && (
-          <Button size="sm" className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => { updateLateFeeRule(local); toast.success('Late fee rules updated') }}>
+        dirty ? (
+          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { updateLateFeeRule(local); toast.success('Late fee rules updated') }}>
             <Check className="h-3 w-3" /> Save
           </Button>
-        )
+        ) : undefined
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* Live rule summary — current values at a glance (updates as fields change) */}
         <div className="flex items-center flex-wrap gap-1.5">
           <RuleChip>{formatINR(local.amountPerMonth, true)} / month</RuleChip>
           <RuleChip>max {formatINR(local.maxLateFee, true)}</RuleChip>
           <RuleChip>grace {local.gracePeriodDays}d</RuleChip>
           <RuleChip>{local.appliesTo === 'mandatory_only' ? 'mandatory heads' : 'all heads'}</RuleChip>
-          {local.enabled
-            ? <RuleChip><span className="text-emerald-600 font-semibold">on</span></RuleChip>
-            : <RuleChip><span className="text-muted-foreground">off</span></RuleChip>}
         </div>
         {/* Rule inputs — 2-col grid of labeled fields */}
         <div className="grid grid-cols-2 gap-3">
@@ -594,23 +498,22 @@ function LateFeeSettings() {
           </div>
           <div>
             <Label className="text-[11px]">Applies To</Label>
-            <select value={local.appliesTo} onChange={(e) => setLocal({ ...local, appliesTo: e.target.value as any })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1">
+            <select value={local.appliesTo} onChange={(e) => setLocal({ ...local, appliesTo: e.target.value as 'mandatory_only' | 'all' })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1">
               <option value="mandatory_only">Mandatory Heads Only</option>
               <option value="all">All Heads</option>
             </select>
           </div>
         </div>
         {/* Master switch */}
-        <SwitchField
-          label="Enable Late Fee — automatically apply to overdue accounts"
-          checked={local.enabled}
-          onToggle={() => setLocal({ ...local, enabled: !local.enabled })}
-        />
-        <div className="rounded-lg bg-muted/30 border border-border p-2.5 text-[10px] text-muted-foreground">
-          <p>Preview: A student 3 months overdue will be charged <span className="font-bold tabular-nums">{formatINR(local.amountPerMonth * 3, true)}</span> late fee (capped at {formatINR(local.maxLateFee, true)}).</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-medium">Automatically apply to overdue accounts</p>
+          <Switch checked={local.enabled} onCheckedChange={(c) => setLocal({ ...local, enabled: c })} aria-label="Enable late fee" />
         </div>
+        <p className="text-[10px] text-muted-foreground border-t border-border/60 pt-2.5">
+          A student 3 months overdue is charged <span className="font-bold tabular-nums text-foreground">{formatINR(local.amountPerMonth * 3, true)}</span> late fee, capped at {formatINR(local.maxLateFee, true)}.
+        </p>
       </div>
-    </FeePanel>
+    </SettingsCard>
   )
 }
 
@@ -623,66 +526,54 @@ function ConcessionSettings() {
   const dirty = JSON.stringify(local) !== JSON.stringify(rule)
 
   return (
-    <div className="space-y-4">
-      <FeePanel
-        title={
-          <ChipTitle icon={<Gift className="h-4 w-4" />} tone="bg-violet-500/15 text-violet-600">
-            Concession Rules
-          </ChipTitle>
-        }
-        subtitle="Approved concession categories & discounts"
-        action={
-          dirty && (
-            <Button size="sm" className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => { updateConcessionRule(local); toast.success('Concession rules updated') }}>
-              <Check className="h-3 w-3" /> Save
-            </Button>
-          )
-        }
-      >
-        <div className="space-y-4">
-          {/* Live rule summary — discounts at a glance (updates as fields change) */}
-          <div className="flex items-center flex-wrap gap-1.5">
-            <RuleChip>sibling {local.siblingDiscountPct}%</RuleChip>
-            <RuleChip>staff ward {local.staffWardDiscountPct}%</RuleChip>
-            <RuleChip>scholarship {local.scholarshipDiscountPct}%</RuleChip>
-            {local.requiresApproval && <RuleChip><span className="text-amber-600 font-semibold">principal approval</span></RuleChip>}
-            {local.enabled
-              ? <RuleChip><span className="text-emerald-600 font-semibold">on</span></RuleChip>
-              : <RuleChip><span className="text-muted-foreground">off</span></RuleChip>}
+    <SettingsCard
+      label="Concession Rules"
+      icon={<Gift />}
+      summary={local.enabled ? 'on' : 'off'}
+      action={
+        dirty ? (
+          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { updateConcessionRule(local); toast.success('Concession rules updated') }}>
+            <Check className="h-3 w-3" /> Save
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className="space-y-3">
+        {/* Live rule summary — discounts at a glance (updates as fields change) */}
+        <div className="flex items-center flex-wrap gap-1.5">
+          <RuleChip>sibling {local.siblingDiscountPct}%</RuleChip>
+          <RuleChip>staff ward {local.staffWardDiscountPct}%</RuleChip>
+          <RuleChip>scholarship {local.scholarshipDiscountPct}%</RuleChip>
+          {local.requiresApproval && <RuleChip><span className="text-amber-600 font-semibold">principal approval</span></RuleChip>}
+        </div>
+        {/* Rule inputs — discount %s */}
+        <div className="grid sm:grid-cols-3 gap-3">
+          <div>
+            <Label className="text-[11px]">Sibling Discount (%)</Label>
+            <Input type="number" value={local.siblingDiscountPct} onChange={(e) => setLocal({ ...local, siblingDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
           </div>
-          {/* Rule inputs — 2-col grid of labeled fields (discount %s + approval switch field) */}
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div>
-              <Label className="text-[11px]">Sibling Discount (%)</Label>
-              <Input type="number" value={local.siblingDiscountPct} onChange={(e) => setLocal({ ...local, siblingDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
-            </div>
-            <div>
-              <Label className="text-[11px]">Staff Ward (%)</Label>
-              <Input type="number" value={local.staffWardDiscountPct} onChange={(e) => setLocal({ ...local, staffWardDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
-            </div>
-            <div>
-              <Label className="text-[11px]">Scholarship (%)</Label>
-              <Input type="number" value={local.scholarshipDiscountPct} onChange={(e) => setLocal({ ...local, scholarshipDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
-            </div>
-            <SwitchField
-              label="Require Principal Approval"
-              checked={local.requiresApproval}
-              onToggle={() => setLocal({ ...local, requiresApproval: !local.requiresApproval })}
-            />
-            <SwitchField
-              className="sm:col-span-2"
-              label="Enable Concessions — allow fee concessions on student accounts"
-              checked={local.enabled}
-              onToggle={() => setLocal({ ...local, enabled: !local.enabled })}
-            />
+          <div>
+            <Label className="text-[11px]">Staff Ward (%)</Label>
+            <Input type="number" value={local.staffWardDiscountPct} onChange={(e) => setLocal({ ...local, staffWardDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
+          </div>
+          <div>
+            <Label className="text-[11px]">Scholarship (%)</Label>
+            <Input type="number" value={local.scholarshipDiscountPct} onChange={(e) => setLocal({ ...local, scholarshipDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
           </div>
         </div>
-      </FeePanel>
-
-      {/* NEW (2-e) — one-time entry fees policy, read directly from the store;
-          the Switch writes through updateAdmissionPolicy({ enabled }) instantly. */}
-      <AdmissionFeesCard />
-    </div>
+        {/* Toggles */}
+        <div className="divide-y divide-border/60 rounded-lg border border-border/60">
+          <div className="flex items-center justify-between gap-3 px-2.5 py-2">
+            <p className="text-xs font-medium">Require Principal approval</p>
+            <Switch checked={local.requiresApproval} onCheckedChange={(c) => setLocal({ ...local, requiresApproval: c })} aria-label="Require principal approval" />
+          </div>
+          <div className="flex items-center justify-between gap-3 px-2.5 py-2">
+            <p className="text-xs font-medium">Enable concessions on student accounts</p>
+            <Switch checked={local.enabled} onCheckedChange={(c) => setLocal({ ...local, enabled: c })} aria-label="Enable concessions" />
+          </div>
+        </div>
+      </div>
+    </SettingsCard>
   )
 }
 
@@ -701,36 +592,20 @@ function AdmissionFeesCard() {
   }
 
   return (
-    <div className="rounded-xl border bg-card p-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-600">
-            <UserPlus className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold tracking-tight truncate">One-Time Entry Fees</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-              Charged only during admission events — never billed with monthly dues.
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={handleToggle}
+    <SettingsCard
+      label="One-Time Entry Fees"
+      icon={<UserPlus />}
+      summary={admissionPolicy.enabled ? 'on' : 'off'}
+      action={
+        <Switch
+          checked={admissionPolicy.enabled}
+          onCheckedChange={handleToggle}
           aria-label="Enable one-time entry fees"
-          aria-pressed={admissionPolicy.enabled}
-          className={cn('relative h-5 w-9 rounded-full transition-colors shrink-0 mt-1', admissionPolicy.enabled ? 'bg-emerald-600' : 'bg-muted-foreground/30')}
-        >
-          <span
-            className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
-            style={{ left: admissionPolicy.enabled ? '1.125rem' : '0.125rem' }}
-          />
-        </button>
-      </div>
-      <div className={cn(
-        'divide-y divide-border/40 rounded-lg border border-border/50 overflow-hidden transition-opacity',
-        !admissionPolicy.enabled && 'opacity-60',
-      )}>
+        />
+      }
+      className={cn(!admissionPolicy.enabled && 'opacity-70')}
+    >
+      <div className="divide-y divide-border/60 rounded-lg border border-border/60">
         <div className="flex items-center justify-between gap-3 px-2.5 py-2.5 text-xs">
           <p className="font-medium shrink-0">Admission Fee</p>
           <p className="text-[11px] text-muted-foreground text-right min-w-0">
@@ -745,7 +620,10 @@ function AdmissionFeesCard() {
           </p>
         </div>
       </div>
-    </div>
+      <p className="text-[10px] text-muted-foreground">
+        Charged only during admission events — never billed with monthly dues.
+      </p>
+    </SettingsCard>
   )
 }
 
@@ -759,18 +637,19 @@ function ReceiptSettings() {
   const dirty = JSON.stringify(local) !== JSON.stringify(settings)
 
   return (
-    <FeePanel
-      title="Receipt Settings"
-      subtitle="Receipt numbering, footer message & signature"
+    <SettingsCard
+      label="Receipt Settings"
+      icon={<Receipt />}
+      summary={`next ${local.prefix}${receiptCounter + 1}`}
       action={
-        dirty && (
-          <Button size="sm" className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => { updateReceiptSettings(local); toast.success('Receipt settings updated') }}>
+        dirty ? (
+          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { updateReceiptSettings(local); toast.success('Receipt settings updated') }}>
             <Check className="h-3 w-3" /> Save
           </Button>
-        )
+        ) : undefined
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <Label className="text-[11px]">Receipt Number Prefix</Label>
@@ -778,88 +657,85 @@ function ReceiptSettings() {
           </div>
           <div>
             <Label className="text-[11px]">Paper Size</Label>
-            <select value={local.paperSize} onChange={(e) => setLocal({ ...local, paperSize: e.target.value as any })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1">
+            <select value={local.paperSize} onChange={(e) => setLocal({ ...local, paperSize: e.target.value as '80mm' | 'A5' })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1">
               <option value="80mm">80mm Thermal</option>
               <option value="A5">A5 Half-Page</option>
             </select>
           </div>
         </div>
-        <div className="rounded-md bg-muted/30 border border-border p-2.5 flex items-baseline justify-between gap-3">
-          <p className="text-[10px] text-muted-foreground">Next receipt number will be:</p>
-          <p className="font-mono text-base font-bold tabular-nums">{local.prefix}{receiptCounter + 1}</p>
-        </div>
         <div>
           <Label className="text-[11px]">Footer Message</Label>
           <Input value={local.footerMessage} onChange={(e) => setLocal({ ...local, footerMessage: e.target.value })} className="h-8 text-xs mt-1" />
         </div>
-        <SwitchField
-          label="Show Authorized Signature — print Principal signature line on receipts"
-          checked={local.showAuthorizedSignature}
-          onToggle={() => setLocal({ ...local, showAuthorizedSignature: !local.showAuthorizedSignature })}
-        />
+        <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2.5">
+          <p className="text-xs font-medium">Show authorized signature on receipts</p>
+          <Switch checked={local.showAuthorizedSignature} onCheckedChange={(c) => setLocal({ ...local, showAuthorizedSignature: c })} aria-label="Show authorized signature" />
+        </div>
       </div>
-    </FeePanel>
+    </SettingsCard>
   )
 }
 
-// ─── Policies (FIN spec #6 — controlled-edit policy + notifications) ───
+// ─── Controlled-Edit Policy — documents the ACTUAL version mechanics
+// implemented across Fee Structures (publish → lock → window).
+
+const POLICY_ROWS = [
+  {
+    icon: <Lock className="h-3.5 w-3.5 shrink-0 text-sky-600 mt-0.5" />,
+    lead: 'Publish locks.',
+    text: 'A fee structure is immutable once published for the current session — later changes open a controlled revision and create a new version, never overwriting the old one.',
+  },
+  {
+    icon: <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 mt-0.5" />,
+    lead: '60% guardian approval.',
+    text: 'A revision affecting existing charges applies only after at least 60% of affected families approve, or when the window deadline passes.',
+  },
+  {
+    icon: <Archive className="h-3.5 w-3.5 shrink-0 text-amber-600 mt-0.5" />,
+    lead: 'Archive, never delete.',
+    text: 'Published structures, recorded payments and issued receipts are part of the permanent financial record — archived, not removed.',
+  },
+]
 
 function PoliciesSettings() {
+  return (
+    <SettingsCard label="Controlled-Edit Policy" icon={<ShieldCheck />}>
+      <div className="space-y-2.5">
+        {POLICY_ROWS.map((row) => (
+          <div key={row.lead} className="flex items-start gap-2.5">
+            {row.icon}
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              <span className="font-semibold text-foreground">{row.lead}</span> {row.text}
+            </p>
+          </div>
+        ))}
+      </div>
+    </SettingsCard>
+  )
+}
+
+// ─── Notification Preferences — wired to the real alerts centre feed ───
+
+function NotificationsSettings() {
   const autoAlertsEnabled = useLiveAlerts((s) => s.autoAlertsEnabled)
   const toggleAutoAlerts = useLiveAlerts((s) => s.toggleAutoAlerts)
 
   return (
-    <div className="space-y-3">
-      {/* Controlled-Edit Policy — documents the ACTUAL version mechanics
-          implemented across Fee Structures (publish → lock → window). */}
-      <FeePanel
-        title={
-          <ChipTitle icon={<ShieldCheck className="h-4 w-4" />} tone="bg-sky-500/15 text-sky-600">
-            Controlled-Edit Policy
-          </ChipTitle>
-        }
-        subtitle="How changes to published money-affecting records are governed"
-      >
-        <div className="space-y-1.5 text-[11px] leading-relaxed">
-          <div className="flex items-start gap-2 rounded-md bg-muted/30 border border-border px-2.5 py-2">
-            <Lock className="mt-0.5 h-3 w-3 shrink-0 text-sky-600" />
-            <p>
-              <span className="font-semibold">Publish locks.</span> A fee structure is immutable once published for the current session — every later change opens a controlled revision window and creates a new version, never overwriting the old one.
+    <SettingsCard label="Notifications" icon={<Bell />}>
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium">Live finance alerts</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Approvals, collections, structure revisions and gateway events reach the alerts centre as they happen.
             </p>
           </div>
-          <div className="flex items-start gap-2 rounded-md bg-muted/30 border border-border px-2.5 py-2">
-            <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
-            <p>
-              <span className="font-semibold">60% guardian approval.</span> A revision that affects existing charges applies to students only after at least 60% of affected families approve, or when the window deadline passes. New-session structures need no threshold.
-            </p>
-          </div>
-          <div className="flex items-start gap-2 rounded-md bg-muted/30 border border-border px-2.5 py-2">
-            <Archive className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
-            <p>
-              <span className="font-semibold">Archive, never delete.</span> Published structures, recorded payments and issued receipts are part of the permanent financial record — they can be archived but not removed.
-            </p>
-          </div>
+          <Switch checked={autoAlertsEnabled} onCheckedChange={toggleAutoAlerts} aria-label="Live finance alerts" />
         </div>
-      </FeePanel>
-
-      {/* Notification Preferences — wired to the real alerts centre feed. */}
-      <FeePanel
-        title={
-          <ChipTitle icon={<Bell className="h-4 w-4" />} tone="bg-violet-500/15 text-violet-600">
-            Notification Preferences
-          </ChipTitle>
-        }
-        subtitle="Which finance events reach the school alerts centre"
-      >
-        <SwitchField
-          label="Live finance alerts — approvals, collections, structure revisions and gateway events appear in the alerts centre as they happen"
-          checked={autoAlertsEnabled}
-          onToggle={toggleAutoAlerts}
-        />
-        <p className="mt-2 text-[10px] text-muted-foreground">
+        <p className="text-[10px] text-muted-foreground border-t border-border/60 pt-2.5">
           Critical financial confirmations (payments, receipts) always notify via toast regardless of this setting.
         </p>
-      </FeePanel>
-    </div>
+      </div>
+    </SettingsCard>
   )
 }
