@@ -32,7 +32,7 @@ type FinanceTab = 'overview' | 'statements' | 'reports'
 
 const TAB_VALUES: FinanceTab[] = ['overview', 'statements', 'reports']
 
-export function FinanceShell() {
+export function FinanceShell({ onModuleNavigate }: { onModuleNavigate?: (moduleKey: string) => void } = {}) {
   const [tab, setTab] = useState<FinanceTab>('overview')
   const [periodId, setPeriodId] = useState('fy25-26')
   const [periodOpen, setPeriodOpen] = useState(false)
@@ -126,7 +126,7 @@ export function FinanceShell() {
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.2 }}
         >
-          {tab === 'overview' && <FinanceOverviewSection data={data} onNavigate={setTab} />}
+          {tab === 'overview' && <FinanceOverviewSection data={data} onNavigate={setTab} onModuleNavigate={onModuleNavigate} />}
           {tab === 'statements' && <FinanceStatementsSection data={data} />}
           {tab === 'reports' && <FinanceReportsSection data={data} />}
         </motion.div>

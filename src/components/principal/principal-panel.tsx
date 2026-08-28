@@ -169,6 +169,11 @@ export function PrincipalPanel() {
         // can deep-link to the Examination module ("Go to Examinations" —
         // the source of truth for exam definitions).
         <FeesModule onNavigate={setActive} />
+      ) : active === 'finance' ? (
+        // Finance Dashboard gets cross-module navigation so its Receivables
+        // "View" and Fee/Payroll quick-nav cards jump to the real modules
+        // instead of dead toasts.
+        <FinanceDashboardModule onModuleNavigate={setActive} />
       ) : (
         <ActiveModule />
       )}

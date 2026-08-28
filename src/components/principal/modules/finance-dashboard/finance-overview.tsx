@@ -23,7 +23,7 @@
 import { motion } from 'framer-motion'
 import {
   Wallet, TrendingUp, TrendingDown, Banknote, ShieldCheck, ArrowRight,
-  AlertCircle, Receipt, ArrowDownRight, ArrowUpRight,
+  AlertCircle, Receipt, ArrowDownRight, ArrowUpRight, Layers,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFinanceData, formatINRCompact } from '@/lib/store/finance-store'
@@ -43,9 +43,30 @@ import { toast } from 'sonner'
 interface Props {
   data: ReturnType<typeof useFinanceData>
   onNavigate: (tab: 'overview' | 'statements' | 'reports') => void
+  /** Optional cross-module jump (AppShell nav keys — 'fees', 'salary').
+   *  Falls back to an honest toast when the shell can't navigate. */
+  onModuleNavigate?: (moduleKey: string) => void
 }
 
-export function FinanceOverviewSection({ data, onNavigate }: Props) {
+export function FinanceOverviewSection({ data, onNavigate, onModuleNavigate }: Props) {
+  const jumpTo = (moduleKey: string, label: string) => {
+    if (onModuleNavigate) onModuleNavigate(moduleKey)
+    else toast.info(`Navigate to ${label}`, { description: 'Open it from the sidebar' })
+  }
+
+  // Alert actions land somewhere real: finance tabs jump inside the shell,
+  // module keys jump across the app, anything else keeps an honest toast.
+  const handleAlertAction = (alert: { action?: string; actionModule?: string }) => {
+    if (!alert.action) return
+    if (alert.actionModule === 'overview' || alert.actionModule === 'statements' || alert.actionModule === 'reports') {
+      onNavigate(alert.actionModule)
+    } else if (alert.actionModule) {
+      jumpTo(alert.actionModule, alert.action)
+    } else {
+      toast.info(alert.action)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* KPI Cards — Academics canonical SummaryCard pattern */}
@@ -232,7 +253,7 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
         {/* Receivables */}
         <FinancePanel
           title="Receivables"
-          action={<Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => toast.info('Navigate to Fee Management', { description: 'Pending Dues' })}>View <ArrowRight className="h-3 w-3" /></Button>}
+          action={<Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => jumpTo('fees', 'Fee Management')}>View <ArrowRight className="h-3 w-3" /></Button>}
         >
           <div className="space-y-2">
             <div>
@@ -244,6 +265,21 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
               <FinanceStat label="Fee Revenue" value={formatINR(data.feeRevenue, true)} accent="emerald" />
               <FinanceStat label="Collection Rate" value={`${data.feeCollectionRate}%`} accent="emerald" />
             </div>
+            {/* Fee-plan session health — live from Fee Structures (spec B) */}
+            <button
+              type="button"
+              onClick={() => jumpTo('fees', 'Fee Management — Fee Structures')}
+              className="w-full flex items-center justify-between rounded-md border border-border/50 bg-muted/30 px-2 py-1.5 hover:bg-muted/50 transition-colors text-left"
+            >
+              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Layers className="h-3 w-3" /> Fee plans · {data.structureSession.session}
+              </span>
+              <span className={cn('text-[10px] font-bold tabular-nums',
+                data.structureSession.published === data.structureSession.total
+                  ? 'text-emerald-600' : 'text-amber-600')}>
+                {data.structureSession.published}/{data.structureSession.total} published
+              </span>
+            </button>
           </div>
         </FinancePanel>
 
@@ -289,7 +325,7 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
                   <p className="text-[9px] text-muted-foreground">{alert.description}</p>
                   {alert.action && (
                     <button
-                      onClick={() => toast.info(alert.action)}
+                      onClick={() => handleAlertAction(alert)}
                       className="text-[9px] text-primary font-semibold mt-0.5 hover:underline"
                     >
                       {alert.action} →
@@ -349,10 +385,10 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
         </div>
       </FinancePanel>
 
-      {/* Quick navigation to Fee Management & Payroll */}
+      {/* Quick navigation to Fee Management & Payroll — REAL cross-module jumps */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <button
-          onClick={() => toast.info('Navigate to Fee Management', { description: 'Fee collection operations' })}
+          onClick={() => jumpTo('fees', 'Fee Management')}
           className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.03] p-3.5 text-left hover:border-emerald-500/40 hover:shadow-md transition-all group"
         >
           <div className="flex items-center justify-between gap-2">
@@ -370,7 +406,7 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
         </button>
 
         <button
-          onClick={() => toast.info('Navigate to Salary & Payroll', { description: 'Payroll operations' })}
+          onClick={() => jumpTo('salary', 'Salary & Payroll')}
           className="rounded-xl border border-violet-500/20 bg-violet-500/[0.03] p-3.5 text-left hover:border-violet-500/40 hover:shadow-md transition-all group"
         >
           <div className="flex items-center justify-between gap-2">
@@ -380,7 +416,11 @@ export function FinanceOverviewSection({ data, onNavigate }: Props) {
               </span>
               <div className="min-w-0">
                 <p className="text-xs font-semibold">Salary & Payroll</p>
-                <p className="text-[10px] text-muted-foreground">{formatINRCompact(data.monthlyPayroll)} monthly · {formatINRCompact(data.annualizedPayroll)} annual</p>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {data.payrollOutstanding > 0
+                    ? <><span className="text-rose-600 font-semibold">{formatINRCompact(data.payrollOutstanding)}</span> unpaid · {formatINRCompact(data.payrollPendingReceipts)} receipts pending</>
+                    : <>{formatINRCompact(data.payrollPaidSession)} paid · payroll clear</>}
+                </p>
               </div>
             </div>
             <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-violet-600 group-hover:translate-x-1 transition-all" />

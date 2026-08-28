@@ -17,7 +17,9 @@
 
 import { useMemo } from 'react'
 import { useFeeData, CURRENT_ACADEMIC_YEAR } from './fee-store'
-import { useSalaryData } from './salary-store'
+import {
+  useSalaryData, currentPeriodKey, periodOptions, netPayableFor, confirmedPaidFor,
+} from './salary-store'
 import { formatINR } from '@/lib/format'
 import {
   pnlData, balanceSheet, cashflow, financeStats,
@@ -76,6 +78,46 @@ export function useFinanceData(periodId: string = 'fy25-26') {
     // Derive payroll expense from salary-store (current month calculated).
     const monthlyPayroll = salaryData.analytics.monthlyPayroll
     const annualizedPayroll = monthlyPayroll * 12
+
+    // ── LIVE PAYROLL LEDGER (Employee Accounts parity) ─────────────
+    // Operational payroll cash metrics mirrored from the Salary & Payroll
+    // module's Employee Accounts tab — the Finance Dashboard and the
+    // payroll workspace always agree. Balance-sheet panels keep their
+    // static reconciliation sources; these are the REAL numbers.
+    const payrollPeriods = periodOptions(6)
+    const payrollCurrentPeriod = currentPeriodKey()
+    let payrollOutstanding = 0
+    for (const e of salaryData.employees) {
+      if (e.status !== 'Active' && e.status !== 'On Leave') continue
+      const joinKey = e.joiningDate?.slice(0, 7) ?? ''
+      for (const pk of payrollPeriods) {
+        if (pk > payrollCurrentPeriod) continue
+        if (joinKey && pk < joinKey) continue // not employed yet — no accrual
+        const payable = netPayableFor(
+          { salaries: salaryData.salaries, adjustments: salaryData.adjustments }, e.id, pk,
+        )
+        if (payable <= 0) continue
+        const confirmed = confirmedPaidFor(salaryData.payments, e.id, pk)
+        payrollOutstanding += Math.max(0, payable - confirmed)
+      }
+    }
+    const payrollPendingReceipts = salaryData.payments
+      .filter((p) => p.status === 'Pending Receipt' || p.status === 'Not Received')
+      .reduce((s, p) => s + p.amount, 0)
+    const payrollPaidSession = salaryData.payments
+      .filter((p) => p.status === 'Confirmed')
+      .reduce((s, p) => s + p.amount, 0)
+
+    // ── FEE-PLAN SESSION HEALTH (Fee Structures parity) ────────────
+    // How many per-class fee plans for the active session are published
+    // (have a current version) vs still drafts/not-configured.
+    const structureSession = {
+      session: CURRENT_ACADEMIC_YEAR,
+      total: feeData.feeStructures.length,
+      published: feeData.feeStructures.filter((st) =>
+        feeData.versions.some((v) => v.structureId === st.id && v.status === 'current'),
+      ).length,
+    }
 
     // Use P&L data expense breakdown for category analysis.
     const expenseBreakdown = financeStats.expenseBreakdown
@@ -159,19 +201,19 @@ export function useFinanceData(periodId: string = 'fy25-26') {
       : 'Healthy'
 
     // ── Alerts ────────────────────────────────────────────────────
-    const alerts: Array<{ id: string; title: string; description: string; severity: 'critical' | 'warning' | 'info'; action?: string }> = []
+    const alerts: Array<{ id: string; title: string; description: string; severity: 'critical' | 'warning' | 'info'; action?: string; /** Where the action button lands: a finance tab ('overview'|'statements'|'reports') or an AppShell module key ('fees'|'salary'). */ actionModule?: string }> = []
     if (feeOutstanding > 1000000) {
-      alerts.push({ id: 'fee-outstanding', title: 'Outstanding Fees', description: `${formatINR(feeOutstanding, true)} pending from ${receivableStudentCount} students`, severity: 'warning', action: 'View Pending Dues' })
+      alerts.push({ id: 'fee-outstanding', title: 'Outstanding Fees', description: `${formatINR(feeOutstanding, true)} pending from ${receivableStudentCount} students`, severity: 'warning', action: 'View Pending Dues', actionModule: 'fees' })
     }
     const techBudget = budgetData.find((b) => b.category === 'Tech')
     if (techBudget && techBudget.actual > techBudget.budget) {
-      alerts.push({ id: 'tech-overrun', title: 'Technology Budget Exceeded', description: `${formatINR(techBudget.actual - techBudget.budget, true)} over budget`, severity: 'critical', action: 'View Budget' })
+      alerts.push({ id: 'tech-overrun', title: 'Technology Budget Exceeded', description: `${formatINR(techBudget.actual - techBudget.budget, true)} over budget`, severity: 'critical', action: 'View Budget', actionModule: 'reports' })
     }
     if (salaryData.analytics.pendingAdjustments > 0) {
-      alerts.push({ id: 'payroll-pending', title: 'Salary Changes Awaiting Approval', description: `${salaryData.analytics.pendingAdjustments} salary change${salaryData.analytics.pendingAdjustments > 1 ? 's' : ''} awaiting employee approval`, severity: 'warning', action: 'View Payroll' })
+      alerts.push({ id: 'payroll-pending', title: 'Salary Changes Awaiting Approval', description: `${salaryData.analytics.pendingAdjustments} salary change${salaryData.analytics.pendingAdjustments > 1 ? 's' : ''} awaiting employee approval`, severity: 'warning', action: 'View Payroll', actionModule: 'salary' })
     }
     if (collectionRate < 85) {
-      alerts.push({ id: 'collection-low', title: 'Fee Collection Below Target', description: `${collectionRate}% collected — target 85%`, severity: 'warning', action: 'View Fee Management' })
+      alerts.push({ id: 'collection-low', title: 'Fee Collection Below Target', description: `${collectionRate}% collected — target 85%`, severity: 'warning', action: 'View Fee Management', actionModule: 'fees' })
     }
     if (reserveCoverage < 3) {
       alerts.push({ id: 'reserve-low', title: 'Cash Reserve Below Target', description: `${reserveCoverage} months coverage — target 3+ months`, severity: 'info' })
@@ -195,8 +237,13 @@ export function useFinanceData(periodId: string = 'fy25-26') {
     ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6)
 
     // ── Upcoming Obligations ───────────────────────────────────────
+    // The payroll line is REAL: when unpaid payroll exists (Employee
+    // Accounts ledger) it shows the actual unpaid portion; otherwise the
+    // forward-looking monthly payroll. Mock vendor/utility lines follow.
     const upcomingObligations = [
-      { id: 'obl-1', title: 'Payroll', amount: monthlyPayroll, due: 'End of month', severity: 'warning' as const },
+      payrollOutstanding > 0
+        ? { id: 'obl-1', title: 'Payroll — unpaid portion', amount: payrollOutstanding, due: 'End of month', severity: 'warning' as const }
+        : { id: 'obl-1', title: 'Payroll', amount: monthlyPayroll, due: 'End of month', severity: 'info' as const },
       { id: 'obl-2', title: 'Utilities', amount: 420000, due: '25th of month', severity: 'info' as const },
       { id: 'obl-3', title: 'Vendor Payments', amount: 860000, due: '28th of month', severity: 'info' as const },
       { id: 'obl-4', title: 'Loan Repayment', amount: 400000, due: '5th next month', severity: 'info' as const },
@@ -234,6 +281,14 @@ export function useFinanceData(periodId: string = 'fy25-26') {
       expenseBreakdown: payrollDerivedExpense,
       monthlyPayroll,
       annualizedPayroll,
+
+      // Live payroll ledger (Employee Accounts parity)
+      payrollPaidSession,
+      payrollPendingReceipts,
+      payrollOutstanding,
+
+      // Fee-plan session health (Fee Structures parity)
+      structureSession,
 
       // Cash flow
       operatingNet,

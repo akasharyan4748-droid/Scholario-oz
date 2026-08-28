@@ -692,3 +692,35 @@ Stage Summary:
 - Row-click pattern note for future agents: overlay-button rows are fragile — prefer row-level onClick + closest('button') guard.
 - Salary red-line held: zero unauthorized changes inside existing salary files (only additive tab wiring + the new section file).
 - Known automation quirk: use agent-browser `type` (real keys) for this app's controlled inputs; `fill`/synthetic events don't reach React onChange.
+
+---
+Task ID: C-1
+Agent: Z.ai Code (main)
+Task: Finance Dashboard cross-module integration — replace dead navigation toasts with real module jumps + surface live Employee Accounts / Fee Structures data in the command center.
+
+Work Log:
+- ASSESSMENT: both prior specs complete and verified. Found the gap: FinanceOverviewSection's "Navigate to Fee Management"/"Navigate to Salary & Payroll" quick-nav cards and Receivables "View" fired toast.info placeholders — PrincipalPanel only passed onNavigate to Dashboard + Fees, not finance.
+- finance-store.ts (additive): new LIVE PAYROLL LEDGER block in useFinanceData — payrollOutstanding (6-period lookback per Active/On-Leave employee, pre-joining periods skipped, netPayableFor − confirmedPaidFor), payrollPendingReceipts (Pending Receipt + Not Received), payrollPaidSession (Confirmed). New structureSession {session, total, published} — published = structure has a current version in the versions pool. Upcoming Obligations payroll line is now REAL ("Payroll — unpaid portion", warning severity) when unpaid payroll exists; falls back to forward monthly payroll when clear. Return object += 4 fields; balance-sheet/statements keep static reconciliation sources (no regression there).
+- finance-overview.tsx: Props += onModuleNavigate?; jumpTo() helper (real nav, honest toast fallback when shell can't navigate). Receivables "View" → fees module. NEW fee-plans chip inside Receivables: "Fee plans · 2026-2027 · 12/12 published" (emerald when all published, amber otherwise) — clicking jumps to Fee Management. Quick-nav cards now navigate for real; Salary card sub-label switched from static monthly/annual to LIVE "₹19.75 L unpaid · ₹32K receipts pending" (rose highlight) or "₹X paid · payroll clear" when settled. Layers icon import.
+- finance-shell.tsx: accepts onModuleNavigate?, threads to overview. principal-panel.tsx: active==='finance' branch renders <FinanceDashboardModule onModuleNavigate={setActive} />.
+- E2E (agent-browser, principal): Finance Dashboard renders chip "12/12 published" (emerald), obligation "Payroll — unpaid portion ₹19.75 L" — figure EXACTLY matches Employee Accounts outstanding (₹19,75,500). Clicks verified: Fee Management card → Fee Management module (h1), Salary card → Salary & Payroll module, Receivables "View" → fees, fee-plans chip → fees. Mobile 390px: chip + obligations stack cleanly.
+- tsc clean (except pre-existing app-shell baseline), lint clean.
+
+Stage Summary:
+- Finance Dashboard is now a true command center: every receivable/payroll number traces to a live store (fee-store/salary-store), and every finance CTA lands in the real module — no dead buttons.
+- Store API additions for future agents: useFinanceData → {payrollPaidSession, payrollPendingReceipts, payrollOutstanding, structureSession{session,total,published}}.
+- Next-round candidates: Needs-Attention alert actions still toast (could deep-link: View Budget→settings, View Payroll→salary, View Fee Management→fees); Statements/Reports tabs could surface the live payroll ledger line; Salary module could accept an initialTab prop for deep-linking to Employee Accounts.
+
+---
+Task ID: C-2
+Agent: Z.ai Code (main)
+Task: Needs-Attention alert actions — deep-link alert CTAs instead of dead toasts (continuation of C-1).
+
+Work Log:
+- finance-store.ts: alerts array gains actionModule? field — 'fees' (fee-outstanding, collection-low), 'salary' (payroll-pending), 'reports' (tech-overrun → finance shell's own Reports tab). Type documented inline.
+- finance-overview.tsx: handleAlertAction() — finance-tab keys route to the shell's onNavigate, module keys route through jumpTo (real navigation with toast fallback), no-module alerts keep honest toast. Alert action button now calls it.
+- E2E verified all three visible alerts: "View Payroll" → Salary & Payroll module (h1 confirmed); "View Budget" → finance Reports tab (Financial Summary content confirmed); "View Fee Management" → Fee Management module (h1 confirmed). Final screenshot shows the complete command center: fee-plans chip, live Salary card (₹19.75 L unpaid · ₹32K receipts pending), real payroll activity rows, footer sticky at viewport bottom. tsc + lint clean.
+
+Stage Summary:
+- Zero dead navigation remains in the Finance Dashboard: 2 quick-nav cards, Receivables View, fee-plans chip and 3 alert actions all land in real destinations.
+- Pattern for future agents: alert objects may carry actionModule ('fees'|'salary' = AppShell module keys; 'overview'|'statements'|'reports' = shell-internal tabs).
