@@ -874,3 +874,20 @@ Stage Summary:
 - Fee Settings now reads exactly like Salary Settings: one flat, scannable card stack; tab context + content + actions with zero navigation nesting, zero dev copy, consistent rounded-xl/border/p-4 card recipe, shadcn Switch toggles, live count summaries in every card header.
 - 2,155 lines of settings code reduced to ~1,730 with MORE visible functionality (everything in one scroll instead of 11 nav destinations).
 - PENDING: push 3 commits (788b98e, 511d890, 8a36534) to main + development once the user supplies a valid GitHub token.
+
+---
+Task ID: FE-SET-2
+Agent: Z.ai Code (main thread)
+Task: User request — "In Fee management module : settings sections : Remove that fee Head and reconciliation thing completely." Surgical removal of the Fee Heads card (fees-settings.tsx) and the Reconciliation card (fees-settings-payment.tsx) from the Fee Settings tab. UI-only; stores/data/logic untouched.
+
+Work Log:
+- Scoped the removal: both components were local (non-exported) to their files; verified no other file references FeeHeadsSettings / AddFeeHeadDialog / ReconciliationSection; confirmed "Fee Heads" management still fully lives in Fee Structures (per-class config) and reconciliation data stays with Transactions — nothing else consumed these cards.
+- fees-settings.tsx: DELETED FeeHeadsSettings card (master catalogue, All/Active/Archived filter chips, per-structure breakdown expansion, Archive All/Restore All) + AddFeeHeadDialog entirely; removed from render stack; cleaned dead imports (IndianRupee, Landmark (already dead), Plus, ChevronDown, ChevronUp, RotateCcw, useMemo, Dialog set, FeeHead type); header doc updated with removal rationale. Fee Heads card gone from Settings — head add/archive/restore mutations remain in the store, untouched, for Fee Structures.
+- fees-settings-payment.tsx: DELETED ReconciliationSection (3 summary tiles, Recent Webhook Events list, Settlements 10-col table, Matched Transactions table) + its render slot; removed ArrowRightLeft import (only consumer); kept Webhook/formatRelativeTime (Gateway card still uses them); header doc updated. Gateway card retains Test Webhook + recordWebhookEvent wiring — webhook pipeline still testable from Settings.
+- Net: −583 / +21 lines across the two files. Settings tab is now exactly 8 cards: Payment Methods → Bank Accounts → UPI/QR → Payment Gateway → Late Fee Rules → Concession Rules → One-Time Entry Fees → Receipt Settings → Controlled-Edit Policy → Notifications.
+- VERIFY: bunx tsc → only the 2 pre-existing app-shell baseline errors (none new); bun run lint → clean; dev.log clean compiles. Browser E2E (agent-browser, principal auth): Settings tab opens straight into PAYMENT METHODS; DOM asserts "Fee Heads" count=0 and "Reconciliation" count=0; all 10 remaining cards render at 1440px (top/mid/bottom screenshots — gateway config grid, Test Connection/Test Webhook/Switch-to-Live intact, Receipt "next RCP-2026-1061", Policy rows, Notifications); 390px mobile: fees module → Settings tab stacks correctly, DOM asserts feeHeadsCards=0 / reconciliationCards=0, document.scrollWidth == viewport (no horizontal overflow); zero console errors / page errors.
+
+Stage Summary:
+- Fee Settings is now purely practical: collection channels + financial rules + receipts + policies + notifications. No head-catalogue duplication of Fee Structures, no reconciliation ledger on a preferences surface.
+- 741→~178 lines fees-settings.tsx payload, 1169→~988 fees-settings-payment.tsx; every store mutation, dirty-Save flow, and dialog outside the two removed cards is behaviour-identical.
+- PUSH STILL BLOCKED: PAT gh p_eXIs… (exposed earlier, user advised to rotate) now returns 401; `git push origin main` → "could not read Username". Local main is 5 commits ahead of origin/main: 8a36534 (salary polish), 511d890 (auto), 788b98e (FE-SET-1 settings rebuild), f129482 (auto), 4252390 (FE-SET-2 this task). development also behind. `stable` untouched per red line. NEED a fresh GitHub token from the user to push main + development.
