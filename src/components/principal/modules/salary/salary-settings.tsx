@@ -21,6 +21,7 @@ import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSalaryStore, type PaymentMethod, EDIT_WINDOW_MS, CURRENT_SESSION } from '@/lib/store/salary-store'
 import { useEditingWindow, LockedBadge } from './salary-shared'
+import { PayrollArchiveCard } from './salary-payroll-archive'
 
 const METHODS: PaymentMethod[] = ['Bank Transfer', 'UPI', 'Cash', 'Cheque']
 
@@ -157,6 +158,9 @@ export function SalarySettingsSection() {
           <LockedBadge label="Locked" />
         </div>
       </div>
+
+      {/* PAYROLL ARCHIVE — historical records, read-only */}
+      <PayrollArchiveCard />
     </div>
   )
 }

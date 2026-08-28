@@ -9,7 +9,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
-  AlertTriangle, ArrowUpRight, Check, ChevronRight, Clock, Users, Wallet, X,
+  AlertTriangle, Archive, ArrowUpRight, Check, ChevronRight, Clock, Users, Wallet, X,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -176,6 +176,7 @@ export function AuditIcon({ action }: { action: AuditAction }) {
     'editing.enabled': { icon: <Check className="h-3.5 w-3.5" strokeWidth={3} />, cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
     'editing.expired': { icon: <Clock className="h-3.5 w-3.5" />, cls: 'bg-slate-500/10 text-slate-600 dark:text-slate-300' },
     'settings.updated': { icon: <Check className="h-3.5 w-3.5" strokeWidth={3} />, cls: 'bg-slate-500/10 text-slate-600 dark:text-slate-300' },
+    'session.archived': { icon: <Archive className="h-3.5 w-3.5" />, cls: 'bg-slate-500/10 text-slate-600 dark:text-slate-300' },
   }
   const m = map[action]
   return <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg', m.cls)}>{m.icon}</span>

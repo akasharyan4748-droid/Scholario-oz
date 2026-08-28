@@ -285,6 +285,7 @@ export function SalaryEmployeeDrawer() {
                       </p>
                       <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
                         {p.method} · {fmtDay(p.date)}
+                        {p.reference ? ` · ${p.reference}` : ''}
                         {p.rejectionReason ? ` — “${p.rejectionReason}”` : ''}
                         {p.reversalReason ? ` — ${p.reversalReason}` : ''}
                       </p>

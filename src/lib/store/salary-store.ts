@@ -180,12 +180,61 @@ export interface PaymentReceipt {
   reference?: string
 }
 
+// ─── Session payroll archive (frozen, read-only snapshots) ───────────
+
+/** One employee's session totals, FROZEN at archive time — later salary
+ *  changes can never rewrite these numbers. */
+export interface ArchivedEmployeeRecord {
+  employeeId: string
+  employeeCode: string // EMP-… / T-…
+  name: string
+  designation: string
+  department: string
+  employmentStatus: EmployeeStatus
+  /** Net monthly salary as it stood when the session was archived. */
+  monthlySalary: number
+  totalPayable: number
+  totalPaid: number
+  outstanding: number
+  paymentsCount: number
+}
+
+/** A completed session's payroll, preserved exactly as it happened.
+ *  Payments are frozen copies of the original records (which already
+ *  snapshot netPayable at record time) — never recomputed. */
+export interface SessionPayrollArchive {
+  sessionId: string
+  sessionLabel: string
+  archivedAt: string
+  archivedBy: string
+  records: ArchivedEmployeeRecord[]
+  payments: SalaryPayment[]
+  summary: {
+    employees: number
+    totalPayroll: number
+    totalPaid: number
+    totalOutstanding: number
+    paymentsCount: number
+  }
+}
+
+/** Same shape as an archive, but computed from the LIVE store — used for
+ *  the in-progress session's read-only overview and for the archive action. */
+export interface SessionPayrollSnapshot {
+  sessionId: string
+  sessionLabel: string
+  records: ArchivedEmployeeRecord[]
+  payments: SalaryPayment[]
+  summary: SessionPayrollArchive['summary']
+}
+
 export type AuditAction =
   | 'payment.recorded'
   | 'payment.confirmed'
   | 'payment.not_received'
   | 'payment.reversed'
   | 'payment.followed_up'
+  | 'session.archived'
   | 'salary.change_requested'
   | 'salary.change_accepted'
   | 'salary.change_declined'
@@ -217,6 +266,109 @@ export interface EditPermission {
 export interface PaymentSettings {
   defaultMethod: PaymentMethod
   referenceRequired: Record<PaymentMethod, boolean>
+}
+
+// ─── Academic session mapping (Indian academic year: April – March) ───
+
+/** Maps a monthly period key ('2026-08') to its academic session id
+ *  ('2026-27'). April–December belong to the session that starts that
+ *  calendar year; January–March belong to the session started a year
+ *  earlier. This is how the archive groups real records by session. */
+export function sessionOfPeriod(periodKey: string): string {
+  const [y, m] = periodKey.split('-').map(Number)
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return CURRENT_SESSION.id
+  const start = m >= 4 ? y : y - 1
+  return `${start}-${String((start + 1) % 100).padStart(2, '0')}`
+}
+
+/** '2026-27' → '2026–27' (en dash, display label). */
+export function sessionLabelOf(sessionId: string): string {
+  return sessionId.replace('-', '–')
+}
+
+/** All monthly period keys of an academic session, in order. `upTo`
+ *  (inclusive) caps the range — the live session only counts months that
+ *  have actually begun, so future months never inflate payroll figures. */
+export function sessionPeriodRange(sessionId: string, upTo?: string): string[] {
+  const [a, b] = sessionId.split('-').map(Number)
+  // '2026-27' → start 2026, end 2027. Accept 4-digit or 2-digit parts.
+  const startYear = a >= 100 ? a : 2000 + a
+  const endYear = b >= 100 ? b : startYear + 1
+  const endMonthCal = 3 // March of the following calendar year
+  const out: string[] = []
+  for (let y = startYear, m = 4; ; m++) {
+    if (m > 12) { m = 1; y++ }
+    const pk = `${y}-${String(m).padStart(2, '0')}`
+    if (upTo && pk > upTo) break
+    out.push(pk)
+    if (y === endYear && m === endMonthCal) break
+    if (out.length > 24) break // safety net — never loops unbounded
+  }
+  return out
+}
+
+/**
+ * Builds a session payroll snapshot from REAL store data — the single
+ * source used both by the in-progress session's read-only overview and by
+ * `archiveSession` when freezing a completed session. Per employee, every
+ * month of the session (up to `upTo`) contributes net payable via the same
+ * helpers the Payments tab uses, so the numbers always match the running
+ * payroll. Payment rows are the original records — netPayable was already
+ * snapshotted when each payment was recorded.
+ */
+export function buildSessionPayrollSnapshot(
+  state: Pick<SalaryState, 'employees' | 'salaries' | 'adjustments' | 'payments'>,
+  sessionId: string,
+  upTo?: string,
+): SessionPayrollSnapshot {
+  const periods = sessionPeriodRange(sessionId, upTo)
+  const inSession = (pk: string) => periods.includes(pk)
+  const sessionPayments = state.payments.filter((p) => inSession(p.periodKey))
+
+  const records: ArchivedEmployeeRecord[] = []
+  for (const e of state.employees) {
+    const state_ = state.salaries[e.id]
+    const empPayments = sessionPayments.filter((p) => p.employeeId === e.id)
+    if (!state_ && empPayments.length === 0) continue // never on payroll this session
+    const joinKey = e.joiningDate?.slice(0, 7) ?? ''
+    let totalPayable = 0
+    for (const pk of periods) {
+      if (joinKey && pk < joinKey) continue // not employed yet that month
+      const payable = netPayableFor(state, e.id, pk)
+      if (payable > 0) totalPayable += payable
+    }
+    const totalPaid = empPayments.filter((p) => p.status === 'Confirmed').reduce((s, p) => s + p.amount, 0)
+    const livePayments = empPayments.filter((p) => p.status !== 'Reversed')
+    records.push({
+      employeeId: e.id,
+      employeeCode: e.employeeId,
+      name: e.name,
+      designation: e.designation,
+      department: e.department,
+      employmentStatus: e.status,
+      monthlySalary: state_?.salary.netBase ?? 0,
+      totalPayable,
+      totalPaid,
+      outstanding: Math.max(0, totalPayable - totalPaid),
+      paymentsCount: livePayments.length,
+    })
+  }
+  records.sort((x, y) => y.totalPayable - x.totalPayable || x.name.localeCompare(y.name))
+
+  const paid = sessionPayments.filter((p) => p.status === 'Confirmed')
+  return {
+    sessionId,
+    sessionLabel: sessionLabelOf(sessionId),
+    records,
+    payments: [...sessionPayments].sort((a, b) => b.date.localeCompare(a.date)),
+    summary: {
+      employees: records.length,
+      totalPayroll: records.reduce((s, r) => s + r.totalPayable, 0),
+      totalPaid: paid.reduce((s, p) => s + p.amount, 0),
+      totalOutstanding: records.reduce((s, r) => s + r.outstanding, 0),
+      paymentsCount: sessionPayments.filter((p) => p.status !== 'Reversed').length,
+    },
+  }
 }
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -691,6 +843,8 @@ interface SalaryState {
   editPermission: EditPermission
   settings: PaymentSettings
   receiptSeq: number
+  /** Completed sessions preserved as frozen, read-only payroll records. */
+  archives: SessionPayrollArchive[]
 
   recordPayment: (input: RecordPaymentInput) => SalaryPayment
   confirmReceipt: (paymentId: string, actor?: string) => void
@@ -710,6 +864,11 @@ interface SalaryState {
   enableEditing: () => void
   normalizeEditPermission: () => void
   updateSettings: (patch: Partial<PaymentSettings>) => void
+
+  /** Freeze a completed session's payroll into a read-only archive.
+   *  Guards: the current (in-progress) session can never be archived,
+   *  a session cannot be archived twice, and empty sessions are refused. */
+  archiveSession: (sessionId: string, actor?: string) => SessionPayrollArchive
 }
 
 export const useSalaryStore = create<SalaryState>()(
@@ -742,6 +901,7 @@ export const useSalaryStore = create<SalaryState>()(
         audit: SEED.audit,
         receiptSeq: 200,
         editPermission: { enabled: false, expiresAt: null },
+        archives: [],
         settings: {
           defaultMethod: 'Bank Transfer',
           referenceRequired: { 'Bank Transfer': true, UPI: false, Cash: false, Cheque: true },
@@ -1021,6 +1181,29 @@ export const useSalaryStore = create<SalaryState>()(
           set((st) => ({ settings: { ...st.settings, ...patch } }))
           log('settings.updated', 'Preferences updated', 'Salary & Payroll', PRINCIPAL)
         },
+
+        // ── Session archive ──
+        archiveSession: (sessionId, actor) => {
+          const st = get()
+          if (sessionId === CURRENT_SESSION.id) {
+            throw new Error('This session is still in progress — it can be archived once it ends.')
+          }
+          if (st.archives.some((a) => a.sessionId === sessionId)) {
+            throw new Error('That session has already been archived.')
+          }
+          const snapshot = buildSessionPayrollSnapshot(st, sessionId)
+          if (snapshot.records.length === 0) {
+            throw new Error('No payroll records exist for that session.')
+          }
+          const archive: SessionPayrollArchive = {
+            ...snapshot,
+            archivedAt: new Date().toISOString(),
+            archivedBy: actor ?? PRINCIPAL,
+          }
+          set({ archives: [archive, ...st.archives] })
+          log('session.archived', 'Session archived', `${archive.sessionLabel} · ${snapshot.summary.employees} employees · ${snapshot.summary.paymentsCount} payments`, actor ?? PRINCIPAL)
+          return archive
+        },
       }
     },
     {
@@ -1037,6 +1220,7 @@ export const useSalaryStore = create<SalaryState>()(
         editPermission: st.editPermission,
         settings: st.settings,
         receiptSeq: st.receiptSeq,
+        archives: st.archives,
       }),
       onRehydrateStorage: () => (state) => {
         // Expiry survives refresh: an expired window rehydrates as OFF.
@@ -1162,6 +1346,67 @@ export function useSalaryData() {
   }, [employees, structures, salaries, changeRequests, adjustments, payments, receipts, audit])
 }
 
-// ─── Re-export formatting (shared convention) ────────────────────────
+// ─── Hook: sessions that actually exist (for the Payroll Archive) ────
+
+export interface PayrollSessionInfo {
+  sessionId: string
+  label: string
+  isCurrent: boolean
+  /** Frozen archive exists for this session. */
+  archived: boolean
+  paymentsCount: number
+  employeesCount: number
+}
+
+/** Derives the sessions REAL payroll data references — never invents one.
+ *  The current session is always listed first (it is where live payroll
+ *  lives); completed/archived sessions follow, newest first. */
+export function usePayrollSessions(): PayrollSessionInfo[] {
+  const employees = useSalaryStore((s) => s.employees)
+  const payments = useSalaryStore((s) => s.payments)
+  const adjustments = useSalaryStore((s) => s.adjustments)
+  const salaries = useSalaryStore((s) => s.salaries)
+  const archives = useSalaryStore((s) => s.archives)
+
+  return useMemo(() => {
+    const ids = new Set<string>([CURRENT_SESSION.id])
+    for (const p of payments) ids.add(sessionOfPeriod(p.periodKey))
+    for (const a of adjustments) ids.add(sessionOfPeriod(a.periodKey))
+    for (const a of archives) ids.add(a.sessionId)
+
+    return Array.from(ids)
+      .sort((x, y) => {
+        if (x === CURRENT_SESSION.id) return -1
+        if (y === CURRENT_SESSION.id) return 1
+        return y.localeCompare(x)
+      })
+      .map((sessionId) => {
+        const archive = archives.find((a) => a.sessionId === sessionId)
+        const isCurrent = sessionId === CURRENT_SESSION.id
+        if (archive) {
+          return {
+            sessionId,
+            label: archive.sessionLabel,
+            isCurrent,
+            archived: true,
+            paymentsCount: archive.summary.paymentsCount,
+            employeesCount: archive.summary.employees,
+          }
+        }
+        const live = isCurrent
+          ? buildSessionPayrollSnapshot({ employees, salaries, adjustments, payments }, sessionId, currentPeriodKey())
+          : null
+        const sessionPayments = payments.filter((p) => sessionOfPeriod(p.periodKey) === sessionId && p.status !== 'Reversed')
+        return {
+          sessionId,
+          label: sessionLabelOf(sessionId),
+          isCurrent,
+          archived: false,
+          paymentsCount: sessionPayments.length,
+          employeesCount: live?.summary.employees ?? 0,
+        }
+      })
+  }, [payments, adjustments, salaries, archives, employees])
+}
 
 export { formatINR, formatDate } from '@/lib/format'
