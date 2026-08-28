@@ -1,35 +1,35 @@
 'use client'
 
 /**
- * FeesStructuresSection — Versioned Fee Structure admin table (Phase 8 /
- * PART 32 compact-table redesign).
+ * FeesStructuresSection — Versioned Fee Structure admin grid (Phase 8).
  *
- * - Compact, information-dense TABLE (Salary & Payroll benchmark): one
- *   row per canonical class (plus any user-created drafts). Columns:
- *   Class (level-toned chip + name + level + "Not configured" warning +
- *   live RevisionPill) · Students · Annual (BASE total, excludes opt-in
- *   Transport) · Heads (top-3 heads preview as tooltip) · Version
- *   (StructureStatusBadge) · Effective · Session exams · Actions.
- * - Row click opens the detail drawer; the Actions cluster stops
- *   propagation. Open / History / More(dropdown) wiring unchanged.
- * - "+ New Structure" header button opens the same right-side detail
- *   drawer in `mode='create'` (replaces the old dashed grid tile); the
- *   drawer handles its own Save Draft / Publish / Cancel flow.
+ * - Per-class structure cards (one per canonical class, plus any
+ *   user-created drafts) on the Salary-structures card benchmark:
+ *   md:grid-cols-2 xl:grid-cols-3 grid of rounded-xl bg-card p-4 cards.
+ * - Each card shows: level-toned icon chip, class name (2-line wrap),
+ *   StructureStatusBadge + v{n}, 3 mini-stats (Annual — BASE total
+ *   excluding opt-in Transport — / active heads / students), a top-3
+ *   non-transport fee-heads preview line (monthly heads read "₹X/mo"),
+ *   effective-from meta, and a session-exam-fee line ('Not configured'
+ *   only for intentionally unconfigured schedules, e.g. Class 6/7).
+ * - Card actions: Open (detail drawer), History, More (dropdown)
+ * - Drawer actions: Edit, Duplicate, Create New Version, View History,
+ *   Compare Versions, Archive, Restore, Delete (with safeguards)
  * - All actions wire to real store mutations (no toast-only placeholders)
  *
- * Status pills (Version column): CURRENT (emerald) · SCHEDULED (amber) ·
- *   DRAFT (slate) · ARCHIVED (muted)
+ * Status pills (per card):
+ *   CURRENT (emerald) · SCHEDULED (amber) · DRAFT (slate) · ARCHIVED (muted)
  *
  * Versioning note: the "Fee Structure History" banner lives once in
  * Settings (Fees → Settings) to avoid a 4-file verbatim duplication.
- * The Version column carries v{n} + status which conveys the same
- * information.
+ * The structure cards below carry their own v{n} + status badge which
+ * conveys the same versioning information.
  */
 
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Layers, History, MoreHorizontal, Plus,
+  Layers, History, MoreHorizontal, Plus, ChevronRight, Calendar,
   FileText, Archive, Copy, Trash2, AlertTriangle, ShieldAlert,
   GraduationCap, ShieldCheck,
 } from 'lucide-react'
@@ -123,9 +123,9 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
     return () => window.removeEventListener('fee-open-structure', handler)
   }, [])
 
-  // FEE-CREATE-DRAWER — "+ New Structure" (header button, PART 32) opens
-  // the same right-side detail drawer used by existing structures, but in
-  // `mode='create'`. The button's onClick toggles `createMode`
+  // FEE-CREATE-DRAWER — "Create New Structure" now opens the same
+  // right-side detail drawer used by existing structures, but in
+  // `mode='create'`. The dashed card's onClick toggles `createMode`
   // (no record is written); the drawer handles its own Save Draft /
   // Publish New Version / Cancel flow. On Save Draft (or Publish) the
   // drawer calls `onCreated(id)` which closes create-mode and re-opens
@@ -364,10 +364,9 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* PART 32 — benchmark header pair (icon-title h2 + subtitle; right
-          actions): "+ New Structure" outline button (opens the same create
-          drawer the old dashed grid tile used) + Structures chip +
-          Bound-classes chip. */}
+      {/* TASK 2-c — benchmark header pair (icon-title h2 + subtitle;
+          right actions) with exactly THREE inline elements: Structures
+          chip, Bound-classes chip, Master Catalogue outline launcher. */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-base font-bold flex items-center gap-2">
@@ -379,16 +378,6 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
           </p>
         </div>
         <div className="flex items-center gap-1.5">
-          {/* FEE-CREATE-DRAWER — create-tile functionality moved here
-              (PART 32): opens the detail drawer in `mode='create'`. */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1"
-            onClick={openCreateDrawer}
-          >
-            <Plus className="h-3.5 w-3.5" /> New Structure
-          </Button>
           <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40">
             <Layers className="h-2.5 w-2.5" /> {feeStructures.length} structure{feeStructures.length === 1 ? '' : 's'}
           </Badge>
@@ -399,211 +388,211 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
       </div>
 
 
-      {/* PART 32 — compact information-dense table (Salary & Payroll
-          benchmark). One row per structure; row click opens the detail
-          drawer while the Actions cluster stops propagation. The list
-          fades in as ONE motion block (no per-row stagger — calm). */}
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-        className="rounded-xl border border-border bg-card overflow-hidden overflow-x-auto"
-      >
-        <div className="min-w-[820px]">
-          {/* Column header — hidden below md; rows scroll horizontally
-              inside min-w-[820px] on narrow screens. */}
-          <div className="hidden md:flex items-center gap-3 px-4 py-2 border-b border-border/60 bg-muted/30 text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">
-            <span className="flex-1 min-w-0">Class</span>
-            <span className="w-16 text-right">Students</span>
-            <span className="w-24 text-right" title="Excludes opt-in Transport">Annual</span>
-            <span className="w-14 text-right">Heads</span>
-            <span className="w-28">Version</span>
-            <span className="w-28">Effective</span>
-            <span className="w-32">Exams</span>
-            <span className="w-[190px] text-right">Actions</span>
-          </div>
-
-          {/* Rows — divide-y keeps the table hairlines. Every computation
-              (students, status, heads preview, exam totals) is the SAME
-              logic the card grid used — only the rendering surface changed. */}
-          <div className="divide-y divide-border">
-            {feeStructures.map((f) => {
-              // FEE-PER-CLASS — `category` and `classLevel` are now the same
-              // value (the spec says "category can be removed or set to the
-              // same value as classLevel"); fall back to `classLevel` when
-              // `category` is empty (e.g. a draft created before the
-              // FEE-PER-CLASS migration may have an empty category). Strip
-              // the ' (Copy)' suffix that Duplicate-as-draft appends so
-              // copies keep the parent's tone.
-              const accentKey = (f.category || f.classLevel).replace(' (Copy)', '')
-              const accent = CATEGORY_COLORS[accentKey] ?? CATEGORY_COLORS['Primary']
-              // FEE-PER-CLASS — count students by EXACT className first
-              // (e.g. Class 9 row → 4 Class 9 students). Falls back to
-              // classLevel substring matching when no student has the
-              // exact className (e.g. a duplicated draft with className
-              // "Class 9 — Draft Copy").
-              const studentsCount =
-                studentsByClassName[f.className] ?? studentsByLevel[f.classLevel] ?? 0
-              const status = structureStatus.get(f.id) ?? 'current'
-              const activeHeads = f.components.filter((c) => c.active)
-              // TASK 2-c — main fee-heads preview: top 3 ACTIVE non-transport
-              // heads ranked by annual contribution (amount × frequency
-              // multiplier). Monthly heads read "{amount}/mo" so frequency
-              // semantics stay visible; everything else shows the annualised
-              // figure. Opt-in Transport is excluded — it never contributes
-              // to the base annual total. Surfaced as a tooltip on Heads.
-              const rankedPreviewHeads = activeHeads
-                .filter((h) => h.category !== 'Transport')
-                .sort((a, b) =>
-                  (b.amount * (FREQUENCY_MULTIPLIER[b.frequency] ?? 1)) -
-                  (a.amount * (FREQUENCY_MULTIPLIER[a.frequency] ?? 1)))
-              const headsPreview = rankedPreviewHeads
-                .slice(0, 3)
-                .map((h) => h.frequency === 'Monthly'
-                  ? `${h.name} ${formatINR(h.amount)}/mo`
-                  : `${h.name} ${formatINR(h.amount * (FREQUENCY_MULTIPLIER[h.frequency] ?? 1))}`)
-                .join(' · ')
-              // TASK 2-c — session exam fees summed across planned
-              // examinations. An EMPTY examFeeSchedule (seeded on Class 6/7)
-              // means intentionally unconfigured → muted "Not configured".
-              const examTotal = computeExamFeeTotal(f.examFeeSchedule)
-              const examItems = (f.examFeeSchedule ?? []).length
-              return (
-                <div
-                  key={f.id}
-                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/25 transition-colors cursor-pointer"
-                  onClick={() => setOpenStructureId(f.id)}
-                >
-                  {/* Class — level-toned icon chip + name/level + the
-                      Not-configured warning + live revision pill */}
-                  <div className="flex-1 min-w-0 flex items-center gap-2.5">
-                    <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', accent)}>
-                      <Layers className="h-3.5 w-3.5" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold truncate">{f.className}</p>
-                      <p className="text-[9px] text-muted-foreground truncate">{f.classLevel}</p>
-                      {f.notConfigured && f.components.length === 0 && (
-                        <p className="text-[9px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                          <AlertTriangle className="h-2.5 w-2.5" /> Not configured
-                        </p>
-                      )}
-                      {activeRevisionByStructure.get(f.id) && (
-                        <div className="mt-0.5 max-w-[240px]">
-                          <RevisionPill revision={activeRevisionByStructure.get(f.id)!} />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Students */}
-                  <div className="w-16 text-right shrink-0">
-                    <span className="text-xs font-bold tabular-nums">{studentsCount}</span>
-                  </div>
-
-                  {/* Annual — BASE total (excludes opt-in Transport) */}
-                  <div className="w-24 text-right shrink-0" title="Excludes opt-in Transport">
-                    <span className="text-xs font-bold tabular-nums">{formatINR(f.annual)}</span>
-                  </div>
-
-                  {/* Heads — hover tooltip carries the top-3 heads preview */}
-                  <div className="w-14 text-right shrink-0" title={headsPreview || 'No active heads'}>
-                    <span className="text-xs font-bold tabular-nums">{activeHeads.length}</span>
-                  </div>
-
-                  {/* Version — shared status badge (component unchanged) */}
-                  <div className="w-28 flex shrink-0">
-                    <StructureStatusBadge status={status} version={f.version} />
-                  </div>
-
-                  {/* Effective */}
-                  <div className="w-28 shrink-0">
-                    <span className="text-[11px] tabular-nums">{formatDate(f.effectiveFrom)}</span>
-                  </div>
-
-                  {/* Session exams */}
-                  <div className="w-32 shrink-0">
-                    <span className={examTotal > 0 ? 'text-[10px] text-muted-foreground' : 'text-[10px] italic text-muted-foreground'}>
-                      {examTotal > 0
-                        ? `${formatINR(examTotal, true)} · ${examItems} planned`
-                        : 'Not configured'}
-                    </span>
-                  </div>
-
-                  {/* Actions — stopPropagation so the row click doesn't
-                      double-fire; wiring identical to the old card footer. */}
-                  <div className="w-[190px] shrink-0 flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="h-7 text-[11px] shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
-                      onClick={() => setOpenStructureId(f.id)}
-                    >
-                      Open
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-[11px] gap-1 shrink-0 whitespace-nowrap"
-                      onClick={() => setHistoryStructure(f)}
-                      title="View version history"
-                    >
-                      <History className="h-3 w-3" /> History
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" title="More">
-                          <MoreHorizontal className="h-3 w-3" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => setOpenStructureId(f.id)}>
-                          <FileText className="h-3 w-3 mr-2" /> Open detail
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setHistoryStructure(f)}>
-                          <History className="h-3 w-3 mr-2" /> View history
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDuplicate(f)}>
-                          <Copy className="h-3 w-3 mr-2" /> Duplicate as draft
-                        </DropdownMenuItem>
-                        {/* PHASE 5 — Bulk Apply to Level. Creates draft
-                            structures for every uncovered class in the
-                            same level. Confirmation dialog shows the exact
-                            list of target classes before any mutation. */}
-                        <DropdownMenuItem
-                          onClick={() => setBulkApplyOpen(f)}
-                          className="text-emerald-700 dark:text-emerald-300 focus:text-emerald-800"
-                        >
-                          <GraduationCap className="h-3 w-3 mr-2" /> Bulk apply to {f.classLevel} level…
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => handleArchive(f)}
-                          className="text-amber-600 focus:text-amber-700"
-                        >
-                          <Archive className="h-3 w-3 mr-2" /> Archive current version
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-rose-600 focus:text-rose-700"
-                          onClick={() => handleDelete(f)}
-                        >
-                          <Trash2 className="h-3 w-3 mr-2" /> Delete structure…
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+      {/* Structure grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        {feeStructures.map((f, i) => {
+          // FEE-PER-CLASS — `category` and `classLevel` are now the same
+          // value (the spec says "category can be removed or set to the
+          // same value as classLevel"); fall back to `classLevel` when
+          // `category` is empty (e.g. a draft created before the
+          // FEE-PER-CLASS migration may have an empty category). Strip
+          // the ' (Copy)' suffix that Duplicate-as-draft appends so
+          // copies keep the parent's tone.
+          const accentKey = (f.category || f.classLevel).replace(' (Copy)', '')
+          const accent = CATEGORY_COLORS[accentKey] ?? CATEGORY_COLORS['Primary']
+          // FEE-PER-CLASS — count students by EXACT className first
+          // (e.g. Class 9 card → 4 Class 9 students). Falls back to
+          // classLevel substring matching when no student has the
+          // exact className (e.g. a duplicated draft with className
+          // "Class 9 — Draft Copy").
+          const studentsCount =
+            studentsByClassName[f.className] ?? studentsByLevel[f.classLevel] ?? 0
+          const status = structureStatus.get(f.id) ?? 'current'
+          const activeHeads = f.components.filter((c) => c.active)
+          // TASK 2-c — main fee-heads preview: top 3 ACTIVE non-transport
+          // heads ranked by annual contribution (amount × frequency
+          // multiplier). Monthly heads read "{amount}/mo" so frequency
+          // semantics stay visible on the card; everything else shows the
+          // annualised figure. Opt-in Transport is excluded — it never
+          // contributes to the base annual total.
+          const rankedPreviewHeads = activeHeads
+            .filter((h) => h.category !== 'Transport')
+            .sort((a, b) =>
+              (b.amount * (FREQUENCY_MULTIPLIER[b.frequency] ?? 1)) -
+              (a.amount * (FREQUENCY_MULTIPLIER[a.frequency] ?? 1)))
+          const headsPreview = rankedPreviewHeads
+            .slice(0, 3)
+            .map((h) => h.frequency === 'Monthly'
+              ? `${h.name} ${formatINR(h.amount)}/mo`
+              : `${h.name} ${formatINR(h.amount * (FREQUENCY_MULTIPLIER[h.frequency] ?? 1))}`)
+            .join(' · ')
+          // TASK 2-c — session exam fees summed across planned
+          // examinations. An EMPTY examFeeSchedule (seeded on Class 6/7)
+          // means intentionally unconfigured → muted "Not configured".
+          const examTotal = computeExamFeeTotal(f.examFeeSchedule)
+          const examItems = (f.examFeeSchedule ?? []).length
+          return (
+            <motion.div
+              key={f.id}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04 }}
+              className="rounded-xl border bg-card p-4 flex flex-col gap-2.5 hover:border-emerald-500/30 hover:shadow-md transition-all cursor-pointer group"
+              onClick={() => setOpenStructureId(f.id)}
+            >
+              {/* Top row — level-toned icon chip + class name + status */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', accent)}>
+                    <Layers className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    {/* FEE-PER-CLASS — title is the class name (stream
+                        labels wrap onto two lines instead of clipping);
+                        subtitle is the academic level. No "Structure
+                        Name" — the card title IS the class name. */}
+                    <p className="text-sm font-bold leading-snug line-clamp-2">{f.className}</p>
+                    <p className="text-xs text-muted-foreground truncate">{f.classLevel}</p>
                   </div>
                 </div>
-              )
-            })}
-
-            {feeStructures.length === 0 && (
-              <div className="px-4 py-8 text-center text-xs text-muted-foreground">
-                No fee structures yet — use the + New Structure button to create the first one.
+                <StructureStatusBadge status={status} version={f.version} />
               </div>
-            )}
+
+              {/* STRUCT-REV — live mid-session revision progress pill. */}
+              {activeRevisionByStructure.get(f.id) && (
+                <RevisionPill revision={activeRevisionByStructure.get(f.id)!} />
+              )}
+              {f.notConfigured && f.components.length === 0 && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 -mt-1">
+                  <AlertTriangle className="h-3 w-3" /> Not configured — set amounts, then publish.
+                </p>
+              )}
+
+              {/* Mini-stat tiles (Salary-benchmark recipe) — Annual shows
+                  the BASE total (excludes opt-in Transport). */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg bg-muted/40 px-2.5 py-1.5" title="Excludes opt-in Transport">
+                  <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Annual</p>
+                  <p className="text-sm font-bold tabular-nums mt-0.5">{formatINR(f.annual)}</p>
+                  <p className="text-[8px] text-muted-foreground/80 mt-0.5">excl. transport</p>
+                </div>
+                <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
+                  <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Heads</p>
+                  <p className="text-sm font-bold tabular-nums mt-0.5">{activeHeads.length}</p>
+                </div>
+                <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
+                  <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Students</p>
+                  <p className="text-sm font-bold tabular-nums mt-0.5">{studentsCount}</p>
+                </div>
+              </div>
+
+              {/* Main fee heads preview — top 3 non-transport heads by
+                  annual contribution; Monthly heads read "₹X/mo". */}
+              <p className="text-[11px] text-muted-foreground truncate min-h-[16px]" title={headsPreview || undefined}>
+                {headsPreview || '—'}
+              </p>
+
+              {/* Meta: effective-from + session exam fees (TASK 2-c) */}
+              <div className="space-y-0.5">
+                <p className="flex items-center gap-1 text-[10px] text-muted-foreground" title="Effective from">
+                  <Calendar className="h-3 w-3 shrink-0" /> Effective {formatDate(f.effectiveFrom)}
+                </p>
+                <p className={examTotal > 0 ? 'text-[10px] text-muted-foreground' : 'text-[10px] italic text-muted-foreground'}>
+                  Session exams:{' '}
+                  {examTotal > 0
+                    ? `${formatINR(examTotal)} · ${examItems} planned`
+                    : 'Not configured'}
+                </p>
+              </div>
+
+              {/* Actions — Open / History / dropdown (TASK 2-c benchmark
+                  ghost-button sizing; wiring unchanged) */}
+              <div className="flex items-center gap-1.5 pt-2 mt-auto border-t border-border/40" onClick={(e) => e.stopPropagation()}>
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="h-7 text-[11px] gap-1 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => setOpenStructureId(f.id)}
+                >
+                  Open <ChevronRight className="h-2.5 w-2.5" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px] gap-1"
+                  onClick={() => setHistoryStructure(f)}
+                  title="View version history"
+                >
+                  <History className="h-3 w-3" /> History
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="More">
+                      <MoreHorizontal className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={() => setOpenStructureId(f.id)}>
+                      <FileText className="h-3 w-3 mr-2" /> Open detail
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setHistoryStructure(f)}>
+                      <History className="h-3 w-3 mr-2" /> View history
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDuplicate(f)}>
+                      <Copy className="h-3 w-3 mr-2" /> Duplicate as draft
+                    </DropdownMenuItem>
+                    {/* PHASE 5 — Bulk Apply to Level. Creates draft
+                        structures for every uncovered class in the
+                        same level. Confirmation dialog shows the exact
+                        list of target classes before any mutation. */}
+                    <DropdownMenuItem
+                      onClick={() => setBulkApplyOpen(f)}
+                      className="text-emerald-700 dark:text-emerald-300 focus:text-emerald-800"
+                    >
+                      <GraduationCap className="h-3 w-3 mr-2" /> Bulk apply to {f.classLevel} level…
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => handleArchive(f)}
+                      className="text-amber-600 focus:text-amber-700"
+                    >
+                      <Archive className="h-3 w-3 mr-2" /> Archive current version
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-rose-600 focus:text-rose-700"
+                      onClick={() => handleDelete(f)}
+                    >
+                      <Trash2 className="h-3 w-3 mr-2" /> Delete structure…
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </motion.div>
+          )
+        })}
+
+        {/* "New Structure" card — FEE-CREATE-DRAWER: opens the same
+            right-side detail drawer used by existing structures, but in
+            `mode='create'`. No record is written on click; the drawer's
+            own Save Draft / Publish New Version handle the actual create. */}
+        <motion.button
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: feeStructures.length * 0.04 }}
+          onClick={openCreateDrawer}
+          className="rounded-xl border border-dashed border-border bg-card/50 p-4 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all text-left"
+        >
+          <div className="flex flex-col items-center justify-center text-center h-full min-h-[180px] gap-2">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20">
+              <Plus className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Create New Structure</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Fill in the basics, then add fee heads in the next step.</p>
+            </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.button>
+      </div>
 
       {/* Detail drawer — existing structure */}
       <AnimatePresence>

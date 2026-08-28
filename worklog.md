@@ -794,3 +794,20 @@ Stage Summary:
 - User's "stuck system" root cause = hung dev server (environment); restarted and stable.
 - FIN spec #1–#8 now fully implemented AND browser-verified: Additional Collections = Cash + UPI/QR dual rails auto-reconciling into one ledger; application↔collection link proven bidirectionally; Settings gains Policies tab; toasts high-contrast; generic collect buttons un-deadened.
 - Known leftovers: 2 app-shell TS baseline errors (pre-existing, out of scope); ChunkLoadError lines in dev.log are stale HMR artifacts (harmless, fresh loads 200).
+
+---
+Task ID: R-1
+Agent: Z.ai Code (main thread)
+Task: User request — restore Fee Structures (Fee Management) to the version from ~two responses back (card-grid era), then push the new project state to GitHub `development` + `main` (stable untouched).
+
+Work Log:
+- Traced fee-structures history: listing changed only once recently — commit 77c0374 (FIN-SPEC-FINAL-1 response) replaced the card grid with the Salary-style compact table (task F-4, 451 lines). State before that (commit 91e0794, Aug 28 02:42) = card-grid era WITH all versioning/revision work (fee-store engine from d4e64c1 + detail fixes from aa539a2 — all identical to HEAD).
+- Surgical restore: `git checkout 91e0794 -- src/components/principal/modules/fees/fees-structures.tsx`. fees-structures-detail.tsx / fees-structures-confirm.tsx / fee-store are byte-identical between 91e0794 and HEAD → single-file revert is fully consistent.
+- VERIFY: `bunx tsc --noEmit` → only the 2 pre-existing app-shell baseline errors (restored file compiles clean against current additive store). `bun run lint` → clean.
+- Browser E2E (agent-browser, principal): Fee Management → Fee Structures shows the card grid again (12 structure cards: chip + name + Current v1 pill + ANNUAL excl. transport + heads/students mini-stats + heads-preview line + effective date + session exams + Open/History/More). Clicked Pre-Nursery card → detail opens: Current v1 badge, ₹3.5K annual, Request Edit / History / Duplicate / Archive / Delete, Fee Heads table (3), Examination Fee Schedule (3, ₹700), Recent Activity. Mobile 390px: cards stack cleanly, zero clipping/overflow.
+- Push: remote main+development were at 180bc03 (ancestor of local main) → fast-forward pushes of local main to BOTH `main` and `development` via one-shot token URL; `stable` branch deliberately NOT touched.
+
+Stage Summary:
+- Fee Structures listing is back to the card-grid version the user liked, with zero functionality lost (create tile, per-card actions, revisions, history all intact and browser-verified).
+- Remote state: github.com/akasharyan4748-droid/Scholario-oz → `main` and `development` both at this commit; `stable` untouched.
+- Security note: user shared a GitHub PAT in chat — recommended to rotate/revoke after use.
