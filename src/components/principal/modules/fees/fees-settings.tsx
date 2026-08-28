@@ -10,15 +10,18 @@
  * two navigation levels for what is a preferences surface; every section
  * is now visible in one scroll, in practical order:
  *
- *   1. Fee Heads            — master catalogue + Add Head (addFeeHead /
- *                             archiveFeeHead / updateFeeHead)
- *   2. Payment Collection   — methods · bank accounts · UPI/QR · gateway ·
- *                             reconciliation (see fees-settings-payment.tsx)
- *   3. Late Fee Rules       — per-month amount, grace period, max
- *   4. Concession Rules     — sibling / staff ward / scholarship %
- *   5. One-Time Entry Fees  — admission policy snapshot (read-only values)
- *   6. Receipt Settings     — prefix, paper, next number, footer, signature
- *   7. Controlled-Edit Policy + Notifications
+ *   1. Payment Collection   — methods · bank accounts · UPI/QR · gateway
+ *                             (see fees-settings-payment.tsx)
+ *   2. Late Fee Rules       — per-month amount, grace period, max
+ *   3. Concession Rules     — sibling / staff ward / scholarship %
+ *   4. One-Time Entry Fees  — admission policy snapshot (read-only values)
+ *   5. Receipt Settings     — prefix, paper, next number, footer, signature
+ *   6. Controlled-Edit Policy + Notifications
+ *
+ * Fee Heads master catalogue and the Reconciliation ledger were removed
+ * from Settings by product decision — head management lives in Fee
+ * Structures (per-class config) and reconciliation lives with the
+ * Transactions data, not on a preferences surface.
  *
  * Card anatomy mirrors Salary Settings: rounded-xl border bg-card p-4,
  * [10px] uppercase muted label + small muted icon, right-aligned action,
@@ -26,11 +29,10 @@
  * mutations, dirty-state Save flows and dialogs are behaviour-identical.
  */
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import {
-  IndianRupee, Landmark, AlertTriangle, Gift,
-  Receipt, Check, Plus, Archive,
-  ChevronDown, ChevronUp, RotateCcw,
+  AlertTriangle, Gift,
+  Receipt, Check, Archive,
   Lock, UserPlus, ShieldCheck, Bell,
 } from 'lucide-react'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
@@ -38,13 +40,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog'
-import {
-  useFeeStore,
-  type FeeHead,
-} from '@/lib/store/fee-store'
+import { useFeeStore } from '@/lib/store/fee-store'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { SettingsCard } from './fees-shared'
@@ -65,7 +61,6 @@ export function FeesSettingsSection() {
     // No page heading / banner — the "Settings" tab establishes context and
     // content starts immediately (Salary Settings benchmark).
     <div className="space-y-4">
-      <FeeHeadsSettings />
       <FeesPaymentCollectionSettings />
       <LateFeeSettings />
       <ConcessionSettings />
@@ -74,382 +69,6 @@ export function FeesSettingsSection() {
       <PoliciesSettings />
       <NotificationsSettings />
     </div>
-  )
-}
-
-// ─── Fee Heads ──────────────────────────────────────────────────────
-//
-// Master fee head catalogue: unique fee head names extracted from all
-// structures, with a per-row breakdown of which structures use the head,
-// the frequencies observed, and an "Active / Archived / Mixed" status.
-// Add Head + Archive All / Restore All call the same store mutations
-// (addFeeHead, archiveFeeHead, updateFeeHead) as before.
-
-function FeeHeadsSettings() {
-  const feeStructures = useFeeStore((s) => s.feeStructures)
-  const addFeeHead = useFeeStore((s) => s.addFeeHead)
-  const archiveFeeHead = useFeeStore((s) => s.archiveFeeHead)
-  // updateFeeHead is used by "Restore All" — the existing mutation already
-  // accepts a `Partial<FeeHead>` patch, so restoring = `{ active: true }`.
-  const updateFeeHead = useFeeStore((s) => s.updateFeeHead)
-
-  // Unique fee head names across all structures, deduplicated by name.
-  const masterHeads = useMemo(() => {
-    const nameMap = new Map<string, {
-      name: string
-      structures: string[]
-      anyActive: boolean
-      anyArchived: boolean
-      frequencies: Set<string>
-    }>()
-    feeStructures.forEach((s) => {
-      s.components.forEach((c) => {
-        const existing = nameMap.get(c.name)
-        if (existing) {
-          existing.structures.push(s.className)
-          if (c.active) existing.anyActive = true
-          if (!c.active) existing.anyArchived = true
-          existing.frequencies.add(c.frequency)
-        } else {
-          nameMap.set(c.name, {
-            name: c.name,
-            structures: [s.className],
-            anyActive: c.active,
-            anyArchived: !c.active,
-            frequencies: new Set([c.frequency]),
-          })
-        }
-      })
-    })
-    return Array.from(nameMap.values()).sort((a, b) => a.name.localeCompare(b.name))
-  }, [feeStructures])
-
-  const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('all')
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [showAdd, setShowAdd] = useState(false)
-
-  // Per-structure head instances for a given name (expanded breakdown).
-  const getInstances = (name: string) => {
-    const out: Array<{
-      structureId: string
-      structureName: string
-      classLevel: string
-      headId: string
-      amount: number
-      frequency: FeeHead['frequency']
-      mandatory: boolean
-      active: boolean
-    }> = []
-    feeStructures.forEach((s) => {
-      s.components.forEach((c) => {
-        if (c.name === name) {
-          out.push({
-            structureId: s.id,
-            structureName: s.className,
-            classLevel: s.classLevel,
-            headId: c.id,
-            amount: c.amount,
-            frequency: c.frequency,
-            mandatory: c.mandatory,
-            active: c.active,
-          })
-        }
-      })
-    })
-    return out
-  }
-
-  const filteredHeads = useMemo(() => {
-    return masterHeads.filter((h) => {
-      if (filter === 'active') return h.anyActive
-      if (filter === 'archived') return h.anyArchived
-      return true
-    })
-  }, [masterHeads, filter])
-
-  const activeCount = masterHeads.filter((h) => h.anyActive).length
-  const archivedCount = masterHeads.filter((h) => h.anyArchived).length
-
-  const toggleExpand = (name: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
-  }
-
-  // Archive All: archive every active instance across all structures.
-  const handleArchiveAll = (name: string) => {
-    const instances = getInstances(name).filter((i) => i.active)
-    if (instances.length === 0) return
-    instances.forEach((i) => archiveFeeHead(i.structureId, i.headId))
-    toast.success(`"${name}" archived`, {
-      description: `Archived across ${instances.length} structure(s). Past payments remain on record.`,
-    })
-  }
-
-  // Restore All: restore every archived instance across all structures.
-  const handleRestoreAll = (name: string) => {
-    const instances = getInstances(name).filter((i) => !i.active)
-    if (instances.length === 0) return
-    let restored = 0
-    instances.forEach((i) => {
-      const r = updateFeeHead(i.structureId, i.headId, { active: true })
-      if (r.success) restored++
-    })
-    toast.success(`"${name}" restored`, {
-      description: `Restored across ${restored} structure(s).`,
-    })
-  }
-
-  return (
-    <SettingsCard
-      label="Fee Heads"
-      icon={<IndianRupee />}
-      summary={`${activeCount} active · ${archivedCount} archived`}
-      action={
-        <Button size="sm" className="h-8 text-xs gap-1" onClick={() => setShowAdd(true)}>
-          <Plus className="h-3 w-3" /> Add Head
-        </Button>
-      }
-    >
-      {/* Filter — [All] [Active] [Archived]. A "Mixed" head appears in BOTH
-          the Active and Archived views. */}
-      <div className="flex items-center gap-1">
-        {[
-          { value: 'all' as const, label: 'All', count: masterHeads.length },
-          { value: 'active' as const, label: 'Active', count: activeCount },
-          { value: 'archived' as const, label: 'Archived', count: archivedCount },
-        ].map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setFilter(t.value)}
-            className={cn(
-              'inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors',
-              filter === t.value
-                ? 'bg-muted/60 text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t.label}
-            <span className="text-[9px] text-muted-foreground tabular-nums">{t.count}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="rounded-lg border border-border divide-y divide-border/70 max-h-96 overflow-y-auto custom-scrollbar">
-        {filteredHeads.length === 0 ? (
-          <div className="text-center py-8 text-xs text-muted-foreground">
-            No fee heads match this filter.
-          </div>
-        ) : (
-          filteredHeads.map((h) => {
-            const instances = getInstances(h.name)
-            const isExpanded = expanded.has(h.name)
-            const status: 'Active' | 'Archived' | 'Mixed' =
-              h.anyActive && h.anyArchived ? 'Mixed' : h.anyActive ? 'Active' : 'Archived'
-            const statusClass =
-              status === 'Active'
-                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/20'
-                : status === 'Archived'
-                  ? 'bg-muted text-muted-foreground ring-border/40'
-                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/20'
-            const frequenciesStr = Array.from(h.frequencies).sort().join(', ')
-            const uniqueStructureNames = Array.from(new Set(h.structures))
-            return (
-              <div key={h.name}>
-                <div className="flex items-center gap-2.5 px-2.5 py-2.5 hover:bg-muted/30">
-                  <span className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-md shrink-0',
-                    h.anyActive ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground',
-                  )}>
-                    <IndianRupee className="h-3 w-3" />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="text-xs font-medium truncate">{h.name}</p>
-                      <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold ring-1 whitespace-nowrap', statusClass)}>
-                        {status}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                      Used in <span className="font-medium text-foreground">{uniqueStructureNames.length}</span> structure(s) · {frequenciesStr}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    {h.anyActive && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[10px] gap-1 text-amber-600 hover:text-amber-700"
-                        onClick={() => handleArchiveAll(h.name)}
-                        title={`Archive "${h.name}" across all structures where it is currently active`}
-                      >
-                        <Archive className="h-3 w-3" /> Archive All
-                      </Button>
-                    )}
-                    {h.anyArchived && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[10px] gap-1 text-emerald-600 hover:text-emerald-700"
-                        onClick={() => handleRestoreAll(h.name)}
-                        title={`Restore "${h.name}" across all structures where it is currently archived`}
-                      >
-                        <RotateCcw className="h-3 w-3" /> Restore All
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 text-muted-foreground"
-                      onClick={() => toggleExpand(h.name)}
-                      aria-label={isExpanded ? 'Hide details' : 'View details'}
-                      title={isExpanded ? 'Hide details' : 'View details'}
-                    >
-                      {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                    </Button>
-                  </div>
-                </div>
-                {/* Expanded per-structure breakdown */}
-                {isExpanded && (
-                  <div className="border-t border-border/60 bg-muted/20 px-2 py-1.5">
-                    <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider mb-1 px-1">
-                      Per-structure breakdown ({instances.length})
-                    </p>
-                    <div className="space-y-0.5">
-                      {instances.map((i) => (
-                        <div key={i.headId} className="flex items-center gap-2 text-[10px] px-1 py-1 rounded hover:bg-muted/40">
-                          <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', i.active ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
-                          <span className="font-medium min-w-0 flex-1 truncate">{i.structureName}</span>
-                          <span className="text-muted-foreground whitespace-nowrap">{i.frequency} · {i.mandatory ? 'Mandatory' : 'Optional'}</span>
-                          <span className="font-mono font-semibold tabular-nums whitespace-nowrap">{formatINR(i.amount, true)}</span>
-                          <span className={cn(
-                            'text-[9px] font-semibold px-1 py-0.5 rounded whitespace-nowrap',
-                            i.active
-                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                              : 'bg-muted text-muted-foreground',
-                          )}>
-                            {i.active ? 'Active' : 'Archived'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })
-        )}
-      </div>
-
-      {showAdd && (
-        <AddFeeHeadDialog
-          structureIds={feeStructures.map((s) => ({ id: s.id, label: s.className }))}
-          onClose={() => setShowAdd(false)}
-          onSave={(structureId, head) => {
-            const result = addFeeHead(structureId, head)
-            if (!result.success) {
-              toast.error('Could not add fee head', { description: result.error })
-              return
-            }
-            const struct = feeStructures.find((s) => s.id === structureId)
-            toast.success('Fee head created', {
-              description: `${head.name} added to ${struct?.className ?? structureId}.`,
-            })
-            setShowAdd(false)
-          }}
-        />
-      )}
-    </SettingsCard>
-  )
-}
-
-interface AddFeeHeadDialogProps {
-  structureIds: Array<{ id: string; label: string }>
-  onClose: () => void
-  onSave: (structureId: string, head: Omit<FeeHead, 'id'>) => void
-}
-
-function AddFeeHeadDialog({ structureIds, onClose, onSave }: AddFeeHeadDialogProps) {
-  const [structureId, setStructureId] = useState(structureIds[0]?.id ?? '')
-  const [name, setName] = useState('')
-  const [amount, setAmount] = useState(0)
-  const [frequency, setFrequency] = useState<FeeHead['frequency']>('Annual')
-  const [mandatory, setMandatory] = useState(false)
-
-  const valid = structureId && name.trim() && amount > 0
-
-  return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add Fee Head</DialogTitle>
-        </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <Label className="text-[11px]">Apply to Fee Structure</Label>
-            <select
-              value={structureId}
-              onChange={(e) => setStructureId(e.target.value)}
-              className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1"
-            >
-              {structureIds.map((s) => (
-                <option key={s.id} value={s.id}>{s.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="col-span-2">
-            <Label className="text-[11px]">Head Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sports Fee" className="h-8 text-xs mt-1" />
-          </div>
-          <div>
-            <Label className="text-[11px]">Amount (₹)</Label>
-            <Input
-              type="number"
-              value={amount || ''}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              placeholder="0"
-              className="h-8 text-xs tabular-nums mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-[11px]">Frequency</Label>
-            <select
-              value={frequency}
-              onChange={(e) => setFrequency(e.target.value as FeeHead['frequency'])}
-              className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1"
-            >
-              <option value="Annual">Annual</option>
-              <option value="Half-Yearly">Half-Yearly</option>
-              <option value="Quarterly">Quarterly</option>
-              <option value="Monthly">Monthly</option>
-              <option value="Per Term">Per Term</option>
-              <option value="One-Time">One-Time</option>
-            </select>
-          </div>
-          <div className="col-span-2 flex items-center justify-between rounded-md border border-border px-2.5 py-2">
-            <div>
-              <p className="text-xs font-semibold">Mandatory Head</p>
-              <p className="text-[10px] text-muted-foreground">Mandatory heads apply to every student in this structure</p>
-            </div>
-            <Switch checked={mandatory} onCheckedChange={setMandatory} aria-label="Mandatory head" />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button
-            size="sm"
-            className="gap-1"
-            disabled={!valid}
-            onClick={() => onSave(structureId, { name: name.trim(), amount, frequency, mandatory, active: true })}
-          >
-            <Check className="h-3.5 w-3.5" /> Add Head
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }
 

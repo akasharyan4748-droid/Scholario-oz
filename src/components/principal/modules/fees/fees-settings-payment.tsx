@@ -16,7 +16,10 @@
  *   C. UPI / QR         → upiQrConfigs[] + addUpiQrConfig / updateUpiQrConfig
  *   D. Payment Gateway  → gatewayConfig + connectGateway / disconnectGateway /
  *                         updateGatewayStatus / recordWebhookEvent
- *   E. Reconciliation   → webhookEvents + settlements + reconciliationRecords
+ *
+ * The Reconciliation card was removed from Settings by product decision —
+ * webhook/settlement matching lives with Transactions data, not on a
+ * preferences surface.
  *
  * Secret keys are NEVER stored client-side. The Connect Gateway form only
  * captures merchantId + apiKeyId (the public key ID). The webhook secret
@@ -29,7 +32,7 @@ import { useState } from 'react'
 import {
   Smartphone, CreditCard, Building2, Banknote, FileText, Wallet,
   Landmark, QrCode, Plug, Unplug, ShieldCheck, ShieldAlert,
-  Check, Plus, Star, Ban, Pencil, RefreshCw, Webhook, ArrowRightLeft,
+  Check, Plus, Star, Ban, Pencil, RefreshCw, Webhook,
   AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -56,7 +59,6 @@ export function FeesPaymentCollectionSettings() {
       <BankAndSettlement />
       <UpiQrConfigSection />
       <PaymentGatewaySection />
-      <ReconciliationSection />
     </>
   )
 }
@@ -984,186 +986,3 @@ function ConnectGatewayDialog({ onClose, onConnect }: ConnectGatewayDialogProps)
   )
 }
 
-// ─── E. Reconciliation ──────────────────────────────────────────────
-
-function ReconciliationSection() {
-  const webhookEvents = useFeeStore((s) => s.webhookEvents)
-  const settlements = useFeeStore((s) => s.settlements)
-  const reconciliationRecords = useFeeStore((s) => s.reconciliationRecords)
-  const transactions = useFeeStore((s) => s.transactions)
-
-  // Reconciliation summary
-  const reconciled = reconciliationRecords.filter((r) => r.reconciliationStatus === 'reconciled').length
-  const pending = transactions.filter((t) => t.gateway && (!t.reconciliationStatus || t.reconciliationStatus === 'pending' || t.reconciliationStatus === 'unreconciled')).length
-  const exceptions = transactions.filter((t) => t.reconciliationStatus === 'exception').length
-
-  const recentWebhooks = webhookEvents.slice(0, 5)
-
-  return (
-    <SettingsCard
-      label="Reconciliation"
-      icon={<ArrowRightLeft />}
-      summary={`${reconciled} matched · auto from webhook + settlement data`}
-    >
-      <div className="space-y-3">
-        {/* Summary tiles */}
-        <div className="grid grid-cols-3 gap-2.5">
-          <div className="rounded-lg bg-muted/40 px-2.5 py-1.5 min-w-0">
-            <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider truncate">Reconciled</p>
-            <p className="text-base font-bold tabular-nums mt-0.5 text-emerald-600">{reconciled}</p>
-            <p className="text-[9px] text-muted-foreground truncate">transactions matched</p>
-          </div>
-          <div className="rounded-lg bg-muted/40 px-2.5 py-1.5 min-w-0">
-            <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider truncate">Pending</p>
-            <p className="text-base font-bold tabular-nums mt-0.5 text-amber-600">{pending}</p>
-            <p className="text-[9px] text-muted-foreground truncate">awaiting settlement</p>
-          </div>
-          <div className="rounded-lg bg-muted/40 px-2.5 py-1.5 min-w-0">
-            <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider truncate">Exceptions</p>
-            <p className="text-base font-bold tabular-nums mt-0.5 text-rose-600">{exceptions}</p>
-            <p className="text-[9px] text-muted-foreground truncate">failed / refunded</p>
-          </div>
-        </div>
-
-        {/* Recent webhooks */}
-        <div>
-          <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground mb-1.5">Recent Webhook Events</p>
-          {recentWebhooks.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground text-center py-4">No webhook events received yet.</p>
-          ) : (
-            <div className="divide-y divide-border/70 rounded-lg border border-border/60">
-              {recentWebhooks.map((w) => (
-                <div key={w.id} className="flex items-center gap-3 px-2.5 py-2">
-                  <span className={cn(
-                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
-                    w.status === 'processed' ? 'bg-emerald-500/10 text-emerald-600' :
-                    w.status === 'failed' ? 'bg-rose-500/10 text-rose-600' :
-                    'bg-amber-500/10 text-amber-600',
-                  )}>
-                    <Webhook className="h-3 w-3" />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-xs font-mono font-semibold">{w.eventType}</p>
-                      <span className="text-[9px] text-muted-foreground capitalize">{w.provider}</span>
-                    </div>
-                    <p className="text-[9px] text-muted-foreground truncate">
-                      {formatDate(w.receivedAt)} · {formatRelativeTime(w.receivedAt)}
-                      {w.transactionId && ` · ${w.transactionId}`}
-                    </p>
-                  </div>
-                  <span className={cn(
-                    'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap',
-                    w.status === 'processed' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                    w.status === 'failed' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
-                    w.status === 'duplicate' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-                  )}>
-                    {w.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Settlements */}
-        <div>
-          <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground mb-1.5">
-            Settlements · {settlements.length} payout(s)
-          </p>
-          {settlements.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground text-center py-4">No settlements recorded yet.</p>
-          ) : (
-            <div className="rounded-lg border border-border/60 overflow-hidden overflow-x-auto">
-              <table className="w-full text-xs min-w-[760px]">
-                <thead className="bg-muted/40">
-                  <tr>
-                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Settlement ID</th>
-                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Gateway</th>
-                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Date</th>
-                    <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Gross</th>
-                    <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Fee</th>
-                    <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Tax</th>
-                    <th className="text-right px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Net</th>
-                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">UTR</th>
-                    <th className="text-center px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Txns</th>
-                    <th className="text-center px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {settlements.map((s) => (
-                    <tr key={s.id} className="border-t border-border/30 hover:bg-muted/20">
-                      <td className="px-2.5 py-2 font-mono text-[10px]">{s.id}</td>
-                      <td className="px-2.5 py-2 capitalize text-muted-foreground">{s.gateway}</td>
-                      <td className="px-2.5 py-2 text-muted-foreground whitespace-nowrap text-[10px]">{formatDate(s.settlementDate)}</td>
-                      <td className="px-2.5 py-2 text-right tabular-nums font-semibold">{formatINR(s.grossAmount, true)}</td>
-                      <td className="px-2.5 py-2 text-right tabular-nums text-rose-600">{formatINR(s.gatewayFee, true)}</td>
-                      <td className="px-2.5 py-2 text-right tabular-nums text-rose-600">{formatINR(s.taxOnFee, true)}</td>
-                      <td className="px-2.5 py-2 text-right tabular-nums font-semibold text-emerald-600">{formatINR(s.netAmount, true)}</td>
-                      <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{s.utr ?? '—'}</td>
-                      <td className="px-2.5 py-2 text-center tabular-nums">{s.transactionIds.length}</td>
-                      <td className="px-2.5 py-2 text-center">
-                        <span className={cn(
-                          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold capitalize whitespace-nowrap',
-                          s.status === 'settled' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                          s.status === 'pending' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-                          s.status === 'failed' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
-                          s.status === 'reversed' && 'bg-sky-500/10 text-sky-700 dark:text-sky-300',
-                        )}>
-                          {s.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Reconciliation ledger */}
-        <div>
-          <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground mb-1.5">
-            Matched Transactions · {reconciliationRecords.length}
-          </p>
-          {reconciliationRecords.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground text-center py-4">No reconciliation records yet.</p>
-          ) : (
-            <div className="rounded-lg border border-border/60 overflow-hidden overflow-x-auto max-h-72 overflow-y-auto custom-scrollbar">
-              <table className="w-full text-xs min-w-[620px]">
-                <thead className="sticky top-0 bg-muted/40">
-                  <tr>
-                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Rec ID</th>
-                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Transaction</th>
-                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Settlement</th>
-                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Gateway Payment ID</th>
-                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">UTR</th>
-                    <th className="text-left px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Reconciled By</th>
-                    <th className="text-center px-2.5 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reconciliationRecords.map((r) => (
-                    <tr key={r.id} className="border-t border-border/30 hover:bg-muted/20">
-                      <td className="px-2.5 py-2 font-mono text-[10px]">{r.id}</td>
-                      <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.transactionId}</td>
-                      <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.settlementId ?? '—'}</td>
-                      <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.gatewayPaymentId ?? '—'}</td>
-                      <td className="px-2.5 py-2 font-mono text-[10px] text-muted-foreground">{r.utr ?? '—'}</td>
-                      <td className="px-2.5 py-2 text-muted-foreground text-[10px]">{r.reconciledBy ?? '—'}</td>
-                      <td className="px-2.5 py-2 text-center">
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold capitalize bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
-                          {r.reconciliationStatus}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-    </SettingsCard>
-  )
-}
