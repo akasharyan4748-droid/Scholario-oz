@@ -285,6 +285,26 @@ export const SEED_ADDITIONAL_CHARGES: AdditionalCharge[] = [
     createdAt: '2026-08-21T11:00:00Z',
     status: 'Active',
   },
+  // FIN-COLLECTION — standalone donation drive (no application needed).
+  // Custom amounts: `amount` is only the suggested contribution; progress
+  // reads against targetAmount instead of students × amount.
+  {
+    id: 'AC-03',
+    name: 'School Development Fund',
+    category: 'Donation',
+    amount: 500,
+    academicYear: '2026-2027',
+    applicableClassIds: ['C11', 'C12'],
+    dueDate: '2026-11-30',
+    mandatory: false,
+    allowCustomAmount: true,
+    targetAmount: 100000,
+    description: 'Voluntary contribution towards library expansion and smart-class upgrades. Every rupee is receipted — contribute any amount you wish.',
+    reference: 'Development Fund 2026-27',
+    createdBy: 'Principal',
+    createdAt: '2026-08-24T10:15:00Z',
+    status: 'Active',
+  },
 ]
 
 // ─── Phase 3: seed version snapshots from FEE_STRUCTURES ────────────

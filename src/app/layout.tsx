@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Sora } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/shared/theme-provider";
 
@@ -43,7 +42,6 @@ export default function RootLayout({
       >
         <ThemeProvider>
           {children}
-          <Toaster />
           <SonnerToaster position="bottom-right" closeButton />
         </ThemeProvider>
       </body>

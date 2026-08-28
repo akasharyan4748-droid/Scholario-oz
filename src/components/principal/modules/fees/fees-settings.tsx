@@ -34,8 +34,9 @@ import {
   IndianRupee, Landmark, AlertTriangle, Gift,
   Receipt, Check, Plus, Archive,
   ChevronDown, ChevronUp, RotateCcw,
-  Lock, UserPlus,
+  Lock, UserPlus, ShieldCheck, Bell,
 } from 'lucide-react'
+import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -52,7 +53,7 @@ import { FeePanel } from './fees-shared'
 import { FeesPaymentCollectionSettings } from './fees-settings-payment'
 import { toast } from 'sonner'
 
-type SettingsTab = 'fee-heads' | 'payment-collection' | 'late-fee' | 'concession' | 'receipt'
+type SettingsTab = 'fee-heads' | 'payment-collection' | 'late-fee' | 'concession' | 'receipt' | 'policies'
 
 // Shared micro-primitives for the settings cards (2-e):
 // ChipTitle — icon-chip + title used at the top of rule cards.
@@ -106,6 +107,7 @@ export function FeesSettingsSection() {
     { value: 'late-fee', label: 'Late Fee Rules', icon: <AlertTriangle className="h-3.5 w-3.5" /> },
     { value: 'concession', label: 'Concession Rules', icon: <Gift className="h-3.5 w-3.5" /> },
     { value: 'receipt', label: 'Receipt Settings', icon: <Receipt className="h-3.5 w-3.5" /> },
+    { value: 'policies', label: 'Policies', icon: <ShieldCheck className="h-3.5 w-3.5" /> },
   ]
 
   return (
@@ -140,6 +142,7 @@ export function FeesSettingsSection() {
       {tab === 'late-fee' && <LateFeeSettings />}
       {tab === 'concession' && <ConcessionSettings />}
       {tab === 'receipt' && <ReceiptSettings />}
+      {tab === 'policies' && <PoliciesSettings />}
     </div>
   )
 }
@@ -796,5 +799,67 @@ function ReceiptSettings() {
         />
       </div>
     </FeePanel>
+  )
+}
+
+// ─── Policies (FIN spec #6 — controlled-edit policy + notifications) ───
+
+function PoliciesSettings() {
+  const autoAlertsEnabled = useLiveAlerts((s) => s.autoAlertsEnabled)
+  const toggleAutoAlerts = useLiveAlerts((s) => s.toggleAutoAlerts)
+
+  return (
+    <div className="space-y-3">
+      {/* Controlled-Edit Policy — documents the ACTUAL version mechanics
+          implemented across Fee Structures (publish → lock → window). */}
+      <FeePanel
+        title={
+          <ChipTitle icon={<ShieldCheck className="h-4 w-4" />} tone="bg-sky-500/15 text-sky-600">
+            Controlled-Edit Policy
+          </ChipTitle>
+        }
+        subtitle="How changes to published money-affecting records are governed"
+      >
+        <div className="space-y-1.5 text-[11px] leading-relaxed">
+          <div className="flex items-start gap-2 rounded-md bg-muted/30 border border-border px-2.5 py-2">
+            <Lock className="mt-0.5 h-3 w-3 shrink-0 text-sky-600" />
+            <p>
+              <span className="font-semibold">Publish locks.</span> A fee structure is immutable once published for the current session — every later change opens a controlled revision window and creates a new version, never overwriting the old one.
+            </p>
+          </div>
+          <div className="flex items-start gap-2 rounded-md bg-muted/30 border border-border px-2.5 py-2">
+            <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+            <p>
+              <span className="font-semibold">60% guardian approval.</span> A revision that affects existing charges applies to students only after at least 60% of affected families approve, or when the window deadline passes. New-session structures need no threshold.
+            </p>
+          </div>
+          <div className="flex items-start gap-2 rounded-md bg-muted/30 border border-border px-2.5 py-2">
+            <Archive className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+            <p>
+              <span className="font-semibold">Archive, never delete.</span> Published structures, recorded payments and issued receipts are part of the permanent financial record — they can be archived but not removed.
+            </p>
+          </div>
+        </div>
+      </FeePanel>
+
+      {/* Notification Preferences — wired to the real alerts centre feed. */}
+      <FeePanel
+        title={
+          <ChipTitle icon={<Bell className="h-4 w-4" />} tone="bg-violet-500/15 text-violet-600">
+            Notification Preferences
+          </ChipTitle>
+        }
+        subtitle="Which finance events reach the school alerts centre"
+      >
+        <SwitchField
+          label="Live finance alerts — approvals, collections, structure revisions and gateway events appear in the alerts centre as they happen"
+          checked={autoAlertsEnabled}
+          onToggle={toggleAutoAlerts}
+        />
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          Critical financial confirmations (payments, receipts) always notify via toast regardless of this setting.
+        </p>
+      </FeePanel>
+    </div>
   )
 }

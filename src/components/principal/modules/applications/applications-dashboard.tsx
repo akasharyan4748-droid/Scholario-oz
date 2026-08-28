@@ -9,7 +9,7 @@
  * cards, no marketing energy — enterprise calm.
  */
 
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Bus, CalendarDays, CheckCircle2, ChevronDown, ClipboardList, Copy, FlaskConical, FileText,
@@ -23,6 +23,12 @@ import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 import {
   useApplicationsStore, effectiveAppStatus, combinedSubmissionStatus,
   deriveSubmissionPayment,
@@ -73,6 +79,7 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
   const [sourceFilter, setSourceFilter] = useState<string>('all')
   const [inChargeFilter, setInChargeFilter] = useState<string>('all')
   const [sessionFilter, setSessionFilter] = useState<string>('all')
+  const [recordOpen, setRecordOpen] = useState(false)
 
   const subsByApp = useMemo(() => {
     const m = new Map<string, typeof submissions>()
@@ -83,6 +90,15 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
     }
     return m
   }, [submissions])
+
+  // PART 24 — Record File pool: closed/locked/archived = permanent record.
+  const recordApps = useMemo(
+    () => applications.filter((a) => {
+      const st = effectiveAppStatus(a)
+      return st === 'Closed' || st === 'Locked' || st === 'Archived'
+    }),
+    [applications],
+  )
 
   const metrics = useMemo(() => {
     let active = 0
@@ -157,9 +173,15 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
         <p className="text-xs text-muted-foreground min-w-0 truncate">
           Examination · Event · Activity · Custom — application → approval → payment → official record
         </p>
-        <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={onStartCreate}>
-          <Plus className="h-3 w-3" /> New Application
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* PART 24 — subtle permanent-record entry point */}
+          <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setRecordOpen(true)} aria-label="Open record file of past applications">
+            <Archive className="h-3 w-3" /> Record File
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={onStartCreate}>
+            <Plus className="h-3 w-3" /> New Application
+          </Button>
+        </div>
       </div>
 
       {/* Metric strip */}
@@ -227,18 +249,37 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
           </SelectContent>
         </Select>
       </div>
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-b border-border/60 bg-muted/30 text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">
-          <span className="flex-1">Application</span>
-          <span className="w-20 shrink-0">Source</span>
-          <span className="w-32 shrink-0 hidden lg:block">In-charge</span>
-          <span className="w-24 shrink-0">Deadline</span>
-          <span className="w-20 shrink-0 text-right">Responses</span>
-          <span className="w-36 shrink-0 text-right">Money</span>
-          <span className="w-24 shrink-0 text-right">Status</span>
-          <span className="w-[72px] shrink-0" />
+      {/* overflow-x-auto + min-width wrapper: narrow viewports (iPad portrait,
+          ~1195px QA screens etc.) scroll horizontally INSIDE the card instead
+          of clipping the Status + Actions columns at the screen edge. */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden overflow-x-auto">
+        <div className="min-w-[860px]">
+          <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-b border-border/60 bg-muted/30 text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">
+            <span className="flex-1">Application</span>
+            <span className="w-20 shrink-0">Source</span>
+            <span className="w-32 shrink-0 hidden lg:block">In-charge</span>
+            <span className="w-24 shrink-0">Deadline</span>
+            <span className="w-20 shrink-0 text-right">Responses</span>
+            <span className="w-36 shrink-0 text-right">Money</span>
+            <span className="w-24 shrink-0 text-right">Status</span>
+            <span className="w-[72px] shrink-0" />
+          </div>
+          {filtered.length > 0 && (
+            <div className="divide-y divide-border">
+              {filtered.map((a, i) => (
+                <Row
+                  key={a.id}
+                  app={a}
+                  index={i}
+                  submissions={subsByApp.get(a.id) ?? []}
+                  onOpen={() => onOpenApplication(a.id)}
+                  onEdit={() => onStartEdit(a.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
-        {filtered.length === 0 ? (
+        {filtered.length === 0 && (
           <div className="py-12 text-center">
             <ClipboardList className="h-6 w-6 mx-auto text-muted-foreground/40" />
             <p className="mt-2 text-xs text-muted-foreground">No applications match this view.</p>
@@ -246,21 +287,49 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
               Create the first one
             </Button>
           </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {filtered.map((a, i) => (
-              <Row
-                key={a.id}
-                app={a}
-                index={i}
-                submissions={subsByApp.get(a.id) ?? []}
-                onOpen={() => onOpenApplication(a.id)}
-                onEdit={() => onStartEdit(a.id)}
-              />
-            ))}
-          </div>
         )}
       </div>
+
+      {/* PART 24 — Record File: permanent institutional record of finished forms */}
+      <Dialog open={recordOpen} onOpenChange={setRecordOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Record File</DialogTitle>
+            <DialogDescription>
+              Closed, locked and archived applications — permanent institutional record
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto divide-y divide-border">
+            {recordApps.length === 0 ? (
+              <p className="py-8 text-center text-xs text-muted-foreground">Nothing archived yet.</p>
+            ) : (
+              recordApps.map((a) => {
+                const RecordIcon = CATEGORY_ICON[a.category]
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => { setRecordOpen(false); onOpenApplication(a.id) }}
+                    className="flex w-full items-center gap-3 py-2.5 text-left transition-colors hover:bg-muted/40"
+                    aria-label={`Open ${a.title}`}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 ring-1 ring-violet-500/20 dark:text-violet-400">
+                      <RecordIcon className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-semibold">{a.title}</span>
+                      <span className="block truncate text-[10px] text-muted-foreground">
+                        {a.category} · {(subsByApp.get(a.id) ?? []).length} responses · deadline {a.deadline ? formatDate(a.deadline) : '—'}
+                      </span>
+                    </span>
+                    <AppStatusBadge status={effectiveAppStatus(a)} />
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -292,7 +361,6 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
   const lockApplication = useApplicationsStore((s) => s.lockApplication)
   const duplicateApplication = useApplicationsStore((s) => s.duplicateApplication)
   const archiveApplication = useApplicationsStore((s) => s.archiveApplication)
-  const [menuOpen, setMenuOpen] = useState(false)
 
   const status = effectiveAppStatus(app)
   const Icon = CATEGORY_ICON[app.category]
@@ -328,6 +396,9 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
       toast[r.success ? 'success' : 'error'](r.success ? 'Reopened' : 'Cannot reopen', r.success ? undefined : { description: r.error })
     } })
   }
+  // Render detail only: the menu draws a separator above the always-available
+  // core operations below — no actions added or removed.
+  const coreActionsStart = actionItems.length
   actionItems.push({ label: app.status === 'Draft' ? 'Edit draft' : 'View details', icon: app.status === 'Draft' ? <PencilLine className="h-3.5 w-3.5" /> : <ClipboardList className="h-3.5 w-3.5" />, onSelect: app.status === 'Draft' ? onEdit : onOpen })
   actionItems.push({ label: 'Duplicate as new draft', icon: <Copy className="h-3.5 w-3.5" />, onSelect: () => {
     const r = duplicateApplication(app.id, 'Dr. Ananya Iyer')
@@ -390,14 +461,22 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
           <p className="text-[9px] text-muted-foreground">{approved} approved</p>
         </div>
 
-        {/* Money */}
+        {/* Money — labelled roll-up (PART 28) */}
         <div className="w-36 shrink-0 text-right hidden lg:block relative z-10">
           {app.payment.mode === 'None' ? (
             <p className="text-[10px] text-muted-foreground">no fee</p>
           ) : (
             <>
-              <p className="text-xs font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(collected, true)}</p>
-              <p className="text-[9px] text-muted-foreground">{anyPendingCash ? 'cash verifying…' : `of ${formatINR(app.payment.amount * Math.max(1, submissions.length), true)}`}</p>
+              <p className="text-xs font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {formatINR(collected, true)} collected
+              </p>
+              <p className="text-[9px] text-muted-foreground">
+                {anyPendingCash
+                  ? 'cash verifying…'
+                  : submissions.length > 0
+                    ? `of ${formatINR(app.payment.amount * submissions.length, true)} expected`
+                    : `${formatINR(app.payment.amount, true)} / student`}
+              </p>
             </>
           )}
         </div>
@@ -407,36 +486,34 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
           <AppStatusBadge status={status} />
         </div>
 
-        {/* Actions */}
+        {/* Actions — Radix dropdown portals to <body>, so collision detection
+            keeps the menu on-screen even for right-most/last rows inside the
+            overflow card (replaces the clipped absolute-positioned menu). */}
         <div className="relative z-10 shrink-0 w-[72px] flex justify-end">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
-            className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] hover:bg-muted/60 transition-colors"
-            aria-label={`Actions for ${app.title}`}
-            aria-expanded={menuOpen}
-          >
-            Actions <ChevronDown className="h-3 w-3" />
-          </button>
-          {menuOpen && (
-            <>
-              <button type="button" tabIndex={-1} aria-hidden className="fixed inset-0 z-[66] cursor-default" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-2 top-9 z-[67] w-52 rounded-lg border border-border bg-popover p-1 shadow-md">
-                {actionItems.map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => { item.onSelect?.(); setMenuOpen(false) }}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-left hover:bg-muted/60 transition-colors',
-                    )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] hover:bg-muted/60 transition-colors"
+                aria-label={`Actions for ${app.title}`}
+              >
+                Actions <ChevronDown className="h-3 w-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 z-[70]">
+              {actionItems.map((item, i) => (
+                <Fragment key={item.label}>
+                  {i === coreActionsStart && i > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuItem
+                    onSelect={() => item.onSelect?.()}
+                    className={cn('text-[11px]', item.danger && 'text-rose-600 focus:text-rose-700')}
                   >
                     {item.icon} {item.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+                  </DropdownMenuItem>
+                </Fragment>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </motion.div>

@@ -102,6 +102,8 @@ export type AuditAction =
   // ─── Additional Charges (Core vs Additional financial separation) ───
   | 'additional_charge.created'
   | 'additional_charge.cancelled'
+  | 'additional_charge.closed'
+  | 'additional_charge.payment'
   // ─── Payment infrastructure audit actions (Phase 4) ───
   | 'gateway.connected'
   | 'gateway.disconnected'
@@ -144,11 +146,22 @@ export function txnCategory(
   return 'CORE'
 }
 
-/** Coarse category of an Additional Charge (drives icon/label in the UI). */
+/** Coarse category of an Additional Charge (drives icon/label in the UI).
+ *  'Donation' covers standalone contribution drives (relief fund,
+ *  development fund…) — FIN-COLLECTION redesign. */
 export type AdditionalChargeCategory =
-  | 'Tour' | 'Workshop' | 'Competition' | 'Camp' | 'Event' | 'Material' | 'Other'
+  | 'Tour' | 'Workshop' | 'Competition' | 'Camp' | 'Event' | 'Material' | 'Donation' | 'Other'
 
-export type AdditionalChargeStatus = 'Active' | 'Cancelled'
+/**
+ * Collection lifecycle (FIN-COLLECTION redesign):
+ *   Active   — open for collection (linked applications publish → Active)
+ *   Closed   — collection window finished; complete payment history
+ *              preserved and surfaced through the Record File view. A
+ *              closed charge stops being an obligation for students.
+ *   Cancelled — revoked before completion; already-collected payments
+ *              stay on record (audit trail).
+ */
+export type AdditionalChargeStatus = 'Active' | 'Closed' | 'Cancelled'
 
 /**
  * ADDITIONAL CHARGE — an event-based / special financial obligation that
@@ -188,6 +201,19 @@ export interface AdditionalCharge {
   status: AdditionalChargeStatus
   /** Principal's reason when cancelling (audit trail only). */
   cancelReason?: string
+  // ─── FIN-COLLECTION redesign (all optional for backward compat) ───
+  /** Donation-style drive where the payer may contribute a custom
+   *  amount. `amount` becomes the SUGGESTED per-student figure and
+   *  expected collection falls back to `targetAmount` (not
+   *  students × amount). */
+  allowCustomAmount?: boolean
+  /** Optional overall collection target (₹) — shown instead of
+   *  students × amount for custom-amount drives. */
+  targetAmount?: number
+  /** When the collection was closed (status Closed). */
+  closedAt?: string
+  /** Optional note recorded when closing the collection. */
+  closeNote?: string
 }
 
 export interface FeeHead {
@@ -995,6 +1021,10 @@ interface FeeState {
    *  classes/students. Does NOT touch any class fee structure. Emits an
    *  immutable audit entry. */
   createAdditionalCharge: (input: Omit<AdditionalCharge, 'id' | 'createdAt' | 'createdBy' | 'status'> & { actor?: string }) => { success: boolean; charge?: AdditionalCharge; error?: string }
+  /** Close an Active collection (FIN-COLLECTION). Stops future
+   *  obligation; collected payments + full history are preserved and
+   *  the collection moves to the Record File view. */
+  closeAdditionalCharge: (id: string, actor?: string, note?: string) => { success: boolean; error?: string }
   /** Soft-cancel an Additional Charge. Active student balances stop
    *  including it immediately; historical payments + audit entries are
    *  preserved (never destructive). */
@@ -1501,7 +1531,12 @@ export const useFeeStore = create<FeeState>()(
     if (!input.name || !input.name.trim()) {
       return { success: false, error: 'Charge name is required.' }
     }
-    if (typeof input.amount !== 'number' || input.amount <= 0) {
+    // Custom-amount drives (donations) may ship a 0 amount — the payer
+    // chooses; a positive `amount` acts as the suggested figure.
+    if (typeof input.amount !== 'number' || input.amount < 0) {
+      return { success: false, error: 'Amount must be zero or greater.' }
+    }
+    if (!input.allowCustomAmount && input.amount <= 0) {
       return { success: false, error: 'Amount must be greater than zero.' }
     }
     if (!input.dueDate) {
@@ -1547,12 +1582,50 @@ export const useFeeStore = create<FeeState>()(
     return { success: true, charge }
   },
 
+  // ─── FIN-COLLECTION: close an Active collection. ────────────────
+  // Distinct from cancel: a CLOSE is the normal end-of-collection
+  // transition (deadline reached / drive complete). Payments stay
+  // bound, history stays readable via the Record File.
+  closeAdditionalCharge: (id, actorInput, note) => {
+    const state = get()
+    const actor = actorInput ?? 'Principal'
+    const charge = state.additionalCharges.find((c) => c.id === id)
+    if (!charge) return { success: false, error: 'Collection not found.' }
+    if (charge.status === 'Closed') {
+      return { success: false, error: 'Collection is already closed.' }
+    }
+    if (charge.status === 'Cancelled') {
+      return { success: false, error: 'A cancelled collection cannot be closed.' }
+    }
+    const collected = state.transactions
+      .filter((t) => t.additionalChargeId === id && t.status === 'Success')
+      .reduce((sum, t) => sum + t.amount, 0)
+    set({
+      additionalCharges: state.additionalCharges.map((c) =>
+        c.id === id
+          ? { ...c, status: 'Closed' as const, closedAt: new Date().toISOString(), ...(note?.trim() ? { closeNote: note.trim() } : {}) }
+          : c,
+      ),
+      audit: pushAudit(state, {
+        action: 'additional_charge.closed',
+        actor,
+        entityId: id,
+        entityType: 'additional_charge',
+        description: `Collection "${charge.name}" closed. ${formatINR(collected)} collected on record${note?.trim() ? ` — ${note.trim()}` : ''}.`,
+      }),
+    })
+    return { success: true }
+  },
+
   cancelAdditionalCharge: (id, actor, reason) => {
     const state = get()
     const charge = state.additionalCharges.find((c) => c.id === id)
     if (!charge) return { success: false, error: 'Charge not found.' }
     if (charge.status === 'Cancelled') {
       return { success: false, error: 'Charge is already cancelled.' }
+    }
+    if (charge.status === 'Closed') {
+      return { success: false, error: 'A closed collection cannot be cancelled — it is part of the permanent record.' }
     }
     // How much was already collected against this charge (historical
     // payments are preserved — cancelling only stops FUTURE obligation).
