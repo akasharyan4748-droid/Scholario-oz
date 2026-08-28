@@ -21,7 +21,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Bus, CalendarDays, ChevronRight, ClipboardList, FlaskConical, Landmark,
-  ShieldCheck, Sparkles, Tag, Tent, Trophy, Users,
+  ShieldCheck, Sparkles, Tag, Tent, Trophy, Users, Award, HandHeart,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -49,6 +49,8 @@ export const CATEGORY_ICON: Record<ApplicationCategory, LucideIcon> = {
   'Board Form': Landmark,
   Transport: Sparkles,
   Activity: CalendarDays,
+  Certificate: Award,
+  Donation: HandHeart,
   Custom: Tag,
 }
 

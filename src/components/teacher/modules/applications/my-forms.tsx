@@ -20,7 +20,7 @@ import { motion } from 'framer-motion'
 import {
   ArrowLeft, Bus, CalendarDays, CheckCircle2, ClipboardList, Download, FileText,
   FlaskConical, Landmark, PencilLine, Plus, Send, ShieldAlert, Sparkles, Tag,
-  Tent, Trophy,
+  Tent, Trophy, Award, HandHeart,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -48,6 +48,8 @@ const CATEGORY_ICON: Record<ApplicationCategory, LucideIcon> = {
   'Board Form': Landmark,
   Transport: Sparkles,
   Activity: CalendarDays,
+  Certificate: Award,
+  Donation: HandHeart,
   Custom: Tag,
 }
 

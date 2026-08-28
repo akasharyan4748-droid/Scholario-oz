@@ -58,7 +58,8 @@ import { CURRENT_ACADEMIC_YEAR } from './fee-store-data'
 /** Rich application categories (broader than AdditionalCharge's coarse set). */
 export type ApplicationCategory =
   | 'Tour' | 'Trip' | 'Workshop' | 'Competition' | 'Camp' | 'Event'
-  | 'Exam Application' | 'Board Form' | 'Transport' | 'Activity' | 'Custom'
+  | 'Exam Application' | 'Board Form' | 'Transport' | 'Activity'
+  | 'Certificate' | 'Donation' | 'Custom'
 
 export type AppStatus =
   | 'Draft' | 'Pending Approval' | 'Changes Requested' | 'Approved' | 'Rejected'
@@ -92,9 +93,22 @@ export type PaymentModeConfig = 'None' | 'Required' | 'Optional'
 
 /** Form field types supported by the builder. */
 export type FormFieldType =
+  // ── Basic inputs ──
   | 'text' | 'longtext' | 'number' | 'date'
+  | 'email' | 'phone' | 'time' | 'datetime'
   | 'dropdown' | 'radio' | 'checkbox' | 'multiselect'
-  | 'yesno' | 'file' | 'emergency-contact' | 'signature' | 'declaration'
+  | 'yesno' | 'rating'
+  // ── School profile (auto-populated from the student record) ──
+  | 'student-select' | 'admission-no' | 'class' | 'section' | 'roll-no'
+  | 'student-name' | 'guardian-name' | 'guardian-phone' | 'guardian-email'
+  | 'emergency-contact'
+  // ── Documents & evidence ──
+  | 'file' | 'file-multi' | 'photo' | 'id-doc' | 'supporting-doc'
+  // ── Special school components ──
+  | 'signature' | 'declaration' | 'consent' | 'terms'
+  | 'address' | 'medical' | 'transport-req' | 'dietary' | 'accommodation'
+  // ── Layout (non-input) ──
+  | 'heading' | 'description-block' | 'divider' | 'notice' | 'instruction'
 
 /** Canonical section presets (PART 13) — builder select + form/print grouping. */
 export const FORM_SECTIONS = [
@@ -117,6 +131,43 @@ export interface ApplicationFormField {
   options?: string[]
   /** Logical section this question belongs to (official form layout). */
   section?: string
+  // ── Builder v2 configuration (all optional — legacy forms stay valid) ──
+  /** Input placeholder text. */
+  placeholder?: string
+  /** Section id from formSections[] the field belongs to (new builder). */
+  sectionId?: string
+  /** Numeric/date bounds. */
+  min?: number
+  max?: number
+  /** Integer-only number input when true. */
+  integerOnly?: boolean
+  /** Text character cap (0 = unlimited). */
+  maxLength?: number
+  /** Dropdown: filter-as-type search. */
+  searchable?: boolean
+  /** Dropdown/radio: respondent may add a custom option. */
+  allowCustom?: boolean
+  /** Rating scale max (e.g. 5 → ★★★★★). */
+  ratingMax?: number
+  /** File inputs: accepted extensions (no dots), size cap (MB), file count. */
+  fileTypes?: string[]
+  maxFiles?: number
+  maxSizeMb?: number
+  /** Signature: who signs ('Student' | 'Guardian' | 'Teacher' | 'Principal'). */
+  signatureRole?: 'Student' | 'Guardian' | 'Teacher' | 'Principal'
+  /** Lightweight conditional visibility: show this field only when the
+   *  referenced field's answer equals any of `equals` (string compare of
+   *  primitives/first-of-array). Undefined = always visible. */
+  visibleWhen?: { fieldId: string; equals: string[] }
+  /** Layout blocks: preformatted body text (heading/notice/instruction/…). */
+  blockText?: string
+}
+
+/** Ordered section metadata for the builder canvas + renderer grouping. */
+export interface FormSectionMeta {
+  id: string
+  title: string
+  description?: string
 }
 
 export interface ApplicationPaymentConfig {
@@ -179,6 +230,12 @@ export interface SchoolApplication {
   inChargeName?: string
   payment: ApplicationPaymentConfig
   formFields: ApplicationFormField[]
+  /** Ordered section metadata (builder v2). Absent on legacy forms —
+   *  the renderer then falls back to grouping by `field.section` labels. */
+  formSections?: FormSectionMeta[]
+  /** Definition version — bumped on structural edits after publish.
+   *  Submissions record the version they answered (auditability). */
+  formVersion?: number
   status: AppStatus
   createdBy: string
   createdByRole: 'Principal' | 'Teacher'
@@ -230,6 +287,8 @@ export interface ApplicationSubmission {
   reviewedBy?: string
   reviewedAt?: string
   resubmissionCount: number
+  /** Version of the form definition this submission answered. */
+  formVersion?: number
   updatedAt: string
 }
 
@@ -335,6 +394,26 @@ export function isApplicationEditable(app: SchoolApplication, now: Date = new Da
     || st === 'Open' || st === 'Closing Soon' || st === 'Scheduled'
 }
 
+/** Spec #20 — classify a schema edit. Structural edits change WHAT a
+ *  respondent answers (add/remove/reorder/type/options/required/logic);
+ *  cosmetic edits only change presentation (labels, help, placeholder,
+ *  bounds metadata that doesn't invalidate existing answers). On published
+ *  forms structural edits create a new definition version. */
+export function isStructuralSchemaChange(
+  prev: ApplicationFormField[],
+  next: ApplicationFormField[],
+): boolean {
+  if (prev.length !== next.length) return true
+  const sig = (f: ApplicationFormField) => JSON.stringify([
+    f.id, f.type, f.required, f.sectionId ?? f.section ?? '',
+    f.options ?? [], f.visibleWhen ?? null, f.maxFiles ?? null,
+  ])
+  for (let i = 0; i < prev.length; i++) {
+    if (sig(prev[i]) !== sig(next[i])) return true
+  }
+  return false
+}
+
 /** Consent satisfied? Digital tick counts immediately; physical needs verification. */
 export function isConsentSatisfied(app: SchoolApplication, sub: ApplicationSubmission): boolean {
   if (!app.guardianConsent.required) return true
@@ -417,15 +496,23 @@ export interface CreateApplicationInput {
   paymentAmount: number
   paymentFeeHeadLabel: string
   formFields: ApplicationFormField[]
+  formSections?: FormSectionMeta[]
 }
 
 interface ApplicationsState {
   applications: SchoolApplication[]
   submissions: ApplicationSubmission[]
   audit: ApplicationAuditEvent[]
+  /** Home view preference — remembered across sessions (spec #2). */
+  homeView: 'cards' | 'table'
+  setHomeView: (v: 'cards' | 'table') => void
 
   createApplication: (input: CreateApplicationInput, actor: string, opts?: { actorRole?: 'Principal' | 'Teacher'; teacherId?: string }) => { success: boolean; application?: SchoolApplication; error?: string }
   updateApplication: (id: string, patch: Partial<CreateApplicationInput>, actor: string, opts?: { actorRole?: 'Principal' | 'Teacher'; teacherId?: string }) => { success: boolean; error?: string }
+  /** Builder autosave path — patches schema fields/sections on a DRAFT and
+   *  bumps `formVersion` on PUBLISHED forms when edits are structural.
+   *  Returns `versionBumped` so the builder can inform the Principal. */
+  updateFormSchema: (id: string, fields: ApplicationFormField[], sections: FormSectionMeta[], actor: string) => { success: boolean; error?: string; versionBumped?: boolean }
   publishApplication: (id: string, actor: string, opts?: { actorRole?: 'Principal' | 'Teacher'; teacherId?: string }) => { success: boolean; error?: string; chargeCreated?: boolean }
   /** TEACHER → PRINCIPAL workflow (PART 4/7). */
   submitForApproval: (id: string, actor: string, actorRole: 'Principal' | 'Teacher', note?: string, opts?: { teacherId?: string }) => { success: boolean; error?: string }
@@ -509,6 +596,43 @@ export const useApplicationsStore = create<ApplicationsState>()(
       submissions: [],
       audit: [],
 
+      homeView: 'cards',
+      setHomeView: (v) => set({ homeView: v }),
+
+      /** Builder autosave — structural edits on a PUBLISHED form bump the
+       *  definition version; drafts mutate freely. Cosmetic edits (labels,
+       *  help text, placeholders, layout blocks) never bump the version. */
+      updateFormSchema: (id, fields, sections, actor) => {
+        const state = get()
+        const app = state.applications.find((a) => a.id === id)
+        if (!app) return { success: false, error: 'Application not found.' }
+        if (!isApplicationEditable(app)) {
+          return { success: false, error: `"${app.title}" is ${effectiveAppStatus(app)} — the form definition is locked.` }
+        }
+        const published = app.status === 'Published'
+        // Structural = anything that changes WHAT respondents answer.
+        const structural = published && isStructuralSchemaChange(app.formFields, fields)
+        const nextVersion = structural ? (app.formVersion ?? 1) + 1 : (app.formVersion ?? 1)
+        const nowIso = new Date().toISOString()
+        set({
+          applications: state.applications.map((a) => a.id !== id ? a : {
+            ...a,
+            formFields: fields,
+            formSections: sections.length ? sections : undefined,
+            ...(structural ? { formVersion: nextVersion } : {}),
+            updatedAt: nowIso,
+          }),
+          audit: pushAudit(state, {
+            ts: nowIso, applicationId: id, actor, actorRole: 'Principal',
+            action: 'application.updated',
+            message: structural
+              ? `Form structure changed on published "${app.title}" — definition moved to v${nextVersion} (existing submissions stay on v${app.formVersion ?? 1}).`
+              : `Form schema saved on "${app.title}".`,
+          }),
+        })
+        return { success: true, versionBumped: structural }
+      },
+
       createApplication: (input, actor, opts) => {
         const state = get()
         const trimmed = input.title.trim()
@@ -536,6 +660,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           source: input.source ?? 'Custom',
           sourceRef: input.sourceRef,
           academicYear: year,
+          formVersion: 1,
           targetClassIds: [...input.targetClassIds],
           targetSectionNames: input.targetSectionNames?.length ? [...input.targetSectionNames] : undefined,
           targetStudentIds: input.targetStudentIds?.length ? [...input.targetStudentIds] : undefined,
@@ -560,6 +685,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
             feeHeadLabel: input.paymentFeeHeadLabel.trim() || trimmed,
           },
           formFields: input.formFields.map((f) => ({ ...f })),
+          formSections: input.formSections?.map((s) => ({ ...s })),
           status: 'Draft',
           createdBy: actor,
           createdByRole: actorRole,
@@ -979,6 +1105,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           },
           reviewNotes: [],
           resubmissionCount: 0,
+          formVersion: app.formVersion ?? 1,
           updatedAt: nowIso,
         }
         set({
@@ -1154,6 +1281,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           },
           reviewNotes: [],
           resubmissionCount: 0,
+          formVersion: app.formVersion ?? 1,
           updatedAt: nowIso,
         }
         set({
@@ -1485,6 +1613,7 @@ export function ensureApplicationSeedData(): void {
         physicalDoc: { status: 'Not Required' },
         reviewNotes: [],
         resubmissionCount: 0,
+        formVersion: 1,
         updatedAt: '2026-08-24T09:00:00Z',
         ...extra,
       }
