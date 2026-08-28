@@ -669,3 +669,26 @@ Stage Summary:
 - Transactions header is solid; Reprint gone; 3 actions with tooltips.
 - Fee Structures now session-scoped per-class structures: auto-created → configured → published → LOCKED; exceptional mid-session changes go through the controlled Request-Edit → Proposed-revision → 60% guardian acknowledgement → publish → notify flow with full versioning (v1 archived, never overwritten) and immutable transactions.
 - Store additions for future agents: fee-store {syncFeeStructuresForSession, requestStructureEditWindow, closeStructureEditWindow, createStructureRevision, respondStructureRevision, publishStructureRevision, cancelStructureRevision, STRUCTURE_APPROVAL_THRESHOLD, structureLockReason, structureEditWindowLive, StructureRevision, StructureEditWindow}; useFeeData now exposes structureRevisions + structureEditWindow; persist v6.
+
+---
+Task ID: B-final
+Agent: Z.ai Code (main)
+Task: Spec B closing pass — finish Employee Accounts (PART 1-2), browser-verify Transactions (PART 3/4) + Fee Structures lifecycle UI, dev-health check, handover.
+
+Work Log:
+- FOUND `salary-employee-accounts.tsx` already complete on disk (created right at the interruption point): 315 lines, subscribes employees/salaries/adjustments/payments + useSalaryData rows, 6-period bounded outstanding lookback (skips pre-joining periods via joiningDate slice), KPI tiles (accounts / gross monthly / paid session / outstanding + pending hint), search + department + employment-status filters, responsive row grid, opens existing SalaryEmployeeDrawer via useSalaryUI().openEmployee. No second employee database — every field sourced from the salary store.
+- tsc: ONLY pre-existing app-shell.tsx baseline errors remain; lint clean.
+- E2E (agent-browser, principal role via scholario-auth localStorage):
+  * Salary & Payroll → new "Employee Accounts" tab sits between Payments and Payslips; 28 accounts; tiles ₹3,14,563 gross / ₹1,10,700 paid / ₹19,75,500 outstanding +₹32,000 pending.
+  * Search "Priya" → 1 row (Priya Nair); typing via real keys updates state (note: agent-browser `fill`/programmatic native-setter does NOT trigger this app's React onChange — automation quirk, not an app bug; `type` command works).
+  * Science dept filter → 5 correct rows; row click opens drawer; drawer Salary tab shows employment block (EMP-017, bank, session-salary Locked) + components breakdown (Basic+HRA+Transport−PF−ProfTax) + payable/confirmed/balance; Payment History tab shows real ledger entries (Priya ₹7,500 Aug 2026 Bank Transfer Pending Receipt; Amit correctly empty).
+  * BUG FOUND + FIXED: row had an absolute-inset-0 z-0 overlay button while name/figures/department were z-10 siblings — clicks on figures/department/avatar were dead. Replaced with row-level onClick + `closest('button')` guard (no overlay, no z-war); Open Account button remains the keyboard path. Browser-verified: clicking the gross figure now opens the correct drawer.
+  * Fee Management → Transactions: 9 cols × 19 rows (spec 15-20 ✓), thead sticky z-10, all th solid bg-muted, border-separate/spacing-0, zero Reprint buttons, tooltips View details/Print receipt/Download receipt; detail drawer has Print+Download only; page-scrolled screenshot shows header pinned, no bleed; historical RCP-2026-1044 ₹700 / RCP-2026-1047 ₹1,600 intact.
+  * Fee Management → Fee Structures: subtitle "2026-2027 · …One structure per active class — auto-created, configured, then published.", 12 structures = 12 active classes; zero "Master Catalogue" matches in DOM; Class 4 detail (fresh profile re-seeded v1): Current v1, ANNUAL ₹3.5K, 4 students impacted, action bar = Request Edit (amber shield) · History · Duplicate · Archive · Delete — no plain Edit on published; fee heads + Examination Fee Schedule live inside the structure (PART 24 ✓).
+- Dev health: log file is dev-runtime.log (dev.log absent). Last `Can't resolve './salary-employee-accounts'` is followed by ~54KB of clean 200/HMR traffic — resolved by the file; remaining browser ChunkLoadError lines are Turbopack HMR reconnect noise; 196× GET / 200.
+
+Stage Summary:
+- Spec B is COMPLETE and browser-verified end-to-end: Employee Accounts payroll ledger live; Transactions header fixed; Reprint removed; Master Catalogue gone; per-class session-scoped structures with auto-sync; locked→Request Edit→3h window→revision→60%→publish pipeline (verified in prior session, store re-seed confirms idempotent fresh state).
+- Row-click pattern note for future agents: overlay-button rows are fragile — prefer row-level onClick + closest('button') guard.
+- Salary red-line held: zero unauthorized changes inside existing salary files (only additive tab wiring + the new section file).
+- Known automation quirk: use agent-browser `type` (real keys) for this app's controlled inputs; `fill`/synthetic events don't reach React onChange.

@@ -254,12 +254,18 @@ function AccountRowView({ row, index, onOpen }: { row: AccountRow; index: number
 
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * 0.03, 0.2) }}>
-      <div className="relative flex items-center gap-3 px-4 py-2.5 hover:bg-muted/25 transition-colors">
-        <button type="button" onClick={onOpen} className="absolute inset-0 z-0 cursor-pointer" aria-label={`Open account for ${e.name}`} />
-        <Avatar className="h-8 w-8 shrink-0 relative z-10">
+      {/* Whole row is the click target — no overlay/absolute trickery, so every
+          area (avatar, figures, department) opens the account. Inner buttons
+          handle their own click; the guard avoids double-firing. Keyboard
+          users open via the trailing "Open Account" button (focusable). */}
+      <div
+        className="relative flex items-center gap-3 px-4 py-2.5 hover:bg-muted/25 transition-colors cursor-pointer"
+        onClick={(ev) => { if (!(ev.target instanceof HTMLElement && ev.target.closest('button'))) onOpen() }}
+      >
+        <Avatar className="h-8 w-8 shrink-0">
           <AvatarFallback className="text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">{initials}</AvatarFallback>
         </Avatar>
-        <button type="button" onClick={onOpen} className="relative z-10 min-w-0 flex-1 text-left">
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-1.5 min-w-0">
             <p className="text-xs font-semibold truncate">{e.name}</p>
             <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-semibold shrink-0', STATUS_TONE[e.status])}>
@@ -270,26 +276,26 @@ function AccountRowView({ row, index, onOpen }: { row: AccountRow; index: number
             {e.employeeId} · {e.designation} · {e.employeeType}
           </p>
         </button>
-        <div className="w-28 shrink-0 hidden md:block relative z-10">
+        <div className="w-28 shrink-0 hidden md:block">
           <p className="text-[11px] font-medium truncate">{e.department}</p>
           <p className="text-[9px] text-muted-foreground hidden xl:block">joined {fmtDayYear(e.joiningDate)}</p>
         </div>
-        <div className="w-20 shrink-0 text-right relative z-10">
+        <div className="w-20 shrink-0 text-right">
           <p className="text-[11px] font-semibold tabular-nums">{moneyMy(row.grossMonthly)}</p>
           <p className="text-[9px] text-muted-foreground">gross/mo</p>
         </div>
-        <div className="w-24 shrink-0 text-right hidden lg:block relative z-10">
+        <div className="w-24 shrink-0 text-right hidden lg:block">
           <p className="text-[11px] font-medium tabular-nums">{moneyMy(row.payableCurrent)}</p>
           <p className="text-[9px] text-muted-foreground">this month</p>
         </div>
-        <div className="w-24 shrink-0 text-right hidden lg:block relative z-10">
+        <div className="w-24 shrink-0 text-right hidden lg:block">
           <p className="text-[11px] font-medium tabular-nums text-emerald-600 dark:text-emerald-400">{moneyMy(row.paidSession)}</p>
           <p className="text-[9px] text-muted-foreground flex items-center justify-end gap-0.5">
             {row.pendingAmount > 0 && <Clock className="h-2.5 w-2.5 text-amber-500" />}
             paid
           </p>
         </div>
-        <div className="w-24 shrink-0 text-right relative z-10">
+        <div className="w-24 shrink-0 text-right">
           <p className={cn(
             'text-[11px] font-bold tabular-nums',
             row.outstanding > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground',
@@ -298,7 +304,7 @@ function AccountRowView({ row, index, onOpen }: { row: AccountRow; index: number
           </p>
           <p className="text-[9px] text-muted-foreground">{paidThisMonth ? 'settled' : row.outstanding > 0 ? 'payroll' : '—'}</p>
         </div>
-        <div className="relative z-10 shrink-0 w-[104px] flex justify-end">
+        <div className="shrink-0 w-[104px] flex justify-end">
           <button
             type="button"
             onClick={onOpen}
