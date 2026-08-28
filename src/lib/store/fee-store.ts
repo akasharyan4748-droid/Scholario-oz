@@ -812,19 +812,31 @@ export function structureEditWindowLive(
 // The signature accepts an optional classId (Phase 5 addition). Callers
 // that pass only className continue to work — backward compatible.
 export function findStructureForStudent(className: string, classId?: string): FeeStructureConfig | undefined {
+  // STRUCT-SESSION/REV — resolve against the LIVE store state (the pool the
+  // publish pipeline updates), falling back to the seed constant only when
+  // the store is not yet hydrated. Previously this read the static
+  // FEE_STRUCTURES seed directly, so a newly published version never
+  // reached student accounts (PART 21 violation).
+  let pool: FeeStructureConfig[] = FEE_STRUCTURES
+  try {
+    const live = useFeeStore.getState().feeStructures
+    if (Array.isArray(live) && live.length > 0) pool = live
+  } catch {
+    /* store not initialised yet — seed fallback is correct at init time */
+  }
   // 1. classId exact match (preferred path — Phase 5)
   if (classId) {
-    const byApplicable = FEE_STRUCTURES.find((f) => f.applicableClassIds?.includes(classId))
+    const byApplicable = pool.find((f) => f.applicableClassIds?.includes(classId))
     if (byApplicable) return byApplicable
-    const byClassId = FEE_STRUCTURES.find((f) => f.classId === classId)
+    const byClassId = pool.find((f) => f.classId === classId)
     if (byClassId) return byClassId
   }
   // 2. className exact match (legacy path — pre-Phase-5 primary lookup)
-  const byName = FEE_STRUCTURES.find((f) => f.className === className)
+  const byName = pool.find((f) => f.className === className)
   if (byName) return byName
   // 3. classLevel fallback (last resort — keeps backward compat with
   //    pre-FEE-PER-CLASS seed which used range names like "Class 9–10")
-  return FEE_STRUCTURES.find((f) => f.classLevel === studentClassLevel(className))
+  return pool.find((f) => f.classLevel === studentClassLevel(className))
 }
 
 // ─── Helper: count affected students for a structure ───────────────

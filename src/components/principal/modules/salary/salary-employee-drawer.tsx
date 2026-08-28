@@ -117,6 +117,23 @@ export function SalaryEmployeeDrawer() {
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4">
               {/* ── Salary ── */}
               <TabsContent value="salary" className="mt-0 space-y-4">
+                {/* Employment profile — the account references the existing
+                    employee/teacher record (no duplicate master data). */}
+                <div className="rounded-xl border bg-card p-4">
+                  <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Employment</p>
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                    <div className="flex items-start justify-between gap-2"><span className="text-muted-foreground shrink-0">Employee ID</span><span className="font-mono font-medium">{employee.employeeId}</span></div>
+                    <div className="flex items-start justify-between gap-2"><span className="text-muted-foreground shrink-0">Status</span><span className="font-medium">{employee.status}</span></div>
+                    <div className="flex items-start justify-between gap-2"><span className="text-muted-foreground shrink-0">Designation</span><span className="font-medium text-right">{employee.designation}</span></div>
+                    <div className="flex items-start justify-between gap-2"><span className="text-muted-foreground shrink-0">Department</span><span className="font-medium text-right">{employee.department}</span></div>
+                    <div className="flex items-start justify-between gap-2"><span className="text-muted-foreground shrink-0">Joined</span><span className="font-medium">{fmtDayYear(employee.joiningDate)}</span></div>
+                    <div className="flex items-start justify-between gap-2"><span className="text-muted-foreground shrink-0">Type</span><span className="font-medium">{employee.employeeType}</span></div>
+                    {employee.bankAccount && (
+                      <div className="col-span-2 flex items-start justify-between gap-2"><span className="text-muted-foreground shrink-0">Bank</span><span className="font-mono text-[10px]">•••• {employee.bankAccount.slice(-4)}{employee.bankIfsc ? ` · ${employee.bankIfsc}` : ''}</span></div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="rounded-xl border bg-card p-4">
                   <div className="flex items-center justify-between gap-2">
                     <SessionSalaryBadge />

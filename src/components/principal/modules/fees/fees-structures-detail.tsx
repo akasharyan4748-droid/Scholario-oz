@@ -198,6 +198,12 @@ function DetailDrawerInner({
   // Edit-mode state
   const [editing, setEditing] = useState(false)
   const [workingHeads, setWorkingHeads] = useState<FeeHead[]>([])
+  // STRUCT-REV — while NOT editing, the working copy always mirrors the
+  // LIVE structure (e.g. right after a revision publishes, the table must
+  // show the new amounts — never a stale pre-publish snapshot).
+  useEffect(() => {
+    if (!editing) setWorkingHeads(structure.components.map((h) => ({ ...h })))
+  }, [structure.id, structure.components, structure.version, editing])
   const [showAddHead, setShowAddHead] = useState(false)
   // FEE-EXAM: parallel working state for the examination fee schedule.
   // Backed by `structure.examFeeSchedule` on open; committed to the live
@@ -466,7 +472,13 @@ function DetailDrawerInner({
     toast.success(`Revision v${rev.toVersion} submitted for acknowledgement`, {
       description: `${rev.affectedStudentIds.length} students/guardians notified. The published v${rev.fromVersion} continues to apply until 60% approve.`,
     })
+    // Reset the working copy — the table must keep showing the PUBLISHED
+    // heads; the proposal lives in the RevisionPanel above it.
+    setWorkingHeads(structure.components.map((h) => ({ ...h })))
+    setWorkingExamSchedule((structure.examFeeSchedule ?? []).map((e) => ({ ...e })))
     setEditing(false)
+    setShowAddHead(false)
+    setShowAddExamFee(false)
     setConfirmMode(null)
   }
 
@@ -1403,11 +1415,17 @@ function DetailDrawerInner({
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleDiscard}>Cancel</Button>
-                    <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleSchedule} disabled={!hasEdits || validationIssues.length > 0}>
-                      <Calendar className="h-3.5 w-3.5" /> Schedule
-                    </Button>
-                    <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handlePublish} disabled={!hasEdits || validationIssues.length > 0}>
-                      <Check className="h-3.5 w-3.5" /> Publish New Version
+                    {!isLockedCurrent && (
+                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleSchedule} disabled={!hasEdits || validationIssues.length > 0}>
+                        <Calendar className="h-3.5 w-3.5" /> Schedule
+                      </Button>
+                    )}
+                    <Button
+                      size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={handlePublish} disabled={!hasEdits || validationIssues.length > 0}
+                      title={isLockedCurrent ? 'Creates a PROPOSED version — 60% guardian acknowledgement required before it can be published' : undefined}
+                    >
+                      <Check className="h-3.5 w-3.5" /> {isLockedCurrent ? 'Submit Revision' : 'Publish New Version'}
                     </Button>
                   </div>
                 </>

@@ -233,7 +233,6 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
       })
     }
     // Run once on mount — the sync is idempotent and only fills gaps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncFeeStructuresForSession])
 
   const openStructure = feeStructures.find((s) => s.id === openStructureId) ?? null

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { IndianRupee, Wallet } from 'lucide-react'
 import { SectionHeading } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
@@ -22,9 +22,20 @@ import { OutstandingSection } from './outstanding-section'
 import { PaymentHistory } from './payment-history'
 import { PaymentDialog } from './payment-dialog'
 import { RenewalDialog } from './renewal-dialog'
+// STRUCT-REV — mid-session fee-structure acknowledgement (student side).
+import { FeeRevisionApprovalCard } from './fee-revision-card'
+import { resolveCanonicalStudent } from '../applications/student'
+import { useStudentsStore } from '@/lib/store/students-store'
 
 export function FeesModule() {
   const student = getStudentById('STU-2024-018')!
+  // STRUCT-REV — canonical twin id (the students-store record that fee
+  // revisions acknowledge against). Roster is static in the demo session.
+  const canonicalStudentId = useMemo(() => {
+    const all = useStudentsStore.getState().students
+    return (all.find((s) => s.admissionNo === student.admissionNo && s.status === 'Active')
+      ?? resolveCanonicalStudent(all))?.id ?? ''
+  }, [])
   const totalPaid = student.feePaid
   const totalPending = student.feeTotal - student.feePaid
   const totalFee = student.feeTotal
@@ -137,6 +148,10 @@ export function FeesModule() {
           )
         }
       />
+
+      {/* STRUCT-REV — guardian acknowledgement request for a mid-session
+          fee-structure revision affecting this student's class. */}
+      <FeeRevisionApprovalCard canonicalStudentId={canonicalStudentId} />
 
       <RenewalCard status={renewalStatus} onOpenDialog={handleOpenRenewalDialog} />
 
