@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { ArrowUpRight, Check, Clock, Download, Landmark, Users, X } from 'lucide-react'
+import { Check, Clock, Download, Landmark, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { cn } from '@/lib/utils'
@@ -62,10 +62,9 @@ export function SalaryReportsSection() {
 
   return (
     <div className="space-y-4">
+      {/* Month + export toolbar — the "Reports" tab already establishes
+          context, so no page heading (UX-REFINE). */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="text-base font-bold flex items-center gap-2">
-          <ArrowUpRight className="h-4 w-4 text-muted-foreground" /> Reports
-        </h2>
         <div className="flex items-center gap-2">
           <Select value={month} onValueChange={setMonth}>
             <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>

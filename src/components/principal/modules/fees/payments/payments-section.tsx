@@ -44,9 +44,6 @@ interface Props {
 export function PaymentsSection({ data, onCollect }: Props) {
   const { analytics } = data
 
-  // Human month label for the subtitle ("October 2025") — purely presentational.
-  const monthLabel = new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })
-
   // Operational snapshot — successful collections landing right now
   // (same source as the ledger; successful transactions only).
   const activity = [
@@ -57,19 +54,35 @@ export function PaymentsSection({ data, onCollect }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* 1 — Page purpose + primary action (benchmark toolbar) */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <h2 className="text-base font-bold tracking-tight text-foreground">Payments</h2>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">
-            {monthLabel} · collections &amp; verification
-          </p>
+      {/* 1 — Collection activity + primary action. The "Payments" tab
+          already establishes context, so no page heading — the page opens
+          straight into live figures with Collect Fee at the right. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid grid-cols-3 gap-3 flex-1 min-w-[280px] max-w-xl">
+          {activity.map((s, i) => (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 * i }}
+              className={cn(
+                'rounded-lg bg-muted/40 px-2.5 py-1.5',
+                s.accent && 'ring-1 ring-amber-500/40',
+              )}
+            >
+              <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">{s.label}</p>
+              <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400 leading-tight mt-0.5">
+                {formatINR(s.value, true)}
+              </p>
+              <p className="text-[9px] text-muted-foreground mt-0.5 truncate hidden sm:block">{s.hint}</p>
+            </motion.div>
+          ))}
         </div>
         {/* Primary action — same treatment as Salary & Payroll → Payments'
             "Record Payment" (white outline, subtle border, Wallet icon,
             identical height/typography/radius): one shared enterprise
             design system across money modules. */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
           <Button
             variant="outline"
             size="sm"
@@ -79,29 +92,6 @@ export function PaymentsSection({ data, onCollect }: Props) {
             <Wallet className="h-3 w-3" /> Collect Fee
           </Button>
         </div>
-      </div>
-
-      {/* 2 — Collection activity tiles (micro-stat recipe; amber ring marks a
-          live today — replaces the legacy border-left strip styling) */}
-      <div className="grid grid-cols-3 gap-3">
-        {activity.map((s, i) => (
-          <motion.div
-            key={s.label}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 * i }}
-            className={cn(
-              'rounded-lg bg-muted/40 px-2.5 py-1.5',
-              s.accent && 'ring-1 ring-amber-500/40',
-            )}
-          >
-            <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">{s.label}</p>
-            <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400 leading-tight mt-0.5">
-              {formatINR(s.value, true)}
-            </p>
-            <p className="text-[9px] text-muted-foreground mt-0.5 truncate hidden sm:block">{s.hint}</p>
-          </motion.div>
-        ))}
       </div>
 
       {/* 3 — Additional Charges (event-based collections, tracked separately

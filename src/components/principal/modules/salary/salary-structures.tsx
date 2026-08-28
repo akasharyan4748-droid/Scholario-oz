@@ -10,7 +10,7 @@
 
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Archive, ArchiveRestore, Copy, Layers, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Copy, Layers, Pencil, Plus, Trash2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { cn } from '@/lib/utils'
@@ -64,18 +64,28 @@ export function SalaryStructuresSection() {
     return map
   }, [salaries])
 
+  // Total staff salary assignments across all structures — the summary
+  // badge's real figure (how many employees' salaries reference a
+  // structure). Never invented.
+  const staffAssigned = useMemo(() => Object.values(usage).reduce((s, n) => s + n, 0), [usage])
+
   const visible = structures.filter((s) => showArchived || s.status === 'Active')
-  const active = structures.filter((s) => s.status === 'Active')
   const archived = structures.filter((s) => s.status === 'Archived')
 
   return (
     <div className="space-y-4">
+      {/* UX-REFINE — the "Salary Structure" tab already establishes context,
+          so no page heading or explanatory line: summary badges left
+          (structures / staff assigned), Archived filter + create right.
+          Mirrors Fee Structures for a twin product feel. */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-base font-bold flex items-center gap-2">
-            <Layers className="h-4 w-4 text-muted-foreground" /> Salary Structure
-          </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Manage standard salary structures.</p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40">
+            <Layers className="h-2.5 w-2.5" /> {structures.length} structure{structures.length === 1 ? '' : 's'}
+          </Badge>
+          <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40">
+            <Users className="h-2.5 w-2.5" /> {staffAssigned} staff assigned
+          </Badge>
         </div>
         <div className="flex items-center gap-2">
           {archived.length > 0 && (
@@ -194,10 +204,6 @@ export function SalaryStructuresSection() {
         open={editing !== null}
         onOpenChange={(o) => !o && setEditing(null)}
       />
-
-      <p className="text-[10px] text-muted-foreground">
-        {active.length} active · {archived.length} archived
-      </p>
     </div>
   )
 }

@@ -198,8 +198,8 @@ export function FeesTransactionsSection({ data }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Purpose header — distinguishes this full ledger from Collections' Recent Payments snapshot */}
-      <h3 className="text-sm font-semibold tracking-tight text-foreground">Complete Payment Ledger</h3>
+      {/* No page heading — the "Transactions" tab already establishes
+          context (UX-REFINE); the page opens straight into live totals. */}
 
       {/* Summary strip — benchmark micro-stat tiles (amounts from Success only; the
           Transactions tile carries the success vs other split as its sub line) */}

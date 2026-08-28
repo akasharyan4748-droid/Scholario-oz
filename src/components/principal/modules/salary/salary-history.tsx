@@ -41,10 +41,9 @@ export function SalaryHistorySection() {
 
   return (
     <div className="space-y-3">
+      {/* Filter row — the "History" tab already establishes context, so
+          no page heading (UX-REFINE); filters lead directly. */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="text-base font-bold flex items-center gap-2">
-          <History className="h-4 w-4 text-muted-foreground" /> History
-        </h2>
         <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
           {FILTERS.map((f) => (
             <button

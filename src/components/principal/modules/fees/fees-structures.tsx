@@ -1,29 +1,31 @@
 'use client'
 
 /**
- * FeesStructuresSection — Versioned Fee Structure admin grid (Phase 8).
+ * FeesStructuresSection — Versioned Fee Structure admin grid (Phase 8 + UX-REFINE).
  *
+ * - No page heading: the "Fee Structures" tab already establishes context,
+ *   so the page opens straight into the toolbar — summary badges left
+ *   (structures / active classes), Archived toggle + "New Structure" right.
  * - Per-class structure cards (one per canonical class, plus any
  *   user-created drafts) on the Salary-structures card benchmark:
- *   md:grid-cols-2 xl:grid-cols-3 grid of rounded-xl bg-card p-4 cards.
+ *   md:grid-cols-2 xl:grid-cols-3 grid of rounded-xl bg-card p-4 cards
+ *   with gap-3 rhythm, semibold titles and one emerald-accent metric.
  * - Each card shows: level-toned icon chip, class name (2-line wrap),
  *   StructureStatusBadge + v{n}, 3 mini-stats (Annual — BASE total
- *   excluding opt-in Transport — / active heads / students), a top-3
- *   non-transport fee-heads preview line (monthly heads read "₹X/mo"),
- *   effective-from meta, and a session-exam-fee line ('Not configured'
- *   only for intentionally unconfigured schedules, e.g. Class 6/7).
- * - Card actions: Open (detail drawer), History, More (dropdown)
+ *   excluding opt-in Transport, emerald accent — / active heads /
+ *   students), a top-3 non-transport fee-heads preview line (monthly
+ *   heads read "₹X/mo"), effective-from meta, and a session-exam-fee
+ *   line ('Not configured' only for intentionally unconfigured
+ *   schedules, e.g. Class 6/7).
+ * - Card actions: Open (primary), History, More (dropdown)
  * - Drawer actions: Edit, Duplicate, Create New Version, View History,
  *   Compare Versions, Archive, Restore, Delete (with safeguards)
  * - All actions wire to real store mutations (no toast-only placeholders)
  *
  * Status pills (per card):
  *   CURRENT (emerald) · SCHEDULED (amber) · DRAFT (slate) · ARCHIVED (muted)
- *
- * Versioning note: the "Fee Structure History" banner lives once in
- * Settings (Fees → Settings) to avoid a 4-file verbatim duplication.
- * The structure cards below carry their own v{n} + status badge which
- * conveys the same versioning information.
+ * Archived-status structures are dimmed and hidden behind the toolbar's
+ * "Archived (N)" toggle by default.
  */
 
 import { useState, useMemo, useEffect } from 'react'
@@ -94,6 +96,10 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
 
   const [openStructureId, setOpenStructureId] = useState<string | null>(null)
   const [historyStructure, setHistoryStructure] = useState<FeeStructureConfig | null>(null)
+  // UX-REFINE — archived structures (latest version archived, no current)
+  // move behind an "Archived (N)" toolbar toggle so the default grid
+  // stays scannable. Same pattern as Salary Structure's toggle.
+  const [showArchived, setShowArchived] = useState(false)
   // Fix 4 (FEE-CORRECT): real delete confirmation dialog state.
   // The previous "Delete" menu item only showed a toast — now we open a
   // proper confirmation dialog (for drafts) or toast the published /
@@ -123,14 +129,13 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
     return () => window.removeEventListener('fee-open-structure', handler)
   }, [])
 
-  // FEE-CREATE-DRAWER — "Create New Structure" now opens the same
+  // FEE-CREATE-DRAWER — "New Structure" (toolbar) opens the same
   // right-side detail drawer used by existing structures, but in
-  // `mode='create'`. The dashed card's onClick toggles `createMode`
+  // `mode='create'`. The button's onClick toggles `createMode`
   // (no record is written); the drawer handles its own Save Draft /
   // Publish New Version / Cancel flow. On Save Draft (or Publish) the
   // drawer calls `onCreated(id)` which closes create-mode and re-opens
-  // the drawer in view mode with the new structure id — exactly the
-  // flow the previous modal used, minus the modal.
+  // the drawer in view mode with the new structure id.
   const [createMode, setCreateMode] = useState(false)
 
   const openCreateDrawer = () => {
@@ -166,6 +171,17 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
     }
     return map
   }, [feeStructures, versions])
+
+  // UX-REFINE — derived archived count + the visible list (all vs
+  // non-archived) for the toolbar toggle.
+  const archivedCount = useMemo(
+    () => feeStructures.filter((f) => structureStatus.get(f.id) === 'archived').length,
+    [feeStructures, structureStatus],
+  )
+  const visibleStructures = useMemo(
+    () => feeStructures.filter((f) => showArchived || structureStatus.get(f.id) !== 'archived'),
+    [feeStructures, showArchived, structureStatus],
+  )
 
   // FEE-PER-CLASS — count students by their EXACT className so each
   // per-class card reports only the students in that specific class
@@ -364,20 +380,12 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* TASK 2-c — benchmark header pair (icon-title h2 + subtitle;
-          right actions) with exactly THREE inline elements: Structures
-          chip, Bound-classes chip, Master Catalogue outline launcher. */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-base font-bold flex items-center gap-2">
-            <Layers className="h-4 w-4 text-muted-foreground" /> Fee Structures
-          </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {CURRENT_ACADEMIC_YEAR} &middot; Per-class fee plans, versions and schedules. One structure
-            per active class &mdash; auto-created, configured, then published.
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5">
+      {/* UX-REFINE — the "Fee Structures" tab already establishes context,
+          so the page opens straight into useful controls: summary badges
+          left, Archived filter + New Structure right. No repeated page
+          heading, no explanatory copy. Mirrors Salary Structure. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40">
             <Layers className="h-2.5 w-2.5" /> {feeStructures.length} structure{feeStructures.length === 1 ? '' : 's'}
           </Badge>
@@ -385,12 +393,27 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
             <GraduationCap className="h-2.5 w-2.5" /> {activeClassCount} active class{activeClassCount === 1 ? '' : 'es'}
           </Badge>
         </div>
+        <div className="flex items-center gap-2">
+          {archivedCount > 0 && (
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowArchived((v) => !v)}>
+              {showArchived ? 'Hide Archived' : `Archived (${archivedCount})`}
+            </Button>
+          )}
+          <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={openCreateDrawer}>
+            <Plus className="h-3.5 w-3.5" /> New Structure
+          </Button>
+        </div>
       </div>
 
 
       {/* Structure grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {feeStructures.map((f, i) => {
+        {visibleStructures.length === 0 && (
+          <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center md:col-span-2 xl:col-span-3">
+            <p className="text-xs text-muted-foreground">No structures in this view.</p>
+          </div>
+        )}
+        {visibleStructures.map((f, i) => {
           // FEE-PER-CLASS — `category` and `classLevel` are now the same
           // value (the spec says "category can be removed or set to the
           // same value as classLevel"); fall back to `classLevel` when
@@ -409,6 +432,9 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
             studentsByClassName[f.className] ?? studentsByLevel[f.classLevel] ?? 0
           const status = structureStatus.get(f.id) ?? 'current'
           const activeHeads = f.components.filter((c) => c.active)
+          // The Annual figure excludes opt-in Transport — the tiny caveat
+          // under the metric only renders when a transport head exists.
+          const hasTransportHead = activeHeads.some((h) => h.category === 'Transport')
           // TASK 2-c — main fee-heads preview: top 3 ACTIVE non-transport
           // heads ranked by annual contribution (amount × frequency
           // multiplier). Monthly heads read "{amount}/mo" so frequency
@@ -432,166 +458,152 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
           const examTotal = computeExamFeeTotal(f.examFeeSchedule)
           const examItems = (f.examFeeSchedule ?? []).length
           return (
-            <motion.div
-              key={f.id}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
-              className="rounded-xl border bg-card p-4 flex flex-col gap-2.5 hover:border-emerald-500/30 hover:shadow-md transition-all cursor-pointer group"
+        <motion.div
+          key={f.id}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: i * 0.03 }}
+          className={cn(
+            'rounded-xl border bg-card p-4 flex flex-col gap-3 hover:border-emerald-500/30 hover:shadow-md transition-all cursor-pointer group',
+            status === 'archived' && 'opacity-75',
+          )}
+          onClick={() => setOpenStructureId(f.id)}
+        >
+          {/* Header — level-toned chip + class name + status/version pill.
+              Title hierarchy matches the Salary Structure card: semibold
+              name, muted 10px subtitle, quiet outline badge right. */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2.5 min-w-0">
+              <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', accent)}>
+                <Layers className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                {/* FEE-PER-CLASS — the card title IS the class name;
+                    stream labels wrap onto two lines instead of
+                    clipping. Subtitle is the academic level. */}
+                <p className="text-sm font-semibold leading-snug line-clamp-2">{f.className}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{f.classLevel}</p>
+              </div>
+            </div>
+            <StructureStatusBadge status={status} version={f.version} />
+          </div>
+
+          {/* STRUCT-REV — live mid-session revision progress pill. */}
+          {activeRevisionByStructure.get(f.id) && (
+            <RevisionPill revision={activeRevisionByStructure.get(f.id)!} />
+          )}
+          {f.notConfigured && f.components.length === 0 && (
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 -mt-1">
+              <AlertTriangle className="h-3 w-3" /> Not configured — set amounts, then publish.
+            </p>
+          )}
+
+          {/* Metrics — Annual is the card's key figure (emerald accent,
+              matching Salary's Net box; BASE total, excludes opt-in
+              Transport — the caveat only shows when a transport head
+              actually exists). Heads/Students stay neutral. */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-lg bg-emerald-500/[0.07] px-2.5 py-1.5" title="Excludes opt-in Transport">
+              <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Annual</p>
+              <p className="text-sm font-bold tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">{formatINR(f.annual)}</p>
+              {hasTransportHead && <p className="text-[8px] text-muted-foreground/80 mt-0.5">excl. transport</p>}
+            </div>
+            <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
+              <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Heads</p>
+              <p className="text-sm font-bold tabular-nums mt-0.5">{activeHeads.length}</p>
+            </div>
+            <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
+              <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Students</p>
+              <p className="text-sm font-bold tabular-nums mt-0.5">{studentsCount}</p>
+            </div>
+          </div>
+
+          {/* Breakdown — compact scan block (Salary's component-summary
+              recipe): top heads by annual contribution, effective date,
+              session exam fees. Every card renders all three lines so
+              heights stay consistent. */}
+          <div className="space-y-1 text-[10px] leading-relaxed min-h-[2rem]">
+            <p className="text-muted-foreground truncate" title={headsPreview || 'No active heads yet'}>
+              {headsPreview || 'No active heads yet'}
+            </p>
+            <p className="flex items-center gap-1 text-muted-foreground truncate">
+              <Calendar className="h-3 w-3 shrink-0" /> Effective from {formatDate(f.effectiveFrom)}
+            </p>
+            <p className={cn('truncate', examTotal > 0 ? 'text-muted-foreground' : 'text-muted-foreground/70 italic')}>
+              Session exams: {examTotal > 0 ? `${formatINR(examTotal)} · ${examItems} planned` : 'Not configured'}
+            </p>
+          </div>
+
+          {/* Actions — clear primary (Open →), quiet secondary (History),
+              overflow right. Wiring unchanged (TASK 2-c). */}
+          <div className="flex items-center gap-1.5 pt-2 mt-auto border-t border-border/40" onClick={(e) => e.stopPropagation()}>
+            <Button
+              size="sm"
+              variant="default"
+              className="h-7 text-[11px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={() => setOpenStructureId(f.id)}
             >
-              {/* Top row — level-toned icon chip + class name + status */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-2.5 min-w-0">
-                  <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', accent)}>
-                    <Layers className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0">
-                    {/* FEE-PER-CLASS — title is the class name (stream
-                        labels wrap onto two lines instead of clipping);
-                        subtitle is the academic level. No "Structure
-                        Name" — the card title IS the class name. */}
-                    <p className="text-sm font-bold leading-snug line-clamp-2">{f.className}</p>
-                    <p className="text-xs text-muted-foreground truncate">{f.classLevel}</p>
-                  </div>
-                </div>
-                <StructureStatusBadge status={status} version={f.version} />
-              </div>
-
-              {/* STRUCT-REV — live mid-session revision progress pill. */}
-              {activeRevisionByStructure.get(f.id) && (
-                <RevisionPill revision={activeRevisionByStructure.get(f.id)!} />
-              )}
-              {f.notConfigured && f.components.length === 0 && (
-                <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 -mt-1">
-                  <AlertTriangle className="h-3 w-3" /> Not configured — set amounts, then publish.
-                </p>
-              )}
-
-              {/* Mini-stat tiles (Salary-benchmark recipe) — Annual shows
-                  the BASE total (excludes opt-in Transport). */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-lg bg-muted/40 px-2.5 py-1.5" title="Excludes opt-in Transport">
-                  <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Annual</p>
-                  <p className="text-sm font-bold tabular-nums mt-0.5">{formatINR(f.annual)}</p>
-                  <p className="text-[8px] text-muted-foreground/80 mt-0.5">excl. transport</p>
-                </div>
-                <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
-                  <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Heads</p>
-                  <p className="text-sm font-bold tabular-nums mt-0.5">{activeHeads.length}</p>
-                </div>
-                <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
-                  <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">Students</p>
-                  <p className="text-sm font-bold tabular-nums mt-0.5">{studentsCount}</p>
-                </div>
-              </div>
-
-              {/* Main fee heads preview — top 3 non-transport heads by
-                  annual contribution; Monthly heads read "₹X/mo". */}
-              <p className="text-[11px] text-muted-foreground truncate min-h-[16px]" title={headsPreview || undefined}>
-                {headsPreview || '—'}
-              </p>
-
-              {/* Meta: effective-from + session exam fees (TASK 2-c) */}
-              <div className="space-y-0.5">
-                <p className="flex items-center gap-1 text-[10px] text-muted-foreground" title="Effective from">
-                  <Calendar className="h-3 w-3 shrink-0" /> Effective {formatDate(f.effectiveFrom)}
-                </p>
-                <p className={examTotal > 0 ? 'text-[10px] text-muted-foreground' : 'text-[10px] italic text-muted-foreground'}>
-                  Session exams:{' '}
-                  {examTotal > 0
-                    ? `${formatINR(examTotal)} · ${examItems} planned`
-                    : 'Not configured'}
-                </p>
-              </div>
-
-              {/* Actions — Open / History / dropdown (TASK 2-c benchmark
-                  ghost-button sizing; wiring unchanged) */}
-              <div className="flex items-center gap-1.5 pt-2 mt-auto border-t border-border/40" onClick={(e) => e.stopPropagation()}>
-                <Button
-                  size="sm"
-                  variant="default"
-                  className="h-7 text-[11px] gap-1 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => setOpenStructureId(f.id)}
-                >
-                  Open <ChevronRight className="h-2.5 w-2.5" />
+              Open <ChevronRight className="h-3 w-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-[11px] gap-1"
+              onClick={() => setHistoryStructure(f)}
+              title="View version history"
+            >
+              <History className="h-3 w-3" /> History
+            </Button>
+            <div className="flex-1" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="More">
+                  <MoreHorizontal className="h-3 w-3" />
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-[11px] gap-1"
-                  onClick={() => setHistoryStructure(f)}
-                  title="View version history"
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => setOpenStructureId(f.id)}>
+                  <FileText className="h-3 w-3 mr-2" /> Open detail
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setHistoryStructure(f)}>
+                  <History className="h-3 w-3 mr-2" /> View history
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDuplicate(f)}>
+                  <Copy className="h-3 w-3 mr-2" /> Duplicate as draft
+                </DropdownMenuItem>
+                {/* PHASE 5 — Bulk Apply to Level. Creates draft
+                    structures for every uncovered class in the
+                    same level. Confirmation dialog shows the exact
+                    list of target classes before any mutation. */}
+                <DropdownMenuItem
+                  onClick={() => setBulkApplyOpen(f)}
+                  className="text-emerald-700 dark:text-emerald-300 focus:text-emerald-800"
                 >
-                  <History className="h-3 w-3" /> History
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="More">
-                      <MoreHorizontal className="h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem onClick={() => setOpenStructureId(f.id)}>
-                      <FileText className="h-3 w-3 mr-2" /> Open detail
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setHistoryStructure(f)}>
-                      <History className="h-3 w-3 mr-2" /> View history
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleDuplicate(f)}>
-                      <Copy className="h-3 w-3 mr-2" /> Duplicate as draft
-                    </DropdownMenuItem>
-                    {/* PHASE 5 — Bulk Apply to Level. Creates draft
-                        structures for every uncovered class in the
-                        same level. Confirmation dialog shows the exact
-                        list of target classes before any mutation. */}
-                    <DropdownMenuItem
-                      onClick={() => setBulkApplyOpen(f)}
-                      className="text-emerald-700 dark:text-emerald-300 focus:text-emerald-800"
-                    >
-                      <GraduationCap className="h-3 w-3 mr-2" /> Bulk apply to {f.classLevel} level…
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => handleArchive(f)}
-                      className="text-amber-600 focus:text-amber-700"
-                    >
-                      <Archive className="h-3 w-3 mr-2" /> Archive current version
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-rose-600 focus:text-rose-700"
-                      onClick={() => handleDelete(f)}
-                    >
-                      <Trash2 className="h-3 w-3 mr-2" /> Delete structure…
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </motion.div>
+                  <GraduationCap className="h-3 w-3 mr-2" /> Bulk apply to {f.classLevel} level…
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => handleArchive(f)}
+                  className="text-amber-600 focus:text-amber-700"
+                >
+                  <Archive className="h-3 w-3 mr-2" /> Archive current version
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-rose-600 focus:text-rose-700"
+                  onClick={() => handleDelete(f)}
+                >
+                  <Trash2 className="h-3 w-3 mr-2" /> Delete structure…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </motion.div>
           )
         })}
 
-        {/* "New Structure" card — FEE-CREATE-DRAWER: opens the same
-            right-side detail drawer used by existing structures, but in
-            `mode='create'`. No record is written on click; the drawer's
-            own Save Draft / Publish New Version handle the actual create. */}
-        <motion.button
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: feeStructures.length * 0.04 }}
-          onClick={openCreateDrawer}
-          className="rounded-xl border border-dashed border-border bg-card/50 p-4 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all text-left"
-        >
-          <div className="flex flex-col items-center justify-center text-center h-full min-h-[180px] gap-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20">
-              <Plus className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Create New Structure</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Fill in the basics, then add fee heads in the next step.</p>
-            </div>
-          </div>
-        </motion.button>
+        {/* UX-REFINE — the standalone dashed "Create New Structure" tile
+            was removed: creation now lives in the toolbar's primary
+            "New Structure" button (same drawer, mode='create'). */}
       </div>
 
       {/* Detail drawer — existing structure */}

@@ -13,7 +13,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Landmark, Lock, Settings2, ShieldCheck } from 'lucide-react'
+import { Landmark, Lock, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -45,12 +45,8 @@ export function SalarySettingsSection() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-bold flex items-center gap-2">
-          <Settings2 className="h-4 w-4 text-muted-foreground" /> Settings
-        </h2>
-        <p className="text-xs text-muted-foreground mt-0.5">Salary &amp; Payroll preferences</p>
-      </div>
+      {/* No page heading — the "Settings" tab already establishes context
+          (UX-REFINE); content starts with the Salary Editing card. */}
 
       {/* SALARY EDITING */}
       <div className="rounded-xl border bg-card p-4">
