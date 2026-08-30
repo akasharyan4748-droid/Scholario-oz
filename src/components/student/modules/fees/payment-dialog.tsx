@@ -15,15 +15,19 @@ interface PaymentDialogProps {
   paidAmount: number
   totalPending: number
   student: PaymentStudentInfo
+  /** Transfer reference entered by the parent (shown on the acknowledgement). */
+  reference?: string
+  /** Canonical acknowledgement number from the fee ledger. */
+  receiptNo?: string
   onOpenChange: (open: boolean) => void
   onMethodChange: (method: string) => void
-  onPay: () => void
+  onPay: (reference: string) => void
   onDownload: () => void
   onComplete: () => void
 }
 
 export function PaymentDialog({
-  open, stage, method, paidAmount, totalPending, student,
+  open, stage, method, paidAmount, totalPending, student, reference, receiptNo,
   onOpenChange, onMethodChange, onPay, onDownload, onComplete,
 }: PaymentDialogProps) {
   return (
@@ -53,6 +57,8 @@ export function PaymentDialog({
               paidAmount={paidAmount}
               method={method}
               student={student}
+              reference={reference}
+              receiptNo={receiptNo}
               onDownload={onDownload}
               onComplete={onComplete}
             />

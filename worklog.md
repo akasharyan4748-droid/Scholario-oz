@@ -945,3 +945,31 @@ Stage Summary:
 2. (Low) Salary record-payment method list is payroll-local (Cash/Cheque/NEFT/UPI free-text bank field) — per spec §5 this is correct payroll-specific behaviour; revisit only if payroll ever needs online gateway collection.
 3. (Idea, next round) Ledger group in central settings (transaction categories) once a real category store exists — deliberately not faked this round.
 4. (Idea) UPI QR image preview in central settings if a QR mechanism is ever introduced (currently deliberately dependency-free).
+
+---
+Task ID: PAY-REWORK-1 (plan)
+Agent: Z.ai Code (main thread)
+Task: Fee Management → Payments PRODUCTION-GRADE REWORK per 40-point spec (upload/Pasted Content_1788071373589.txt): unified payment workflow (teacher/office/self), verification lifecycle, A5 dual-copy receipt engine, Payments page rework, role-specific wording, E2E tests.
+
+Audit findings (complete):
+- fee-store already has: FeeTransaction (verifiedBy/verifiedAt, paymentSource, gateway fields), CashRequest queue + approve/reject/clarify, approveDirectCashTxn/rejectDirectCashTxn (flip Under Verification→Success/Failed in place), strong idempotency (referenceNo + 5-min hash), receiptSettings(prefix/counter), live-alerts store, amountInWordsINR, school mock (code/affiliation).
+- recordPayment rule today: mode==='Cash' → 'Under Verification' else 'Success' — no collector-role concept.
+- Principal-recorded cash currently needs self-approval in queue (spec: office-recorded = authorised at record time).
+- Teacher cash flow is a MOCK (teacher/modules/students/data.tsx initialCashRequests + local state; never touches fee-store) — biggest gap.
+- Student fee payment is a mock simulation (no store write; fake receipt) — TEST 3 requires real submission → verification.
+- fees-receipt.tsx = 80mm thermal style only; spec requires A5 LANDSCAPE dual-copy (Student/School) w/ tear line, dynamic data, @page A5 landscape, no CDNs.
+- Payments page has tiles+Collect+AdditionalCharges+VerificationQueue but NO Recent/Active Payments list, no per-payment receipt actions, no bulk receipts.
+
+Implementation plan (in order):
+1. fee-store (additive): collectorRole on PaymentInput/FeeTransaction ('principal'|'teacher'|'self'); recordPayment → principal=verified-at-record, teacher/self=Under Verification; receiptHandledAt + markReceiptHandled (audit receipt.generated/reprinted).
+2. NEW fee-receipt-a5.tsx: dual-copy A5 landscape receipt (dynamic: school/student/account/settings), tear line, amount in words, pending-verification honesty state, print(@page A5 landscape margin 0)+HTML download (no CDN), scaled preview, multi-line safe + compact single-line layout; format-aware printFeeReceipt/downloadFeeReceipt wrappers (80mm keeps legacy thermal).
+3. payments-section.tsx: Recent/Active Payments panel (student/class/amount/method/collector/status-wording/date/ref/receipt availability; View/Print/Download per row; contextual bulk select → Print/Download receipts); keep tiles+Collect, Additional Charges, Verification Queue.
+4. fees-shell: pass setTab for "View all in Transactions".
+5. collect wizard: collectorRole 'principal'; A5 receipt on success when paperSize 'A5'.
+6. transactions page: format-aware receipt actions + markReceiptHandled on print/download.
+7. fees-shared: audience-aware paymentStatusLabel (Principal "Pending verification" / Teacher "Collected — Awaiting verification" / Student "Payment submitted").
+8. approvals queue: relabel direct section → "Payments awaiting verification" with collector attribution.
+9. teacher module: replace mock cash panel with REAL Fee Collections panel (record collection dialog → recordPayment collectorRole 'teacher', collectedBy=user.name; My Collections list w/ verification status + receipt when verified). Remove initialCashRequests mock (verified only used here).
+10. student fees: wire handlePay → recordPayment (collectorRole 'self', reference required; success copy "Payment submitted — awaiting confirmation"; receipt after confirmation).
+11. live-alerts addAlert on: collection submitted (principal alert), verified, rejected.
+12. QA: tsc/lint + agent-browser E2E (spec TEST 1,2,3,5,6,7,8 + receipt layout 9,10 + mobile 390px + dark).

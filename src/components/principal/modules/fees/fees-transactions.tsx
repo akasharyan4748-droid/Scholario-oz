@@ -58,6 +58,7 @@ import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FeePanel, FeeEmptyState, ModeIcon, modeAccent, FeeStatusBadge } from './fees-shared'
 import { ReceiptPreview, downloadReceiptHTML, printReceipt } from './fees-receipt'
+import { FeeReceiptA5Preview, printReceiptA5, downloadReceiptA5 } from './fee-receipt-a5'
 import { toast } from 'sonner'
 
 // ─── Financial type badge (Core Fee / Examination Fee / Additional) ────
@@ -118,6 +119,22 @@ export function FeesTransactionsSection({ data }: Props) {
   // FINANCIAL TYPE filter — Core Fee / Examination Fee / Additional Charge.
   const [typeFilter, setTypeFilter] = useState<'all' | TransactionCategory>('all')
   const [viewReceipt, setViewReceipt] = useState<FeeTransaction | null>(null)
+
+  // Format-aware receipt actions (PAY-REWORK-1): the paper-size setting in
+  // Finance Settings selects the canonical A5 dual-copy receipt or the 80mm
+  // thermal slip; printing/downloading stamps the receipt lifecycle marker.
+  const doPrint = (t: FeeTransaction) => {
+    if (receiptSettings.paperSize === 'A5') printReceiptA5(t, receiptSettings)
+    else printReceipt(t, receiptSettings)
+    useFeeStore.getState().markReceiptHandled(t.id, 'Principal')
+    toast.success('Print dialog opened')
+  }
+  const doDownload = (t: FeeTransaction) => {
+    if (receiptSettings.paperSize === 'A5') downloadReceiptA5(t, receiptSettings)
+    else downloadReceiptHTML(t, receiptSettings)
+    useFeeStore.getState().markReceiptHandled(t.id, 'Principal')
+    toast.success('Receipt downloaded', { description: `${t.receiptNo}.html` })
+  }
   const [detailTxn, setDetailTxn] = useState<FeeTransaction | null>(null)
 
   const classes = useMemo(() => {
@@ -355,10 +372,10 @@ export function FeesTransactionsSection({ data }: Props) {
                         <button onClick={() => setDetailTxn(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-primary hover:bg-primary/10 transition-colors" title="View details" aria-label={`View details of ${t.receiptNo}`}>
                           <Eye className="h-3 w-3" />
                         </button>
-                        <button onClick={() => printReceipt(t, receiptSettings)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Print receipt" aria-label={`Print receipt ${t.receiptNo}`}>
+                        <button onClick={() => doPrint(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Print receipt" aria-label={`Print receipt ${t.receiptNo}`}>
                           <Printer className="h-3 w-3" />
                         </button>
-                        <button onClick={() => downloadReceiptHTML(t, receiptSettings)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Download receipt" aria-label={`Download receipt ${t.receiptNo}`}>
+                        <button onClick={() => doDownload(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Download receipt" aria-label={`Download receipt ${t.receiptNo}`}>
                           <Download className="h-3 w-3" />
                         </button>
                       </div>
@@ -388,16 +405,26 @@ export function FeesTransactionsSection({ data }: Props) {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-card border border-border rounded-xl p-4 max-h-[90vh] overflow-y-auto"
+              className="bg-card border border-border rounded-xl p-4 max-h-[90vh] overflow-y-auto w-[min(56rem,calc(100vw-2rem))]"
               onClick={(e) => e.stopPropagation()}
             >
-              <ReceiptPreview
-                transaction={viewReceipt}
-                settings={receiptSettings}
-                onClose={() => setViewReceipt(null)}
-                onPrint={() => { printReceipt(viewReceipt, receiptSettings); toast.success('Print dialog opened') }}
-                onDownload={() => { downloadReceiptHTML(viewReceipt, receiptSettings); toast.success('Receipt downloaded', { description: `${viewReceipt.receiptNo}.html` }) }}
-              />
+              {receiptSettings.paperSize === 'A5' ? (
+                <FeeReceiptA5Preview
+                  transaction={viewReceipt}
+                  settings={receiptSettings}
+                  onClose={() => setViewReceipt(null)}
+                  onPrint={() => doPrint(viewReceipt)}
+                  onDownload={() => doDownload(viewReceipt)}
+                />
+              ) : (
+                <ReceiptPreview
+                  transaction={viewReceipt}
+                  settings={receiptSettings}
+                  onClose={() => setViewReceipt(null)}
+                  onPrint={() => doPrint(viewReceipt)}
+                  onDownload={() => doDownload(viewReceipt)}
+                />
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -410,8 +437,8 @@ export function FeesTransactionsSection({ data }: Props) {
         receiptSettings={receiptSettings}
         onClose={() => setDetailTxn(null)}
         onViewReceipt={(t) => setViewReceipt(t)}
-        onPrint={(t) => { printReceipt(t, receiptSettings); toast.success('Print dialog opened') }}
-        onDownload={(t) => { downloadReceiptHTML(t, receiptSettings); toast.success('Receipt downloaded', { description: `${t.receiptNo}.html` }) }}
+        onPrint={doPrint}
+        onDownload={doDownload}
       />
     </div>
   )

@@ -87,8 +87,8 @@ function FinanceReceiptsSettings() {
           <div>
             <Label className="text-[11px]">Paper Size</Label>
             <select value={local.paperSize} onChange={(e) => setLocal({ ...local, paperSize: e.target.value as '80mm' | 'A5' })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1">
-              <option value="80mm">80mm Thermal</option>
-              <option value="A5">A5 Half-Page</option>
+              <option value="A5">A5 Landscape — Dual Copy (recommended)</option>
+              <option value="80mm">80mm Thermal (counter printer)</option>
             </select>
           </div>
         </div>

@@ -1,12 +1,14 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  IndianRupee, Wallet, ShieldCheck, Sparkles,
+  IndianRupee, Wallet, ShieldCheck, Sparkles, Hash,
 } from 'lucide-react'
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { formatINR } from '@/lib/format'
 import { paymentMethods, type PaymentStudentInfo } from './data'
@@ -19,8 +21,15 @@ export function PaymentFormStage({
   student: PaymentStudentInfo
   onMethodChange: (m: string) => void
   onCancel: () => void
-  onPay: () => void
+  /** Called with the transfer reference the parent provides (PAY-REWORK-1 §5). */
+  onPay: (reference: string) => void
 }) {
+  // Reference / transaction ID — required for UPI & Net Banking (manual
+  // transfers are NEVER auto-confirmed; the school office verifies them).
+  const [reference, setReference] = useState('')
+  const needsRef = method === 'upi' || method === 'netbanking'
+  const refTooShort = needsRef && reference.trim().length < 4
+
   return (
     <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <DialogHeader>
@@ -92,16 +101,37 @@ export function PaymentFormStage({
           </RadioGroup>
         </div>
 
+        {needsRef && (
+          <div>
+            <label className="text-xs font-semibold mb-2 block">Transaction Reference</label>
+            <div className="relative">
+              <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                placeholder="UPI / UTR reference from your payment app"
+                className="pl-8 h-9 text-xs font-mono"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              The school office confirms your payment against this reference — usually the same day.
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center gap-2 rounded-lg bg-card/40 border border-border p-2.5">
           <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
-          <p className="text-[11px] text-muted-foreground">256-bit encrypted · PCI-DSS compliant · Powered by Razorpay</p>
+          <p className="text-[11px] text-muted-foreground">
+            Your payment is submitted to the school office and confirmed after verification. The receipt becomes available once confirmed.
+          </p>
         </div>
       </div>
 
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
         <Button
-          onClick={onPay}
+          onClick={() => onPay(reference.trim())}
+          disabled={refTooShort}
           className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white min-w-[140px]"
         >
           <Wallet className="h-3.5 w-3.5" /> Pay {formatINR(totalPending)}

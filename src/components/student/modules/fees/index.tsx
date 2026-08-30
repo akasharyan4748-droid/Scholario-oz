@@ -26,6 +26,10 @@ import { RenewalDialog } from './renewal-dialog'
 import { FeeRevisionApprovalCard } from './fee-revision-card'
 import { resolveCanonicalStudent } from '../applications/student'
 import { useStudentsStore } from '@/lib/store/students-store'
+// PAY-REWORK-1 — real payment submission into the canonical fee ledger.
+import { useFeeStore, type FeeTransaction } from '@/lib/store/fee-store'
+import { useLiveAlerts } from '@/lib/store/live-alerts-store'
+import { downloadReceiptA5 } from '@/components/principal/modules/fees/fee-receipt-a5'
 
 export function FeesModule() {
   const student = getStudentById('STU-2024-018')!
@@ -45,6 +49,12 @@ export function FeesModule() {
   const [stage, setStage] = useState<PayStage>('form')
   const [method, setMethod] = useState('upi')
   const [paidAmount, setPaidAmount] = useState(totalPending)
+  // PAY-REWORK-1 — the canonical acknowledgement of THIS submission.
+  const [submittedRef, setSubmittedRef] = useState('')
+  const [submittedTxn, setSubmittedTxn] = useState<FeeTransaction | null>(null)
+  const recordPayment = useFeeStore((s) => s.recordPayment)
+  const receiptSettings = useFeeStore((s) => s.receiptSettings)
+  const addAlert = useLiveAlerts((s) => s.addAlert)
 
   // New Academic Session Renewal State
   const [renewalStatus, setRenewalStatus] = useState<RenewalStatus>('open')
@@ -80,9 +90,43 @@ export function FeesModule() {
     }, 2000)
   }
 
-  const handlePay = () => {
+  // PAY-REWORK-1 — the student/guardian submission lands in the ONE fee
+  // ledger as 'Under Verification' (collectorRole 'self'). It is NEVER
+  // auto-confirmed: the Principal verifies it against the reference, and
+  // only then does the receipt become official (Fee Management side).
+  const handlePay = (reference: string) => {
+    const modeMap: Record<string, 'UPI' | 'Card' | 'Net Banking'> = { upi: 'UPI', card: 'Card', netbanking: 'Net Banking' }
+    setSubmittedRef(reference)
     setStage('processing')
     setTimeout(() => {
+      const result = recordPayment({
+        studentId: canonicalStudentId,
+        amount: paidAmount,
+        mode: modeMap[method] ?? 'UPI',
+        feeHead: 'Tuition',
+        purpose: `Online fee payment submitted by student (${method.toUpperCase()})`,
+        collectedBy: student.name,
+        collectorRole: 'self',
+        referenceNo: reference || undefined,
+      })
+      if (result.success && result.transaction) {
+        setSubmittedTxn(result.transaction)
+        // Principal-side alert — a manual transfer is waiting for verification.
+        addAlert({
+          id: `alert-${Date.now()}`,
+          severity: 'high',
+          title: 'Manual payment awaiting verification',
+          desc: `${student.name} submitted ${formatINR(paidAmount)} via ${modeMap[method] ?? 'UPI'} · ref ${reference || '—'}.`,
+          color: 'amber',
+          navKey: 'fees',
+          isNew: true,
+          time: 'just now',
+        })
+      } else {
+        toast.error('Could not submit payment', { description: result.error })
+        setStage('form')
+        return
+      }
       setStage('success')
       setTimeout(() => {
         setStage('receipt')
@@ -97,13 +141,20 @@ export function FeesModule() {
       setStage('form')
       setMethod('upi')
       setPaidAmount(totalPending)
+      setSubmittedRef('')
+      setSubmittedTxn(null)
     }, 200)
   }
 
+  // Acknowledgement download — the A5 sheet renders the honest PENDING
+  // VERIFICATION state; it is NOT an official receipt until verified.
   const handleReceiptDownload = () => {
-    toast.success('Receipt downloaded', {
-      description: `RCP-2024-1018C.pdf · ${formatINR(paidAmount)} via ${method.toUpperCase()}`,
-    })
+    if (submittedTxn) {
+      downloadReceiptA5(submittedTxn, receiptSettings)
+      toast.success('Acknowledgement downloaded', { description: `${submittedTxn.receiptNo}.html` })
+    } else {
+      toast.success('Acknowledgement downloaded')
+    }
   }
 
   const handlePaidComplete = () => {
@@ -111,8 +162,8 @@ export function FeesModule() {
     setTimeout(() => {
       setStage('form')
       setMethod('upi')
-      toast.success('Payment successful! 🎉', {
-        description: `${formatINR(paidAmount)} paid. Receipt sent to ${student.email}.`,
+      toast.success('Payment submitted', {
+        description: `${formatINR(paidAmount)} via ${method.toUpperCase()} — awaiting confirmation by the school office.`,
       })
     }, 200)
   }
@@ -185,6 +236,8 @@ export function FeesModule() {
           className: student.className,
           section: student.section,
         }}
+        reference={submittedRef}
+        receiptNo={submittedTxn?.receiptNo}
         onOpenChange={(o) => !o && handleCloseDialog()}
         onMethodChange={setMethod}
         onPay={handlePay}

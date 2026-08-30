@@ -75,6 +75,28 @@ export function statusAccent(status: string): string {
   return 'bg-muted text-muted-foreground'
 }
 
+// ─── Audience-aware payment status wording (PAY-REWORK-1 spec §9) ────
+// One canonical status, role-appropriate words — the school office sees a
+// verification QUEUE, the teacher sees THEIR collection waiting, the
+// student sees a submission. Same record, honest phrasing everywhere.
+
+export type StatusAudience = 'principal' | 'teacher' | 'student'
+
+export function paymentStatusLabel(status: string, audience: StatusAudience): string {
+  if (status === 'Under Verification') {
+    if (audience === 'teacher') return 'Collected — Awaiting verification'
+    if (audience === 'student') return 'Payment submitted — Awaiting confirmation'
+    return 'Pending verification'
+  }
+  if (status === 'Success') return 'Paid'
+  if (status === 'Failed') {
+    if (audience === 'teacher') return 'Rejected by office'
+    if (audience === 'student') return 'Payment could not be confirmed'
+    return 'Rejected'
+  }
+  return status
+}
+
 // ─── FeeKpiCard ──────────────────────────────────────────────────────
 
 interface KpiProps {

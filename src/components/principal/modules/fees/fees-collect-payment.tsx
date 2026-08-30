@@ -37,6 +37,7 @@ import { useStudentsStore } from '@/lib/store/students-store'
 import { formatINR } from '@/lib/format'
 import { ModeIcon, modeAccent, FeeStatusBadge } from './fees-shared'
 import { ReceiptPreview, downloadReceiptHTML, printReceipt } from './fees-receipt'
+import { FeeReceiptA5Preview, printReceiptA5, downloadReceiptA5 } from './fee-receipt-a5'
 import { MoneyInput } from './money-input'
 
 type Stage = 'find' | 'review' | 'confirm' | 'processing' | 'success' | 'failed'
@@ -199,6 +200,10 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
         purpose,
         feeHead,
         collectedBy: 'Principal',
+        // PAY-REWORK-1: the Principal/school office IS the authorised finance
+        // role — money confirmed at the counter is verified at record time
+        // (any mode). Teacher/self submissions verify through the queue.
+        collectorRole: 'principal',
         referenceNo: referenceNo || undefined,
         meta,
         // The payment's financial category — Core fee / Exam fee, or
@@ -636,12 +641,23 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
                 </motion.div>
 
                 <div className="flex justify-center overflow-x-auto">
-                  <ReceiptPreview
-                    transaction={recordedTxn}
-                    settings={receiptSettings}
-                    onPrint={() => { printReceipt(recordedTxn, receiptSettings); toast.success('Print dialog opened') }}
-                    onDownload={() => { downloadReceiptHTML(recordedTxn, receiptSettings); toast.success('Receipt downloaded', { description: `${recordedTxn.receiptNo}.html` }) }}
-                  />
+                  {receiptSettings.paperSize === 'A5' ? (
+                    /* Canonical A5 landscape dual-copy receipt (spec §14-18). */
+                    <FeeReceiptA5Preview
+                      transaction={recordedTxn}
+                      settings={receiptSettings}
+                      onPrint={() => { printReceiptA5(recordedTxn, receiptSettings); toast.success('Print dialog opened') }}
+                      onDownload={() => { downloadReceiptA5(recordedTxn, receiptSettings); toast.success('Receipt downloaded', { description: `${recordedTxn.receiptNo}.html` }) }}
+                    />
+                  ) : (
+                    /* 80mm thermal counter printer (receipt settings). */
+                    <ReceiptPreview
+                      transaction={recordedTxn}
+                      settings={receiptSettings}
+                      onPrint={() => { printReceipt(recordedTxn, receiptSettings); toast.success('Print dialog opened') }}
+                      onDownload={() => { downloadReceiptHTML(recordedTxn, receiptSettings); toast.success('Receipt downloaded', { description: `${recordedTxn.receiptNo}.html` }) }}
+                    />
+                  )}
                 </div>
 
                 <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-2.5 flex items-start gap-2">

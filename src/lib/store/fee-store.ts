@@ -347,6 +347,20 @@ export interface FeeTransaction {
    *  application id — kept alongside additionalChargeId so the permanent
    *  record chain (application → charge → txn → receipt) stays explicit. */
   applicationId?: string
+  /** WHO recorded this payment — drives the verification lifecycle
+   *  (PAY-REWORK-1). 'principal' = school office / Principal (authorised
+   *  finance role — payment is verified at record time). 'teacher' = class
+   *  teacher collection (ALWAYS requires Principal verification before it
+   *  counts as officially paid). 'self' = student/guardian self-service
+   *  submission (manual transfer reference — requires verification; a real
+   *  gateway webhook would confirm these automatically in future).
+   *  Absent on legacy seed rows — treat as 'principal'. */
+  collectorRole?: 'principal' | 'teacher' | 'self'
+  /** Receipt lifecycle: when this payment's receipt was first printed or
+   *  downloaded by an authorised user. A payment with a handled receipt is
+   *  completed activity (settles into Transactions view); the payment
+   *  record itself is NEVER deleted — only its UI classification changes. */
+  receiptHandledAt?: string
 }
 
 export interface StudentFeeAccount {
@@ -1016,6 +1030,11 @@ interface FeeState {
   /** Principal rejects a direct cash entry — status becomes 'Failed' with
    *  the reason preserved on the transaction. No money ever moved. */
   rejectDirectCashTxn: (transactionId: string, actor: string, reason: string) => { success: boolean; error?: string }
+  /** Receipt lifecycle — stamp receiptHandledAt the first time an
+   *  authorised user prints or downloads this payment's receipt. The
+   *  payment record is never modified beyond this marker (audit:
+   *  receipt.generated on first handling, receipt.reprinted afterwards). */
+  markReceiptHandled: (transactionId: string, actor: string) => void
   // ─── Additional Charge mutations (event-based collections) ─────────
   /** Create an Additional Charge (event-based collection) for the given
    *  classes/students. Does NOT touch any class fee structure. Emits an
@@ -1191,6 +1210,11 @@ export interface PaymentInput {
   /** When collecting against an Applications & Forms submission — the
    *  application id, stamped on the transaction for permanent linkage. */
   applicationId?: string
+  /** WHO is recording the payment (PAY-REWORK-1). 'principal' → verified
+   *  immediately (authorised finance role at the counter). 'teacher' →
+   *  Under Verification (cannot self-verify). 'self' → Under Verification
+   *  (student/guardian manual submission — never auto-paid). */
+  collectorRole?: 'principal' | 'teacher' | 'self'
 }
 
 function pushAudit(state: FeeState, record: Omit<AuditRecord, 'id' | 'timestamp' | '_immutable'>): AuditRecord[] {
@@ -1343,13 +1367,33 @@ export const useFeeStore = create<FeeState>()(
       classId: student.classId,
       amount: input.amount,
       mode: input.mode,
-      status: input.mode === 'Cash' ? 'Under Verification' : 'Success',
+      // VERIFICATION LIFECYCLE (PAY-REWORK-1) — one canonical record whose
+      // status is decided by WHO recorded it, not just the mode:
+      //   principal/office → the authorised finance person confirmed the
+      //     money at the counter → verified immediately (any mode).
+      //   teacher / student-self → the money was NOT confirmed by the
+      //     office → 'Under Verification' regardless of mode. A teacher can
+      //     never self-verify; a manual transfer is never auto-paid.
+      // Legacy callers (no collectorRole) keep the historic mode-based rule.
+      status:
+        input.collectorRole === 'principal'
+          ? 'Success'
+          : input.collectorRole === 'teacher' || input.collectorRole === 'self' || input.mode === 'Cash'
+            ? 'Under Verification'
+            : 'Success',
       date: new Date().toISOString().split('T')[0],
       purpose: input.purpose,
       feeHead: input.feeHead,
       collectedBy: input.collectedBy,
-      verifiedBy: input.mode === 'Cash' ? null : input.collectedBy,
-      verifiedAt: input.mode === 'Cash' ? null : new Date().toISOString(),
+      ...(input.collectorRole ? { collectorRole: input.collectorRole } : {}),
+      verifiedBy:
+        input.collectorRole === 'principal' || (!input.collectorRole && input.mode !== 'Cash')
+          ? input.collectedBy
+          : null,
+      verifiedAt:
+        input.collectorRole === 'principal' || (!input.collectorRole && input.mode !== 'Cash')
+          ? new Date().toISOString()
+          : null,
       referenceNo: input.referenceNo ?? null,
       academicYear: CURRENT_ACADEMIC_YEAR,
       category: resolvedCategory,
@@ -1515,6 +1559,24 @@ export const useFeeStore = create<FeeState>()(
       }),
     })
     return { success: true }
+  },
+
+  // ─── Receipt lifecycle (PAY-REWORK-1) ───────────────────────────────
+  markReceiptHandled: (transactionId, actor) => {
+    const state = get()
+    const txn = state.transactions.find((t) => t.id === transactionId)
+    if (!txn || txn.receiptHandledAt) return // already handled — no double audit
+    const alreadyGenerated = state.audit.some((a) => a.action === 'receipt.generated' && a.entityId === transactionId)
+    set({
+      transactions: state.transactions.map((t) => t.id !== transactionId ? t : { ...t, receiptHandledAt: new Date().toISOString() }),
+      audit: pushAudit(state, {
+        action: alreadyGenerated ? 'receipt.reprinted' : 'receipt.generated',
+        actor,
+        entityId: transactionId,
+        entityType: 'receipt',
+        description: `Receipt ${txn.receiptNo} issued for ${txn.studentName} (₹${txn.amount.toLocaleString('en-IN')}) by ${actor}.`,
+      }),
+    })
   },
 
   // ─── Additional Charges (event-based collections) ───────────────────
@@ -3322,6 +3384,19 @@ function computeAccount(
     examExpected: examFeeTotal,
     additional,
   }
+}
+
+// ─── Helper: balance due after a payment (receipt lifecycle) ─────────
+/** One-off compute of a student's CURRENT outstanding (accounts are derived,
+ *  never stored). Used by the receipt engine to print the honest
+ *  "Balance Dues Remaining" line — the same figure the Student Accounts and
+ *  Transactions surfaces show, so the receipt can never contradict them. */
+export function getStudentBalanceDue(studentId: string): number | null {
+  const state = useFeeStore.getState()
+  const student = useStudentsStore.getState().students.find((s) => s.id === studentId)
+  if (!student) return null
+  const acct = computeAccount(student, state.transactions, state.lateFeeRule, state.additionalCharges)
+  return acct.outstanding
 }
 
 // ─── Hook: Canonical Fee Data ────────────────────────────────────────

@@ -5,16 +5,14 @@
  *
  *   Payments is for ACTIONS. Transactions is for HISTORY. Overview is for INSIGHTS.
  *
- * Contents (flat, no nested sub-views):
- *   1. Benchmark header row — title block ("Payments" + "<Month Year> ·
- *      collections & verification") LEFT, the primary white-outline
- *      "Collect Fee" CTA RIGHT (opens the existing collection wizard:
- *      student → amount → mode → receipt). Same design language as Salary
- *      & Payroll → Payments' "Record Payment" button — one ERP system.
- *   2. Collection activity — Today / This Week / This Month as three
- *      micro-stat TILES (Salary benchmark recipe). Operational feedback that
- *      collections are landing right now — not analytics. The Today tile
- *      carries an amber accent ring while money has landed today (else muted).
+ * Contents (flat, no nested sub-views — PAY-REWORK-1 spec §8):
+ *   1. Compact payment summary — Today / Week / Month collection tiles LEFT,
+ *      the primary "Collect Fee" CTA RIGHT (opens the collection wizard).
+ *   2. Recent Payments — current / actionable payment activity: every row
+ *      scans student · class · amount · method · collector · status · date ·
+ *      reference · receipt availability; contextual bulk receipt actions
+ *      (print / download) appear only while a selection exists
+ *      (→ payments/recent-payments).
  *   3. Additional Charges Panel — event-based collections (tour, workshop…)
  *      created INDEPENDENTLY of the annual fee structures + their live
  *      collection progress (→ fees-additional-charges).
@@ -23,8 +21,8 @@
  *      pending anywhere (→ fees-approvals, which reads analytics directly).
  *
  * What deliberately does NOT live here: financial KPIs, the collection trend,
- * payment-mode analytics, recent-payments summaries (→ Overview) and the
- * complete transaction ledger (→ Transactions).
+ * payment-mode analytics (→ Overview) and the complete transaction ledger
+ * (→ Transactions) — a payment settles there once its receipt is issued.
  */
 
 import { motion } from 'framer-motion'
@@ -35,13 +33,15 @@ import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FeesVerificationQueue } from '../fees-approvals'
 import { FeesAdditionalCharges } from '../fees-additional-charges'
+import { RecentPayments } from './recent-payments'
 
 interface Props {
   data: ReturnType<typeof useFeeData>
   onCollect: () => void
+  onOpenTransactions?: () => void
 }
 
-export function PaymentsSection({ data, onCollect }: Props) {
+export function PaymentsSection({ data, onCollect, onOpenTransactions }: Props) {
   const { analytics } = data
 
   // Operational snapshot — successful collections landing right now
@@ -93,6 +93,10 @@ export function PaymentsSection({ data, onCollect }: Props) {
           </Button>
         </div>
       </div>
+
+      {/* 2 — Recent / Active Payments (current actionable activity +
+          contextual bulk receipt actions) */}
+      <RecentPayments data={data} onOpenTransactions={onOpenTransactions} />
 
       {/* 3 — Additional Charges (event-based collections, tracked separately
           from the annual fee structures) */}

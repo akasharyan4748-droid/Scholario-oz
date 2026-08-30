@@ -9,45 +9,9 @@ export const progressData = [
 
 export type Filter = 'all' | 'high' | 'at-risk'
 
-export interface CashRequest {
-  id: string
-  studentName: string
-  admissionNo: string
-  class: string
-  promotedClass: string
-  amount: number
-  mode: string
-  receiver: string
-  date: string
-  status: string
-}
-
-export const initialCashRequests: CashRequest[] = [
-  {
-    id: 'REQ-01',
-    studentName: 'Aarav Sharma',
-    admissionNo: 'GWS2024018',
-    class: 'Class 10-A',
-    promotedClass: 'Class 11-A',
-    amount: 65000,
-    mode: 'Cash Payment',
-    receiver: 'Ananya Sharma (Class Teacher)',
-    date: '2025-03-28',
-    status: 'Pending Acceptance',
-  },
-  {
-    id: 'REQ-02',
-    studentName: 'Ananya Rao',
-    admissionNo: 'GWS2024042',
-    class: 'Class 10-A',
-    promotedClass: 'Class 11-A',
-    amount: 65000,
-    mode: 'Cash Payment',
-    receiver: 'Ananya Sharma (Class Teacher)',
-    date: '2025-03-27',
-    status: 'Accepted & Renewed',
-  },
-]
+// NOTE (PAY-REWORK-1): the old mock CashRequest re-admission data was
+// removed — teacher fee collections now use the REAL canonical fee ledger
+// (see fee-collections.tsx → fee-store.recordPayment).
 
 // Deterministic math-score sequence used to render per-student math score chips.
 export const scoreSequence = [48, 44, 38, 49, 36, 47, 42, 46, 40, 50, 32, 45, 41, 48, 39, 47, 35, 46]

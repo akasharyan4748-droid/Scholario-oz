@@ -71,33 +71,11 @@ export function PaymentSuccessStage({ paidAmount, method }: { paidAmount: number
       exit={{ opacity: 0 }}
       className="flex flex-col items-center justify-center py-10 text-center relative"
     >
-      {[...Array(24)].map((_, i) => {
-        const colors = ['#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316']
-        const angle = (i / 24) * 2 * Math.PI
-        const distance = 120 + Math.random() * 60
-        return (
-          <motion.div
-            key={i}
-            className="absolute h-2.5 w-2.5 rounded-full"
-            style={{ background: colors[i % colors.length] }}
-            initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-            animate={{
-              x: Math.cos(angle) * distance,
-              y: Math.sin(angle) * distance,
-              opacity: 0,
-              scale: 0.2,
-              rotate: 720,
-            }}
-            transition={{ duration: 1.6, ease: 'easeOut' }}
-          />
-        )
-      })}
-
       <motion.div
         initial={{ scale: 0, rotate: -30 }}
         animate={{ scale: 1, rotate: 0 }}
         transition={{ type: 'spring', stiffness: 200, delay: 0.1 }}
-        className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-premium-lg mb-5"
+        className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-premium-lg mb-5"
       >
         <CheckCircle2 className="h-14 w-14" />
       </motion.div>
@@ -107,7 +85,7 @@ export function PaymentSuccessStage({ paidAmount, method }: { paidAmount: number
         transition={{ delay: 0.4 }}
         className="font-display text-2xl font-extrabold"
       >
-        Payment Successful! 🎉
+        Payment Submitted
       </motion.h3>
       <motion.p
         initial={{ opacity: 0, y: 8 }}
@@ -115,18 +93,30 @@ export function PaymentSuccessStage({ paidAmount, method }: { paidAmount: number
         transition={{ delay: 0.5 }}
         className="text-sm text-muted-foreground mt-1"
       >
-        {formatINR(paidAmount)} paid via {method.toUpperCase()}
+        {formatINR(paidAmount)} via {method.toUpperCase()} · Awaiting confirmation by the school office
+      </motion.p>
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.7 }}
+        className="text-[11px] text-muted-foreground mt-3 max-w-[280px]"
+      >
+        Your receipt becomes available as soon as the office verifies the payment — usually the same day.
       </motion.p>
     </motion.div>
   )
 }
 
 export function PaymentReceiptStage({
-  paidAmount, method, student, onDownload, onComplete,
+  paidAmount, method, student, reference, receiptNo, onDownload, onComplete,
 }: {
   paidAmount: number
   method: string
   student: PaymentStudentInfo
+  /** Transfer reference the parent provided (real, from the form). */
+  reference?: string
+  /** Canonical acknowledgement number from the fee ledger (pending state). */
+  receiptNo?: string
   onDownload: () => void
   onComplete: () => void
 }) {
@@ -134,57 +124,58 @@ export function PaymentReceiptStage({
     <motion.div key="receipt" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600">
             <Receipt className="h-4 w-4" />
           </div>
-          Payment Receipt
+          Payment Acknowledgement
         </DialogTitle>
-        <DialogDescription>Transaction completed successfully</DialogDescription>
+        <DialogDescription>Submitted — the official receipt follows confirmation</DialogDescription>
       </DialogHeader>
 
       <div className="py-2">
-        <div className="rounded-t-2xl bg-gradient-to-br from-emerald-600 to-teal-600 p-4 text-white text-center">
+        <div className="rounded-t-2xl bg-gradient-to-br from-amber-500 to-orange-500 p-4 text-white text-center">
           <div className="flex items-center justify-center gap-2 mb-1">
             <CheckCircle2 className="h-5 w-5" />
-            <p className="font-display text-lg font-bold">Payment Successful</p>
+            <p className="font-display text-lg font-bold">Payment Submitted</p>
           </div>
-          <p className="text-[11px] text-emerald-100">Demo School of Scholario</p>
+          <p className="text-[11px] text-amber-50">Awaiting confirmation by the school office</p>
         </div>
 
         <div className="rounded-b-2xl border border-t-0 border-border bg-card/40 p-4">
           <div className="text-center mb-4">
-            <p className="text-[11px] text-muted-foreground">Amount Paid</p>
+            <p className="text-[11px] text-muted-foreground">Amount Submitted</p>
             <p className="font-display text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
               {formatINR(paidAmount)}
             </p>
           </div>
 
           <div className="space-y-2 text-sm border-t border-border pt-3">
-            <ReceiptRow label="Receipt No" value="RCP-2024-1018C" mono />
-            <ReceiptRow label="Transaction ID" value={`TXN${Date.now().toString().slice(-10)}`} mono small />
+            {receiptNo && <ReceiptRow label="Reference No" value={receiptNo} mono />}
+            {reference && <ReceiptRow label="Transaction Ref" value={reference} mono small />}
             <ReceiptRow label="Date" value={formatDate(new Date().toISOString())} />
             <ReceiptRow label="Method" value={method.toUpperCase()} />
             <ReceiptRow label="Student" value={student.name} />
             <ReceiptRow label="Admission No" value={student.admissionNo} mono />
             <ReceiptRow label="Class" value={`${student.className}-${student.section}`} />
-            <ReceiptRow label="Purpose" value="Annual Fee — Q3" />
           </div>
 
           <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
             <span className="text-sm font-semibold">Status</span>
-            <StatusBadge status="Success" variant="success" dot />
+            <StatusBadge status="Awaiting confirmation" variant="warning" dot />
           </div>
         </div>
 
-        <div className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-2.5">
-          <Sparkles className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-          <p className="text-[11px] text-muted-foreground">A copy has been emailed to {student.email}</p>
+        <div className="mt-3 flex items-center gap-2 rounded-lg bg-amber-500/5 border border-amber-500/20 p-2.5">
+          <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+          <p className="text-[11px] text-muted-foreground">
+            Keep the transaction reference safe. Your official receipt appears in Payment History once the office confirms.
+          </p>
         </div>
       </div>
 
       <DialogFooter>
         <Button variant="outline" onClick={onDownload} className="flex-1">
-          <Download className="h-3.5 w-3.5" /> Download
+          <Download className="h-3.5 w-3.5" /> Download Acknowledgement
         </Button>
         <Button
           onClick={onComplete}

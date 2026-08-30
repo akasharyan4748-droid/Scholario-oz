@@ -84,6 +84,13 @@ function QueueStatusChip({ status }: { status: CashRequest['status'] }) {
   )
 }
 
+/** Who recorded the payment awaiting verification (PAY-REWORK-1). */
+function collectorLabel(role: FeeTransaction['collectorRole'], collectedBy: string): string {
+  if (role === 'teacher') return `Teacher ${collectedBy}`
+  if (role === 'self') return 'Self-submitted'
+  return `Office · ${collectedBy}`
+}
+
 export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFeeData> }) {
   const { cashRequests, accounts, analytics, transactions } = data
   const approveCashRequest = useFeeStore((s) => s.approveCashRequest)
@@ -319,23 +326,37 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
           </div>
         )}
 
-        {/* ── Direct cash entries (recorded straight to the ledger, e.g.
-            student application payments) awaiting the same verification ── */}
+        {/* ── Payments awaiting verification — ONE canonical record each
+            (teacher collections + self-service submissions + direct cash).
+            Verify posts the SAME record as successful; reject preserves the
+            reason on it. No second payment copy is ever created. ── */}
         {directPending.length > 0 && (
           <div className="border-t border-border/60">
             <p className="px-4 pt-2.5 pb-1 text-[9px] uppercase tracking-wider font-semibold text-muted-foreground flex items-center gap-1.5">
-              <Banknote className="h-3 w-3" /> Direct cash entries · self-service
+              <Banknote className="h-3 w-3" /> Payments awaiting verification
             </p>
             <div className="divide-y divide-border pb-1">
               {directPending.map((t) => (
                 <div key={t.id} className="px-4 py-2 flex items-center gap-3 hover:bg-muted/25 transition-colors">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-500/10 text-sky-700 dark:text-sky-300 ring-1 ring-sky-500/20">
-                    <Banknote className="h-3.5 w-3.5" />
+                  <span
+                    className={cn(
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1',
+                      t.collectorRole === 'teacher'
+                        ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/20'
+                        : 'bg-sky-500/10 text-sky-700 dark:text-sky-300 ring-sky-500/20',
+                    )}
+                    title={`Collected by ${t.collectedBy}`}
+                  >
+                    <span className="text-[9px] font-bold">{initials(t.collectedBy)}</span>
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate">{t.studentName}</p>
+                    <p className="text-xs font-semibold truncate">
+                      {t.studentName}
+                      <span className="ml-1.5 text-[9px] font-semibold text-muted-foreground">{collectorLabel(t.collectorRole, t.collectedBy)}</span>
+                    </p>
                     <p className="text-[10px] text-muted-foreground truncate">
-                      {t.className} · {t.feeHead} · {formatDate(t.date)}
+                      {t.className} · {t.feeHead} · {t.mode} · {formatDate(t.date)}
+                      {t.referenceNo && <span className="font-mono"> · {t.referenceNo}</span>}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
