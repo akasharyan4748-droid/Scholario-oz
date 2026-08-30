@@ -641,13 +641,14 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
                 </motion.div>
 
                 <div className="flex justify-center overflow-x-auto">
-                  {receiptSettings.paperSize === 'A5' ? (
-                    /* Canonical A5 landscape dual-copy receipt (spec §14-18). */
+                  {receiptSettings.paperSize !== '80mm' ? (
+                    /* Canonical dual-copy receipt sheet (spec §14-18):
+                       A5 landscape 1 student/page · A4 portrait 2/page. */
                     <FeeReceiptA5Preview
                       transaction={recordedTxn}
                       settings={receiptSettings}
-                      onPrint={() => { printReceiptA5(recordedTxn, receiptSettings); toast.success('Print dialog opened') }}
-                      onDownload={() => { downloadReceiptA5(recordedTxn, receiptSettings); toast.success('Receipt downloaded', { description: `${recordedTxn.receiptNo}.html` }) }}
+                      onPrint={() => { printReceiptA5(recordedTxn, receiptSettings); useFeeStore.getState().markReceiptHandled(recordedTxn.id, 'Principal'); toast.success('Print dialog opened') }}
+                      onDownload={() => { downloadReceiptA5(recordedTxn, receiptSettings); useFeeStore.getState().markReceiptHandled(recordedTxn.id, 'Principal'); toast.success('Receipt downloaded', { description: `${recordedTxn.receiptNo}.html` }) }}
                     />
                   ) : (
                     /* 80mm thermal counter printer (receipt settings). */

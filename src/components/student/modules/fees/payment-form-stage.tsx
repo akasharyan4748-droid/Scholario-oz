@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  IndianRupee, Wallet, ShieldCheck, Sparkles, Hash,
+  IndianRupee, Wallet, ShieldCheck, Sparkles, Hash, Landmark,
 } from 'lucide-react'
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -14,20 +14,29 @@ import { formatINR } from '@/lib/format'
 import { paymentMethods, type PaymentStudentInfo } from './data'
 
 export function PaymentFormStage({
-  method, totalPending, student, onMethodChange, onCancel, onPay,
+  method, totalPending, student, gatewayProvider, onMethodChange, onCancel, onPay,
 }: {
   method: string
   totalPending: number
   student: PaymentStudentInfo
+  /** Active gateway provider (e.g. 'razorpay') — when connected, ALL online
+   *  rails route through the secure gateway checkout and the payment is
+   *  confirmed by the gateway itself (no manual reference, instant receipt). */
+  gatewayProvider?: string | null
   onMethodChange: (m: string) => void
   onCancel: () => void
-  /** Called with the transfer reference the parent provides (PAY-REWORK-1 §5). */
+  /** Called with the transfer reference the parent provides (manual rails). */
   onPay: (reference: string) => void
 }) {
-  // Reference / transaction ID — required for UPI & Net Banking (manual
-  // transfers are NEVER auto-confirmed; the school office verifies them).
+  // GATEWAY CHECKOUT — when the school's payment gateway is connected, the
+  // payment is confirmed by the actual gateway: no manual reference entry,
+  // no office verification round-trip, receipt immediately available.
+  const gatewayPay = !!gatewayProvider
+  // Reference / transaction ID — required ONLY for manual transfers (gateway
+  // not connected). Manual transfers are NEVER auto-confirmed; the school
+  // office verifies them against the reference.
   const [reference, setReference] = useState('')
-  const needsRef = method === 'upi' || method === 'netbanking'
+  const needsRef = !gatewayPay
   const refTooShort = needsRef && reference.trim().length < 4
 
   return (
@@ -119,12 +128,21 @@ export function PaymentFormStage({
           </div>
         )}
 
-        <div className="flex items-center gap-2 rounded-lg bg-card/40 border border-border p-2.5">
-          <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
-          <p className="text-[11px] text-muted-foreground">
-            Your payment is submitted to the school office and confirmed after verification. The receipt becomes available once confirmed.
-          </p>
-        </div>
+        {gatewayPay ? (
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-2.5">
+            <Landmark className="h-4 w-4 text-emerald-600 shrink-0" />
+            <p className="text-[11px] text-muted-foreground">
+              Secure checkout via <span className="font-semibold text-emerald-700 dark:text-emerald-400 capitalize">{gatewayProvider}</span>. The gateway confirms your payment instantly — your official receipt is issued immediately, no office visit needed.
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg bg-card/40 border border-border p-2.5">
+            <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+            <p className="text-[11px] text-muted-foreground">
+              Your payment is submitted to the school office and confirmed after verification. The receipt becomes available once confirmed.
+            </p>
+          </div>
+        )}
       </div>
 
       <DialogFooter>
@@ -134,7 +152,8 @@ export function PaymentFormStage({
           disabled={refTooShort}
           className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white min-w-[140px]"
         >
-          <Wallet className="h-3.5 w-3.5" /> Pay {formatINR(totalPending)}
+          {gatewayPay ? <Landmark className="h-3.5 w-3.5" /> : <Wallet className="h-3.5 w-3.5" />}
+          {gatewayPay ? `Pay via ${gatewayProvider}` : `Pay ${formatINR(totalPending)}`}
         </Button>
       </DialogFooter>
     </motion.div>

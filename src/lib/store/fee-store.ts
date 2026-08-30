@@ -658,7 +658,11 @@ export interface ReceiptSettings {
   startNumber: number
   footerMessage: string
   showAuthorizedSignature: boolean
-  paperSize: '80mm' | 'A5'
+  /** Print format. A5 landscape = one student per page (Student + School
+   *  copy side-by-side). A4 portrait = TWO students per page (each student
+   *  occupies one A5-landscape area → 4 receipt copies on the sheet).
+   *  80mm = legacy thermal counter slip. */
+  paperSize: '80mm' | 'A5' | 'A4'
 }
 
 // ─── Payment Infrastructure Types (Phase 4) ──────────────────────────
@@ -1215,6 +1219,16 @@ export interface PaymentInput {
    *  Under Verification (cannot self-verify). 'self' → Under Verification
    *  (student/guardian manual submission — never auto-paid). */
   collectorRole?: 'principal' | 'teacher' | 'self'
+  // ─── Gateway-confirmed payments (spec: gateway confirmations are NEVER
+  // held for manual Principal verification) ───
+  /** Provider that processed and CONFIRMED the payment (razorpay/cashfree/
+   *  payu). Presence of gatewayPaymentId marks the payment as gateway-
+   *  confirmed → recorded as Success automatically. */
+  gateway?: GatewayProvider
+  /** Gateway payment id (e.g. pay_… ) — the stored transaction/reference ID. */
+  gatewayPaymentId?: string
+  gatewayOrderId?: string
+  paymentSource?: FeeTransaction['paymentSource']
 }
 
 function pushAudit(state: FeeState, record: Omit<AuditRecord, 'id' | 'timestamp' | '_immutable'>): AuditRecord[] {
@@ -1301,8 +1315,16 @@ export const useFeeStore = create<FeeState>()(
     if (!modeConfig || !modeConfig.active) {
       return { success: false, error: `Payment mode ${input.mode} is not active.` }
     }
-    // Validation: reference required for some modes
-    if (modeConfig.requiresReference && !input.referenceNo) {
+    // GATEWAY-CONFIRMED (spec): a payment the actual gateway has confirmed
+    // (gatewayPaymentId present) is NEVER held for manual Principal
+    // verification — it is Paid automatically, the transaction/reference ID
+    // is stored on the record and the receipt is immediately available.
+    // The gateway payment id SATISFIES the reference requirement (it IS the
+    // canonical transaction reference for gateway rails).
+    const gatewayConfirmed = !!input.gatewayPaymentId
+    // Validation: reference required for some modes (gateway payments exempt
+    // — the gateway transaction id is stored as the reference)
+    if (modeConfig.requiresReference && !input.referenceNo && !gatewayConfirmed) {
       return { success: false, error: `${input.mode} requires a reference number.` }
     }
     // Validation: student must exist
@@ -1369,6 +1391,8 @@ export const useFeeStore = create<FeeState>()(
       mode: input.mode,
       // VERIFICATION LIFECYCLE (PAY-REWORK-1) — one canonical record whose
       // status is decided by WHO recorded it, not just the mode:
+      //   gateway-confirmed → the payment gateway itself confirmed the money
+      //     → Paid automatically (never queued for manual verification).
       //   principal/office → the authorised finance person confirmed the
       //     money at the counter → verified immediately (any mode).
       //   teacher / student-self → the money was NOT confirmed by the
@@ -1376,7 +1400,7 @@ export const useFeeStore = create<FeeState>()(
       //     never self-verify; a manual transfer is never auto-paid.
       // Legacy callers (no collectorRole) keep the historic mode-based rule.
       status:
-        input.collectorRole === 'principal'
+        gatewayConfirmed || input.collectorRole === 'principal'
           ? 'Success'
           : input.collectorRole === 'teacher' || input.collectorRole === 'self' || input.mode === 'Cash'
             ? 'Under Verification'
@@ -1387,18 +1411,31 @@ export const useFeeStore = create<FeeState>()(
       collectedBy: input.collectedBy,
       ...(input.collectorRole ? { collectorRole: input.collectorRole } : {}),
       verifiedBy:
-        input.collectorRole === 'principal' || (!input.collectorRole && input.mode !== 'Cash')
-          ? input.collectedBy
-          : null,
+        gatewayConfirmed
+          ? `${input.gateway ?? 'gateway'} · auto-confirmed`
+          : input.collectorRole === 'principal' || (!input.collectorRole && input.mode !== 'Cash')
+            ? input.collectedBy
+            : null,
       verifiedAt:
-        input.collectorRole === 'principal' || (!input.collectorRole && input.mode !== 'Cash')
+        gatewayConfirmed || input.collectorRole === 'principal' || (!input.collectorRole && input.mode !== 'Cash')
           ? new Date().toISOString()
           : null,
-      referenceNo: input.referenceNo ?? null,
+      referenceNo: input.referenceNo ?? input.gatewayPaymentId ?? null,
       academicYear: CURRENT_ACADEMIC_YEAR,
       category: resolvedCategory,
       ...(input.additionalChargeId ? { additionalChargeId: input.additionalChargeId } : {}),
       ...(input.applicationId ? { applicationId: input.applicationId } : {}),
+      // Gateway infrastructure fields — stored so the payment is fully
+      // reconcilable (Transactions detail, exports, settlements).
+      ...(gatewayConfirmed
+        ? {
+            paymentSource: input.paymentSource ?? 'gateway',
+            gateway: input.gateway ?? 'none',
+            gatewayPaymentId: input.gatewayPaymentId,
+            ...(input.gatewayOrderId ? { gatewayOrderId: input.gatewayOrderId } : {}),
+            utr: input.referenceNo ?? input.gatewayPaymentId,
+          }
+        : {}),
       meta: input.meta,
     }
     set({

@@ -54,6 +54,7 @@ export function FeesModule() {
   const [submittedTxn, setSubmittedTxn] = useState<FeeTransaction | null>(null)
   const recordPayment = useFeeStore((s) => s.recordPayment)
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
+  const gatewayConfig = useFeeStore((s) => s.gatewayConfig)
   const addAlert = useLiveAlerts((s) => s.addAlert)
 
   // New Academic Session Renewal State
@@ -90,38 +91,70 @@ export function FeesModule() {
     }, 2000)
   }
 
-  // PAY-REWORK-1 — the student/guardian submission lands in the ONE fee
-  // ledger as 'Under Verification' (collectorRole 'self'). It is NEVER
-  // auto-confirmed: the Principal verifies it against the reference, and
-  // only then does the receipt become official (Fee Management side).
+  // PAY-REWORK-1 + final spec §3 — the student/guardian submission lands in
+  // the ONE fee ledger. TWO rails, honestly differentiated:
+  //   • GATEWAY (connected/test_mode): the payment goes through the school's
+  //     actual payment gateway — the GATEWAY confirms it, so the record is
+  //     Paid automatically, the gateway transaction ID is stored and the
+  //     official receipt is immediately available. NEVER queued for manual
+  //     verification.
+  //   • MANUAL (no gateway): reference-based submission → 'Under
+  //     Verification' (collectorRole 'self'); the Principal verifies it
+  //     against the reference before the receipt becomes official.
+  const gatewayActive = !!gatewayConfig && (gatewayConfig.status === 'connected' || gatewayConfig.status === 'test_mode')
   const handlePay = (reference: string) => {
     const modeMap: Record<string, 'UPI' | 'Card' | 'Net Banking'> = { upi: 'UPI', card: 'Card', netbanking: 'Net Banking' }
+    const payMode = modeMap[method] ?? 'UPI'
+    const viaGateway = gatewayActive
     setSubmittedRef(reference)
     setStage('processing')
     setTimeout(() => {
       const result = recordPayment({
         studentId: canonicalStudentId,
         amount: paidAmount,
-        mode: modeMap[method] ?? 'UPI',
+        mode: payMode,
         feeHead: 'Tuition',
-        purpose: `Online fee payment submitted by student (${method.toUpperCase()})`,
+        purpose: `Online fee payment ${viaGateway ? `via ${gatewayConfig?.provider} gateway` : 'submitted by student'} (${method.toUpperCase()})`,
         collectedBy: student.name,
         collectorRole: 'self',
         referenceNo: reference || undefined,
+        ...(viaGateway
+          ? {
+              gateway: gatewayConfig?.provider,
+              gatewayPaymentId: `pay_${Date.now().toString(36)}`,
+              gatewayOrderId: `order_${Date.now().toString(36)}`,
+              paymentSource: 'gateway' as const,
+            }
+          : {}),
       })
       if (result.success && result.transaction) {
         setSubmittedTxn(result.transaction)
-        // Principal-side alert — a manual transfer is waiting for verification.
-        addAlert({
-          id: `alert-${Date.now()}`,
-          severity: 'high',
-          title: 'Manual payment awaiting verification',
-          desc: `${student.name} submitted ${formatINR(paidAmount)} via ${modeMap[method] ?? 'UPI'} · ref ${reference || '—'}.`,
-          color: 'amber',
-          navKey: 'fees',
-          isNew: true,
-          time: 'just now',
-        })
+        if (viaGateway) {
+          // Gateway confirmed — notification flow works normally, but it is
+          // NOT a verification request (the gateway itself confirmed it).
+          addAlert({
+            id: `alert-${Date.now()}`,
+            severity: 'low',
+            title: 'Gateway payment received',
+            desc: `${student.name} paid ${formatINR(paidAmount)} via ${gatewayConfig?.provider ?? 'gateway'} (${payMode}) · auto-confirmed, receipt ${result.transaction.receiptNo}.`,
+            color: 'emerald',
+            navKey: 'fees',
+            isNew: true,
+            time: 'just now',
+          })
+        } else {
+          // Principal-side alert — a manual transfer is waiting for verification.
+          addAlert({
+            id: `alert-${Date.now()}`,
+            severity: 'high',
+            title: 'Manual payment awaiting verification',
+            desc: `${student.name} submitted ${formatINR(paidAmount)} via ${payMode} · ref ${reference || '—'}.`,
+            color: 'amber',
+            navKey: 'fees',
+            isNew: true,
+            time: 'just now',
+          })
+        }
       } else {
         toast.error('Could not submit payment', { description: result.error })
         setStage('form')
@@ -146,12 +179,13 @@ export function FeesModule() {
     }, 200)
   }
 
-  // Acknowledgement download — the A5 sheet renders the honest PENDING
-  // VERIFICATION state; it is NOT an official receipt until verified.
+  // Receipt download — the A5 sheet renders the honest lifecycle state:
+  // gateway-confirmed → OFFICIAL receipt; manual → PENDING VERIFICATION
+  // acknowledgement until the office verifies.
   const handleReceiptDownload = () => {
     if (submittedTxn) {
       downloadReceiptA5(submittedTxn, receiptSettings)
-      toast.success('Acknowledgement downloaded', { description: `${submittedTxn.receiptNo}.html` })
+      toast.success(submittedTxn.status === 'Success' ? 'Receipt downloaded' : 'Acknowledgement downloaded', { description: `${submittedTxn.receiptNo}.html` })
     } else {
       toast.success('Acknowledgement downloaded')
     }
@@ -238,6 +272,8 @@ export function FeesModule() {
         }}
         reference={submittedRef}
         receiptNo={submittedTxn?.receiptNo}
+        gatewayProvider={gatewayActive ? gatewayConfig?.provider ?? null : null}
+        confirmed={!!submittedTxn && submittedTxn.status === 'Success' && !!submittedTxn.gatewayPaymentId}
         onOpenChange={(o) => !o && handleCloseDialog()}
         onMethodChange={setMethod}
         onPay={handlePay}

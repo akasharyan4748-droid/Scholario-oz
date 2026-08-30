@@ -5,20 +5,27 @@
  *
  *   Payments is for ACTIONS. Transactions is for HISTORY. Overview is for INSIGHTS.
  *
- * Contents (flat, no nested sub-views — PAY-REWORK-1 spec §8):
- *   1. Compact payment summary — Today / Week / Month collection tiles LEFT,
- *      the primary "Collect Fee" CTA RIGHT (opens the collection wizard).
- *   2. Recent Payments — current / actionable payment activity: every row
+ * Contents (flat, no nested sub-views — PAY-REWORK-1 spec §8 + final §3/§4):
+ *   1. Compact payment summary — Today / Week / Month collection tiles in
+ *      the SAME micro-stat recipe as the Transactions summary strip and the
+ *      Overview cards (muted chip, 9px uppercase label, bold tabular value,
+ *      quiet sub line) — no bulky treatment — with the primary "Collect Fee"
+ *      CTA RIGHT (opens the collection wizard).
+ *   2. Recent Payments — NEW / ACTIONABLE payment activity: every row
  *      scans student · class · amount · method · collector · status · date ·
  *      reference · receipt availability; contextual bulk receipt actions
- *      (print / download) appear only while a selection exists
+ *      (print / download) appear only while a selection exists. A payment
+ *      leaves this list the moment its receipt is printed or downloaded —
+ *      it settles into Transactions (never deleted)
  *      (→ payments/recent-payments).
- *   3. Additional Charges Panel — event-based collections (tour, workshop…)
- *      created INDEPENDENTLY of the annual fee structures + their live
- *      collection progress (→ fees-additional-charges).
- *   4. Cash Verification Panel — the verification queue with rich context +
- *      decision actions; shows an all-clear slim row when there is nothing
- *      pending anywhere (→ fees-approvals, which reads analytics directly).
+ *   3. Additional Collections — READ-ONLY payment status per existing
+ *      event-based collection (expected · collected · students/payments ·
+ *      progress). Creation/recording lives in Applications & Forms
+ *      (→ fees-additional-charges).
+ *   4. Cash Verification — the compact verification TABLE with decision
+ *      actions; shows an all-clear slim row when there is nothing pending
+ *      anywhere (→ fees-approvals). Gateway-confirmed payments never
+ *      appear here — they are recorded Paid automatically.
  *
  * What deliberately does NOT live here: financial KPIs, the collection trend,
  * payment-mode analytics (→ Overview) and the complete transaction ledger
@@ -41,15 +48,29 @@ interface Props {
   onOpenTransactions?: () => void
 }
 
+/** Payment summary tile — the exact Overview/Transactions micro-stat recipe
+ *  (spec §4: compact · clean · lightweight · consistent spacing). */
+function PaymentStatTile({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
+  return (
+    <div className={cn('rounded-lg bg-muted/40 px-2.5 py-1.5', accent && 'ring-1 ring-amber-500/40')}>
+      <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400 leading-tight mt-0.5">
+        {value}
+      </p>
+      {sub && <p className="text-[9px] text-muted-foreground mt-0.5 truncate hidden sm:block">{sub}</p>}
+    </div>
+  )
+}
+
 export function PaymentsSection({ data, onCollect, onOpenTransactions }: Props) {
   const { analytics } = data
 
   // Operational snapshot — successful collections landing right now
   // (same source as the ledger; successful transactions only).
   const activity = [
-    { label: 'Today', value: analytics.todayCollection, hint: 'since midnight', accent: analytics.todayCollection > 0 },
-    { label: 'This Week', value: analytics.weekCollection, hint: 'rolling 7 days', accent: false },
-    { label: 'This Month', value: analytics.monthCollection, hint: 'rolling 30 days', accent: false },
+    { label: 'Today', value: analytics.todayCollection, sub: 'since midnight', accent: analytics.todayCollection > 0 },
+    { label: 'This Week', value: analytics.weekCollection, sub: 'rolling 7 days', accent: false },
+    { label: 'This Month', value: analytics.monthCollection, sub: 'rolling 30 days', accent: false },
   ]
 
   return (
@@ -65,16 +86,8 @@ export function PaymentsSection({ data, onCollect, onOpenTransactions }: Props) 
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 * i }}
-              className={cn(
-                'rounded-lg bg-muted/40 px-2.5 py-1.5',
-                s.accent && 'ring-1 ring-amber-500/40',
-              )}
             >
-              <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">{s.label}</p>
-              <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400 leading-tight mt-0.5">
-                {formatINR(s.value, true)}
-              </p>
-              <p className="text-[9px] text-muted-foreground mt-0.5 truncate hidden sm:block">{s.hint}</p>
+              <PaymentStatTile label={s.label} value={formatINR(s.value, true)} sub={s.sub} accent={s.accent} />
             </motion.div>
           ))}
         </div>
@@ -98,12 +111,11 @@ export function PaymentsSection({ data, onCollect, onOpenTransactions }: Props) 
           contextual bulk receipt actions) */}
       <RecentPayments data={data} onOpenTransactions={onOpenTransactions} />
 
-      {/* 3 — Additional Charges (event-based collections, tracked separately
-          from the annual fee structures) */}
+      {/* 3 — Additional Collections (read-only status per collection) */}
       <FeesAdditionalCharges data={data} />
 
-      {/* 4 — Verification queue (operations block, not a nested page;
-          renders its own all-clear slim row when nothing is pending) */}
+      {/* 4 — Verification queue (compact table; renders its own all-clear
+          slim row when nothing is pending) */}
       <FeesVerificationQueue data={data} />
     </div>
   )

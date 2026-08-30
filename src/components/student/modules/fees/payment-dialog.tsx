@@ -17,8 +17,12 @@ interface PaymentDialogProps {
   student: PaymentStudentInfo
   /** Transfer reference entered by the parent (shown on the acknowledgement). */
   reference?: string
-  /** Canonical acknowledgement number from the fee ledger. */
+  /** Canonical receipt number from the fee ledger. */
   receiptNo?: string
+  /** Active gateway provider — routes the form through the gateway checkout. */
+  gatewayProvider?: string | null
+  /** Gateway-confirmed → success/receipt stages show the OFFICIAL receipt. */
+  confirmed?: boolean
   onOpenChange: (open: boolean) => void
   onMethodChange: (method: string) => void
   onPay: (reference: string) => void
@@ -28,6 +32,7 @@ interface PaymentDialogProps {
 
 export function PaymentDialog({
   open, stage, method, paidAmount, totalPending, student, reference, receiptNo,
+  gatewayProvider, confirmed,
   onOpenChange, onMethodChange, onPay, onDownload, onComplete,
 }: PaymentDialogProps) {
   return (
@@ -40,6 +45,7 @@ export function PaymentDialog({
               method={method}
               totalPending={totalPending}
               student={student}
+              gatewayProvider={gatewayProvider}
               onMethodChange={onMethodChange}
               onCancel={() => onOpenChange(false)}
               onPay={onPay}
@@ -49,7 +55,7 @@ export function PaymentDialog({
             <PaymentProcessingStage key="processing" paidAmount={paidAmount} method={method} />
           )}
           {stage === 'success' && (
-            <PaymentSuccessStage key="success" paidAmount={paidAmount} method={method} />
+            <PaymentSuccessStage key="success" paidAmount={paidAmount} method={method} confirmed={confirmed} gatewayProvider={gatewayProvider} />
           )}
           {stage === 'receipt' && (
             <PaymentReceiptStage
@@ -59,6 +65,8 @@ export function PaymentDialog({
               student={student}
               reference={reference}
               receiptNo={receiptNo}
+              confirmed={confirmed}
+              gatewayProvider={gatewayProvider}
               onDownload={onDownload}
               onComplete={onComplete}
             />

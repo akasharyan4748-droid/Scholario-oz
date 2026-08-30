@@ -2,21 +2,27 @@
 
 /**
  * RecentPayments — "Recent / Active Payments" panel on the Payments page
- * (PAY-REWORK-1 spec §8/§10/§12/§13/§20/§21).
+ * (PAY-REWORK-1 spec §8/§10/§12/§13/§20/§21 + final UI/UX spec §3).
  *
- *   Payments = CURRENT / ACTIONABLE payment activity.
+ *   Payments = NEW / ACTIONABLE payment activity.
  *   Transactions = the completed historical ledger.
  *
  * A payment stays here while it is NEW or ACTIONABLE — i.e. while it is
  * still awaiting verification, or until its receipt has been printed or
- * downloaded (receiptHandledAt). It then settles into Transactions on its
- * own; the payment record is never deleted — only its UI classification
- * changes. Every row shows the spec's scan line: student · class · amount ·
- * method · collector · status · date · reference · receipt availability,
- * with progressive disclosure (secondary details in the receipt dialog).
+ * downloaded (receiptHandledAt). Once the receipt is issued the payment
+ * LEAVES this list and settles into Transactions — the record itself is
+ * NEVER deleted; it remains fully searchable in Transactions and on the
+ * student's account. Gateway-confirmed payments arrive here already Paid
+ * (never queued for manual verification) with receipt actions available
+ * immediately.
+ *
+ * Every row shows the scan line: student · class · amount · method ·
+ * collector · status · date · reference · receipt availability, with
+ * progressive disclosure (secondary details in the receipt dialog).
  *
  * Bulk receipts: contextual selection — the bulk bar exists ONLY while a
- * selection is made; no permanent toolbar (spec §21).
+ * selection is made; no permanent toolbar (spec §21). Pagination follows
+ * the paper-size setting (A5 = 1 student/page, A4 = 2 students/page).
  */
 
 import { useMemo, useState } from 'react'
@@ -32,7 +38,6 @@ import { FeeStatusBadge, ModeIcon, paymentStatusLabel } from '../fees-shared'
 import { ReceiptRowActions, ReceiptViewDialog, printReceiptsA5Bulk, downloadReceiptsA5Bulk } from '../fee-receipt-a5'
 import { toast } from 'sonner'
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 const MAX_ROWS = 8
 
 export function RecentPayments({
@@ -48,15 +53,17 @@ export function RecentPayments({
   const [viewing, setViewing] = useState<FeeTransaction | null>(null)
 
   // Recent / actionable slice — newest first (store prepends).
-  const recent = useMemo(() => {
-    const cutoff = Date.now() - THIRTY_DAYS_MS
-    return transactions.filter((t) => {
-      if (t.status !== 'Success') return true // pending/failed = actionable
-      if (!t.receiptHandledAt) return true // receipt not yet issued = actionable
-      const handled = new Date(t.receiptHandledAt).getTime()
-      return handled >= cutoff // recently completed → still "recent"
-    })
-  }, [transactions])
+  // A payment is actionable while it is pending/failed OR its receipt has
+  // not been issued yet. As soon as the receipt is printed or downloaded
+  // the payment settles into Transactions/history (never deleted).
+  const recent = useMemo(
+    () =>
+      transactions.filter((t) => {
+        if (t.status !== 'Success') return true // pending/failed = actionable
+        return !t.receiptHandledAt // receipt issued → settled into Transactions
+      }),
+    [transactions],
+  )
 
   const visible = recent.slice(0, MAX_ROWS)
   const overflow = recent.length - visible.length
@@ -87,7 +94,9 @@ export function RecentPayments({
     if (selectedItems.length === 0) return
     const ok = printReceiptsA5Bulk(selectedItems, receiptSettings)
     if (ok) {
-      toast.success(`Printing ${selectedItems.length} receipt${selectedItems.length === 1 ? '' : 's'}`, { description: 'One A5 sheet per payment.' })
+      toast.success(`Printing ${selectedItems.length} receipt${selectedItems.length === 1 ? '' : 's'}`, {
+        description: receiptSettings.paperSize === 'A4' ? '2 receipts per A4 sheet.' : 'One A5 sheet per payment.',
+      })
       const mark = useFeeStore.getState().markReceiptHandled
       selectedItems.forEach(({ transaction }) => mark(transaction.id, 'Principal'))
       clearSelection()
@@ -99,7 +108,12 @@ export function RecentPayments({
   const handleBulkDownload = () => {
     if (selectedItems.length === 0) return
     downloadReceiptsA5Bulk(selectedItems, receiptSettings)
-    toast.success(`Receipt file downloaded`, { description: `${selectedItems.length} A5 sheet${selectedItems.length === 1 ? '' : 's'} · one per payment.` })
+    toast.success('Receipt file downloaded', {
+      description:
+        receiptSettings.paperSize === 'A4'
+          ? `${Math.ceil(selectedItems.length / 2)} A4 sheet${selectedItems.length > 2 ? 's' : ''} · 2 receipts per sheet.`
+          : `${selectedItems.length} A5 sheet${selectedItems.length === 1 ? '' : 's'} · one per payment.`,
+    })
     const mark = useFeeStore.getState().markReceiptHandled
     selectedItems.forEach(({ transaction }) => mark(transaction.id, 'Principal'))
     clearSelection()
@@ -145,8 +159,8 @@ export function RecentPayments({
     >
       {recent.length === 0 ? (
         <div className="px-4 py-6 text-center">
-          <p className="text-xs font-medium">No payments yet</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Recorded collections appear here with their verification status and receipt.</p>
+          <p className="text-xs font-medium">No payments awaiting action</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">New collections and issued receipts appear here first — the complete history lives in Transactions.</p>
         </div>
       ) : (
         <div className="divide-y divide-border">
@@ -243,7 +257,7 @@ export function RecentPayments({
               onClick={onOpenTransactions}
               className="w-full px-4 py-2 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors flex items-center justify-center gap-1"
             >
-              {overflow} older payment{overflow === 1 ? '' : 's'} in Transactions <ArrowRight className="h-3 w-3" />
+              {overflow} settled payment{overflow === 1 ? '' : 's'} in Transactions <ArrowRight className="h-3 w-3" />
             </button>
           )}
         </div>
@@ -253,7 +267,7 @@ export function RecentPayments({
       {recent.length > 0 && selectable.length > 0 && selected.size === 0 && recent.every((t) => t.status === 'Success' && t.receiptHandledAt) && (
         <div className="flex items-center gap-2 px-4 py-2 border-t border-border/60 text-[10px] text-muted-foreground">
           <CheckCheck className="h-3.5 w-3.5 text-emerald-500" aria-hidden />
-          All caught up — receipts issued for recent payments. Complete history lives in Transactions.
+          All caught up — receipts issued. These payments now live in Transactions.
         </div>
       )}
 

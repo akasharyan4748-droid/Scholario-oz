@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/shared/ui'
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { formatINR, formatDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import type { PaymentStudentInfo } from './data'
 
 export function PaymentProcessingStage({ paidAmount, method }: { paidAmount: number; method: string }) {
@@ -62,7 +63,7 @@ export function PaymentProcessingStage({ paidAmount, method }: { paidAmount: num
   )
 }
 
-export function PaymentSuccessStage({ paidAmount, method }: { paidAmount: number; method: string }) {
+export function PaymentSuccessStage({ paidAmount, method, confirmed, gatewayProvider }: { paidAmount: number; method: string; /** Gateway-confirmed — the payment is PAID, not merely submitted. */ confirmed?: boolean; gatewayProvider?: string | null }) {
   return (
     <motion.div
       key="success"
@@ -75,7 +76,7 @@ export function PaymentSuccessStage({ paidAmount, method }: { paidAmount: number
         initial={{ scale: 0, rotate: -30 }}
         animate={{ scale: 1, rotate: 0 }}
         transition={{ type: 'spring', stiffness: 200, delay: 0.1 }}
-        className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-premium-lg mb-5"
+        className={cnConfirm(confirmed)}
       >
         <CheckCircle2 className="h-14 w-14" />
       </motion.div>
@@ -85,7 +86,7 @@ export function PaymentSuccessStage({ paidAmount, method }: { paidAmount: number
         transition={{ delay: 0.4 }}
         className="font-display text-2xl font-extrabold"
       >
-        Payment Submitted
+        {confirmed ? 'Payment Successful' : 'Payment Submitted'}
       </motion.h3>
       <motion.p
         initial={{ opacity: 0, y: 8 }}
@@ -93,7 +94,9 @@ export function PaymentSuccessStage({ paidAmount, method }: { paidAmount: number
         transition={{ delay: 0.5 }}
         className="text-sm text-muted-foreground mt-1"
       >
-        {formatINR(paidAmount)} via {method.toUpperCase()} · Awaiting confirmation by the school office
+        {confirmed
+          ? <>{formatINR(paidAmount)} via {method.toUpperCase()} · Confirmed by the {gatewayProvider ?? 'payment gateway'} gateway</>
+          : <>{formatINR(paidAmount)} via {method.toUpperCase()} · Awaiting confirmation by the school office</>}
       </motion.p>
       <motion.p
         initial={{ opacity: 0 }}
@@ -101,22 +104,34 @@ export function PaymentSuccessStage({ paidAmount, method }: { paidAmount: number
         transition={{ delay: 0.7 }}
         className="text-[11px] text-muted-foreground mt-3 max-w-[280px]"
       >
-        Your receipt becomes available as soon as the office verifies the payment — usually the same day.
+        {confirmed
+          ? 'Your official receipt is ready — download it now or find it anytime in Payment History.'
+          : 'Your receipt becomes available as soon as the office verifies the payment — usually the same day.'}
       </motion.p>
     </motion.div>
   )
 }
 
+function cnConfirm(confirmed?: boolean): string {
+  return confirmed
+    ? 'flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-premium-lg mb-5'
+    : 'flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-premium-lg mb-5'
+}
+
 export function PaymentReceiptStage({
-  paidAmount, method, student, reference, receiptNo, onDownload, onComplete,
+  paidAmount, method, student, reference, receiptNo, confirmed, gatewayProvider, onDownload, onComplete,
 }: {
   paidAmount: number
   method: string
   student: PaymentStudentInfo
   /** Transfer reference the parent provided (real, from the form). */
   reference?: string
-  /** Canonical acknowledgement number from the fee ledger (pending state). */
+  /** Canonical receipt number from the fee ledger. */
   receiptNo?: string
+  /** Gateway-confirmed → OFFICIAL receipt now (green); otherwise the honest
+   *  amber acknowledgement until the office verifies. */
+  confirmed?: boolean
+  gatewayProvider?: string | null
   onDownload: () => void
   onComplete: () => void
 }) {
@@ -124,33 +139,37 @@ export function PaymentReceiptStage({
     <motion.div key="receipt" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600">
+          <div className={cnTitle(confirmed)}>
             <Receipt className="h-4 w-4" />
           </div>
-          Payment Acknowledgement
+          {confirmed ? 'Fee Receipt' : 'Payment Acknowledgement'}
         </DialogTitle>
-        <DialogDescription>Submitted — the official receipt follows confirmation</DialogDescription>
+        <DialogDescription>
+          {confirmed ? `Paid · confirmed by the ${gatewayProvider ?? 'gateway'} gateway` : 'Submitted — the official receipt follows confirmation'}
+        </DialogDescription>
       </DialogHeader>
 
       <div className="py-2">
-        <div className="rounded-t-2xl bg-gradient-to-br from-amber-500 to-orange-500 p-4 text-white text-center">
+        <div className={cnHeader(confirmed)}>
           <div className="flex items-center justify-center gap-2 mb-1">
             <CheckCircle2 className="h-5 w-5" />
-            <p className="font-display text-lg font-bold">Payment Submitted</p>
+            <p className="font-display text-lg font-bold">{confirmed ? 'Payment Successful' : 'Payment Submitted'}</p>
           </div>
-          <p className="text-[11px] text-amber-50">Awaiting confirmation by the school office</p>
+          <p className={cn('text-[11px]', confirmed ? 'text-emerald-50' : 'text-amber-50')}>
+            {confirmed ? `Confirmed by the ${gatewayProvider ?? 'payment'} gateway · receipt available now` : 'Awaiting confirmation by the school office'}
+          </p>
         </div>
 
         <div className="rounded-b-2xl border border-t-0 border-border bg-card/40 p-4">
           <div className="text-center mb-4">
-            <p className="text-[11px] text-muted-foreground">Amount Submitted</p>
+            <p className="text-[11px] text-muted-foreground">{confirmed ? 'Amount Paid' : 'Amount Submitted'}</p>
             <p className="font-display text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
               {formatINR(paidAmount)}
             </p>
           </div>
 
           <div className="space-y-2 text-sm border-t border-border pt-3">
-            {receiptNo && <ReceiptRow label="Reference No" value={receiptNo} mono />}
+            {receiptNo && <ReceiptRow label={confirmed ? 'Receipt No' : 'Reference No'} value={receiptNo} mono />}
             {reference && <ReceiptRow label="Transaction Ref" value={reference} mono small />}
             <ReceiptRow label="Date" value={formatDate(new Date().toISOString())} />
             <ReceiptRow label="Method" value={method.toUpperCase()} />
@@ -161,21 +180,32 @@ export function PaymentReceiptStage({
 
           <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
             <span className="text-sm font-semibold">Status</span>
-            <StatusBadge status="Awaiting confirmation" variant="warning" dot />
+            {confirmed
+              ? <StatusBadge status="Paid" variant="success" dot />
+              : <StatusBadge status="Awaiting confirmation" variant="warning" dot />}
           </div>
         </div>
 
-        <div className="mt-3 flex items-center gap-2 rounded-lg bg-amber-500/5 border border-amber-500/20 p-2.5">
-          <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-          <p className="text-[11px] text-muted-foreground">
-            Keep the transaction reference safe. Your official receipt appears in Payment History once the office confirms.
-          </p>
-        </div>
+        {confirmed ? (
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-2.5">
+            <Sparkles className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <p className="text-[11px] text-muted-foreground">
+              This is your official receipt. You can print or download it again anytime from Payment History.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-amber-500/5 border border-amber-500/20 p-2.5">
+            <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <p className="text-[11px] text-muted-foreground">
+              Keep the transaction reference safe. Your official receipt appears in Payment History once the office confirms.
+            </p>
+          </div>
+        )}
       </div>
 
       <DialogFooter>
         <Button variant="outline" onClick={onDownload} className="flex-1">
-          <Download className="h-3.5 w-3.5" /> Download Acknowledgement
+          <Download className="h-3.5 w-3.5" /> {confirmed ? 'Download Receipt' : 'Download Acknowledgement'}
         </Button>
         <Button
           onClick={onComplete}
@@ -186,6 +216,18 @@ export function PaymentReceiptStage({
       </DialogFooter>
     </motion.div>
   )
+}
+
+function cnTitle(confirmed?: boolean): string {
+  return confirmed
+    ? 'flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600'
+    : 'flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600'
+}
+
+function cnHeader(confirmed?: boolean): string {
+  return confirmed
+    ? 'rounded-t-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-4 text-white text-center'
+    : 'rounded-t-2xl bg-gradient-to-br from-amber-500 to-orange-500 p-4 text-white text-center'
 }
 
 function ReceiptRow({ label, value, mono, small }: { label: string; value: string; mono?: boolean; small?: boolean }) {

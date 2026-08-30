@@ -121,16 +121,17 @@ export function FeesTransactionsSection({ data }: Props) {
   const [viewReceipt, setViewReceipt] = useState<FeeTransaction | null>(null)
 
   // Format-aware receipt actions (PAY-REWORK-1): the paper-size setting in
-  // Finance Settings selects the canonical A5 dual-copy receipt or the 80mm
-  // thermal slip; printing/downloading stamps the receipt lifecycle marker.
+  // Finance Settings selects the dual-copy sheet (A5 landscape 1/page ·
+  // A4 portrait 2/page) or the 80mm thermal slip; printing/downloading
+  // stamps the receipt lifecycle marker.
   const doPrint = (t: FeeTransaction) => {
-    if (receiptSettings.paperSize === 'A5') printReceiptA5(t, receiptSettings)
+    if (receiptSettings.paperSize !== '80mm') printReceiptA5(t, receiptSettings)
     else printReceipt(t, receiptSettings)
     useFeeStore.getState().markReceiptHandled(t.id, 'Principal')
     toast.success('Print dialog opened')
   }
   const doDownload = (t: FeeTransaction) => {
-    if (receiptSettings.paperSize === 'A5') downloadReceiptA5(t, receiptSettings)
+    if (receiptSettings.paperSize !== '80mm') downloadReceiptA5(t, receiptSettings)
     else downloadReceiptHTML(t, receiptSettings)
     useFeeStore.getState().markReceiptHandled(t.id, 'Principal')
     toast.success('Receipt downloaded', { description: `${t.receiptNo}.html` })
@@ -408,7 +409,7 @@ export function FeesTransactionsSection({ data }: Props) {
               className="bg-card border border-border rounded-xl p-4 max-h-[90vh] overflow-y-auto w-[min(56rem,calc(100vw-2rem))]"
               onClick={(e) => e.stopPropagation()}
             >
-              {receiptSettings.paperSize === 'A5' ? (
+              {receiptSettings.paperSize !== '80mm' ? (
                 <FeeReceiptA5Preview
                   transaction={viewReceipt}
                   settings={receiptSettings}
