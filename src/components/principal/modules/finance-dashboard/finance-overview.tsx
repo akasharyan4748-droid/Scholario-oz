@@ -50,7 +50,7 @@ import { toast } from 'sonner'
 
 interface Props {
   data: ReturnType<typeof useFinanceData>
-  onNavigate: (tab: 'overview' | 'statements' | 'reports') => void
+  onNavigate: (tab: 'overview' | 'statements' | 'reports' | 'settings') => void
   /** Cross-module jump (AppShell nav keys — 'fees', 'salary'). */
   onModuleNavigate?: (moduleKey: string) => void
 }
@@ -66,7 +66,8 @@ export function FinanceOverviewSection({ data, onNavigate, onModuleNavigate }: P
   }
 
   const handleAttention = (item: FinanceAttentionItem) => {
-    if (item.module === 'statements' || item.module === 'reports') onNavigate(item.module)
+    if (item.module === 'finance-settings') onNavigate('settings')
+    else if (item.module === 'statements' || item.module === 'reports') onNavigate(item.module)
     else if (item.module) jumpTo(item.module, item.cta)
   }
 

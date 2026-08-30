@@ -58,7 +58,7 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
   const [notifOpen, setNotifOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [cmdOpen, setCmdOpen] = useState(false)
-  const [notifList, setNotifList] = useState(initialNotifications)
+  const [notifList, setNotifList] = useState<NotificationItem[]>(initialNotifications)
   // 'live' = fetched from /api/notifications-feed, 'demo' = static mock fallback
   const [notifSource, setNotifSource] = useState<'live' | 'demo'>('demo')
   // Real-time event stream status (socket.io mini-service :3003 via gateway)

@@ -1,50 +1,45 @@
 'use client'
 
 /**
- * FeesSettingsSection — Fee Management administrative settings.
+ * FeesSettingsSection — Fee Management module settings (FEE-SPECIFIC RULES
+ * ONLY).
  *
- * UX-SAL-1 (presentation-only rebuild): the settings page now follows the
- * Salary & Payroll Settings benchmark — ONE flat stack of compact cards,
- * no inner tab bar, no nested sub-navigation, no dev banners. The previous
- * 6-tab layout (with Payment Collection nesting 5 more sub-tabs) forced
- * two navigation levels for what is a preferences surface; every section
- * is now visible in one scroll, in practical order:
+ * ARCHITECTURE (FIN-CENTRAL-1): global payment infrastructure (methods,
+ * bank accounts, UPI/QR, gateway) and school-wide receipts now live in the
+ * CENTRAL Finance Settings (Finance Dashboard → Settings). They are
+ * configured once at the school level and consumed here through the shared
+ * fee-store — this page never duplicates them. A compact link card keeps
+ * the central surface discoverable from Fee Management.
  *
- *   1. Payment Collection   — methods · bank accounts · UPI/QR · gateway
- *                             (see fees-settings-payment.tsx)
+ * What remains here is genuinely fee-specific:
+ *
+ *   1. Payment Channels & Receipts — pointer to the central Finance Settings
  *   2. Late Fee Rules       — per-month amount, grace period, max
  *   3. Concession Rules     — sibling / staff ward / scholarship %
  *   4. One-Time Entry Fees  — admission policy snapshot (read-only values)
- *   5. Receipt Settings     — prefix, paper, next number, footer, signature
- *   6. Controlled-Edit Policy + Notifications
+ *   5. Controlled-Edit Policy — documents the ACTUAL structure versioning
  *
- * Fee Heads master catalogue and the Reconciliation ledger were removed
- * from Settings by product decision — head management lives in Fee
- * Structures (per-class config) and reconciliation lives with the
- * Transactions data, not on a preferences surface.
- *
- * Card anatomy mirrors Salary Settings: rounded-xl border bg-card p-4,
- * [10px] uppercase muted label + small muted icon, right-aligned action,
- * shadcn Switch toggles, label-left/control-right rows. All store
- * mutations, dirty-state Save flows and dialogs are behaviour-identical.
+ * Card anatomy mirrors Salary Settings via the shared SettingsCard
+ * primitive (modules/shared/settings-card.tsx): rounded-xl border bg-card
+ * p-4, [10px] uppercase muted label + small muted icon, right-aligned
+ * action, shadcn Switch toggles, label-left/control-right rows.
  */
 
 import { useState } from 'react'
 import {
   AlertTriangle, Gift,
-  Receipt, Check, Archive,
-  Lock, UserPlus, ShieldCheck, Bell,
+  Check, Archive, CreditCard, ArrowUpRight,
+  Lock, UserPlus, ShieldCheck,
 } from 'lucide-react'
-import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useFeeStore } from '@/lib/store/fee-store'
+import { useFocusStore } from '@/lib/store/focus-store'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { SettingsCard } from './fees-shared'
-import { FeesPaymentCollectionSettings } from './fees-settings-payment'
+import { SettingsCard } from '../shared/settings-card'
 import { toast } from 'sonner'
 
 // RuleChip — tiny mono value chip summarising the live rule values.
@@ -56,19 +51,55 @@ function RuleChip({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function FeesSettingsSection() {
+export function FeesSettingsSection({ onNavigate }: { onNavigate?: (moduleKey: string) => void } = {}) {
   return (
     // No page heading / banner — the "Settings" tab establishes context and
     // content starts immediately (Salary Settings benchmark).
     <div className="space-y-4">
-      <FeesPaymentCollectionSettings />
+      <CentralFinanceSettingsLink onNavigate={onNavigate} />
       <LateFeeSettings />
       <ConcessionSettings />
       <AdmissionFeesCard />
-      <ReceiptSettings />
       <PoliciesSettings />
-      <NotificationsSettings />
     </div>
+  )
+}
+
+// ─── Central Finance Settings pointer — payment infrastructure and
+// receipts are school-wide, not fee-specific. One compact card keeps the
+// central surface discoverable without duplicating any configuration.
+
+function CentralFinanceSettingsLink({ onNavigate }: { onNavigate?: (moduleKey: string) => void }) {
+  const setFocus = useFocusStore((s) => s.setFocus)
+  const gatewayConfig = useFeeStore((s) => s.gatewayConfig)
+  const paymentModes = useFeeStore((s) => s.paymentModes)
+
+  const open = () => {
+    // Focus request makes the Finance Dashboard land on its Settings tab.
+    setFocus({ type: 'finance-settings', id: 'finance-settings', title: 'Finance Settings', moduleKey: 'finance' })
+    onNavigate?.('finance')
+  }
+
+  const enabledCount = paymentModes.filter((m) => m.active).length
+  const summary = gatewayConfig
+    ? `gateway ${gatewayConfig.provider} · ${gatewayConfig.environment}`
+    : `${enabledCount} of ${paymentModes.length} methods enabled`
+
+  return (
+    <SettingsCard
+      label="Payment Channels & Receipts"
+      icon={<CreditCard />}
+      summary={summary}
+      action={
+        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={open}>
+          Open Finance Settings <ArrowUpRight className="h-3 w-3" />
+        </Button>
+      }
+    >
+      <p className="text-[11px] text-muted-foreground">
+        Payment methods, bank accounts, UPI/QR, the gateway and receipt numbering are configured once at the school level — in Finance → Finance Dashboard → Settings — and used by fee collection, additional collections and application payments.
+      </p>
+    </SettingsCard>
   )
 }
 
@@ -246,55 +277,6 @@ function AdmissionFeesCard() {
   )
 }
 
-// ─── Receipt Settings ──────────────────────────────────────────────
-
-function ReceiptSettings() {
-  const settings = useFeeStore((s) => s.receiptSettings)
-  const updateReceiptSettings = useFeeStore((s) => s.updateReceiptSettings)
-  const receiptCounter = useFeeStore((s) => s.receiptCounter)
-  const [local, setLocal] = useState(settings)
-  const dirty = JSON.stringify(local) !== JSON.stringify(settings)
-
-  return (
-    <SettingsCard
-      label="Receipt Settings"
-      icon={<Receipt />}
-      summary={`next ${local.prefix}${receiptCounter + 1}`}
-      action={
-        dirty ? (
-          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { updateReceiptSettings(local); toast.success('Receipt settings updated') }}>
-            <Check className="h-3 w-3" /> Save
-          </Button>
-        ) : undefined
-      }
-    >
-      <div className="space-y-3">
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
-            <Label className="text-[11px]">Receipt Number Prefix</Label>
-            <Input value={local.prefix} onChange={(e) => setLocal({ ...local, prefix: e.target.value })} className="h-8 text-xs font-mono mt-1" />
-          </div>
-          <div>
-            <Label className="text-[11px]">Paper Size</Label>
-            <select value={local.paperSize} onChange={(e) => setLocal({ ...local, paperSize: e.target.value as '80mm' | 'A5' })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1">
-              <option value="80mm">80mm Thermal</option>
-              <option value="A5">A5 Half-Page</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <Label className="text-[11px]">Footer Message</Label>
-          <Input value={local.footerMessage} onChange={(e) => setLocal({ ...local, footerMessage: e.target.value })} className="h-8 text-xs mt-1" />
-        </div>
-        <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2.5">
-          <p className="text-xs font-medium">Show authorized signature on receipts</p>
-          <Switch checked={local.showAuthorizedSignature} onCheckedChange={(c) => setLocal({ ...local, showAuthorizedSignature: c })} aria-label="Show authorized signature" />
-        </div>
-      </div>
-    </SettingsCard>
-  )
-}
-
 // ─── Controlled-Edit Policy — documents the ACTUAL version mechanics
 // implemented across Fee Structures (publish → lock → window).
 
@@ -328,32 +310,6 @@ function PoliciesSettings() {
             </p>
           </div>
         ))}
-      </div>
-    </SettingsCard>
-  )
-}
-
-// ─── Notification Preferences — wired to the real alerts centre feed ───
-
-function NotificationsSettings() {
-  const autoAlertsEnabled = useLiveAlerts((s) => s.autoAlertsEnabled)
-  const toggleAutoAlerts = useLiveAlerts((s) => s.toggleAutoAlerts)
-
-  return (
-    <SettingsCard label="Notifications" icon={<Bell />}>
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-medium">Live finance alerts</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Approvals, collections, structure revisions and gateway events reach the alerts centre as they happen.
-            </p>
-          </div>
-          <Switch checked={autoAlertsEnabled} onCheckedChange={toggleAutoAlerts} aria-label="Live finance alerts" />
-        </div>
-        <p className="text-[10px] text-muted-foreground border-t border-border/60 pt-2.5">
-          Critical financial confirmations (payments, receipts) always notify via toast regardless of this setting.
-        </p>
       </div>
     </SettingsCard>
   )

@@ -141,7 +141,7 @@ export function FeesShell({ onNavigate }: { onNavigate?: (moduleKey: string) => 
             {tab === 'structures' && <FeesStructuresSection data={data} onNavigate={onNavigate} />}
             {tab === 'payments' && <PaymentsSection data={data} onCollect={() => openCollect()} />}
             {tab === 'transactions' && <FeesTransactionsSection data={data} />}
-            {tab === 'settings' && <FeesSettingsSection />}
+            {tab === 'settings' && <FeesSettingsSection onNavigate={onNavigate} />}
           </motion.div>
         </AnimatePresence>
       </PageTransition>

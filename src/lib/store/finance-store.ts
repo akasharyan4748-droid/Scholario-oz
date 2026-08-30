@@ -16,7 +16,7 @@
  */
 
 import { useMemo } from 'react'
-import { useFeeData, CURRENT_ACADEMIC_YEAR } from './fee-store'
+import { useFeeData, useFeeStore, CURRENT_ACADEMIC_YEAR } from './fee-store'
 import {
   useSalaryData, currentPeriodKey, periodOptions, netPayableFor, confirmedPaidFor,
 } from './salary-store'
@@ -379,13 +379,20 @@ export interface FinanceAttentionItem {
   title: string
   description: string
   cta: string
-  /** Where the CTA lands: an AppShell module key, or a finance tab. */
-  module?: 'fees' | 'salary' | 'statements' | 'reports'
+  /** Where the CTA lands: an AppShell module key, the central finance
+   * settings tab, or a finance dashboard tab. */
+  module?: 'fees' | 'salary' | 'statements' | 'reports' | 'finance-settings'
 }
 
 export function useFinanceAttention(): FinanceAttentionItem[] {
   const feeData = useFeeData(CURRENT_ACADEMIC_YEAR)
   const salaryData = useSalaryData()
+  // Payment infrastructure state (central Finance Settings) — the command
+  // centre should surface configuration problems, not just balances.
+  const paymentModes = useFeeStore((s) => s.paymentModes)
+  const gatewayConfig = useFeeStore((s) => s.gatewayConfig)
+  const upiQrConfigs = useFeeStore((s) => s.upiQrConfigs)
+  const bankAccounts = useFeeStore((s) => s.bankAccounts)
 
   return useMemo(() => {
     const items: FinanceAttentionItem[] = []
@@ -496,7 +503,44 @@ export function useFinanceAttention(): FinanceAttentionItem[] {
       })
     }
 
+    // 9-10 — PAYMENT INFRASTRUCTURE (central Finance Settings parity).
+    // Availability mirrors the settings logic: UPI needs an active QR or a
+    // connected gateway; Card/Net Banking need a gateway; Bank Transfer
+    // needs an active bank account.
+    const gatewayLive = !!gatewayConfig && (gatewayConfig.status === 'connected' || gatewayConfig.status === 'test_mode')
+
+    if (gatewayConfig?.status === 'test_mode') {
+      items.push({
+        id: 'gateway-test-mode',
+        severity: 'warning',
+        title: 'Payment gateway in test mode',
+        description: 'Card, net-banking and gateway UPI payments only run test transactions — switch to live before opening to parents.',
+        cta: 'Open Settings',
+        module: 'finance-settings',
+      })
+    }
+
+    const unconfigured: string[] = []
+    for (const m of paymentModes) {
+      if (!m.active) continue
+      if (m.id === 'Cash' || m.id === 'Cheque') continue
+      if (m.id === 'Bank Transfer' && bankAccounts.some((b) => b.status === 'active')) continue
+      if (m.id === 'UPI' && (upiQrConfigs.some((c) => c.status === 'active') || gatewayLive)) continue
+      if ((m.id === 'Card' || m.id === 'Net Banking') && gatewayLive) continue
+      unconfigured.push(m.label)
+    }
+    if (unconfigured.length > 0) {
+      items.push({
+        id: 'payments-unconfigured',
+        severity: 'warning',
+        title: 'Payment methods need configuration',
+        description: `${unconfigured.join(', ')} enabled but not yet usable by parents — finish the setup in Finance Settings.`,
+        cta: 'Open Settings',
+        module: 'finance-settings',
+      })
+    }
+
     const order: Record<FinanceAttentionItem['severity'], number> = { critical: 0, warning: 1, info: 2 }
     return items.sort((a, b) => order[a.severity] - order[b.severity])
-  }, [feeData, salaryData])
+  }, [feeData, salaryData, paymentModes, gatewayConfig, upiQrConfigs, bankAccounts])
 }

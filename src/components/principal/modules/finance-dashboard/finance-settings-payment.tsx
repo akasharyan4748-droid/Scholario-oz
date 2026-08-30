@@ -1,14 +1,12 @@
 'use client'
 
 /**
- * FeesPaymentCollectionSettings — Payment Collection configuration.
+ * FinancePaymentCollectionSettings — CENTRAL payment infrastructure.
  *
- * UX-SAL-1 (presentation-only rebuild): the previous 5 sub-tab navigation
- * (Accepted Methods / Bank & Settlement / UPI / QR / Gateway /
- * Reconciliation) is flattened into ONE stack of compact cards, in the
- * Salary & Payroll Settings anatomy — the Principal sees the whole
- * collection configuration in a single scroll instead of clicking through
- * two navigation levels. Card order = practical order:
+ * ARCHITECTURE (FIN-CENTRAL-1): payment configuration has ONE home — the
+ * Finance Dashboard → Settings tab. This component renders that global
+ * infrastructure as ONE stack of compact cards in the Salary & Payroll
+ * Settings anatomy:
  *
  *   A. Payment Methods  → paymentModes[] + togglePaymentMode
  *   B. Bank Accounts    → bankAccounts[] + addBankAccount / updateBankAccount /
@@ -16,6 +14,15 @@
  *   C. UPI / QR         → upiQrConfigs[] + addUpiQrConfig / updateUpiQrConfig
  *   D. Payment Gateway  → gatewayConfig + connectGateway / disconnectGateway /
  *                         updateGatewayStatus / recordWebhookEvent
+ *
+ * Downstream consumers (Fee collections, Additional Collections, UPI/QR
+ * collect, Application & Form payments, any future financial workflow)
+ * REFERENCE this configuration through the shared fee-store — they never
+ * maintain duplicate gateway/bank/UPI settings of their own.
+ *
+ * Module-specific business rules stay where they belong: late fees,
+ * concessions and entry-fee policy in Fee Management → Settings; payroll
+ * payment behaviour in Salary & Payroll → Settings.
  *
  * The Reconciliation card was removed from Settings by product decision —
  * webhook/settlement matching lives with Transactions data, not on a
@@ -49,10 +56,11 @@ import type {
 } from '@/lib/store/fee-store'
 import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { SettingsCard, FeeStatusBadge, modeAccent } from './fees-shared'
+import { SettingsCard } from '../shared/settings-card'
+import { FeeStatusBadge, modeAccent } from '../fees/fees-shared'
 import { toast } from 'sonner'
 
-export function FeesPaymentCollectionSettings() {
+export function FinancePaymentCollectionSettings() {
   return (
     <>
       <AcceptedPaymentMethods />

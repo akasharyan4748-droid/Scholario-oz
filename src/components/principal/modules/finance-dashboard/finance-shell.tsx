@@ -12,25 +12,31 @@
  * does NOT add its own scroll wrapper (which previously caused double
  * scroll + double padding).
  *
- * Tabs: Overview · Statements · Reports
+ * Tabs: Overview · Statements · Reports · Settings
+ *
+ * The Settings tab IS the centralized Finance Settings capability — global
+ * payment infrastructure (methods, banks, UPI/QR, gateway), receipts and
+ * finance alerts. No separate sidebar module exists by design.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Download, Calendar, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs, type SegmentedTab } from '../shared/segmented-tabs'
+import { useFocusStore } from '@/lib/store/focus-store'
 import { useFinanceData, useFinanceAttention, FINANCE_PERIODS } from '@/lib/store/finance-store'
 import { FinanceOverviewSection } from './finance-overview'
 import { FinanceStatementsSection } from './finance-statements'
 import { FinanceReportsSection } from './finance-reports'
+import { FinanceSettingsSection } from './finance-settings'
 import { toast } from 'sonner'
 
-type FinanceTab = 'overview' | 'statements' | 'reports'
+type FinanceTab = 'overview' | 'statements' | 'reports' | 'settings'
 
-const TAB_VALUES: FinanceTab[] = ['overview', 'statements', 'reports']
+const TAB_VALUES: FinanceTab[] = ['overview', 'statements', 'reports', 'settings']
 
 export function FinanceShell({ onModuleNavigate }: { onModuleNavigate?: (moduleKey: string) => void } = {}) {
   const [tab, setTab] = useState<FinanceTab>('overview')
@@ -39,20 +45,34 @@ export function FinanceShell({ onModuleNavigate }: { onModuleNavigate?: (moduleK
   const data = useFinanceData(periodId)
   const attention = useFinanceAttention()
 
+  // Deep-link: "open Finance Settings" requests (fee-settings link card,
+  // attention-feed CTA from other modules) land directly on the Settings
+  // tab. Mirrors the fee-shell focus pattern.
+  const focus = useFocusStore((s) => s.focus)
+  const clearFocus = useFocusStore((s) => s.clearFocus)
+  const handledFocusTs = useRef<number | null>(null)
+  useEffect(() => {
+    if (!focus || focus.type !== 'finance-settings' || handledFocusTs.current === focus.ts) return
+    handledFocusTs.current = focus.ts
+    clearFocus()
+    setTab('settings')
+  }, [focus?.ts])
+
   // Build tab list with optional alerts badge on the Overview tab.
   const tabs: SegmentedTab[] = [
     { value: 'overview', label: 'Overview', badge: attention.length },
     { value: 'statements', label: 'Statements' },
     { value: 'reports', label: 'Reports' },
+    { value: 'settings', label: 'Settings' },
   ]
 
-  // Keyboard shortcuts: 1-3 switch tabs.
+  // Keyboard shortcuts: 1-4 switch tabs.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (e.key >= '1' && e.key <= '3') {
+      if (e.key >= '1' && e.key <= '4') {
         const idx = Number(e.key) - 1
         if (idx < TAB_VALUES.length) {
           e.preventDefault()
@@ -128,6 +148,7 @@ export function FinanceShell({ onModuleNavigate }: { onModuleNavigate?: (moduleK
           {tab === 'overview' && <FinanceOverviewSection data={data} onNavigate={setTab} onModuleNavigate={onModuleNavigate} />}
           {tab === 'statements' && <FinanceStatementsSection data={data} />}
           {tab === 'reports' && <FinanceReportsSection data={data} />}
+          {tab === 'settings' && <FinanceSettingsSection />}
         </motion.div>
       </AnimatePresence>
     </PageTransition>
