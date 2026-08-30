@@ -2,7 +2,7 @@
 
 /**
  * RecentPayments — "Recent / Active Payments" panel on the Payments page
- * (PAY-REWORK-1 spec §8/§10/§12/§13/§20/§21 + final UI/UX spec §3).
+ * (PAY-REWORK-1 spec §8/§10/§12/§13/§20/§21 + FINAL PAYMENTS UI POLISH §1/§2).
  *
  *   Payments = NEW / ACTIONABLE payment activity.
  *   Transactions = the completed historical ledger.
@@ -16,25 +16,28 @@
  * (never queued for manual verification) with receipt actions available
  * immediately.
  *
- * Every row shows the scan line: student · class · amount · method ·
- * collector · status · date · reference · receipt availability, with
- * progressive disclosure (secondary details in the receipt dialog).
+ * UI (FINAL PAYMENTS UI POLISH): the EXACT Transactions ledger table
+ * recipe — sticky muted header (11px uppercase columns), py-2.5 rows,
+ * border-t border-border/30, hover:bg-muted/30, mono receipt, mode chip
+ * with the premium ModeIcon, subtle status pill, date + small secondary
+ * time, and right-aligned icon actions. No oversized cards, no scan-line
+ * paragraphs, no unnecessary descriptions.
  *
  * Bulk receipts: contextual selection — the bulk bar exists ONLY while a
- * selection is made; no permanent toolbar (spec §21). Pagination follows
- * the paper-size setting (A5 = 1 student/page, A4 = 2 students/page).
+ * selection is made (header checkbox column provides select-all; no
+ * permanent toolbar). Pagination follows the paper-size setting
+ * (A5 = 1 student/page, A4 = 2 students/page).
  */
 
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
 import { ArrowRight, Printer, Download, X, CheckCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useFeeStore, useFeeData, type FeeTransaction } from '@/lib/store/fee-store'
-import { formatINR, formatDate } from '@/lib/format'
+import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Panel } from '../../shared/panel'
-import { FeeStatusBadge, ModeIcon, paymentStatusLabel } from '../fees-shared'
+import { FeeStatusBadge, ModeIcon, modeAccent, paymentStatusLabel, TxnDateTime, txnRecordedAt } from '../fees-shared'
 import { ReceiptRowActions, ReceiptViewDialog, printReceiptsA5Bulk, downloadReceiptsA5Bulk } from '../fee-receipt-a5'
 import { toast } from 'sonner'
 
@@ -52,16 +55,22 @@ export function RecentPayments({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [viewing, setViewing] = useState<FeeTransaction | null>(null)
 
-  // Recent / actionable slice — newest first (store prepends).
-  // A payment is actionable while it is pending/failed OR its receipt has
-  // not been issued yet. As soon as the receipt is printed or downloaded
-  // the payment settles into Transactions/history (never deleted).
+  // Recent / actionable slice — NEWEST FIRST regardless of store order
+  // (seed rows arrive in ledger order; live rows are prepended). A payment
+  // is actionable while it is pending/failed OR its receipt has not been
+  // issued yet. As soon as the receipt is printed or downloaded the payment
+  // settles into Transactions/history (never deleted).
   const recent = useMemo(
     () =>
-      transactions.filter((t) => {
-        if (t.status !== 'Success') return true // pending/failed = actionable
-        return !t.receiptHandledAt // receipt issued → settled into Transactions
-      }),
+      transactions
+        .filter((t) => {
+          if (t.status !== 'Success') return true // pending/failed = actionable
+          return !t.receiptHandledAt // receipt issued → settled into Transactions
+        })
+        .slice()
+        .sort(
+          (a, b) => (txnRecordedAt(b)?.getTime() ?? 0) - (txnRecordedAt(a)?.getTime() ?? 0),
+        ),
     [transactions],
   )
 
@@ -163,104 +172,122 @@ export function RecentPayments({
           <p className="text-[10px] text-muted-foreground mt-0.5">New collections and issued receipts appear here first — the complete history lives in Transactions.</p>
         </div>
       ) : (
-        <div className="divide-y divide-border">
-          {/* Select-all — only when there is anything receipt-able */}
-          {selectable.length > 0 && selected.size === 0 && (
-            <label className="flex items-center gap-2 px-4 py-1.5 text-[10px] text-muted-foreground cursor-pointer hover:bg-muted/30 select-none">
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={toggleAll}
-                aria-label="Select all verified payments for bulk receipt actions"
-                className="h-3.5 w-3.5"
-              />
-              Select verified payments for bulk receipts
-            </label>
-          )}
-
-          {visible.map((t, i) => {
-            const isOffice = !t.collectorRole || t.collectorRole === 'principal'
-            const collectorLabel = isOffice ? 'Office' : t.collectorRole === 'teacher' ? t.collectedBy : 'Self-service'
-            const canSelect = t.status === 'Success'
-            return (
-              <motion.div
-                key={t.id}
-                initial={{ opacity: 0, y: 3 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i * 0.03, 0.2) }}
-                className={cn(
-                  'px-3.5 py-2 flex items-center gap-3 hover:bg-muted/30 transition-colors',
-                  selected.has(t.id) && 'bg-emerald-500/[0.04]',
+        /* ONE Transactions-style table — sticky muted header, dense rows,
+           right-aligned actions (FINAL PAYMENTS UI POLISH §1). */
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-separate border-spacing-0">
+            <thead className="sticky top-0 z-10">
+              <tr className="h-10 bg-muted shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+                {selectable.length > 0 && (
+                  <th className="pl-3 pr-1 bg-muted">
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleAll}
+                      aria-label="Select all verified payments for bulk receipt actions"
+                      className="h-3.5 w-3.5"
+                    />
+                  </th>
                 )}
-              >
-                {canSelect ? (
-                  <Checkbox
-                    checked={selected.has(t.id)}
-                    onCheckedChange={() => toggle(t.id)}
-                    aria-label={`Select receipt ${t.receiptNo} for ${t.studentName}`}
-                    className="h-3.5 w-3.5 shrink-0"
-                  />
-                ) : (
-                  <span className="w-[14px] shrink-0" aria-hidden />
-                )}
-
-                {/* Scan column — who / what / when */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <p className="text-xs font-semibold truncate">{t.studentName}</p>
-                    <span
-                      className={cn(
-                        'shrink-0 inline-flex items-center px-1.5 py-px rounded text-[9px] font-semibold',
-                        isOffice
-                          ? 'bg-slate-500/10 text-slate-600 dark:text-slate-300'
-                          : 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden 2xl:table-cell">Receipt</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Student</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden lg:table-cell">Class</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden md:table-cell">Fee Head</th>
+                <th className="text-right px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Amount</th>
+                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden sm:table-cell">Mode</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden md:table-cell">Source</th>
+                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden lg:table-cell">Date</th>
+                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Status</th>
+                <th className="text-right pl-3 pr-4 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((t) => {
+                const isOffice = !t.collectorRole || t.collectorRole === 'principal'
+                const canSelect = t.status === 'Success'
+                return (
+                  <tr
+                    key={t.id}
+                    className={cn(
+                      'border-t border-border/30 hover:bg-muted/30 transition-colors',
+                      selected.has(t.id) && 'bg-emerald-500/[0.04]',
+                    )}
+                  >
+                    {selectable.length > 0 && (
+                      <td className="pl-3 pr-1 py-2.5">
+                        {canSelect ? (
+                          <Checkbox
+                            checked={selected.has(t.id)}
+                            onCheckedChange={() => toggle(t.id)}
+                            aria-label={`Select receipt ${t.receiptNo} for ${t.studentName}`}
+                            className="h-3.5 w-3.5"
+                          />
+                        ) : (
+                          <span className="block h-3.5 w-3.5" aria-hidden />
+                        )}
+                      </td>
+                    )}
+                    <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground whitespace-nowrap hidden 2xl:table-cell">{t.receiptNo}</td>
+                    <td className="px-3 py-2.5 text-xs">
+                      <p className="font-medium leading-tight">{t.studentName}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono">{t.admissionNo}</p>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell">{t.className}</td>
+                    <td className="px-3 py-2.5 text-xs hidden md:table-cell max-w-[200px]">
+                      <span className="block truncate text-muted-foreground" title={t.feeHead}>{t.feeHead}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums font-medium whitespace-nowrap">{formatINR(t.amount)}</td>
+                    <td className="px-3 py-2.5 text-center hidden sm:table-cell">
+                      <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ring-1', modeAccent(t.mode))}>
+                        <ModeIcon mode={t.mode} className="h-2.5 w-2.5" />
+                        {t.mode}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 hidden md:table-cell">
+                      <span
+                        className={cn(
+                          'inline-flex max-w-[130px] truncate px-1.5 py-0.5 rounded text-[9px] font-semibold',
+                          isOffice
+                            ? 'bg-slate-500/10 text-slate-600 dark:text-slate-300'
+                            : 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                        )}
+                        title={`Collected by ${isOffice ? 'school office' : t.collectedBy}`}
+                      >
+                        {isOffice ? 'Office' : t.collectorRole === 'teacher' ? `Teacher · ${t.collectedBy}` : 'Self-service'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell">
+                      <TxnDateTime transaction={t} />
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <FeeStatusBadge status={paymentStatusLabel(t.status, 'principal')} />
+                    </td>
+                    <td className="pl-3 pr-4 py-2.5 text-right">
+                      {t.status === 'Success' ? (
+                        <div className="inline-flex justify-end">
+                          <ReceiptRowActions transaction={t} settings={receiptSettings} onView={setViewing} />
+                        </div>
+                      ) : (
+                        <span className="text-[9px] text-muted-foreground whitespace-nowrap">
+                          {t.status === 'Under Verification' ? 'Awaiting verification' : '—'}
+                        </span>
                       )}
-                      title={`Collected by ${collectorLabel}`}
-                    >
-                      {isOffice ? 'Office' : collectorRoleShort(t.collectorRole)}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                    {t.className} · {t.feeHead} · {formatDate(t.date)}
-                    {t.referenceNo ? <span className="font-mono"> · {t.referenceNo}</span> : null}
-                  </p>
-                </div>
-
-                {/* Mode */}
-                <span className="shrink-0 hidden sm:flex h-6 w-6 items-center justify-center rounded-md ring-1 bg-muted/40 text-muted-foreground" title={t.mode}>
-                  <ModeIcon mode={t.mode} className="h-3 w-3" />
-                </span>
-
-                {/* Amount + status */}
-                <div className="shrink-0 text-right min-w-[92px]">
-                  <p className="text-xs font-bold tabular-nums leading-tight">{formatINR(t.amount, true)}</p>
-                  <div className="mt-0.5 flex justify-end">
-                    <FeeStatusBadge status={paymentStatusLabel(t.status, 'principal')} />
-                  </div>
-                </div>
-
-                {/* Receipt actions — Success only; pending rows show nothing
-                    (their action lives in the Cash Verification queue below) */}
-                {t.status === 'Success' ? (
-                  <ReceiptRowActions transaction={t} settings={receiptSettings} onView={setViewing} />
-                ) : (
-                  <span className="w-[78px] shrink-0 text-right text-[9px] text-muted-foreground hidden md:block">
-                    {t.status === 'Under Verification' ? 'Awaiting verification' : '—'}
-                  </span>
-                )}
-              </motion.div>
-            )
-          })}
-
-          {overflow > 0 && (
-            <button
-              type="button"
-              onClick={onOpenTransactions}
-              className="w-full px-4 py-2 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors flex items-center justify-center gap-1"
-            >
-              {overflow} settled payment{overflow === 1 ? '' : 's'} in Transactions <ArrowRight className="h-3 w-3" />
-            </button>
-          )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
+      )}
+
+      {overflow > 0 && (
+        <button
+          type="button"
+          onClick={onOpenTransactions}
+          className="w-full px-4 py-2 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors flex items-center justify-center gap-1 border-t border-border/60"
+        >
+          {overflow} settled payment{overflow === 1 ? '' : 's'} in Transactions <ArrowRight className="h-3 w-3" />
+        </button>
       )}
 
       {/* All-clear helper when everything has settled */}
@@ -279,10 +306,4 @@ export function RecentPayments({
       />
     </Panel>
   )
-}
-
-function collectorRoleShort(role: FeeTransaction['collectorRole']): string {
-  if (role === 'teacher') return 'Teacher'
-  if (role === 'self') return 'Self'
-  return 'Office'
 }

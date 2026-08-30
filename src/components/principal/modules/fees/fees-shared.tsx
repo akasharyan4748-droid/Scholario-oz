@@ -17,7 +17,8 @@ import {
   Smartphone, CreditCard, Building2, Banknote, FileText, Wallet, ArrowRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { PaymentMode } from '@/lib/store/fee-store'
+import { formatDate, formatTime } from '@/lib/format'
+import type { FeeTransaction, PaymentMode } from '@/lib/store/fee-store'
 import { Panel } from '../shared/panel'
 
 // ─── Tab type ────────────────────────────────────────────────────────
@@ -65,6 +66,55 @@ export function modeAccent(mode: PaymentMode): string {
     case 'Cheque': return 'bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-violet-500/20'
     case 'Bank Transfer': return 'bg-sky-500/10 text-sky-600 dark:text-sky-400 ring-sky-500/20'
   }
+}
+
+// ─── Date + secondary time (FINAL PAYMENTS UI POLISH §2) ────────────
+
+/**
+ * Resolves the full wall-clock instant a payment was recorded:
+ *   1. `recordedAt` (ISO timestamp — stamped by recordPayment / cash
+ *      approval and present on all seeded rows);
+ *   2. fallback — the `TXN-<epochMs>` id (live-recorded rows always carry
+ *      an epoch id);
+ *   3. null — date-only rows (nothing secondary to show).
+ */
+export function txnRecordedAt(t: Pick<FeeTransaction, 'id' | 'recordedAt'>): Date | null {
+  if (t.recordedAt) {
+    const d = new Date(t.recordedAt)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  const ts = Number(t.id.replace(/^TXN-?/, ''))
+  // Guard: seed ids like TXN001 parse to 1ms (1970) — treat as date-only.
+  if (Number.isFinite(ts) && ts >= 1_000_000_000_000) return new Date(ts)
+  return null
+}
+
+/**
+ * Date + very small secondary timestamp — "30 Aug 2026 · 02:35 PM".
+ * The date dominates; the time renders smaller and quieter right after it.
+ * Rows without a wall-clock instant degrade to date-only. Used by the
+ * Payments tables (Recent Payments / Cash Verification) and the
+ * Transactions ledger so both speak the same visual language.
+ */
+export function DateTimeText({ date, instant, className }: { date: string; instant?: string | Date | null; className?: string }) {
+  const d = instant ? (instant instanceof Date ? instant : new Date(instant)) : null
+  const valid = d && !Number.isNaN(d.getTime())
+  return (
+    <span className={cn('whitespace-nowrap', className)}>
+      {formatDate(date)}
+      {valid && (
+        <span className="ml-1 text-[10px] text-muted-foreground/70" aria-hidden>
+          · {formatTime(d!).toUpperCase()}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** Transaction wrapper around DateTimeText — resolves the record instant
+ *  via txnRecordedAt (recordedAt → TXN-<epochMs> fallback). */
+export function TxnDateTime({ transaction, className }: { transaction: Pick<FeeTransaction, 'id' | 'recordedAt' | 'date'>; className?: string }) {
+  return <DateTimeText date={transaction.date} instant={txnRecordedAt(transaction)} className={className} />
 }
 
 export function statusAccent(status: string): string {
@@ -227,7 +277,7 @@ export function FeeEmptyState({ icon, title, description, action }: { icon: Reac
 
 export function FeeStatusBadge({ status }: { status: string }) {
   return (
-    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold', statusAccent(status))}>
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap', statusAccent(status))}>
       <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
       {status}
     </span>

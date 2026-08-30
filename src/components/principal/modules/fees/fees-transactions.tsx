@@ -56,7 +56,7 @@ import {
 } from '@/lib/store/fee-store'
 import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { FeePanel, FeeEmptyState, ModeIcon, modeAccent, FeeStatusBadge } from './fees-shared'
+import { FeePanel, FeeEmptyState, ModeIcon, modeAccent, FeeStatusBadge, TxnDateTime } from './fees-shared'
 import { ReceiptPreview, downloadReceiptHTML, printReceipt } from './fees-receipt'
 import { FeeReceiptA5Preview, printReceiptA5, downloadReceiptA5 } from './fee-receipt-a5'
 import { toast } from 'sonner'
@@ -364,7 +364,7 @@ export function FeesTransactionsSection({ data }: Props) {
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-center"><FeeStatusBadge status={t.status} /></td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell whitespace-nowrap">{formatDate(t.date)}</td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell whitespace-nowrap"><TxnDateTime transaction={t} /></td>
                     <td className="px-3 py-2.5 text-center">
                       <div
                         className="inline-flex items-center gap-0.5"

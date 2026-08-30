@@ -52,7 +52,7 @@ import { useFeeData, useFeeStore, type CashRequest, type FeeTransaction } from '
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Panel } from '../shared/panel'
-import { FeeEmptyState, FeeStatusBadge, ModeIcon, modeAccent, paymentStatusLabel } from './fees-shared'
+import { FeeEmptyState, FeeStatusBadge, ModeIcon, modeAccent, paymentStatusLabel, TxnDateTime, DateTimeText } from './fees-shared'
 import { toast } from 'sonner'
 
 // Rejection reasons (structured list + "Other" with custom text) — catalog UNCHANGED.
@@ -256,9 +256,9 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
                   <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden sm:table-cell">Method</th>
                   <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden md:table-cell">Source</th>
                   <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden lg:table-cell">Date</th>
-                  <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden xl:table-cell">Reference</th>
+                  <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden 2xl:table-cell">Reference</th>
                   <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Status</th>
-                  <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Actions</th>
+                  <th className="text-right pl-3 pr-4 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -283,7 +283,7 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
                     <td className="px-3 py-2.5 hidden md:table-cell">
                       <span
                         className={cn(
-                          'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold',
+                          'inline-flex max-w-[120px] items-center truncate px-1.5 py-0.5 rounded text-[9px] font-semibold',
                           t.collectorRole === 'teacher'
                             ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
                             : 'bg-sky-500/10 text-sky-700 dark:text-sky-300',
@@ -293,30 +293,34 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
                         {collectorLabel(t.collectorRole, t.collectedBy)}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap hidden lg:table-cell">{formatDate(t.date)}</td>
-                    <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground hidden xl:table-cell">{t.referenceNo ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap hidden lg:table-cell"><TxnDateTime transaction={t} /></td>
+                    <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground hidden 2xl:table-cell">{t.referenceNo ?? '—'}</td>
                     <td className="px-3 py-2.5 text-center">
                       <FeeStatusBadge status={paymentStatusLabel(t.status, 'principal')} />
                     </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <div className="inline-flex items-center gap-1.5">
+                    <td className="pl-3 pr-4 py-2.5 text-right">
+                      <div className="inline-flex items-center justify-end gap-1.5">
                         <Button
                           size="sm" variant="outline"
                           className="h-7 text-[10px] gap-1 border-rose-500/30 text-rose-600 hover:bg-rose-500/10 hover:text-rose-600"
+                          aria-label={`Reject ${t.studentName}'s payment`}
+                          title="Reject"
                           onClick={() => { setRejectingDirect(t); setRejectingDirectReason('') }}
                         >
-                          <X className="h-3 w-3" /> Reject
+                          <X className="h-3 w-3" /> <span className="hidden 2xl:inline">Reject</span>
                         </Button>
                         <Button
                           size="sm"
                           className="h-7 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          aria-label={`Verify ${t.studentName}'s payment`}
+                          title="Verify"
                           onClick={() => {
                             const r = approveDirectCashTxn(t.id, 'Principal')
                             if (r.success) toast.success('Cash verified', { description: `${t.receiptNo} posted as successful for ${t.studentName}.` })
                             else toast.error('Could not verify', { description: r.error })
                           }}
                         >
-                          <Check className="h-3 w-3" /> Verify
+                          <Check className="h-3 w-3" /> <span className="hidden 2xl:inline">Verify</span>
                         </Button>
                       </div>
                     </td>
@@ -344,17 +348,17 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
                       </td>
                       <td className="px-3 py-2.5 hidden md:table-cell">
                         <span
-                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                          className="inline-flex max-w-[120px] items-center truncate px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300"
                           title={`Cash collected by ${r.collectedBy}`}
                         >
                           Teacher · {r.collectedBy}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap hidden lg:table-cell">{formatDate(r.collectedAt)}</td>
-                      <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground hidden xl:table-cell">{r.referenceNo ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap hidden lg:table-cell"><DateTimeText date={r.collectedAt} instant={r.collectedAt.includes('T') ? r.collectedAt : null} /></td>
+                      <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground hidden 2xl:table-cell">{r.referenceNo ?? '—'}</td>
                       <td className="px-3 py-2.5 text-center"><QueueStatusChip status={r.status} /></td>
-                      <td className="px-3 py-2.5 text-center">
-                        <div className="inline-flex items-center gap-1.5">
+                      <td className="pl-3 pr-4 py-2.5 text-right">
+                        <div className="inline-flex items-center justify-end gap-1.5">
                           <Button
                             size="sm" variant="ghost"
                             className="h-7 w-7 p-0 rounded-md text-muted-foreground hover:bg-muted"
@@ -368,18 +372,22 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
                           <Button
                             size="sm" variant="outline"
                             className="h-7 text-[10px] gap-1 border-rose-500/30 text-rose-600 hover:bg-rose-500/10 hover:text-rose-600"
+                            aria-label={`Reject ${r.studentName}'s cash collection`}
+                            title="Reject"
                             onClick={() => { setRejectingReq(r); setRejectReason(''); setRejectNote('') }}
                             disabled={!actionable}
                           >
-                            <X className="h-3 w-3" /> Reject
+                            <X className="h-3 w-3" /> <span className="hidden 2xl:inline">Reject</span>
                           </Button>
                           <Button
                             size="sm"
                             className="h-7 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                            aria-label={`Approve ${r.studentName}'s cash collection`}
+                            title="Approve"
                             onClick={() => setApprovingReq(r)}
                             disabled={!actionable}
                           >
-                            <Check className="h-3 w-3" /> Approve
+                            <Check className="h-3 w-3" /> <span className="hidden 2xl:inline">Approve</span>
                           </Button>
                         </div>
                       </td>

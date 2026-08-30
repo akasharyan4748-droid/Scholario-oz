@@ -303,6 +303,11 @@ export interface FeeTransaction {
   mode: PaymentMode
   status: PaymentStatus
   date: string
+  /** Full ISO wall-clock instant when this payment was RECORDED — powers
+   *  the secondary "· 02:35 PM" timestamp in the Payments / Transactions
+   *  tables (FINAL PAYMENTS UI POLISH §2). Optional for backward compat:
+   *  legacy rows fall back to the TXN-<epochMs> id, then to date-only. */
+  recordedAt?: string
   purpose: string
   feeHead: string
   collectedBy: string
@@ -1406,6 +1411,7 @@ export const useFeeStore = create<FeeState>()(
             ? 'Under Verification'
             : 'Success',
       date: new Date().toISOString().split('T')[0],
+      recordedAt: new Date().toISOString(),
       purpose: input.purpose,
       feeHead: input.feeHead,
       collectedBy: input.collectedBy,
@@ -1476,6 +1482,7 @@ export const useFeeStore = create<FeeState>()(
       mode: 'Cash',
       status: 'Success',
       date: new Date().toISOString().split('T')[0],
+      recordedAt: new Date().toISOString(),
       purpose: req.notes ?? 'Cash payment approved',
       feeHead: req.feeHead,
       collectedBy: req.collectedBy,
@@ -3074,7 +3081,7 @@ export const useFeeStore = create<FeeState>()(
   // `additionalCharges` array (event-based charges like the Class 8
   // Educational Tour) when the persisted state predates the key. Never
   // overwrites user-created charges; never touches transactions.
-  version: 6,
+  version: 7,
   migrate: (persistedState: any, fromVersion: number) => {
     // v5 — session rollover reset: the whole demo dataset moved from the
     // archived 2025-26 session into the live 2026-27 session (CURRENT_ACADEMIC_YEAR).
@@ -3118,6 +3125,34 @@ export const useFeeStore = create<FeeState>()(
         structureRevisions: Array.isArray(st.structureRevisions) ? st.structureRevisions : [],
         structureEditWindow: st.structureEditWindow ?? { structureId: null, openedAt: null, expiresAt: null },
       }
+    }
+    // v7 — RECORDED-AT: backfill the wall-clock instant on persisted
+    // transactions + cash requests so the Payments / Transactions tables
+    // can render the secondary "· 02:35 PM" timestamp (FINAL PAYMENTS UI
+    // POLISH §2). Seed-matched rows take their realistic school-hours time
+    // from the new seed; live rows (TXN-<epochMs>) use their exact record
+    // instant; anything else stays date-only. Never mutates amounts/status.
+    if (fromVersion < 7 && persistedState && typeof persistedState === 'object') {
+      const st = persistedState as Record<string, any>
+      const out: Record<string, any> = { ...st }
+      if (Array.isArray(st.transactions)) {
+        out.transactions = st.transactions.map((t: any) => {
+          if (!t || typeof t !== 'object' || t.recordedAt) return t
+          const seed = SEED_TRANSACTIONS.find((s) => s.id === t.id)
+          if (seed?.recordedAt) return { ...t, recordedAt: seed.recordedAt }
+          const ts = Number(String(t.id ?? '').replace(/^TXN-/, ''))
+          if (Number.isFinite(ts) && ts >= 1_000_000_000_000) return { ...t, recordedAt: new Date(ts).toISOString() }
+          return t
+        })
+      }
+      if (Array.isArray(st.cashRequests)) {
+        out.cashRequests = st.cashRequests.map((r: any) => {
+          if (!r || typeof r !== 'object' || (r.collectedAt && r.collectedAt.includes('T'))) return r
+          const seed = SEED_CASH_REQUESTS.find((s) => s.id === r.id)
+          return seed ? { ...r, collectedAt: seed.collectedAt, submittedAt: seed.submittedAt } : r
+        })
+      }
+      return out
     }
     return persistedState
   },
