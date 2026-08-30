@@ -909,3 +909,39 @@ Stage Summary:
 - Principle established: THE FINANCE DASHBOARD NEVER CONTRADICTS THE OPERATIONAL MODULES. Headline money figures derive from the same live fee/salary stores the modules render; books-level views (statements, reserves, expense mix) are clearly secondary and reconciled.
 - Overview is now answer-first: four questions (collected? owed? payroll covered? cash safe?), one real trend, one actionable to-do list, honest activity.
 - Commit c12eadb on local main (NOT pushed — user will provide token/word). Local main now 6 commits ahead of origin/main; development also pending; `stable` untouched.
+
+---
+Task ID: FIN-CENTRAL-1
+Agent: Z.ai Code (main thread)
+Task: FINANCE production pass per 34-point spec — centralize Finance Settings under Finance Dashboard (no new sidebar module), keep fee/payroll-specific rules in their modules, single payment source of truth, consistency + QA. Canvas editor stays OUT of scope (untouched).
+
+Work Log:
+- AUDITED first: finance-shell (Overview/Statements/Reports), finance-overview (FIN-1 money console), fees-settings.tsx + fees-settings-payment.tsx (methods/banks/UPI/gateway UI over fee-store), fee-store data ownership (paymentModes/gatewayConfig/bankAccounts/upiQrConfigs/receiptSettings — consumed by Collect Fee, CollectUpiDialog, applications-store recordPayment), salary settings (no gateway duplication), sidebar FINANCE nav (fees/salary/finance — unchanged), applications payment link (already one-ledger via chargeId — verified in FIN-SPEC-FINAL-1, untouched).
+- ARCHITECTURE: created the centralized Finance Settings as a NEW TAB inside Finance Dashboard (Overview · Statements · Reports · Settings). Data stays in fee-store (single source of truth — zero migration risk); the central tab is the only place the infrastructure UI lives. Fee Management Settings keeps only fee business rules; Salary settings untouched.
+- MOVED (not duplicated): fees-settings-payment.tsx → finance-dashboard/finance-settings-payment.tsx, export renamed FinancePaymentCollectionSettings; header documents the central-ownership architecture. Renders Payment Methods + Bank Accounts + UPI/QR + Payment Gateway.
+- NEW finance-settings.tsx: flat stack grouped by micro-labels per spec §10 — PAYMENT & COLLECTION (methods/banks/UPI/gateway) → RECEIPTS (school-wide numbering "next RCP-2026-1061", moved from fee settings) → ALERTS (live finance alerts toggle, moved from fee settings).
+- SettingsCard promoted to modules/shared/settings-card.tsx (+ SettingsGroupLabel primitive); fees-shared keeps a pointer comment. Fee Settings imports the shared primitive.
+- fees-settings.tsx slimmed to 5 cards: "Payment Channels & Receipts" link card (live gateway/methods summary, "Open Finance Settings" → setFocus('finance-settings') + onNavigate('finance')) + Late Fee + Concession + One-Time Entry Fees + Controlled-Edit Policy. FeesShell passes onNavigate.
+- finance-shell: 4th tab, keyboard 1–4, focus deep-link ('finance-settings' → Settings tab; mirrors fee-shell pattern).
+- useFinanceAttention extended with infrastructure parity (9–10): "Payment gateway in test mode" (warning) + "Payment methods need configuration" (enabled-but-unusable methods, same availability logic as settings) — both CTA "Open Settings" → finance-settings. Overview badge now reflects them (7 items live).
+- finance-overview handleAttention routes 'finance-settings' → onNavigate('settings'); Props type widened.
+- FIXED 2 pre-existing app-shell TS baseline errors (notifList state typed NotificationItem[]) — codebase now has ZERO tsc errors.
+- VERIFY: bunx tsc --noEmit → 0 errors; bun run lint → clean. Browser E2E (principal via gateway :81): Finance tabs render (Overview 7 / Statements / Reports / Settings); Settings groups + all 6 cards verified; Cheque toggle on→off round-trip in central home with toasts + persisted state (baseline restored: UPI/Card/NB/Cash/BankTransfer on, Cheque off, "5 of 6 enabled"); Bank/UPI/Gateway cards render (primary pill, masked A/C, parent instructions, Main Counter UPI); attention CTA "Open Settings" jumps to Settings tab; fee-settings link card deep-links to Finance → Settings (focus pattern proven); Collect Fee dialog (Stage 1→3) still consumes central methods (UPI carried through, no payment recorded); fee settings = exactly 5 cards (old payment/receipts/notifications cards gone — no duplicates); salary settings unchanged (Salary Editing + Payroll Archive, NO gateway duplication); mobile 390px finance-settings + fee-settings no h-overflow (sw==iw==390); dark mode clean via app toggle; zero console/page errors; sticky footer intact.
+- QA NOTE: an agent-browser selector bug (clicked container's first switch instead of the row's) briefly set UPI=off/Cheque=on during testing — identified via localStorage inspection and corrected in-browser; final persisted baseline verified correct.
+- Commit 68e0c31 on local main (NOT pushed — token still invalid; main now 7 commits ahead of origin; development pending too; stable untouched).
+
+Stage Summary:
+- Finance now has ONE centralized settings capability logically owned by Finance Dashboard: payment gateways, methods, UPI/QR, bank accounts, receipts and finance alerts configured once at school level and consumed by Fee collections, Additional Collections, UPI/QR collect and Application payments through the shared fee-store.
+- Sidebar unchanged (FINANCE = Fee Management · Salary & Payroll · Finance Dashboard). Module business rules stayed put: fee rules in Fee Management → Settings, payroll rules in Salary & Payroll → Settings.
+- Adding a new payment gateway/method now touches ONE settings surface + fee-store — no module edits (spec §27).
+- State of the acceptance checklist: all §34 boxes verified except git push (blocked on fresh token from user).
+
+## Current State Assessment (after FIN-CENTRAL-1)
+- Finance area = one coherent system: Dashboard (money console + infrastructure awareness) · Fee Management (operations + fee rules) · Salary & Payroll (benchmark module) · central Settings under Finance Dashboard.
+- tsc: 0 errors project-wide. lint: clean. Event-stream mini-service not needed for this round (not started; notifications fall back to demo badge if polled without it).
+
+## Unresolved Issues / Risks / Next-Phase Priorities
+1. (Blocker for publishing) git push: local main 7 commits ahead of origin/main; development also behind. Needs fresh GitHub token from the user (old PAT revoked). stable untouched per red line.
+2. (Low) Salary record-payment method list is payroll-local (Cash/Cheque/NEFT/UPI free-text bank field) — per spec §5 this is correct payroll-specific behaviour; revisit only if payroll ever needs online gateway collection.
+3. (Idea, next round) Ledger group in central settings (transaction categories) once a real category store exists — deliberately not faked this round.
+4. (Idea) UPI QR image preview in central settings if a QR mechanism is ever introduced (currently deliberately dependency-free).
