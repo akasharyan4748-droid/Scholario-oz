@@ -32,6 +32,11 @@ import {
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { VersionStatusPill } from './fees-structures-shared'
+// SaaS-STAGE-2A (Task 7-b) — ARCHIVE RETENTION display: for archived
+// versions, show when the platform purge job becomes eligible. Pure
+// display only — the purge itself is a future server-side job
+// (lib/tenant/archive-retention.ts; no client timers).
+import { getArchiveRetentionState } from '@/lib/tenant/archive-retention'
 
 export interface HistoryDialogProps {
   open: boolean
@@ -259,6 +264,18 @@ function VersionRow({ version, selected, onToggle, onRevert, onArchive, changeLo
             <MetaItem label="Total" value={formatINR(version.totalAmount, true)} mono />
             <MetaItem label="Heads" value={`${version.heads.length}`} mono />
           </div>
+
+          {/* SaaS-STAGE-2A (Task 7-b) — RETENTION: archived versions show
+              when the platform purge becomes eligible (30-day window).
+              Versions without archivedAt metadata (old rows) show nothing. */}
+          {isArchived && (() => {
+            const retention = getArchiveRetentionState(version.archivedAt)
+            return retention ? (
+              <p className="text-[10px] text-muted-foreground/70 mb-1.5">
+                Retention: auto-purge eligible {retention.purgeEligibleOn} · platform job
+              </p>
+            ) : null
+          })()}
 
           {/* Change reason / notes */}
           {version.changeReason && (

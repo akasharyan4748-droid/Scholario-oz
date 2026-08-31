@@ -70,7 +70,19 @@ export interface FeeHeadConfig {
   /** Financial classification — see FeeHeadKind above. */
   kind?: FeeHeadKind
   defaultAmount: number
-  frequency: 'Monthly' | 'Quarterly' | 'Term' | 'Annual' | 'One-Time' | 'Half-Yearly' | 'Per Term'
+  /**
+   * Billing frequency (SaaS-STAGE-2A §4). 'Per-Exam' marks the EXAMINATION
+   * template heads whose amounts are charged per conducted examination
+   * instance (mapped onto the structure's ExamFeeSchedule, never ×12).
+   * 'Term'/'Per Term' are legacy synonyms retained for old persisted data.
+   */
+  frequency: 'Monthly' | 'Quarterly' | 'Term' | 'Annual' | 'One-Time' | 'Half-Yearly' | 'Per Term' | 'Per-Exam'
+  /**
+   * SaaS-STAGE-2A §6 — applicability template. `false` marks OPTIONAL
+   * heads (Books, Uniform…): catalogue defaults a structure MAY include,
+   * never auto-payable for every student. Default true (mandatory).
+   */
+  mandatory?: boolean
   /** When true, this head no longer appears in the "pick from catalogue"
    *  picker for new fee structures. Existing structures keep their
    *  snapshot (versioning integrity). Default false. */

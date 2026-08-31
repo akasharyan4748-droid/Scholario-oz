@@ -7,6 +7,11 @@ import { createDraftSlice } from './slices/draft-slice'
 import { createReviewSlice } from './slices/review-slice'
 import { createDecisionSlice } from './slices/decision-slice'
 import { createCompletionSlice } from './slices/completion-slice'
+// SaaS-STAGE-2A — tenant-scoped persistence (per-school admissions data).
+import { migrateLegacyScopedStore, createTenantScopedStorage, TENANT_SCOPED_BASES } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+migrateLegacyScopedStore(TENANT_SCOPED_BASES.admission, DEFAULT_TENANT_ID)
 
 export const useAdmissionStore = create<AdmissionStoreState>()(
   persist(
@@ -19,7 +24,8 @@ export const useAdmissionStore = create<AdmissionStoreState>()(
       ...createCompletionSlice(...a),
     }),
     {
-      name: 'scholario_admission_store',
+      name: TENANT_SCOPED_BASES.admission,
+      storage: createTenantScopedStorage(TENANT_SCOPED_BASES.admission),
     }
   )
 )

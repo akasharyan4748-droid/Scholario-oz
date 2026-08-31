@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  IndianRupee, Wallet, ShieldCheck, Sparkles, Hash, Landmark,
+  IndianRupee, Wallet, ShieldCheck, Sparkles, Hash, Landmark, Lock,
 } from 'lucide-react'
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,10 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { formatINR } from '@/lib/format'
+// SaaS-STAGE-2A §20 — the school's Online Payment sub-feature gates the
+// student self-service rails (see the Fees module; the fee-store rejects
+// collectorRole 'self' when it is off).
+import { useFeatureGate } from '@/lib/tenant/store'
 import { paymentMethods, type PaymentStudentInfo } from './data'
 
 export function PaymentFormStage({
@@ -38,6 +42,33 @@ export function PaymentFormStage({
   const [reference, setReference] = useState('')
   const needsRef = !gatewayPay
   const refTooShort = needsRef && reference.trim().length < 4
+
+  // SaaS-STAGE-2A §20 — defence in depth: the Fees module hides the pay CTA
+  // and only mounts the dialog when the school's Online Payment sub-feature
+  // is on, but if this stage is ever reached in a school without it, show
+  // the office notice instead of payment rails. Placed AFTER all hooks so
+  // hook order stays unconditional.
+  const onlinePaymentsEnabled = useFeatureGate().isSubFeatureEnabled('fee_online_payments')
+  if (!onlinePaymentsEnabled) {
+    return (
+      <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50 text-muted-foreground border border-border">
+              <Lock className="h-4 w-4" />
+            </div>
+            Online payments unavailable
+          </DialogTitle>
+          <DialogDescription>
+            Online payments are not enabled for your school. Please contact the school office to pay by cash or other offline methods.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>Close</Button>
+        </DialogFooter>
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>

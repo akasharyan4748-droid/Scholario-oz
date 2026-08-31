@@ -6,6 +6,13 @@ import { createProfileSlice } from './slices/profile-slice'
 import { createInventorySlice } from './slices/inventory-slice'
 import { createAcademicConfigSlice } from './slices/academic-config-slice'
 import { createAdmissionSlice } from './slices/admission-slice'
+// SaaS-STAGE-2A — tenant-scoped persistence: every school gets its OWN
+// settings namespace (profile, sessions, fee-head catalogue, admission
+// config) + a one-time legacy copy into the demo school's namespace.
+import { migrateLegacyScopedStore, createTenantScopedStorage, TENANT_SCOPED_BASES } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+migrateLegacyScopedStore(TENANT_SCOPED_BASES.schoolSettings, DEFAULT_TENANT_ID)
 
 export const useSchoolSettingsStore = create<SchoolSettingsState>()(
   persist(
@@ -17,7 +24,10 @@ export const useSchoolSettingsStore = create<SchoolSettingsState>()(
       ...createAdmissionSlice(...a),
     }),
     {
-      name: 'scholario_school_settings_v1',
+      name: TENANT_SCOPED_BASES.schoolSettings,
+      // SaaS-STAGE-2A — TENANT-SCOPED: the real localStorage key is
+      // `${name}::t:${activeTenantId}` (see lib/tenant/tenant-storage.ts).
+      storage: createTenantScopedStorage(TENANT_SCOPED_BASES.schoolSettings),
       // PHASE 5 — bumped to v2 to merge in the enriched master fee-head
       // catalogue (added fh-7..fh-12 Transport/Board/Development/Smart
       // Class/Sports/Medical + description/effectiveFrom on existing
@@ -26,7 +36,7 @@ export const useSchoolSettingsStore = create<SchoolSettingsState>()(
       // entries and patches the existing ones' names/types to match
       // the new seed WITHOUT losing any user-edited catalogue entries
       // they may have added on top.
-      version: 4,
+      version: 5,
       migrate: (persistedState: any, fromVersion: number) => {
         // ─── v4 — ACTIVE SESSION REALIGNMENT (SaaS-STAGE-1) ────────────
         // The active session must agree with the live fee dataset
@@ -82,6 +92,28 @@ export const useSchoolSettingsStore = create<SchoolSettingsState>()(
           )
           for (const seedEntry of initialState.fees.feeHeads) {
             if (!idSet.has(seedEntry.id)) persistedState.fees.feeHeads.push({ ...seedEntry })
+          }
+        }
+        // ─── v5 — SaaS-STAGE-2A fee-model vocabulary (§3–§6) ───────────
+        // 1) Append the new OPTIONAL head templates (fh-20 Books &
+        //    Material, fh-21 Uniform & Sports Kit) to persisted
+        //    catalogues that predate them — user-added heads preserved.
+        // 2) fh-6 Examination Fee: frequency One-Time → 'Per-Exam' ONLY
+        //    when untouched (semantic correction, not a user override).
+        if (persistedState?.fees?.feeHeads && fromVersion < 5) {
+          const idSet = new Set(persistedState.fees.feeHeads.map((f: any) => f.id))
+          for (const seedEntry of initialState.fees.feeHeads) {
+            if ((seedEntry.id === 'fh-20' || seedEntry.id === 'fh-21') && !idSet.has(seedEntry.id)) {
+              persistedState.fees.feeHeads.push({ ...seedEntry })
+            }
+          }
+          const fh6 = persistedState.fees.feeHeads.find((f: any) => f.id === 'fh-6')
+          if (fh6 && (fh6.frequency === 'One-Time' || !fh6.frequency)) {
+            fh6.frequency = 'Per-Exam'
+            if (!fh6.description || fh6.description.startsWith('Session-wide exam conduct')) {
+              const seedFh6 = initialState.fees.feeHeads.find((f) => f.id === 'fh-6')
+              if (seedFh6) fh6.description = seedFh6.description
+            }
           }
         }
         return persistedState

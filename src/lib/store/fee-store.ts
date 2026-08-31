@@ -18,6 +18,14 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+// SaaS-STAGE-2A — tenant foundation. The fee store is TENANT-SCOPED
+// (per-school persisted namespace + seed factory) and ENFORCES the
+// platform-granted capabilities in the actions below — the UI gates are
+// convenience, these guards are the law (client cannot bypass them).
+import { migrateLegacyScopedStore, createTenantScopedStorage, TENANT_SCOPED_BASES } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+import { getActiveTenantPermissionsSync, getActiveTenantConfigSync } from '@/lib/tenant/store'
+import type { CapabilityKey } from '@/lib/tenant/types'
 import { useStudentsStore } from '@/lib/store/students-store'
 import type { StudentRecord } from '@/lib/store/students-store'
 import { useCommunicationStore } from '@/lib/store/communication-store'
@@ -77,6 +85,28 @@ export {
   CURRENT_ACADEMIC_YEAR,
 }
 export type { AdmissionFeePolicy }
+
+// ─── Tenant capability enforcement (SaaS-STAGE-2A) ───────────────────
+//
+// Super Admin → school capability → Principal. The ACTIVE tenant's
+// effective permissions are resolved at ACTION time (never captured), so
+// a config change in the School Control Center applies to every panel
+// after the tenant reload — and the store refuses to mutate when the
+// capability is absent, even if a client calls the action directly.
+
+const CAPABILITY_DENIALS: Record<CapabilityKey, string> = {
+  fee_structure_edit: 'Fee structure editing is disabled for your school by the platform configuration.',
+  fee_structure_publish: 'Fee structure publishing is disabled for your school by the platform configuration.',
+  fee_structure_archive: 'Fee structure archiving is disabled for your school by the platform configuration.',
+  fee_structure_delete: 'Permanent delete is reserved for the Scholario platform. Schools archive structures; the platform purges after the retention window.',
+  fee_catalogue_manage: 'Fee catalogue management is disabled for your school by the platform configuration.',
+}
+
+/** Returns null when the ACTIVE tenant grants the capability, else the denial reason. */
+function platformCapabilityDenial(cap: CapabilityKey): string | null {
+  const perms = getActiveTenantPermissionsSync()
+  return perms[cap] ? null : CAPABILITY_DENIALS[cap]
+}
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -537,6 +567,14 @@ export interface FeeStructureVersion {
   changeReason?: string
   supersedesId?: string         // previous version id
   notes?: string
+  /**
+   * SaaS-STAGE-2A — archive retention metadata. Stamped when the version
+   * enters the archived state. Drives the centralized 30-day retention
+   * display (lib/tenant/archive-retention.ts); the actual purge is a
+   * FUTURE PLATFORM-SIDE JOB — never a client timer.
+   */
+  archivedAt?: string
+  archivedBy?: string
   /**
    * Examination fee schedule snapshot at this version. Optional for
    * backward compatibility: pre-existing versions without this field
@@ -1314,6 +1352,13 @@ function genReceiptNo(prefix: string, counter: number): string {
   return `${prefix}${counter}`
 }
 
+// SaaS-STAGE-2A — ONE-TIME legacy migration: data persisted before tenant
+// scoping lived under the un-scoped key; copy it into the DEFAULT tenant's
+// namespace (the demo school) so the verified demo experience survives the
+// upgrade, then remove the legacy key. Runs once, at module eval, BEFORE
+// the store (and its persist hydration) is created.
+migrateLegacyScopedStore(TENANT_SCOPED_BASES.fee, DEFAULT_TENANT_ID)
+
 export const useFeeStore = create<FeeState>()(
   persist((set, get) => ({
   transactions: SEED_TRANSACTIONS,
@@ -1341,6 +1386,18 @@ export const useFeeStore = create<FeeState>()(
 
   recordPayment: (input) => {
     const state = get()
+    // ─── §20 school payment-channel policy (SaaS-STAGE-2A) ────────────
+    // Office/Teacher/Class-Teacher collections require the school's Fee
+    // Collection capability; student self-service requires the Online
+    // Payment capability. Gateway is a CHANNEL behind these — never a
+    // source. A school without gateway runs purely manual collections.
+    const tenantConfig = getActiveTenantConfigSync()
+    if (input.collectorRole !== 'self' && !tenantConfig.subFeatures.fee_collect) {
+      return { success: false, error: 'Fee collection is disabled for your school by the platform configuration.' }
+    }
+    if (input.collectorRole === 'self' && !tenantConfig.subFeatures.fee_online_payments) {
+      return { success: false, error: 'Online payments are not enabled for your school. Please contact the school office.' }
+    }
     // Validation: amount must be positive
     if (!input.amount || input.amount <= 0) {
       return { success: false, error: 'Amount must be greater than zero.' }
@@ -1784,6 +1841,9 @@ export const useFeeStore = create<FeeState>()(
   },
 
   addFeeHead: (structureId, head) => {
+    // Capability guard (SaaS-STAGE-2A): editing is school-grantable.
+    const editDenial = platformCapabilityDenial('fee_structure_edit')
+    if (editDenial) return { success: false, error: editDenial }
     const state = get()
     const struct = state.feeStructures.find((s) => s.id === structureId)
 
@@ -1851,6 +1911,9 @@ export const useFeeStore = create<FeeState>()(
   },
 
   updateFeeHead: (structureId, headId, patch) => {
+    // Capability guard (SaaS-STAGE-2A): editing is school-grantable.
+    const editDenial = platformCapabilityDenial('fee_structure_edit')
+    if (editDenial) return { success: false, error: editDenial }
     const state = get()
     const struct = state.feeStructures.find((s) => s.id === structureId)
     const oldHead = struct?.components.find((h) => h.id === headId)
@@ -2087,6 +2150,10 @@ export const useFeeStore = create<FeeState>()(
   },
 
   createFeeStructure: (input) => {
+    // Capability guard (SaaS-STAGE-2A): creating structures (incl. the
+    // Bulk-apply-to-level draft path) requires the school's edit capability.
+    const editDenial = platformCapabilityDenial('fee_structure_edit')
+    if (editDenial) return ''
     const state = get()
     const actor = input.actor ?? 'Principal'
     const structureId = `FS${(state.feeStructures.length + 1).toString().padStart(2, '0')}-${Date.now().toString(36)}`
@@ -2159,6 +2226,8 @@ export const useFeeStore = create<FeeState>()(
   },
 
   publishFeeStructureVersion: (structureId, newHeads, effectiveFrom, reason, actorInput, examFeeSchedule) => {
+    // Capability guard (SaaS-STAGE-2A): publishing is school-grantable.
+    if (platformCapabilityDenial('fee_structure_publish')) return ''
     const state = get()
     const actor = actorInput ?? 'Principal'
     const struct = state.feeStructures.find((s) => s.id === structureId)
@@ -2236,6 +2305,8 @@ export const useFeeStore = create<FeeState>()(
   },
 
   scheduleFeeStructureVersion: (structureId, newHeads, effectiveFrom, reason, actorInput, examFeeSchedule) => {
+    // Capability guard (SaaS-STAGE-2A): scheduling is publishing.
+    if (platformCapabilityDenial('fee_structure_publish')) return ''
     const state = get()
     const actor = actorInput ?? 'Principal'
     const struct = state.feeStructures.find((s) => s.id === structureId)
@@ -2286,6 +2357,8 @@ export const useFeeStore = create<FeeState>()(
   },
 
   archiveFeeStructureVersion: (versionId, actorInput) => {
+    // Capability guard (SaaS-STAGE-2A): archiving is school-grantable.
+    if (platformCapabilityDenial('fee_structure_archive')) return
     const state = get()
     const actor = actorInput ?? 'Principal'
     const version = state.versions.find((v) => v.id === versionId)
@@ -2297,7 +2370,14 @@ export const useFeeStore = create<FeeState>()(
     }
     const struct = state.feeStructures.find((s) => s.id === version.structureId)
     set({
-      versions: state.versions.map((v) => v.id === versionId ? { ...v, status: 'archived' as const, effectiveTo: v.effectiveTo ?? new Date().toISOString().split('T')[0] } : v),
+      versions: state.versions.map((v) => v.id === versionId ? {
+        ...v,
+        status: 'archived' as const,
+        effectiveTo: v.effectiveTo ?? new Date().toISOString().split('T')[0],
+        // SaaS-STAGE-2A — retention metadata (30-day platform purge window).
+        archivedAt: v.archivedAt ?? new Date().toISOString(),
+        archivedBy: v.archivedBy ?? actor,
+      } : v),
       audit: pushAudit(state, {
         action: 'fee_structure.changed',
         actor,
@@ -2320,6 +2400,9 @@ export const useFeeStore = create<FeeState>()(
   },
 
   revertFeeStructureVersion: (structureId, targetVersionId, reason, actorInput) => {
+    // Capability guard (SaaS-STAGE-2A): a rollback creates a new version
+    // from history — a publishing-class governance action.
+    if (platformCapabilityDenial('fee_structure_publish')) return ''
     const state = get()
     const actor = actorInput ?? 'Principal'
     const struct = state.feeStructures.find((s) => s.id === structureId)
@@ -2395,6 +2478,9 @@ export const useFeeStore = create<FeeState>()(
   },
 
   updateFeeStructureDraft: (versionId, changes) => {
+    // Capability guard (SaaS-STAGE-2A): drafts are only editable when the
+    // school holds the edit capability (read-only structures otherwise).
+    if (platformCapabilityDenial('fee_structure_edit')) return
     const state = get()
     const version = state.versions.find((v) => v.id === versionId && v.status === 'draft')
     if (!version) return
@@ -2439,6 +2525,13 @@ export const useFeeStore = create<FeeState>()(
   // The audit log + changeLog entries are NEVER deleted — they preserve
   // the immutable financial history forever.
   deleteFeeStructure: (structureId, actor) => {
+    // ─── PLATFORM-RESERVED (SaaS-STAGE-2A §7/§16) ─────────────────────
+    // Principals NEVER permanently delete fee structures — school roles
+    // archive; the platform purges after the 30-day retention window (or
+    // a future Super Admin tool does, server-side). The historical rules
+    // below remain for the future platform actor path only.
+    const deleteDenial = platformCapabilityDenial('fee_structure_delete')
+    if (deleteDenial) return { success: false, error: deleteDenial }
     const state = get()
     const struct = state.feeStructures.find((s) => s.id === structureId)
     if (!struct) {
@@ -2522,6 +2615,9 @@ export const useFeeStore = create<FeeState>()(
   // ─── STRUCT-SESSION / STRUCT-REV implementations ────────────────────
 
   syncFeeStructuresForSession: (actor) => {
+    // Capability guard (SaaS-STAGE-2A): auto-creating per-class draft
+    // structures is an editing action — read-only schools stay untouched.
+    if (platformCapabilityDenial('fee_structure_edit')) return { created: 0, classes: [] }
     const state = get()
     const who = actor ?? 'System'
     // One structure per active class for the CURRENT session. Anything
@@ -2570,6 +2666,10 @@ export const useFeeStore = create<FeeState>()(
   },
 
   requestStructureEditWindow: (structureId, actor) => {
+    // Capability guard (SaaS-STAGE-2A): the edit window only matters when
+    // the school may edit at all.
+    const editDenial = platformCapabilityDenial('fee_structure_edit')
+    if (editDenial) return { success: false, error: editDenial }
     const state = get()
     const struct = state.feeStructures.find((s) => s.id === structureId)
     if (!struct) return { success: false, error: 'Fee structure not found.' }
@@ -2617,6 +2717,9 @@ export const useFeeStore = create<FeeState>()(
   },
 
   createStructureRevision: (input) => {
+    // Capability guard (SaaS-STAGE-2A): proposing revisions is editing.
+    const revEditDenial = platformCapabilityDenial('fee_structure_edit')
+    if (revEditDenial) return { success: false, error: revEditDenial }
     const state = get()
     const struct = state.feeStructures.find((s) => s.id === input.structureId)
     if (!struct) return { success: false, error: 'Fee structure not found.' }
@@ -2728,6 +2831,10 @@ export const useFeeStore = create<FeeState>()(
   },
 
   publishStructureRevision: (revisionId, actor) => {
+    // Capability guard (SaaS-STAGE-2A): publishing a revision publishes a
+    // new version — publishing is school-grantable.
+    const revPubDenial = platformCapabilityDenial('fee_structure_publish')
+    if (revPubDenial) return { success: false, error: revPubDenial }
     const state = get()
     const rev = state.structureRevisions.find((r) => r.id === revisionId)
     if (!rev) return { success: false, error: 'Revision not found.' }
@@ -3102,6 +3209,12 @@ export const useFeeStore = create<FeeState>()(
   // until/unless the Prisma schema gains FeeStructure/FeeHead/Version/
   // Settlement models (tracked as a separate architectural workstream).
   name: 'scholario-fee-store-v1',
+  // SaaS-STAGE-2A — TENANT-SCOPED persistence: the real localStorage key is
+  // `${name}::t:${activeTenantId}` so every school has its own fee dataset
+  // (structures, versions, transactions, audit). Switching tenants reloads
+  // the app and re-hydrates from the target school's namespace — data can
+  // never leak across schools (see lib/tenant/tenant-storage.ts).
+  storage: createTenantScopedStorage(TENANT_SCOPED_BASES.fee),
   // PHASE 5 — bumped to v2 to merge in the new classId/applicableClassIds
   // fields on FeeStructureConfig and the catalogueId/category fields on
   // FeeHead. The migrate function patches persisted v1 state to add these

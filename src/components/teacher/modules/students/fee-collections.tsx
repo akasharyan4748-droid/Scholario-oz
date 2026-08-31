@@ -19,6 +19,14 @@
  *
  * ONE canonical payment record everywhere; this panel is a role-specific
  * VIEW of it (status wording: "Collected — Awaiting verification" → "Paid").
+ *
+ * SaaS-STAGE-2A §20 (school payment-channel policy): teacher collections
+ * are OFFICE-style MANUAL collections — Cash, or a UPI/Bank transfer the
+ * parent shows proof of, recorded here with collectorRole 'teacher' and
+ * gated by the fee_collect sub-feature (enforced in fee-store recordPayment).
+ * They NEVER create gateway orders and are NEVER auto-verified; the
+ * fee_online_payments gateway capability applies to student self-service
+ * only, so no online-payment gating belongs on this surface.
  */
 
 import { useMemo, useState } from 'react'

@@ -30,6 +30,11 @@ import type {
 } from './fee-store'
 import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
 import { SS } from './students-store/seed-data'
+// SaaS-STAGE-2A — the seed factory is TENANT-AWARE: each school's namespace
+// is seeded with its own exam pattern (Pattern A vs B) from the tenant
+// registry. No store cloning — one builder, per-tenant output.
+import { getActiveTenantSync } from '@/lib/tenant/active-tenant'
+import { getExamTemplate } from '@/lib/tenant/registry'
 
 /**
  * CURRENT_ACADEMIC_YEAR — single source of truth for the fee session label.
@@ -60,6 +65,9 @@ export const VALID_FREQUENCIES: FeeHead['frequency'][] = [
 export const FEE_POLICY = {
   tuitionByGrade: { early: 250, middle: 250, secondary: 300, seniorSecondary: 400 },
   examSessionSplit: {
+    // Pattern A reference values (4 Unit Tests + Half-Yearly + Annual).
+    // Pattern B schools (quarterly-hy-annual) get their tier-scaled rows
+    // from examSplitForActiveTenant() below — see SaaS-STAGE-2A §7.
     /** N–C5 → ₹700 total across the six examinations */
     early: [{ examType: 'Unit Test', amount: 100, plannedInstances: 4 }, { examType: 'Half-Yearly', amount: 150 }, { examType: 'Annual Examination', amount: 150 }],
     /** C8–C10 → ₹900 total */
@@ -71,6 +79,9 @@ export const FEE_POLICY = {
   managementAnnual: 500,
   boardFormFee: 1500,
   registrationFee: 300,
+  // SaaS-STAGE-2A §6 — optional-head seed amounts (Books / Uniform).
+  booksFee: 2500,
+  uniformFee: 1800,
   practicalFeePerSubject: 300,
 } as const
 
@@ -81,7 +92,7 @@ const STREAM_PRACTICAL_SUBJECTS: Record<string, string[]> = {
 }
 
 /** Master catalogue ids (src/lib/store/school-settings-store/initial-state.ts). */
-const CATALOGUE = { tuition: 'fh-1', registration: 'fh-2', mgmt: 'fh-9', transport: 'fh-7', board: 'fh-8', physPrac: 'fh-17', chemPrac: 'fh-18', bioPrac: 'fh-19' }
+const CATALOGUE = { tuition: 'fh-1', registration: 'fh-2', mgmt: 'fh-9', transport: 'fh-7', board: 'fh-8', physPrac: 'fh-17', chemPrac: 'fh-18', bioPrac: 'fh-19', books: 'fh-20', uniform: 'fh-21' }
 
 function tuitionFor(c: { grade: number }): number {
   return c.grade >= 11 ? FEE_POLICY.tuitionByGrade.seniorSecondary
@@ -92,6 +103,26 @@ function tuitionFor(c: { grade: number }): number {
 function streamOf(classId: string): string | undefined {
   const m = classId.match(/-(PCM|PCB)$/)
   return m?.[1]
+}
+
+// ─── SaaS-STAGE-2A — tenant-aware examination pattern (§7/§8) ──────────
+//
+// The exam fee split seeded into each structure follows the ACTIVE
+// school's examination template:
+//   Pattern A (ut4-hy-annual)  → 4 Unit Tests + Half-Yearly + Annual
+//   Pattern B (quarterly-hy-annual) → Quarterly + Half-Yearly + Annual
+// Pattern A keeps the historical tier table verbatim (demo-school values);
+// Pattern B uses its own tier-scaled amounts. Fee configuration here is
+// NOT exam creation — actual exams live in the Examination module.
+const PATTERN_B_SPLIT: Record<'early' | 'secondary' | 'senior', Array<{ examType: string; amount: number; plannedInstances?: number }>> = {
+  early: [{ examType: 'Quarterly', amount: 200 }, { examType: 'Half-Yearly', amount: 200 }, { examType: 'Annual Examination', amount: 250 }],
+  secondary: [{ examType: 'Quarterly', amount: 250 }, { examType: 'Half-Yearly', amount: 250 }, { examType: 'Annual Examination', amount: 300 }],
+  senior: [{ examType: 'Quarterly', amount: 300 }, { examType: 'Half-Yearly', amount: 300 }, { examType: 'Annual Examination', amount: 350 }],
+}
+
+function examSplitForActiveTenant(tier: 'early' | 'secondary' | 'senior') {
+  const templateId = getActiveTenantSync().feeProfile.examTemplateId
+  return templateId === 'quarterly-hy-annual' ? PATTERN_B_SPLIT[tier] : FEE_POLICY.examSessionSplit[tier]
 }
 
 /**
@@ -110,21 +141,31 @@ function buildStructures(): FeeStructureConfig[] {
   return ACADEMIC_CLASSES.map((c) => {
     const level = c.level
     const isSeniorStream = Boolean(streamOf(c.id))
-    // Exam session band: N–C5 → ₹700 · C8–C10 → ₹900 · C11–C12 → ₹1000.
-    // C6/C7 intentionally UNCONFIGURED (₹0, per school policy).
+    // Exam session band follows the ACTIVE TENANT'S examination pattern
+    // (SaaS-STAGE-2A §7/§8). C6/C7 intentionally UNCONFIGURED (₹0, per
+    // school policy).
     const examUnconfigured = c.grade === 6 || c.grade === 7
     const examRows = examUnconfigured
       ? []
       : c.grade >= 11 || isSeniorStream
-        ? FEE_POLICY.examSessionSplit.senior
+        ? examSplitForActiveTenant('senior')
         : c.grade >= 8
-          ? FEE_POLICY.examSessionSplit.secondary
-          : FEE_POLICY.examSessionSplit.early
+          ? examSplitForActiveTenant('secondary')
+          : examSplitForActiveTenant('early')
 
     const components: FeeHead[] = [
       { id: nextHeadId(), name: 'Tuition', amount: tuitionFor(c), frequency: 'Monthly', mandatory: true, active: true, catalogueId: CATALOGUE.tuition, category: 'Tuition' },
       { id: nextHeadId(), name: 'Management & Maintenance', amount: FEE_POLICY.managementAnnual, frequency: 'Annual', mandatory: true, active: true, catalogueId: CATALOGUE.mgmt, category: 'Other' },
       { id: nextHeadId(), name: 'Transport', amount: FEE_POLICY.transportMonthly, frequency: 'Monthly', mandatory: false, active: true, catalogueId: CATALOGUE.transport, category: 'Transport' },
+      // SaaS-STAGE-2A §6 — OPTIONAL heads. Books & Uniform exist in every
+      // structure as OPTIONAL (mandatory: false): they are catalogue
+      // offerings, NOT universal charges. isHeadApplicableToStudent keeps
+      // them out of every student's auto-billed dues until an explicit
+      // per-student applicability exists (student-level opt-in, later
+      // stage). baseTotal below already excludes non-mandatory heads, so
+      // seeded dues stay consistent.
+      { id: nextHeadId(), name: 'Books & Material', amount: FEE_POLICY.booksFee, frequency: 'One-Time', mandatory: false, active: true, catalogueId: CATALOGUE.books, category: 'Other' },
+      { id: nextHeadId(), name: 'Uniform & Sports Kit', amount: FEE_POLICY.uniformFee, frequency: 'Annual', mandatory: false, active: true, catalogueId: CATALOGUE.uniform, category: 'Other' },
     ]
 
     if (c.grade === 9 || c.grade === 11) {
@@ -193,18 +234,26 @@ export function computeStructureBaseTotal(structure: Pick<FeeStructureConfig, 'c
 }
 
 /**
- * Per-student head applicability gate (FEE-POLICY):
+ * Per-student head applicability gate (FEE-POLICY + SaaS-STAGE-2A §6):
  *   Transport → charged ONLY when the student is actually enrolled.
+ *   OPTIONAL heads (mandatory === false — e.g. Books & Material, Uniform
+ *     & Sports Kit) are NEVER auto-billed. They are catalogue offerings
+ *     selectable per structure and, later, per student (explicit opt-in
+ *     applicability — the student-account layer stays capable of it).
  *   Everything else follows from structure membership (stream-level
  *   practicals are already bound via applicableClassIds).
  */
 export function isHeadApplicableToStudent(
-  head: Pick<FeeHead, 'category' | 'name'>,
+  head: Pick<FeeHead, 'category' | 'name' | 'mandatory'>,
   student: { transport?: boolean; hostel?: boolean } | null | undefined,
 ): boolean {
-  // Defensive aggregate path (no student context) — exclude conditional charges.
-  if (!student) return head.category !== 'Transport'
+  // Defensive aggregate path (no student context) — exclude conditional
+  // and optional charges.
+  if (!student) return head.category !== 'Transport' && head.mandatory !== false
   if (head.category === 'Transport') return Boolean(student.transport)
+  // Optional heads require an explicit per-student applicability (not
+  // modelled yet) — they must not silently become payable for everyone.
+  if (head.mandatory === false) return false
   return true
 }
 

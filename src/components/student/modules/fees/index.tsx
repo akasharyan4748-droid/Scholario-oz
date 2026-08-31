@@ -1,8 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { IndianRupee, Wallet } from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
+import { IndianRupee, Lock, Wallet } from 'lucide-react'
+import { GlassCard, SectionHeading } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { getStudentById } from '@/lib/mock/students'
 import { formatINR } from '@/lib/format'
@@ -28,6 +28,10 @@ import { resolveCanonicalStudent } from '../applications/student'
 import { useStudentsStore } from '@/lib/store/students-store'
 // PAY-REWORK-1 — real payment submission into the canonical fee ledger.
 import { useFeeStore, type FeeTransaction } from '@/lib/store/fee-store'
+// SaaS-STAGE-2A §20 — the school's online-payment capability gates the
+// student self-service rails (the fee-store rejects collectorRole 'self'
+// when the sub-feature is off; the UI must never lead the student there).
+import { useFeatureGate } from '@/lib/tenant/store'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { downloadReceiptA5 } from '@/components/principal/modules/fees/fee-receipt-a5'
 
@@ -102,6 +106,12 @@ export function FeesModule() {
   //     Verification' (collectorRole 'self'); the Principal verifies it
   //     against the reference before the receipt becomes official.
   const gatewayActive = !!gatewayConfig && (gatewayConfig.status === 'connected' || gatewayConfig.status === 'test_mode')
+  // SaaS-STAGE-2A §20 — school payment-channel policy. Student self-service
+  // IS the online channel: without the fee_online_payments sub-feature there
+  // are no payment rails for this student at all (offline modes are office
+  // collections), so the pay CTA and gateway flow are replaced by an
+  // intentional disabled state that still surfaces the outstanding amount.
+  const onlinePaymentsEnabled = useFeatureGate().isSubFeatureEnabled('fee_online_payments')
   const handlePay = (reference: string) => {
     const modeMap: Record<string, 'UPI' | 'Card' | 'Net Banking'> = { upi: 'UPI', card: 'Card', netbanking: 'Net Banking' }
     const payMode = modeMap[method] ?? 'UPI'
@@ -223,7 +233,7 @@ export function FeesModule() {
         subtitle="Academic Year 2024–2025 · Demo School of Scholario"
         icon={<IndianRupee className="h-5 w-5" />}
         action={
-          totalPending > 0 && (
+          totalPending > 0 && onlinePaymentsEnabled && (
             <Button
               onClick={() => setPayOpen(true)}
               className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md"
@@ -247,39 +257,64 @@ export function FeesModule() {
         paidPct={paidPct}
       />
 
-      <OutstandingSection
-        totalFee={totalFee}
-        totalPending={totalPending}
-        totalPaid={totalPaid}
-        paidPct={paidPct}
-        onPay={() => setPayOpen(true)}
-      />
+      {onlinePaymentsEnabled ? (
+        <OutstandingSection
+          totalFee={totalFee}
+          totalPending={totalPending}
+          totalPaid={totalPaid}
+          paidPct={paidPct}
+          onPay={() => setPayOpen(true)}
+        />
+      ) : (
+        /* SaaS-STAGE-2A §20 — no online rails for this school: compact
+           disabled state (mirrors the premium empty states used across the
+           fee surfaces) with the outstanding amount still visible. */
+        <GlassCard className="p-4 border border-border">
+          <div className="flex items-start gap-3 flex-wrap">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted/50 text-muted-foreground border border-border" aria-hidden>
+              <Lock className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-[240px]">
+              <h3 className="text-sm font-semibold text-foreground">Online payments unavailable</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5 max-w-xl">
+                Online payments are not enabled for your school. Please contact the school office to pay by cash or other offline methods.
+              </p>
+            </div>
+            <div className="shrink-0 rounded-lg bg-muted/40 border border-border px-3 py-1.5 text-right">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Outstanding</p>
+              <p className="text-sm font-bold tabular-nums">{formatINR(totalPending)}</p>
+            </div>
+          </div>
+        </GlassCard>
+      )}
 
       <PaymentHistory totalPaid={totalPaid} />
 
-      <PaymentDialog
-        open={payOpen}
-        stage={stage}
-        method={method}
-        paidAmount={paidAmount}
-        totalPending={totalPending}
-        student={{
-          name: student.name,
-          admissionNo: student.admissionNo,
-          email: student.email,
-          className: student.className,
-          section: student.section,
-        }}
-        reference={submittedRef}
-        receiptNo={submittedTxn?.receiptNo}
-        gatewayProvider={gatewayActive ? gatewayConfig?.provider ?? null : null}
-        confirmed={!!submittedTxn && submittedTxn.status === 'Success' && !!submittedTxn.gatewayPaymentId}
-        onOpenChange={(o) => !o && handleCloseDialog()}
-        onMethodChange={setMethod}
-        onPay={handlePay}
-        onDownload={handleReceiptDownload}
-        onComplete={handlePaidComplete}
-      />
+      {onlinePaymentsEnabled && (
+        <PaymentDialog
+          open={payOpen}
+          stage={stage}
+          method={method}
+          paidAmount={paidAmount}
+          totalPending={totalPending}
+          student={{
+            name: student.name,
+            admissionNo: student.admissionNo,
+            email: student.email,
+            className: student.className,
+            section: student.section,
+          }}
+          reference={submittedRef}
+          receiptNo={submittedTxn?.receiptNo}
+          gatewayProvider={gatewayActive ? gatewayConfig?.provider ?? null : null}
+          confirmed={!!submittedTxn && submittedTxn.status === 'Success' && !!submittedTxn.gatewayPaymentId}
+          onOpenChange={(o) => !o && handleCloseDialog()}
+          onMethodChange={setMethod}
+          onPay={handlePay}
+          onDownload={handleReceiptDownload}
+          onComplete={handlePaidComplete}
+        />
+      )}
 
       <RenewalDialog
         open={renewalDialogOpen}

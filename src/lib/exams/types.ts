@@ -23,6 +23,7 @@ export interface AuthUserLike {
 export const EXAM_TYPES = [
   'Unit Test',
   'Periodic Assessment',
+  'Quarterly',
   'Term Examination',
   'Half-Yearly',
   'Annual Examination',

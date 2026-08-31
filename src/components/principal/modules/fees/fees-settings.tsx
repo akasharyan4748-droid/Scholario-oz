@@ -39,6 +39,10 @@ import { useFeeStore } from '@/lib/store/fee-store'
 import { useFocusStore } from '@/lib/store/focus-store'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
+// SaaS-STAGE-2A (Task 7-b) — tenant-aware feature gates: the gateway/
+// connect surface and the receipt-settings pointer follow the ACTIVE
+// school's platform configuration (fee_online_payments / receipt_templates).
+import { useFeatureGate } from '@/lib/tenant/store'
 import { SettingsCard } from '../shared/settings-card'
 import { toast } from 'sonner'
 
@@ -73,6 +77,17 @@ function CentralFinanceSettingsLink({ onNavigate }: { onNavigate?: (moduleKey: s
   const setFocus = useFocusStore((s) => s.setFocus)
   const gatewayConfig = useFeeStore((s) => s.gatewayConfig)
   const paymentModes = useFeeStore((s) => s.paymentModes)
+  // SaaS-STAGE-2A (Task 7-b) — school-level sub-feature gates.
+  //   · fee_online_payments OFF → the gateway/connect UI is REPLACED by a
+  //     compact muted locked notice (no connect/disable controls, no
+  //     gateway provider summary); office/teacher/class-teacher collection
+  //     is unaffected.
+  //   · receipt_templates OFF → the receipt-settings pointer is replaced by
+  //     the same style locked notice; receipts keep the default A5
+  //     Landscape Dual Copy format (never thermal).
+  const gate = useFeatureGate()
+  const onlinePayments = gate.isSubFeatureEnabled('fee_online_payments')
+  const receiptTemplates = gate.isSubFeatureEnabled('receipt_templates')
 
   const open = () => {
     // Focus request makes the Finance Dashboard land on its Settings tab.
@@ -81,7 +96,9 @@ function CentralFinanceSettingsLink({ onNavigate }: { onNavigate?: (moduleKey: s
   }
 
   const enabledCount = paymentModes.filter((m) => m.active).length
-  const summary = gatewayConfig
+  // Gateway provider info is part of the online-payments sub-feature —
+  // never advertised when the school's configuration disables it.
+  const summary = onlinePayments && gatewayConfig
     ? `gateway ${gatewayConfig.provider} · ${gatewayConfig.environment}`
     : `${enabledCount} of ${paymentModes.length} methods enabled`
 
@@ -96,9 +113,34 @@ function CentralFinanceSettingsLink({ onNavigate }: { onNavigate?: (moduleKey: s
         </Button>
       }
     >
-      <p className="text-[11px] text-muted-foreground">
-        Payment methods, bank accounts, UPI/QR, the gateway and receipt numbering are configured once at the school level — in Finance → Finance Dashboard → Settings — and used by fee collection, additional collections and application payments.
-      </p>
+      {/* SaaS-STAGE-2A (Task 7-b) — locked gateway notice replaces the
+          gateway/connect UI when online payments are disabled for the
+          school (platform configuration). */}
+      {!onlinePayments && (
+        <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2.5 flex items-start gap-2.5" data-testid="fee-settings-gateway-locked">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-foreground">Online payments are not enabled for your school (platform configuration)</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Office, teacher and class-teacher collections continue normally; receipts unaffected.</p>
+          </div>
+        </div>
+      )}
+      {/* SaaS-STAGE-2A (Task 7-b) — locked receipt-settings notice replaces
+          the paper/format pointer when receipt templates are disabled.
+          A5 dual-copy stays the default language (no thermal). */}
+      {!receiptTemplates ? (
+        <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2.5 flex items-start gap-2.5" data-testid="fee-settings-receipt-locked">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-foreground">Receipt template settings are not enabled for your school (platform configuration)</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Issued receipts keep the default A5 Landscape Dual Copy format.</p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">
+          Payment methods, bank accounts, UPI/QR, the gateway and receipt numbering are configured once at the school level — in Finance → Finance Dashboard → Settings — and used by fee collection, additional collections and application payments.
+        </p>
+      )}
     </SettingsCard>
   )
 }

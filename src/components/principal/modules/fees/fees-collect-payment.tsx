@@ -38,6 +38,13 @@ import { formatINR } from '@/lib/format'
 import { ModeIcon, modeAccent, FeeStatusBadge } from './fees-shared'
 import { FeeReceiptA5Preview, printReceiptA5, downloadReceiptA5 } from './fee-receipt-a5'
 import { MoneyInput } from './money-input'
+// SaaS-STAGE-2A (Task 7-b) — school-level online-payments gate. When the
+// ACTIVE school's platform configuration disables fee_online_payments,
+// every collection persists through the OFFLINE /api/fees/transactions
+// branch (manual collection semantics) regardless of mode — the gateway
+// order flow is never touched. The gateway remains a CHANNEL: payment
+// MODES (UPI/Card/Net Banking chips) stay selectable as before.
+import { useFeatureGate } from '@/lib/tenant/store'
 
 type Stage = 'find' | 'review' | 'confirm' | 'processing' | 'success' | 'failed'
 
@@ -81,6 +88,9 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
   const recordPayment = useFeeStore((s) => s.recordPayment)
   const paymentModes = useFeeStore((s) => s.paymentModes)
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
+  // SaaS-STAGE-2A (Task 7-b) — school-level online-payments gate.
+  const gate = useFeatureGate()
+  const onlinePayments = gate.isSubFeatureEnabled('fee_online_payments')
   // FEE-POLICY single-source: every rupee shown here derives from the
   // canonical computeAccount pipeline — identical to the Student Accounts
   // tab and the student drawer (no duplicated due-math).
@@ -231,11 +241,18 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
         // notes.studentId + notes.feeHead so the webhook can later
         // auto-reconcile when the gateway sends payment.captured.
         //
+        // SaaS-STAGE-2A (Task 7-b) — SCHOOL GATE: when the ACTIVE school's
+        // platform configuration disables fee_online_payments, the gateway
+        // order branch is NEVER used — every payment (any mode) persists
+        // through the offline /api/fees/transactions branch (manual
+        // collection semantics) and the "Gateway order created" toast is
+        // suppressed. Modes stay selectable (gateway is a channel).
+        //
         // Failures are non-fatal: the in-memory record is the system of
         // record for the UI; the DB write is the audit trail. A failure
         // just means the operator may need to manually reconcile later
         // (which the Reconcile tab supports).
-        const isOnline = mode === 'UPI' || mode === 'Card' || mode === 'Net Banking'
+        const isOnline = onlinePayments && (mode === 'UPI' || mode === 'Card' || mode === 'Net Banking')
         const dbPersist = isOnline
           ? fetch('/api/fees/orders', {
               method: 'POST',
@@ -266,7 +283,9 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
               }),
             }).then((r) => r.json()).catch(() => null)
         dbPersist.then((json: any) => {
-          if (json?.ok && json?.data?.orderId) {
+          // Gateway order toast ONLY on the online branch (suppressed when
+          // online payments are disabled for the school).
+          if (isOnline && json?.ok && json?.data?.orderId) {
             // For online payments, surface the order id so the principal
             // (or parent) can complete payment via the gateway. In a real
             // deployment, the Razorpay checkout JS would auto-open here.

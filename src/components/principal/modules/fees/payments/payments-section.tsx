@@ -36,6 +36,10 @@ import { IndianRupee, CalendarDays, CalendarRange, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFeeData } from '@/lib/store/fee-store'
 import { formatINR } from '@/lib/format'
+// SaaS-STAGE-2A (Task 7-b) — the open-collect affordances follow the
+// ACTIVE school's fee_collect sub-feature. Cash Verification and the
+// tables are core operations and stay. SummaryCards untouched.
+import { useFeatureGate } from '@/lib/tenant/store'
 import { SummaryCard, SummaryCardGrid } from '../../shared/summary-card'
 import { FeesVerificationQueue } from '../fees-approvals'
 import { FeesAdditionalCharges } from '../fees-additional-charges'
@@ -54,6 +58,11 @@ const countLabel = (n: number) =>
 
 export function PaymentsSection({ data, onCollect, onOpenTransactions }: Props) {
   const { analytics, transactions } = data
+  // SaaS-STAGE-2A (Task 7-b) — the Collect Fee CTA (and any open-collect
+  // entry point) renders only when the school's platform configuration
+  // enables fee_collect. The store enforces the same gate at action time.
+  const gate = useFeatureGate()
+  const canCollect = gate.isSubFeatureEnabled('fee_collect')
 
   // Operational snapshot — successful collections landing right now
   // (same Success-only source as the ledger; counts share the filters).
@@ -94,17 +103,21 @@ export function PaymentsSection({ data, onCollect, onOpenTransactions }: Props) 
         {/* Primary action — same treatment as Salary & Payroll → Payments'
             "Record Payment" (white outline, subtle border, Wallet icon,
             identical height/typography/radius): one shared enterprise
-            design system across money modules. */}
-        <div className="flex items-center gap-2 shrink-0 ml-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-[11px] gap-1"
-            onClick={onCollect}
-          >
-            <Wallet className="h-3 w-3" /> Collect Fee
-          </Button>
-        </div>
+            design system across money modules.
+            SaaS-STAGE-2A (Task 7-b) — hidden when fee_collect is disabled
+            for the school; verification + tables stay. */}
+        {canCollect && (
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px] gap-1"
+              onClick={onCollect}
+            >
+              <Wallet className="h-3 w-3" /> Collect Fee
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* 2 — Recent / Active Payments (current actionable activity +

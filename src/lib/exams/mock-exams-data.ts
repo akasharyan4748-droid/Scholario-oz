@@ -19,6 +19,10 @@ import { create } from 'zustand'
 import type { ExamDTO, CreateExamInput, ExamClassDTO, ExamSubjectConfigDTO, ScheduleItemDTO } from './types'
 import { buildSeedClassesAndSubjects, buildSeedSchedule, SEED_CLASS_DEFS } from './seed-helpers'
 import { createExaminationFormApplication } from '@/lib/store/applications-store'
+// SaaS-STAGE-2A — exam seeds are TENANT-AWARE: each school's namespace
+// boots with its own exam list (schoolId + pattern-flavored names). No
+// duplicate store — one builder, per-tenant output.
+import { getActiveTenantSync } from '@/lib/tenant/active-tenant'
 
 // ─── Sample exams (seed) ────────────────────────────────────────────────
 // These give the Examination list a non-empty default state so the UI
@@ -38,7 +42,7 @@ function buildSeedExam(examId: string, name: string, type: string, session: stri
   const totalStudents = classes.reduce((sum, c) => sum + c.studentCount, 0)
   return {
     id: examId,
-    schoolId: 'demo-school',
+    schoolId: getActiveTenantSync().id,
     name, type, session, term,
     status, resultStatus,
     passPercentage: 33,
@@ -52,24 +56,32 @@ function buildSeedExam(examId: string, name: string, type: string, session: stri
   }
 }
 
-const SEED_EXAMS: ExamDTO[] = [
-  buildSeedExam(
-    'exam-seed-1', 'Unit Test 2', 'UT2', '2025-2026', 'Term 1',
-    'Scheduled', 'Not Started', '2025-10-10', '2025-10-15',
-    50, 2,
-  ),
-  buildSeedExam(
-    'exam-seed-2', 'Final Examination', 'ANNUAL', '2025-2026', 'Term 2',
-    'Scheduled', 'Not Started', '2026-02-10', '2026-02-20',
-    100, 1,
-  ),
-  buildSeedExam(
-    'exam-seed-3', 'Mid-Term Examination', 'HALF_YEARLY', '2025-2026', 'Term 1',
-    'Completed', 'Result Declared', '2025-09-15', '2025-09-25',
-    100, 1,
-    { total: 24, entered: 24, locked: 24, submitted: 24, verified: 24, pct: 100 },
-  ),
-]
+const SEED_EXAMS: ExamDTO[] = (() => {
+  // SaaS-STAGE-2A — the first seed exam follows the ACTIVE school's
+  // examination pattern (Pattern A → 'Unit Test 2'; Pattern B →
+  // 'Quarterly Examination'); ids + schoolId are tenant-scoped.
+  const tenant = getActiveTenantSync()
+  const patternB = tenant.feeProfile.examTemplateId === 'quarterly-hy-annual'
+  const tc = tenant.code.toLowerCase()
+  return [
+    buildSeedExam(
+      `exam-${tc}-1`, patternB ? 'Quarterly Examination' : 'Unit Test 2', patternB ? 'QUARTERLY' : 'UT2', '2025-2026', 'Term 1',
+      'Scheduled', 'Not Started', '2025-10-10', '2025-10-15',
+      50, 2,
+    ),
+    buildSeedExam(
+      `exam-${tc}-2`, 'Final Examination', 'ANNUAL', '2025-2026', 'Term 2',
+      'Scheduled', 'Not Started', '2026-02-10', '2026-02-20',
+      100, 1,
+    ),
+    buildSeedExam(
+      `exam-${tc}-3`, 'Mid-Term Examination', 'HALF_YEARLY', '2025-2026', 'Term 1',
+      'Completed', 'Result Declared', '2025-09-15', '2025-09-25',
+      100, 1,
+      { total: 24, entered: 24, locked: 24, submitted: 24, verified: 24, pct: 100 },
+    ),
+  ]
+})()
 
 // ─── Mock exams store (in-memory, persists for the browser session) ─────
 
@@ -140,7 +152,7 @@ export const useMockExamsStore = create<MockExamsState>()((set, get) => ({
     })
     const exam: ExamDTO = {
       id,
-      schoolId: 'demo-school',
+      schoolId: getActiveTenantSync().id,
       name: input.name,
       type: input.type,
       session: input.session ?? '2025-2026',

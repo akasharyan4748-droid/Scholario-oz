@@ -1,4 +1,30 @@
 import type { SchoolSettingsState } from './types'
+// SaaS-STAGE-2A — the settings profile is TENANT-AWARE: every school seeds
+// its own identity (name, principal, city…) from the active tenant. The
+// demo tenant reproduces the historical values verbatim.
+import { getActiveTenantSync } from '@/lib/tenant/active-tenant'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+const activeTenant = getActiveTenantSync()
+const isDemoTenant = activeTenant.id === DEFAULT_TENANT_ID
+
+// Per-tenant `general` seed — composed from the tenant identity (no
+// scattered school conditionals; the identity IS the data).
+const tenantGeneral = {
+  schoolName: activeTenant.name,
+  shortName: activeTenant.shortName,
+  tagline: isDemoTenant ? 'Excellence in Education & Innovation' : 'Rooted in tradition, rising in excellence',
+  affiliation: isDemoTenant ? 'CBSE — Affiliation No. 1730456' : `CBSE — Affiliation No. ${activeTenant.code}`,
+  address: isDemoTenant ? '100 Knowledge Parkway, Sector 47, Gurugram, Haryana 122003' : `Education Board Road, ${activeTenant.city}`,
+  phone: isDemoTenant ? '9876543210' : '9810045678',
+  email: isDemoTenant ? 'info@demoschool.edu' : `info@${activeTenant.code.toLowerCase()}.edu.in`,
+  website: isDemoTenant ? 'www.demoschool.edu' : `www.${activeTenant.code.toLowerCase()}.edu.in`,
+  principalName: activeTenant.principalName,
+  vicePrincipalName: activeTenant.vicePrincipalName,
+  established: activeTenant.established,
+  logoText: activeTenant.initials,
+  brandColor: isDemoTenant ? 'oklch(0.55 0.14 162)' : "oklch(0.55 0.14 262)",
+}
 
 type StateShape = Omit<SchoolSettingsState, keyof SchoolSettingsActions>
 
@@ -38,27 +64,14 @@ interface SchoolSettingsActions {
 // Initial non-action state for the School Settings store. Splitting this out
 // keeps the store creation file small while preserving every seeded value.
 export const initialState: StateShape = {
-  general: {
-    schoolName: 'Demo School of Scholario',
-    shortName: 'Demo School',
-    tagline: 'Excellence in Education & Innovation',
-    affiliation: 'CBSE — Affiliation No. 1730456',
-    address: '100 Knowledge Parkway, Sector 47, Gurugram, Haryana 122003',
-    phone: '9876543210',
-    email: 'info@demoschool.edu',
-    website: 'www.demoschool.edu',
-    principalName: 'Dr. Ananya Iyer',
-    vicePrincipalName: 'Mr. Suresh Nair',
-    established: 2020,
-    logoText: 'D',
-    brandColor: 'oklch(0.55 0.14 162)',
-  },
+  general: tenantGeneral,
 
   academics: {
     // SaaS-STAGE-1 — the active session MUST agree with the live fee data
     // (fee-store CURRENT_ACADEMIC_YEAR '2026-2027'). This value is the
     // source read by lib/academic-session.ts — never hand-typed in UIs.
-    currentSession: '2026–2027',
+    // SaaS-STAGE-2A — the seed is tenant-aware (identity.session).
+    currentSession: (activeTenant.session ?? '2026-2027').replace('-', '–'),
     academicSessions: ['2023–2024', '2024–2025', '2025–2026', '2026–2027'],
     board: 'CBSE Central Board of Secondary Education',
     curriculum: 'NCERT & Experiential Learning Framework',
@@ -134,11 +147,11 @@ export const initialState: StateShape = {
     // Fee, Medical Fee that the principal can drop into any class.
     feeHeads: [
       { id: 'fh-1',  name: 'Tuition Fee',                       type: 'Tuition',   kind: 'CORE',       defaultAmount: 250,   frequency: 'Monthly',    description: 'Core academic instruction — charged monthly. Policy bands: ₹250 N–C8 · ₹300 C9–10 · ₹400 C11–12.', effectiveFrom: '2026-04-01' },
-      { id: 'fh-2',  name: 'Admission / Registration Fee',      type: 'Admission', kind: 'CORE',       defaultAmount: 500,   frequency: 'One-Time',   description: 'Admission: boys ₹500 one-time (girls free above Class 5). Registration ₹300 for Class 9 & 11 entry points. Charged at admission events only.', effectiveFrom: '2026-04-01' },
+      { id: 'fh-2',  name: 'Admission / Registration Fee',      type: 'Admission', kind: 'CORE',       defaultAmount: 500,   frequency: 'One-Time',   description: 'Admission: boys ₹500 one-time (girls free above Class 5). Registration ₹300 for Class 9 & 11 entry points. SaaS-STAGE-2A §5: charged at admission events — schools that levy it EVERY academic year simply switch this head\u2019s frequency to Annual (one model, policy-driven frequency).', effectiveFrom: '2026-04-01' },
       { id: 'fh-3',  name: 'Activity Fee',                      type: 'Activity',  kind: 'CORE',       defaultAmount: 4000,  frequency: 'Annual',     description: 'Annual cultural, sports, and co-curricular activities. Adjust per class as needed.', effectiveFrom: '2026-04-01' },
       { id: 'fh-4',  name: 'Computer & Science Lab Fee',        type: 'Lab',       kind: 'CORE',       defaultAmount: 1200,  frequency: 'Quarterly',  description: 'Computer lab maintenance + science consumables. Typically waived for Pre-Primary.', effectiveFrom: '2026-04-01' },
       { id: 'fh-5',  name: 'Library Fee',                       type: 'Library',   kind: 'CORE',       defaultAmount: 2000,  frequency: 'Annual',      description: 'Annual library access + book bank. Pre-Primary typically ₹1,000; Senior Secondary ₹5,000.', effectiveFrom: '2026-04-01' },
-      { id: 'fh-6',  name: 'Examination Fee',                   type: 'Exam',      kind: 'EXAMINATION', defaultAmount: 900,  frequency: 'One-Time',   description: 'Session-wide exam conduct + evaluation (all six examinations): ₹700 N–C5 · ₹900 C8–C10 · ₹1,000 C11–12. Class 6–7 unconfigured by policy.', effectiveFrom: '2026-04-01' },
+      { id: 'fh-6',  name: 'Examination Fee',                   type: 'Exam',      kind: 'EXAMINATION', defaultAmount: 900,  frequency: 'Per-Exam',   description: 'SaaS-STAGE-2A §4/§7: per-examination charge (never ×12) — the school\u2019s exam pattern maps amounts per exam type (Pattern A: UT×4 + Half-Yearly + Annual · Pattern B: Quarterly + Half-Yearly + Annual). Fee configuration ≠ exam creation: actual exams are produced in the Examination module.', effectiveFrom: '2026-04-01' },
       { id: 'fh-7',  name: 'Transport Fee',                     type: 'Transport', kind: 'CORE',       defaultAmount: 500,   frequency: 'Monthly',    description: 'Bus service — ₹500/month, charged ONLY to students actually enrolled in transport (opt-in).', effectiveFrom: '2026-04-01' },
       { id: 'fh-8',  name: 'Board Form Fee',                    type: 'Board',     kind: 'EXAMINATION', defaultAmount: 1500,  frequency: 'One-Time',   description: 'Board registration + center form fee — Class 10 and Class 12 only.', effectiveFrom: '2026-04-01' },
       { id: 'fh-9',  name: 'Management & Maintenance Fee',      type: 'Other',     kind: 'CORE',       defaultAmount: 500,   frequency: 'Annual',     description: 'Annual management & maintenance charge — every student. Billed once per session (never ×12).', effectiveFrom: '2026-04-01' },
@@ -159,6 +172,12 @@ export const initialState: StateShape = {
       { id: 'fh-17', name: 'Physics Practical Fee',              type: 'Lab',       kind: 'CORE',       defaultAmount: 300,   frequency: 'Annual',     description: '₹300 per session for students taking Physics (lab consumables + manuals). Streams only — never charged school-wide.', effectiveFrom: '2026-04-01' },
       { id: 'fh-18', name: 'Chemistry Practical Fee',            type: 'Lab',       kind: 'CORE',       defaultAmount: 300,   frequency: 'Annual',     description: '₹300 per session for students taking Chemistry (lab consumables + manuals). Streams only — never charged school-wide.', effectiveFrom: '2026-04-01' },
       { id: 'fh-19', name: 'Biology Practical Fee',              type: 'Lab',       kind: 'CORE',       defaultAmount: 300,   frequency: 'Annual',     description: '₹300 per session for students taking Biology (lab consumables + manuals). PCB stream only.', effectiveFrom: '2026-04-01' },
+      // ─── SaaS-STAGE-2A §6 — OPTIONAL HEAD TEMPLATES ─────────────────
+      // Books & Uniform are catalogue OFFERINGS, not universal charges.
+      // Structures may include them as mandatory:false heads; student
+      // accounts never auto-bill them (per-student applicability later).
+      { id: 'fh-20', name: 'Books & Material',                   type: 'Other',     kind: 'CORE',       defaultAmount: 2500,  frequency: 'One-Time',   mandatory: false, description: 'OPTIONAL — textbooks, notebooks and class material sets. Not auto-billed: applies only to students who opt in (per-student applicability).', effectiveFrom: '2026-04-01' },
+      { id: 'fh-21', name: 'Uniform & Sports Kit',               type: 'Other',     kind: 'CORE',       defaultAmount: 1800,  frequency: 'Annual',     mandatory: false, description: 'OPTIONAL — uniform set + house sports kit. Not auto-billed: applies only to students who opt in (per-student applicability).', effectiveFrom: '2026-04-01' },
     ],
     discounts: [
       { id: 'dc-1', name: 'Sibling Concession', type: 'Percentage', value: 15, code: 'SIBLING15' },

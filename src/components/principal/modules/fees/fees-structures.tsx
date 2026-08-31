@@ -32,8 +32,8 @@ import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Layers, History, MoreHorizontal, Plus, ChevronRight, Calendar,
-  FileText, Archive, Copy, Trash2, AlertTriangle, ShieldAlert,
-  GraduationCap, ShieldCheck, CalendarCheck2, BookOpen,
+  FileText, Archive, Copy, AlertTriangle, Lock, ShieldCheck,
+  GraduationCap, CalendarCheck2, BookOpen,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -54,6 +54,11 @@ import { useFeeData,
   type StructureRevision,
 } from '@/lib/store/fee-store'
 import { useStudentsStore } from '@/lib/store/students-store'
+// SaaS-STAGE-2A (Task 7-b) — tenant-aware gating: the Catalogue entry point,
+// the New-Structure CTA and the Bulk-Apply action follow the ACTIVE school's
+// sub-features / effective capabilities. The store already enforces every
+// capability — these UI gates are the convenience layer.
+import { useFeatureGate, useEffectiveFeeCapabilities } from '@/lib/tenant/store'
 // PHASE 5 — class catalogue (used by Bulk Apply to Level + Coverage Matrix).
 import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
 import { formatINR, formatDate } from '@/lib/format'
@@ -96,8 +101,13 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
   const students = useStudentsStore((s) => s.students)
   const archiveFeeStructureVersion = useFeeStore((s) => s.archiveFeeStructureVersion)
   const createFeeStructure = useFeeStore((s) => s.createFeeStructure)
-  const deleteFeeStructure = useFeeStore((s) => s.deleteFeeStructure)
   const syncFeeStructuresForSession = useFeeStore((s) => s.syncFeeStructuresForSession)
+  // SaaS-STAGE-2A (Task 7-b) — tenant gates. Note: `fee_structure_delete`
+  // is ALWAYS false for principals (platform-reserved) — the card More
+  // menu no longer offers permanent delete at all.
+  const gate = useFeatureGate()
+  const perms = useEffectiveFeeCapabilities()
+  const catalogueAvailable = gate.isSubFeatureEnabled('fee_catalogue') && perms.fee_catalogue_manage
 
   const [openStructureId, setOpenStructureId] = useState<string | null>(null)
   const [historyStructure, setHistoryStructure] = useState<FeeStructureConfig | null>(null)
@@ -105,12 +115,6 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
   // move behind an "Archived (N)" toolbar toggle so the default grid
   // stays scannable. Same pattern as Salary Structure's toggle.
   const [showArchived, setShowArchived] = useState(false)
-  // Fix 4 (FEE-CORRECT): real delete confirmation dialog state.
-  // The previous "Delete" menu item only showed a toast — now we open a
-  // proper confirmation dialog (for drafts) or toast the published /
-  // financial-record guard error.
-  const [deleteTarget, setDeleteTarget] = useState<FeeStructureConfig | null>(null)
-  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   // FEE-CREATE-DRAWER — "New Structure" (toolbar) opens the same
   // right-side detail drawer used by existing structures, but in
@@ -360,51 +364,10 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
     toast.info('Version archived', { description: `v${current.version} of ${s.className} archived.` })
   }
 
-  // Fix 4 (FEE-CORRECT): real delete handler. Decides what to do based on
-  // the structure's current version status:
-  //   - DRAFT (no published version yet) → open a confirmation dialog
-  //   - CURRENT / PUBLISHED → toast "cannot delete, archive instead"
-  //   - ARCHIVED + has financial records → toast "financial records depend on it"
-  //   - ARCHIVED + no records → open a confirmation dialog
-  // The actual mutation runs only after the user confirms.
-  const handleDelete = (s: FeeStructureConfig) => {
-    const sVersions = versions.filter((v) => v.structureId === s.id)
-    const hasCurrent = sVersions.some((v) => v.status === 'current')
-    const hasScheduled = sVersions.some((v) => v.status === 'scheduled')
-    if (hasCurrent) {
-      toast.error('Cannot delete a published structure', {
-        description: 'Archive the current version instead — published structures affect live student accounts.',
-      })
-      return
-    }
-    if (hasScheduled) {
-      toast.error('Cannot delete — scheduled version exists', {
-        description: 'Cancel the scheduled version first via the detail drawer.',
-      })
-      return
-    }
-    setDeleteTarget(s)
-  }
-
-  const confirmDelete = () => {
-    if (!deleteTarget) return
-    setDeleteSubmitting(true)
-    // Slight delay so the user sees the "Working…" state on the dialog.
-    setTimeout(() => {
-      const result = deleteFeeStructure(deleteTarget.id, 'Principal')
-      setDeleteSubmitting(false)
-      if (!result.success) {
-        toast.error('Delete failed', { description: result.error })
-        return
-      }
-      toast.success('Structure deleted', {
-        description: `${deleteTarget.className} was removed. Financial records and audit history preserved.`,
-      })
-      // If the deleted structure was open in the drawer, close it.
-      if (openStructureId === deleteTarget.id) setOpenStructureId(null)
-      setDeleteTarget(null)
-    }, 250)
-  }
+  // SaaS-STAGE-2A (Task 7-b) — the permanent-delete action is REMOVED from
+  // the principal UI entirely (fee_structure_delete is platform-reserved:
+  // ALWAYS false for school roles). Principals archive structures; the
+  // platform purges after the 30-day retention window.
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
@@ -438,18 +401,36 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
         </div>
         <div className="flex items-center gap-2">
           {/* SaaS-STAGE-1 — the ONLY catalogue entry point. Opens the full
-              content-area Catalogue Management view (no modal). */}
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={openCatalogue}>
-            <BookOpen className="h-3.5 w-3.5" /> Catalogue
-          </Button>
+              content-area Catalogue Management view (no modal).
+              SaaS-STAGE-2A (Task 7-b) — hidden (not disabled) unless the
+              school's config enables the fee_catalogue sub-feature AND the
+              principal holds fee_catalogue_manage. */}
+          {catalogueAvailable && (
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={openCatalogue}>
+              <BookOpen className="h-3.5 w-3.5" /> Catalogue
+            </Button>
+          )}
           {archivedCount > 0 && (
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowArchived((v) => !v)}>
               {showArchived ? 'Hide Archived' : `Archived (${archivedCount})`}
             </Button>
           )}
-          <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={openCreateDrawer}>
-            <Plus className="h-3.5 w-3.5" /> New Structure
-          </Button>
+          {/* SaaS-STAGE-2A (Task 7-b) — the primary CTA renders only when
+              the principal holds fee_structure_edit; when absent a muted
+              inline notice chip explains why (no disabled fake button). */}
+          {perms.fee_structure_edit ? (
+            <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={openCreateDrawer}>
+              <Plus className="h-3.5 w-3.5" /> New Structure
+            </Button>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-muted/40 px-2 py-1 text-[11px] leading-tight text-muted-foreground"
+              title="Enabled by the platform configuration for this school"
+            >
+              <Lock className="h-3 w-3 shrink-0" />
+              Fee structure editing is disabled for your school by the platform configuration
+            </span>
+          )}
         </div>
       </div>
 
@@ -500,6 +481,19 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
               ? `${h.name} ${formatINR(h.amount)}/mo`
               : `${h.name} ${formatINR(h.amount * (FREQUENCY_MULTIPLIER[h.frequency] ?? 1))}`)
             .join(' · ')
+          // SaaS-STAGE-2A (Task 7-b) — the same top-3 preview, rendered as
+          // inline items so OPTIONAL heads (mandatory === false, e.g. Books
+          // & Material / Uniform & Sports Kit) can carry a tiny muted
+          // "Optional" chip next to the head name. Never auto-billed.
+          const previewHeadItems = rankedPreviewHeads
+            .slice(0, 3)
+            .map((h) => ({
+              id: h.id,
+              label: h.frequency === 'Monthly'
+                ? `${h.name} ${formatINR(h.amount)}/mo`
+                : `${h.name} ${formatINR(h.amount * (FREQUENCY_MULTIPLIER[h.frequency] ?? 1))}`,
+              optional: h.mandatory === false,
+            }))
           // TASK 2-c — session exam fees summed across planned
           // examinations. An EMPTY examFeeSchedule (seeded on Class 6/7)
           // means intentionally unconfigured → muted "Not configured".
@@ -571,9 +565,26 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
               session exam fees. Every card renders all three lines so
               heights stay consistent. */}
           <div className="space-y-1 text-[10px] leading-relaxed min-h-[2rem]">
-            <p className="text-muted-foreground truncate" title={headsPreview || 'No active heads yet'}>
-              {headsPreview || 'No active heads yet'}
-            </p>
+            <div
+              className="flex items-center gap-x-1 gap-y-0.5 flex-wrap text-muted-foreground"
+              title={headsPreview || 'No active heads yet'}
+            >
+              {previewHeadItems.length === 0 ? (
+                <span>No active heads yet</span>
+              ) : (
+                previewHeadItems.map((item, idx) => (
+                  <span key={item.id} className="inline-flex items-center gap-1 min-w-0">
+                    {idx > 0 && <span className="text-muted-foreground/50">·</span>}
+                    <span className="truncate">{item.label}</span>
+                    {item.optional && (
+                      <span className="shrink-0 rounded bg-slate-500/10 px-1 py-px text-[10px] leading-4 font-medium text-slate-600 dark:text-slate-300">
+                        Optional
+                      </span>
+                    )}
+                  </span>
+                ))
+              )}
+            </div>
             <p className="flex items-center gap-1 text-muted-foreground truncate">
               <Calendar className="h-3 w-3 shrink-0" /> Effective from {formatDate(f.effectiveFrom)}
             </p>
@@ -615,13 +626,18 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
                 {/* PHASE 5 — Bulk Apply to Level. Creates draft
                     structures for every uncovered class in the
                     same level. Confirmation dialog shows the exact
-                    list of target classes before any mutation. */}
-                <DropdownMenuItem
-                  onClick={() => setBulkApplyOpen(f)}
-                  className="text-emerald-700 dark:text-emerald-300 focus:text-emerald-800"
-                >
-                  <GraduationCap className="h-3 w-3 mr-2" /> Bulk apply to {f.classLevel} level…
-                </DropdownMenuItem>
+                    list of target classes before any mutation.
+                    SaaS-STAGE-2A (Task 7-b) — hidden when the school's
+                    configuration disables fee_structure_edit (it creates
+                    drafts); the store enforces the same rule. */}
+                {perms.fee_structure_edit && (
+                  <DropdownMenuItem
+                    onClick={() => setBulkApplyOpen(f)}
+                    className="text-emerald-700 dark:text-emerald-300 focus:text-emerald-800"
+                  >
+                    <GraduationCap className="h-3 w-3 mr-2" /> Bulk apply to {f.classLevel} level…
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => handleArchive(f)}
@@ -629,12 +645,11 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
                 >
                   <Archive className="h-3 w-3 mr-2" /> Archive current version
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-rose-600 focus:text-rose-700"
-                  onClick={() => handleDelete(f)}
-                >
-                  <Trash2 className="h-3 w-3 mr-2" /> Delete structure…
-                </DropdownMenuItem>
+                {/* SaaS-STAGE-2A (Task 7-b) — the "Delete structure…" menu
+                    item is REMOVED for principals: permanent delete is
+                    platform-reserved (fee_structure_delete is ALWAYS false
+                    for school roles). Schools archive; the platform purges
+                    after the 30-day retention window. */}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -710,92 +725,9 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
         }}
       />
 
-      {/* Delete confirmation dialog (Fix 4 — FEE-CORRECT). */}
-      <AnimatePresence>
-        {deleteTarget && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => !deleteSubmitting && setDeleteTarget(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.96, opacity: 0, y: 8 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.96, opacity: 0, y: 8 }}
-              transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-              className="bg-card border border-border rounded-xl shadow-2xl max-w-md w-full overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="px-5 py-4 border-b border-border bg-rose-500/5">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 ring-1 ring-rose-500/20">
-                    <ShieldAlert className="h-4.5 w-4.5" />
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-bold truncate">Delete Fee Structure</h3>
-                    <p className="text-[11px] text-muted-foreground">High-impact, irreversible action</p>
-                  </div>
-                </div>
-              </div>
-              <div className="p-5 space-y-3">
-                <p className="text-[12px] leading-relaxed text-muted-foreground">
-                  You are about to permanently delete the structure
-                  <span className="font-semibold text-foreground"> {deleteTarget.className}</span>
-                  {' '}({deleteTarget.category} · {deleteTarget.classLevel}). All
-                  version snapshots for this structure will be removed.
-                </p>
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
-                  <p className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1.5 mb-1">
-                    <AlertTriangle className="h-3.5 w-3.5" /> What is preserved
-                  </p>
-                  <ul className="text-[10px] text-muted-foreground space-y-0.5 ml-5 list-disc">
-                    <li>Audit log entries (immutable record of the deletion)</li>
-                    <li>ChangeLog entries (financial history)</li>
-                    <li>Existing transactions, receipts, and concessions</li>
-                  </ul>
-                </div>
-                <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[11px]">
-                  <p className="font-semibold mb-0.5">Annual total at deletion:</p>
-                  <p className="font-mono tabular-nums text-rose-700 dark:text-rose-300">
-                    {formatINR(deleteTarget.annual, true)} · {deleteTarget.components.filter((c) => c.active).length} active heads
-                  </p>
-                </div>
-              </div>
-              <div className="border-t border-border bg-muted/30 px-5 py-3 flex items-center justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => setDeleteTarget(null)}
-                  disabled={deleteSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  className="h-8 text-xs gap-1.5"
-                  onClick={confirmDelete}
-                  disabled={deleteSubmitting}
-                >
-                  {deleteSubmitting ? (
-                    <>
-                      <span className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-                      Deleting…
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="h-3.5 w-3.5" /> Delete Structure
-                    </>
-                  )}
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* SaaS-STAGE-2A (Task 7-b) — the permanent-delete confirmation
+          dialog was removed with the "Delete structure…" menu item: the
+          capability is platform-reserved and the UI never offers it. */}
 
       {/* PHASE 5 — Bulk Apply to Level confirmation dialog. Shows the
           exact list of target classes (uncovered classes in the same

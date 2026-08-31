@@ -8,6 +8,9 @@ import { Bell, Menu, Plus, Globe, Radio, Megaphone } from 'lucide-react'
 import { useAuth } from '@/lib/store/auth-store'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { school } from '@/lib/mock/school'
+// SaaS-STAGE-2A — the shell footer reflects the ACTIVE TENANT's school
+// identity (falls back to the demo school profile for platform surfaces).
+import { useActiveTenant } from '@/lib/tenant/store'
 import { cn } from '@/lib/utils'
 import { formatINR } from '@/lib/format'
 import { notifications as initialNotifications } from '@/lib/mock/operations'
@@ -375,6 +378,8 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
                 role={role}
                 onNavigateSettings={() => { onNavigate('settings'); setProfileOpen(false) }}
                 onSwitchToStudent={() => { switchTo('student'); setProfileOpen(false) }}
+                // SaaS-STAGE-2A — super admins jump straight back to the control plane.
+                onOpenPlatform={role === 'superadmin' ? () => onNavigate('overview') : undefined}
                 onLogout={() => { setProfileOpen(false); logout() }}
               />
             </div>
@@ -388,7 +393,7 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
           <footer className="mt-8 pt-6 border-t border-border text-center text-[11px] text-muted-foreground/80 font-medium tracking-wide">
             <p>
               &copy; {new Date().getFullYear()} SCHOLARIO-OS &middot; Enterprise School ERP &middot;
-              <span className="text-primary/80 ml-1">{school.name}</span>
+              <span className="text-primary/80 ml-1"><FooterSchoolName fallback={school.name} /></span>
               &middot; All systems operational
             </p>
           </footer>
@@ -398,4 +403,15 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} onNavigate={onNavigate} />
     </div>
   )
+}
+
+/**
+ * SaaS-STAGE-2A — footer school identity: school panels show the ACTIVE
+ * tenant's school name; the platform control plane shows its own label.
+ */
+function FooterSchoolName({ fallback }: { fallback: string }) {
+  const role = useAuth((s) => s.user?.role)
+  const tenant = useActiveTenant()
+  if (role === 'superadmin') return 'Platform Control Plane'
+  return tenant?.name ?? fallback
 }

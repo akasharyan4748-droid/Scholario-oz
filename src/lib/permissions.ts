@@ -1,75 +1,112 @@
 /**
- * permissions — effective permission resolution (SaaS-STAGE-1 preparation).
+ * permissions — effective permission resolution (SaaS-STAGE-2A).
  *
  * The school UI must NEVER hard-code "who may edit/publish" — it consumes
- * the EFFECTIVE permissions derived from the school's configuration. Today
- * the school configuration itself is mock (Stage 5 wires the Super Admin
- * Feature/Permission management UI to it); the boundary is already the
- * production one:
+ * the EFFECTIVE permissions derived from the ACTIVE school's (tenant's)
+ * configuration:
  *
- *   school configuration (per-school overrides, Stage 5)
- *     → getEffectivePermissions(role, config)
- *       → UI gates (publish/archive/delete buttons disabled with reasons)
+ *   Super Admin (platform)
+ *     → school capability (tenant config, per school — see lib/tenant)
+ *       → getEffectivePermissions(role, tenantConfig)
+ *         → UI gates + STORE-ACTION guards (fee-store enforces these too)
  *
  * Keys follow the agreed capability vocabulary:
  *   fee_structure_edit / fee_structure_publish / fee_structure_archive /
- *   fee_structure_delete
+ *   fee_structure_delete / fee_catalogue_manage
  *
- * When publish is disabled for the viewer: drafts can still be edited and
- * saved, the publish action is unavailable, and historical versions remain
- * read-only — enforced in the Fee Structures UI via these flags.
+ * PLATFORM-RESERVED CAPABILITY: fee_structure_delete is ALWAYS false for
+ * school roles. Principals archive structures; permanent deletion belongs
+ * to the platform (retention expiry or Super Admin tooling). No school-side
+ * configuration can enable it — the guard here AND in the tenant store AND
+ * in the fee-store actions.
+ *
+ * When edit is disabled for the viewer: the structure is READ-ONLY (edit
+ * controls disabled AND store actions reject). When publish is disabled:
+ * drafts can still be EDITED and SAVED (if edit is on), but the publish
+ * action is unavailable, and historical versions remain read-only.
  */
 
-export type CapabilityKey =
-  | 'fee_structure_edit'
-  | 'fee_structure_publish'
-  | 'fee_structure_archive'
-  | 'fee_structure_delete'
-
+import type { CapabilityKey } from './tenant/types'
+export type { CapabilityKey }
+/** Effective permission record — one boolean per CapabilityKey. */
 export type EffectivePermissions = Record<CapabilityKey, boolean>
 
 export type PrincipalRole = 'principal' | 'teacher' | 'student' | 'superadmin'
 
-/** Per-school capability configuration (mock today — Stage 5 makes this
- *  tenant-specific and editable from the Super Admin platform). */
+/** Per-school capability configuration — fed from the ACTIVE tenant. */
 export interface SchoolPermissionConfig {
   capabilities?: Partial<Record<CapabilityKey, boolean>>
 }
 
-/** Default school configuration: the Principal holds the full fee-office
- *  capability set (demo-school baseline). */
-export const DEFAULT_SCHOOL_PERMISSIONS: SchoolPermissionConfig = {
-  capabilities: {
+const ALL_CAPABILITY_KEYS: CapabilityKey[] = [
+  'fee_structure_edit',
+  'fee_structure_publish',
+  'fee_structure_archive',
+  'fee_structure_delete',
+  'fee_catalogue_manage',
+]
+
+/**
+ * Role baselines. The school capability layer can only REMOVE capabilities
+ * from the principal baseline (explicit false wins) — it can never grant a
+ * capability the role does not hold, and it can never re-enable the
+ * platform-reserved permanent delete.
+ */
+const ROLE_BASE: Record<PrincipalRole, EffectivePermissions> = {
+  principal: {
     fee_structure_edit: true,
     fee_structure_publish: true,
     fee_structure_archive: true,
-    fee_structure_delete: true,
+    fee_structure_delete: false, // platform-reserved
+    fee_catalogue_manage: true,
   },
-}
-
-const ROLE_BASE: Record<PrincipalRole, EffectivePermissions> = {
-  principal: { fee_structure_edit: true, fee_structure_publish: true, fee_structure_archive: true, fee_structure_delete: true },
-  teacher: { fee_structure_edit: false, fee_structure_publish: false, fee_structure_archive: false, fee_structure_delete: false },
-  student: { fee_structure_edit: false, fee_structure_publish: false, fee_structure_archive: false, fee_structure_delete: false },
-  superadmin: { fee_structure_edit: true, fee_structure_publish: true, fee_structure_archive: true, fee_structure_delete: true },
+  teacher: {
+    fee_structure_edit: false,
+    fee_structure_publish: false,
+    fee_structure_archive: false,
+    fee_structure_delete: false,
+    fee_catalogue_manage: false,
+  },
+  student: {
+    fee_structure_edit: false,
+    fee_structure_publish: false,
+    fee_structure_archive: false,
+    fee_structure_delete: false,
+    fee_catalogue_manage: false,
+  },
+  superadmin: {
+    fee_structure_edit: true,
+    fee_structure_publish: true,
+    fee_structure_archive: true,
+    fee_structure_delete: true, // platform actor
+    fee_catalogue_manage: true,
+  },
 }
 
 /**
  * Resolve the effective permission set for a role under a school's
- * configuration. School-level overrides WIN over the role baseline
- * (explicit false keeps a capability off even for principals — that is
- * what makes "publish disabled" flows possible).
+ * (tenant's) configuration. School-level overrides WIN over the role
+ * baseline for school-grantable capabilities (explicit false keeps a
+ * capability off even for principals — that is what makes "read-only fee
+ * structures" possible).
  */
 export function getEffectivePermissions(
   role: PrincipalRole,
-  config: SchoolPermissionConfig = DEFAULT_SCHOOL_PERMISSIONS,
+  config: SchoolPermissionConfig = {},
 ): EffectivePermissions {
   const base = ROLE_BASE[role] ?? ROLE_BASE.student
   const caps = config.capabilities ?? {}
-  return {
-    fee_structure_edit: base.fee_structure_edit && caps.fee_structure_edit !== false,
-    fee_structure_publish: base.fee_structure_publish && caps.fee_structure_publish !== false,
-    fee_structure_archive: base.fee_structure_archive && caps.fee_structure_archive !== false,
-    fee_structure_delete: base.fee_structure_delete && caps.fee_structure_delete !== false,
+  const out = {} as EffectivePermissions
+  for (const key of ALL_CAPABILITY_KEYS) {
+    if (key === 'fee_structure_delete') {
+      // Platform-reserved: false for every school role regardless of config.
+      out[key] = base[key] === true && role === 'superadmin'
+      continue
+    }
+    out[key] = base[key] === true && caps[key] !== false
   }
+  return out
 }
+
+/** Back-compat default (demo school baseline) — prefer the tenant hook. */
+export const DEFAULT_SCHOOL_PERMISSIONS: SchoolPermissionConfig = {}

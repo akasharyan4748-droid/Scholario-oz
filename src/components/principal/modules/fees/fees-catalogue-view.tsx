@@ -24,7 +24,7 @@
 import { useMemo, useState } from 'react'
 import {
   ArrowLeft, Plus, Search, Pencil, Archive, ArchiveRestore,
-  BookOpen, Layers, ShieldCheck,
+  BookOpen, Layers, ShieldCheck, Lock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -43,6 +43,12 @@ import {
 import type { FeeHeadConfig, FeeHeadKind } from '@/lib/store/school-settings-store/types'
 import { useFeeData } from '@/lib/store/fee-store'
 import { useAcademicSession } from '@/lib/academic-session'
+// SaaS-STAGE-2A (Task 7-b) — the catalogue view is writable only when the
+// ACTIVE school's config grants fee_catalogue_manage; otherwise it renders
+// READ-ONLY (heads list without the New Head / Edit / Archive-Restore
+// actions, plus a slim notice). The store CRUD actions enforce the same
+// capability at action time.
+import { useEffectiveFeeCapabilities } from '@/lib/tenant/store'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
@@ -54,8 +60,11 @@ import { toast } from 'sonner'
 
 const HEAD_TYPES = CATEGORY_ORDER // Tuition / Admission / Annual / Transport / Lab / Library / Exam / Activity / Board / Other
 
+// SaaS-STAGE-2A §4 — 'Per-Exam' is the EXAMINATION-head frequency: the
+// charge applies once per conducted exam of the mapped exam type (never
+// ×12). Rendered as a normal frequency option + badge.
 const FREQUENCIES: FeeHeadConfig['frequency'][] = [
-  'Monthly', 'Quarterly', 'Half-Yearly', 'Per Term', 'Term', 'Annual', 'One-Time',
+  'Monthly', 'Quarterly', 'Half-Yearly', 'Per Term', 'Term', 'Annual', 'One-Time', 'Per-Exam',
 ]
 
 const KINDS: FeeHeadKind[] = ['CORE', 'EXAMINATION', 'ADDITIONAL']
@@ -72,6 +81,10 @@ export function FeesCatalogueView({ onBack }: Props) {
   const restoreFeeHead = useSchoolSettingsStore((s) => s.restoreFeeHead)
   const { feeStructures } = useFeeData()
   const session = useAcademicSession()
+  // SaaS-STAGE-2A (Task 7-b) — write access follows the ACTIVE school's
+  // effective capabilities (fee_catalogue_manage). Read-only otherwise.
+  const perms = useEffectiveFeeCapabilities()
+  const canManage = perms.fee_catalogue_manage
 
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<'All' | string>('All')
@@ -141,10 +154,27 @@ export function FeesCatalogueView({ onBack }: Props) {
             </p>
           </div>
         </div>
-        <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={openCreate}>
-          <Plus className="h-3.5 w-3.5" /> New Head
-        </Button>
+        {/* SaaS-STAGE-2A (Task 7-b) — "+ New Head" stays VISIBLE and fully
+            rendered whenever the school may manage the catalogue; hidden
+            (not disabled) in read-only mode. */}
+        {canManage && (
+          <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={openCreate}>
+            <Plus className="h-3.5 w-3.5" /> New Head
+          </Button>
+        )}
       </div>
+
+      {/* SaaS-STAGE-2A (Task 7-b) — READ-ONLY notice: the catalogue is
+          browsable for everyone, but management actions require
+          fee_catalogue_manage. Slim — never a banner. */}
+      {!canManage && (
+        <div className="rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5 flex items-start gap-2" data-testid="fee-catalogue-readonly-notice">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground">Read-only</span> — catalogue management is disabled for your school by the platform configuration
+          </p>
+        </div>
+      )}
 
       {/* ── Search + compact category filters + archived toggle ── */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -201,7 +231,18 @@ export function FeesCatalogueView({ onBack }: Props) {
                 return (
                   <tr key={h.id} className={cn('border-t border-border/30 hover:bg-muted/30 transition-colors', h.archived && 'opacity-70')}>
                     <td className="px-3 py-2.5 max-w-[260px]">
-                      <p className="font-medium leading-tight truncate" title={h.name}>{h.name}</p>
+                      <p className="font-medium leading-tight truncate flex items-center gap-1.5" title={h.name}>
+                        <span className="truncate">{h.name}</span>
+                        {/* SaaS-STAGE-2A (Task 7-b) — OPTIONAL heads
+                            (mandatory === false) are never auto-billed to
+                            every student; per-student applicability applies
+                            later. Tiny muted chip keeps rows compact. */}
+                        {h.mandatory === false && (
+                          <span className="shrink-0 rounded bg-slate-500/10 px-1 py-px text-[10px] leading-4 font-medium text-slate-600 dark:text-slate-300">
+                            Optional
+                          </span>
+                        )}
+                      </p>
                       {h.description && (
                         <p className="text-[10px] text-muted-foreground truncate mt-0.5" title={h.description}>{h.description}</p>
                       )}
@@ -228,35 +269,39 @@ export function FeesCatalogueView({ onBack }: Props) {
                       </span>
                     </td>
                     <td className="pl-3 pr-4 py-2.5 text-right">
-                      <div className="inline-flex items-center gap-0.5">
-                        <button
-                          onClick={() => openEdit(h)}
-                          className="inline-flex items-center justify-center h-6 w-6 rounded text-primary hover:bg-primary/10 transition-colors"
-                          title="Edit defaults"
-                          aria-label={`Edit ${h.name}`}
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                        {h.archived ? (
+                      {/* SaaS-STAGE-2A (Task 7-b) — row actions are hidden in
+                          read-only mode (fee_catalogue_manage off). */}
+                      {canManage && (
+                        <div className="inline-flex items-center gap-0.5">
                           <button
-                            onClick={() => { restoreFeeHead(h.id); toast.success('Head restored', { description: `${h.name} is pickable again.` }) }}
-                            className="inline-flex items-center justify-center h-6 w-6 rounded text-emerald-600 hover:bg-emerald-500/10 transition-colors"
-                            title="Restore head"
-                            aria-label={`Restore ${h.name}`}
+                            onClick={() => openEdit(h)}
+                            className="inline-flex items-center justify-center h-6 w-6 rounded text-primary hover:bg-primary/10 transition-colors"
+                            title="Edit defaults"
+                            aria-label={`Edit ${h.name}`}
                           >
-                            <ArchiveRestore className="h-3 w-3" />
+                            <Pencil className="h-3 w-3" />
                           </button>
-                        ) : (
-                          <button
-                            onClick={() => { archiveFeeHead(h.id); toast.info('Head archived', { description: `${h.name} hidden from new picks — existing structures keep their snapshot.` }) }}
-                            className="inline-flex items-center justify-center h-6 w-6 rounded text-amber-600 hover:bg-amber-500/10 transition-colors"
-                            title="Archive head (existing structures keep their snapshot)"
-                            aria-label={`Archive ${h.name}`}
-                          >
-                            <Archive className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
+                          {h.archived ? (
+                            <button
+                              onClick={() => { restoreFeeHead(h.id); toast.success('Head restored', { description: `${h.name} is pickable again.` }) }}
+                              className="inline-flex items-center justify-center h-6 w-6 rounded text-emerald-600 hover:bg-emerald-500/10 transition-colors"
+                              title="Restore head"
+                              aria-label={`Restore ${h.name}`}
+                            >
+                              <ArchiveRestore className="h-3 w-3" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => { archiveFeeHead(h.id); toast.info('Head archived', { description: `${h.name} hidden from new picks — existing structures keep their snapshot.` }) }}
+                              className="inline-flex items-center justify-center h-6 w-6 rounded text-amber-600 hover:bg-amber-500/10 transition-colors"
+                              title="Archive head (existing structures keep their snapshot)"
+                              aria-label={`Archive ${h.name}`}
+                            >
+                              <Archive className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )
@@ -268,7 +313,7 @@ export function FeesCatalogueView({ onBack }: Props) {
                       icon={<Layers className="h-6 w-6" />}
                       title="No heads match"
                       description={search || categoryFilter !== 'All' ? 'Try adjusting the search or category filter.' : 'Create the first catalogue head with “New Head”.'}
-                      action={feeHeads.length === 0 ? (
+                      action={feeHeads.length === 0 && canManage ? (
                         <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={openCreate}>
                           <Plus className="h-3.5 w-3.5" /> New Head
                         </Button>
@@ -320,6 +365,9 @@ interface EditorPatch {
   description?: string
   isTaxable?: boolean
   taxRate?: number
+  /** SaaS-STAGE-2A (Task 7-b) — applicability template: optional heads
+   *  (mandatory=false) are never auto-billed to every student. */
+  mandatory?: boolean
 }
 
 function FeeHeadEditorDialog({
@@ -338,6 +386,9 @@ function FeeHeadEditorDialog({
   const [description, setDescription] = useState('')
   const [taxable, setTaxable] = useState(false)
   const [taxRate, setTaxRate] = useState('18')
+  // SaaS-STAGE-2A (Task 7-b) — Mandatory/Optional applicability. Optional
+  // heads (Books, Uniform…) are never auto-billed to every student.
+  const [mandatory, setMandatory] = useState(true)
   const [formKey, setFormKey] = useState(0)
 
   // Re-seed the form whenever the dialog opens (create vs edit target).
@@ -352,6 +403,7 @@ function FeeHeadEditorDialog({
     setDescription(editing?.description ?? '')
     setTaxable(editing?.isTaxable ?? false)
     setTaxRate(String(editing?.taxRate ?? 18))
+    setMandatory(editing?.mandatory ?? true)
     setFormKey((k) => k + 1)
   } else if (!open && wasOpen) {
     setWasOpen(false)
@@ -371,6 +423,7 @@ function FeeHeadEditorDialog({
       description: description.trim() || undefined,
       isTaxable: taxable,
       taxRate: taxable ? Number(taxRate) || 18 : undefined,
+      mandatory,
     })
   }
 
@@ -442,6 +495,43 @@ function FeeHeadEditorDialog({
           <div>
             <Label className="text-[11px]">Description (optional)</Label>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Shown in the picker to guide selection" className="h-8 text-xs mt-1" />
+          </div>
+          {/* SaaS-STAGE-2A (Task 7-b) — Mandatory/Optional applicability
+              template. Bound to `mandatory` and persisted via the existing
+              add/update actions. */}
+          <div>
+            <Label className="text-[11px]">Applicability</Label>
+            <div className="grid grid-cols-2 gap-1.5 mt-1 rounded-md border border-border bg-muted/30 p-1">
+              <button
+                type="button"
+                onClick={() => setMandatory(true)}
+                aria-pressed={mandatory}
+                className={cn(
+                  'h-7 rounded text-[11px] font-medium transition-colors',
+                  mandatory
+                    ? 'bg-card shadow-sm text-foreground ring-1 ring-border'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Mandatory
+              </button>
+              <button
+                type="button"
+                onClick={() => setMandatory(false)}
+                aria-pressed={!mandatory}
+                className={cn(
+                  'h-7 rounded text-[11px] font-medium transition-colors',
+                  !mandatory
+                    ? 'bg-card shadow-sm text-foreground ring-1 ring-border'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Optional
+              </button>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
+              Optional heads (Books, Uniform…) are never auto-billed to every student — per-student applicability applies later.
+            </p>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
             <div>

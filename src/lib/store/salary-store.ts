@@ -22,9 +22,12 @@
  */
 
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { persist } from 'zustand/middleware'
 import { useMemo } from 'react'
 import { teachers } from '@/lib/mock/teachers'
+// SaaS-STAGE-2A — tenant-scoped persistence (per-school payroll dataset).
+import { migrateLegacyScopedStore, createTenantScopedStorage, TENANT_SCOPED_BASES } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -871,6 +874,10 @@ interface SalaryState {
   archiveSession: (sessionId: string, actor?: string) => SessionPayrollArchive
 }
 
+// SaaS-STAGE-2A — one-time legacy copy into the demo school's namespace
+// (before store creation / hydration).
+migrateLegacyScopedStore(TENANT_SCOPED_BASES.salary, DEFAULT_TENANT_ID)
+
 export const useSalaryStore = create<SalaryState>()(
   persist(
     (set, get) => {
@@ -1208,7 +1215,9 @@ export const useSalaryStore = create<SalaryState>()(
     },
     {
       name: 'scholario-salary-v3',
-      storage: createJSONStorage(() => localStorage),
+      // SaaS-STAGE-2A — tenant-scoped: each school has its own payroll
+      // dataset (structures, salaries, payments, receipts, audit).
+      storage: createTenantScopedStorage(TENANT_SCOPED_BASES.salary),
       partialize: (st) => ({
         structures: st.structures,
         salaries: st.salaries,

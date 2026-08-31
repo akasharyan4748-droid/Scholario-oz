@@ -22,7 +22,7 @@
  * All numbers derive from the canonical useFeeData() hook.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs, type SegmentedTab } from '../shared/segmented-tabs'
@@ -30,6 +30,12 @@ import { useFeeData } from '@/lib/store/fee-store'
 import { useFocusStore } from '@/lib/store/focus-store'
 import { toast } from 'sonner'
 import { school } from '@/lib/mock/school'
+// SaaS-STAGE-2A (Task 7-b) — tenant-aware feature gating: the tab list is
+// FILTERED by the ACTIVE school's sub-feature configuration. Overview /
+// Payments / Student Accounts are always present (core operations); the
+// store already enforces every capability — these gates are the
+// convenience layer so disabled surfaces are simply not reachable.
+import { useFeatureGate } from '@/lib/tenant/store'
 import type { FeeTab } from './fees-shared'
 import { FeesOverviewSection } from './fees-overview'
 import { FeesStudentAccountsSection } from './fees-student-accounts'
@@ -38,10 +44,6 @@ import { PaymentsSection } from './payments/payments-section'
 import { FeesTransactionsSection } from './fees-transactions'
 import { FeesSettingsSection } from './fees-settings'
 import { CollectPaymentModal } from './fees-collect-payment'
-
-// Static tab values used for keyboard-shortcut mapping (1–6 → tab index).
-// MUST mirror the display order of the `tabs` array below.
-const TAB_VALUES: FeeTab[] = ['overview', 'payments', 'transactions', 'accounts', 'structures', 'settings']
 
 export function FeesShell({ onNavigate }: { onNavigate?: (moduleKey: string) => void }) {
   const [tab, setTab] = useState<FeeTab>('overview')
@@ -71,16 +73,42 @@ export function FeesShell({ onNavigate }: { onNavigate?: (moduleKey: string) => 
   // actionable queue (cash collections awaiting verification).
   const pendingVerification = data.analytics.pendingCashRequests
 
+  // SaaS-STAGE-2A (Task 7-b) — tenant-aware sub-feature gates for the tab
+  // list. Overview / Payments / Student Accounts are ALWAYS present (core
+  // operations; payments includes cash verification). Transactions, Fee
+  // Structures and Settings render only when the ACTIVE school's platform
+  // configuration enables their sub-features.
+  const gate = useFeatureGate()
+  const showTransactions = gate.isSubFeatureEnabled('fee_transactions')
+  const showStructures = gate.isSubFeatureEnabled('fee_structures')
+  const showSettings = gate.isSubFeatureEnabled('receipt_templates')
+
   // Primary navigation ORDER everywhere the tab bar renders:
   // Overview → Payments → Transactions → Student Accounts → Fee Structures → Settings
-  const tabs: SegmentedTab[] = [
-    { value: 'overview', label: 'Overview' },
-    { value: 'payments', label: 'Payments', badge: pendingVerification > 0 ? pendingVerification : undefined },
-    { value: 'transactions', label: 'Transactions' },
-    { value: 'accounts', label: 'Student Accounts' },
-    { value: 'structures', label: 'Fee Structures' },
-    { value: 'settings', label: 'Settings' },
-  ]
+  // (Transactions / Fee Structures / Settings are gated per tenant — the
+  // filtered list drives BOTH the tab bar and the keyboard shortcuts.)
+  const tabs: SegmentedTab[] = useMemo(() => {
+    const list: SegmentedTab[] = [
+      { value: 'overview', label: 'Overview' },
+      { value: 'payments', label: 'Payments', badge: pendingVerification > 0 ? pendingVerification : undefined },
+    ]
+    if (showTransactions) list.push({ value: 'transactions', label: 'Transactions' })
+    list.push({ value: 'accounts', label: 'Student Accounts' })
+    if (showStructures) list.push({ value: 'structures', label: 'Fee Structures' })
+    if (showSettings) list.push({ value: 'settings', label: 'Settings' })
+    return list
+  }, [pendingVerification, showTransactions, showStructures, showSettings])
+
+  // Keyboard-shortcut mapping (1-6 → tab index) FOLLOWS the FILTERED tab
+  // list, so a hidden tab can never be focused by its old shortcut.
+  const tabValues = useMemo(() => tabs.map((t) => t.value) as FeeTab[], [tabs])
+
+  // If the CURRENT tab becomes disabled by a configuration change (e.g.
+  // the platform turned a sub-feature off for this school), fall back to
+  // 'overview' — never leave the user on an orphaned tab.
+  useEffect(() => {
+    if (!tabValues.includes(tab)) setTab('overview')
+  }, [tabValues, tab])
 
   // Keyboard shortcuts: 1-6 switch tabs (kept for power users, not displayed).
   useEffect(() => {
@@ -90,15 +118,16 @@ export function FeesShell({ onNavigate }: { onNavigate?: (moduleKey: string) => 
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key >= '1' && e.key <= '6') {
         const idx = Number(e.key) - 1
-        if (idx < TAB_VALUES.length) {
+        // Guard: the index must resolve inside the FILTERED list.
+        if (idx >= 0 && idx < tabValues.length) {
           e.preventDefault()
-          setTab(TAB_VALUES[idx])
+          setTab(tabValues[idx])
         }
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [])
+  }, [tabValues])
 
   const openCollect = (studentId?: string) => {
     setPreselectStudentId(studentId)

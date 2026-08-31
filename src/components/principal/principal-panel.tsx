@@ -11,6 +11,11 @@ import { AppShell, type NavGroup } from '@/components/shell/app-shell'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { useAdmissionStore } from '@/lib/store/admission-store'
 import { ensureApplicationSeedData } from '@/lib/store/applications-store'
+// SaaS-STAGE-2A — TENANT MODULE GATING (single choke point). The nav is
+// filtered through the ACTIVE school's module flags via the canonical
+// PRINCIPAL_NAV_MODULE_KEYS map — no scattered school conditionals.
+import { useFeatureGate } from '@/lib/tenant/store'
+import { PRINCIPAL_NAV_MODULE_KEYS } from '@/lib/tenant/registry'
 
 
 import { PrincipalDashboard } from './modules/dashboard'
@@ -124,6 +129,7 @@ const navGroups: NavGroup[] = [
 export function PrincipalPanel() {
   const [active, setActive] = useState('dashboard')
   const alertCount = useLiveAlerts((s) => s.alerts.length)
+  const { isModuleEnabled } = useFeatureGate()
   const pendingAdmissions = useAdmissionStore((s) =>
     s.applications.filter((a) =>
       a.status === 'Submitted' || a.status === 'Under Review' || a.status === 'Need Correction'
@@ -133,15 +139,34 @@ export function PrincipalPanel() {
   // Seed applications demo data once per session (idempotent).
   useEffect(() => { ensureApplicationSeedData() }, [])
 
-  const groups: NavGroup[] = useMemo(() => navGroups.map((g) => {
-    if (g.label === 'Overview') {
-      return { ...g, items: g.items.map((item) => item.key === 'dashboard' ? { ...item, badge: alertCount > 0 ? alertCount : undefined } : item) }
-    }
-    if (g.label === 'Academics') {
-      return { ...g, items: g.items.map((item) => item.key === 'admission' ? { ...item, badge: pendingAdmissions > 0 ? pendingAdmissions : undefined } : item) }
-    }
-    return g
-  }), [alertCount, pendingAdmissions])
+  const groups: NavGroup[] = useMemo(() => navGroups
+    // SaaS-STAGE-2A — drop nav items whose module is disabled for the
+    // ACTIVE school (e.g. Examinations OFF for a school, Transport OFF for
+    // another). Dashboard/Settings are always available.
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((item) => {
+        const moduleKey = PRINCIPAL_NAV_MODULE_KEYS[item.key]
+        return !moduleKey || isModuleEnabled(moduleKey)
+      }),
+    }))
+    .map((g) => {
+      if (g.label === 'Overview') {
+        return { ...g, items: g.items.map((item) => item.key === 'dashboard' ? { ...item, badge: alertCount > 0 ? alertCount : undefined } : item) }
+      }
+      if (g.label === 'Academics') {
+        return { ...g, items: g.items.map((item) => item.key === 'admission' ? { ...item, badge: pendingAdmissions > 0 ? pendingAdmissions : undefined } : item) }
+      }
+      return g
+    }), [alertCount, pendingAdmissions, isModuleEnabled])
+
+  // If the active module gets disabled while viewing it (platform toggle
+  // + tenant switch), fall back to the dashboard — never render a module
+  // the school doesn't have.
+  useEffect(() => {
+    const moduleKey = PRINCIPAL_NAV_MODULE_KEYS[active]
+    if (moduleKey && !isModuleEnabled(moduleKey)) setActive('dashboard')
+  }, [active, isModuleEnabled])
 
   const ActiveModule = moduleRegistry[active] ?? PrincipalDashboard
 

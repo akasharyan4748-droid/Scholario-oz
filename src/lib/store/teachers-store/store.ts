@@ -11,6 +11,11 @@ import { createPositionsSlice } from './slices/positions-slice'
 import { createWorkloadSlice } from './slices/workload-slice'
 import { createCredentialsSlice } from './slices/credentials-slice'
 import { createPayrollSlice } from './slices/payroll-slice'
+// SaaS-STAGE-2A — tenant-scoped persistence (per-school staff dataset).
+import { migrateLegacyScopedStore, createTenantScopedStorage, TENANT_SCOPED_BASES } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+migrateLegacyScopedStore(TENANT_SCOPED_BASES.teachers, DEFAULT_TENANT_ID)
 
 export const useTeachersStore = create<TeachersStoreState>()(
   persist(
@@ -25,7 +30,8 @@ export const useTeachersStore = create<TeachersStoreState>()(
       ...createPayrollSlice(...a),
     }),
     {
-      name: 'gws-teachers-lifecycle-store',
+      name: TENANT_SCOPED_BASES.teachers,
+      storage: createTenantScopedStorage(TENANT_SCOPED_BASES.teachers),
     }
   )
 )

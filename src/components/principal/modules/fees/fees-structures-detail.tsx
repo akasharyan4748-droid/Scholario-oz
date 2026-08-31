@@ -33,7 +33,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Pencil, Plus, History, Copy, Trash2, X, Check,
   Layers, Calendar, User, RotateCcw, Archive, FileText, AlertCircle,
-  CheckCircle2, Save, Sparkles, ShieldAlert, AlertTriangle, Award, Lock,
+  CheckCircle2, Save, Sparkles, ShieldAlert, Award, Lock,
   CalendarCheck2,
   // PHASE 7 — Re-link from catalogue row action icons.
   Link2, Link2Off, Search, ChevronDown,
@@ -71,8 +71,11 @@ import { VersionStatusPill } from './fees-structures-shared'
 // SaaS-STAGE-1 — the active academic session is DERIVED (read-only) and
 // effective permissions come from the school configuration (never
 // hard-coded role checks in the UI).
+// SaaS-STAGE-2A (Task 7-b) — permissions now resolve from the ACTIVE
+// TENANT's config via useEffectiveFeeCapabilities (per-school capability
+// gating); getEffectivePermissions('principal') without a config is gone.
 import { useAcademicSession } from '@/lib/academic-session'
-import { getEffectivePermissions } from '@/lib/permissions'
+import { useEffectiveFeeCapabilities } from '@/lib/tenant/store'
 // Canonical monetary input — permanently fixes the leading-zero bug
 // (select-all-and-type, paste, clearing, leading "04…") on every amount
 // field in this editor.
@@ -168,7 +171,6 @@ function DetailDrawerInner({
   open,
   structure,
   onClose,
-  onStructureDeleted,
   onCreated,
   onNavigate,
   isCreateMode,
@@ -180,8 +182,6 @@ function DetailDrawerInner({
   const archiveFeeStructureVersion = useFeeStore((s) => s.archiveFeeStructureVersion)
   const revertFeeStructureVersion = useFeeStore((s) => s.revertFeeStructureVersion)
   const createFeeStructure = useFeeStore((s) => s.createFeeStructure)
-  // Fix 4 (FEE-CORRECT): wire the new deleteFeeStructure mutation.
-  const deleteFeeStructure = useFeeStore((s) => s.deleteFeeStructure)
   // STRUCT-REV — controlled mid-session revision workflow.
   const structureEditWindow = useFeeStore((s) => s.structureEditWindow)
   const structureRevisions = useFeeStore((s) => s.structureRevisions)
@@ -195,9 +195,14 @@ function DetailDrawerInner({
   const { types: examTypeDefs, loading: examTypesLoading } = useExamTypeDefinitions()
   // SaaS-STAGE-1 — session is DERIVED (read-only) and permissions come
   // from the school configuration. Publish-disabled schools can still
-  // edit + save drafts; publish/archive/delete actions are gated below.
+  // edit + save drafts; publish/archive actions are gated below.
+  // SaaS-STAGE-2A (Task 7-b) — resolved per ACTIVE tenant; when
+  // fee_structure_edit is off the whole editor is READ-ONLY, and
+  // fee_structure_delete is ALWAYS false for principals (platform-reserved:
+  // the permanent-delete UI has been removed entirely).
   const session = useAcademicSession()
-  const perms = getEffectivePermissions('principal')
+  const perms = useEffectiveFeeCapabilities()
+  const canEdit = perms.fee_structure_edit
   // PHASE 7 — Re-link from catalogue row action. Wires the existing
   // `linkHeadToCatalogue` store action (added in Phase 6 for the
   // Normalize drawer) to a compact per-row popover trigger in the
@@ -226,9 +231,6 @@ function DetailDrawerInner({
   // Dialogs
   const [confirmMode, setConfirmMode] = useState<'publish' | 'schedule' | 'revision' | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
-  // Fix 4 (FEE-CORRECT): delete confirmation dialog state.
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   // FEE-PER-CLASS — create-mode form state. Only used when
   // `isCreateMode=true`. The drawer opens with a blank template; the
@@ -284,7 +286,6 @@ function DetailDrawerInner({
       setShowAddExamFee(false)
       setConfirmMode(null)
       setHistoryOpen(false)
-      setDeleteOpen(false)
       // FEE-PER-CLASS — reset the create-mode form whenever the drawer
       // opens (or re-opens) in create mode. Defaults: empty class id
       // (the inline select shows its placeholder "Select class"), empty
@@ -298,43 +299,13 @@ function DetailDrawerInner({
     }
   }, [open, structure.id, isCreateMode])
 
-  // Fix 4 (FEE-CORRECT): delete handler. The store mutation enforces the
-  // published / financial-record safeguards — we just relay the result
-  // back to the user via toast and close the drawer on success.
-  const handleDelete = () => {
-    // Quick pre-flight: refuse to open the dialog for CURRENT / SCHEDULED.
-    if (currentVersion) {
-      toast.error('Cannot delete a published structure', {
-        description: 'Archive the current version instead — published structures affect live student accounts.',
-      })
-      return
-    }
-    if (scheduledVersions.length > 0) {
-      toast.error('Cannot delete — scheduled version exists', {
-        description: 'Cancel all scheduled versions first (use the pending versions panel below).',
-      })
-      return
-    }
-    setDeleteOpen(true)
-  }
-
-  const confirmDelete = () => {
-    setDeleteSubmitting(true)
-    setTimeout(() => {
-      const result = deleteFeeStructure(structure.id, 'Principal')
-      setDeleteSubmitting(false)
-      if (!result.success) {
-        toast.error('Delete failed', { description: result.error })
-        return
-      }
-      toast.success('Structure deleted', {
-        description: `${structure.className} was removed. Financial records and audit history preserved.`,
-      })
-      setDeleteOpen(false)
-      onStructureDeleted?.(structure.id)
-      onClose()
-    }, 250)
-  }
+  // SaaS-STAGE-2A (Task 7-b) — the permanent-delete action is REMOVED from
+  // the principal UI (fee_structure_delete is ALWAYS false for school
+  // roles; the store denies it at action time too). handleDelete /
+  // confirmDelete / the delete confirmation dialog are gone; the quick
+  // action bar carries a disabled "Permanent delete · Platform reserved"
+  // row instead. `onStructureDeleted` stays in the props contract for the
+  // platform-actor path but is no longer invoked from this UI.
 
   // Versions for this structure (newest first)
   const structureVersions = useMemo(() => {
@@ -401,6 +372,9 @@ function DetailDrawerInner({
   // ─── Actions ───────────────────────────────────────────────────
 
   const handleStartEdit = () => {
+    // SaaS-STAGE-2A (Task 7-b) — read-only when the school's configuration
+    // disables fee_structure_edit (the store rejects the write anyway).
+    if (!perms.fee_structure_edit) return
     setWorkingHeads(structure.components.map((h) => ({ ...h })))
     setWorkingExamSchedule((structure.examFeeSchedule ?? []).map((e) => ({ ...e })))
     setEditing(true)
@@ -420,6 +394,14 @@ function DetailDrawerInner({
   // STRUCT-REV (PART 10) — open the temporary editing window with a clear
   // explanation of WHY the structure is locked.
   const handleRequestEdit = () => {
+    // SaaS-STAGE-2A (Task 7-b) — the temporary editing window is an EDIT
+    // capability: never open it when fee_structure_edit is disabled.
+    if (!perms.fee_structure_edit) {
+      toast.error('Read-only', {
+        description: 'Fee structure editing is disabled for your school by the platform configuration.',
+      })
+      return
+    }
     const res = requestStructureEditWindow(structure.id, 'Principal')
     if (!res.success) {
       toast.error('Cannot open editing window', { description: res.error })
@@ -928,16 +910,26 @@ function DetailDrawerInner({
                   {isLockedCurrent && !liveEditWindow.live ? (
                     // PART 8/10 — published current-session structure: no
                     // unrestricted Edit. Request a temporary window instead.
+                    // SaaS-STAGE-2A (Task 7-b) — disabled when the school's
+                    // configuration makes the editor read-only.
                     <Button
                       size="sm" variant="ghost"
                       className="h-7 text-xs gap-1 text-amber-600 hover:bg-amber-500/10"
                       onClick={handleRequestEdit}
-                      title="Current fee structure is locked because it is already active for students"
+                      disabled={!canEdit}
+                      title={!canEdit
+                        ? 'Read-only — fee structure editing is disabled for your school by the platform configuration'
+                        : 'Current fee structure is locked because it is already active for students'}
                     >
                       <ShieldAlert className="h-3 w-3" /> Request Edit
                     </Button>
                   ) : (
-                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={handleStartEdit}>
+                    <Button
+                      size="sm" variant="ghost" className="h-7 text-xs gap-1"
+                      onClick={handleStartEdit}
+                      disabled={!canEdit}
+                      title={!canEdit ? 'Read-only — fee structure editing is disabled for your school by the platform configuration' : 'Edit heads and amounts'}
+                    >
                       <Pencil className="h-3 w-3" /> Edit
                     </Button>
                   )}
@@ -967,17 +959,19 @@ function DetailDrawerInner({
                       <Archive className="h-3 w-3" /> Archive
                     </Button>
                   )}
+                  {/* SaaS-STAGE-2A (Task 7-b) — the permanent-delete button
+                      is REPLACED by a disabled platform-reserved row:
+                      fee_structure_delete is ALWAYS false for principals —
+                      schools archive; the platform purges after the 30-day
+                      retention window. */}
                   <Button
                     size="sm"
                     variant="ghost"
-                    className={cn('h-7 text-xs gap-1 ml-auto', currentVersion ? 'text-muted-foreground/60' : 'text-rose-600 hover:bg-rose-500/10')}
-                    onClick={handleDelete}
-                    disabled={!perms.fee_structure_delete}
-                    title={!perms.fee_structure_delete
-                      ? 'Deleting is disabled for your role by the school configuration'
-                      : currentVersion ? 'Cannot delete a published structure — archive instead' : 'Delete this structure'}
+                    className="h-7 text-xs gap-1 ml-auto text-muted-foreground/60 cursor-not-allowed"
+                    disabled
+                    title="Principals archive structures; the platform purges after the 30-day retention window"
                   >
-                    <Trash2 className="h-3 w-3" /> Delete
+                    <Lock className="h-3 w-3" /> Permanent delete · Platform reserved
                   </Button>
                   {scheduledVersions.length > 0 && (
                     <Badge variant="outline" className="text-[9px] h-5 gap-1 ml-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20">
@@ -1022,6 +1016,18 @@ function DetailDrawerInner({
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {/* SaaS-STAGE-2A (Task 7-b) — READ-ONLY notice: when the school's
+                platform configuration disables fee_structure_edit, the whole
+                editing area is inert. Slim, never a banner. */}
+            {!canEdit && (
+              <div className="rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5 flex items-start gap-2">
+                <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  <span className="font-medium text-foreground">Read-only</span> — fee structure editing is disabled for your school by the platform configuration
+                </p>
+              </div>
+            )}
+
             {/* Validation banner */}
             {editing && validationIssues.length > 0 && (
               <div className="rounded-md border border-rose-500/30 bg-rose-500/5 px-2.5 py-1.5 flex items-start gap-2">
@@ -1100,7 +1106,7 @@ function DetailDrawerInner({
                   <FileText className="h-3 w-3" /> Fee Heads
                   <Badge variant="outline" className="text-[9px] h-4 px-1 ml-1">{workingHeads.length}</Badge>
                 </p>
-                {editing && (
+                {editing && canEdit && (
                   <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => setShowAddHead(true)}>
                     <Plus className="h-3 w-3" /> Add Head
                   </Button>
@@ -1128,6 +1134,9 @@ function DetailDrawerInner({
                         key={h.id}
                         head={h}
                         editing={editing}
+                        // SaaS-STAGE-2A (Task 7-b) — read-only editor when
+                        // the school's configuration disables editing.
+                        locked={!canEdit}
                         onChange={(patch) => updateWorkingHead(h.id, patch)}
                         onRemove={() => removeWorkingHead(h.id)}
                         // PHASE 7 — Re-link from catalogue row action.
@@ -1189,6 +1198,9 @@ function DetailDrawerInner({
                 {editing && showAddHead && (
                   <AddHeadForm
                     existingNames={workingHeads.map((h) => h.name.toLowerCase())}
+                    // SaaS-STAGE-2A (Task 7-b) — picker + add button are
+                    // disabled in read-only mode.
+                    locked={!canEdit}
                     onAdd={addWorkingHead}
                     onCancel={() => setShowAddHead(false)}
                     // PHASE 6 — dispatch a CustomEvent so the parent
@@ -1223,7 +1235,7 @@ function DetailDrawerInner({
                   </p>
                   <span className="text-[10px] text-muted-foreground">Examinations configured in the Examination module</span>
                 </div>
-                {editing && (
+                {editing && canEdit && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -1266,6 +1278,8 @@ function DetailDrawerInner({
                         key={e.id}
                         entry={e}
                         editing={editing}
+                        // SaaS-STAGE-2A (Task 7-b) — read-only editor.
+                        locked={!canEdit}
                         existingTypes={workingExamSchedule.map((x) => x.examType.toLowerCase())}
                         availableTypes={examTypeDefs.map((t) => t.name)}
                         onChange={(patch) => updateWorkingExamFee(e.id, patch)}
@@ -1292,6 +1306,8 @@ function DetailDrawerInner({
                     existingTypes={workingExamSchedule.map((e) => e.examType.toLowerCase())}
                     availableTypes={examTypeDefs.map((t) => t.name)}
                     loadingTypes={examTypesLoading}
+                    // SaaS-STAGE-2A (Task 7-b) — read-only editor.
+                    locked={!canEdit}
                     onAdd={addWorkingExamFee}
                     onCancel={() => setShowAddExamFee(false)}
                     onNavigate={onNavigate}
@@ -1416,7 +1432,13 @@ function DetailDrawerInner({
                       size="sm"
                       className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
                       onClick={handleSaveDraft}
-                      disabled={!createValid || createSubmitting}
+                      // SaaS-STAGE-2A (Task 7-b) — the Save Draft path is an
+                      // EDIT flow: gated on fee_structure_edit (the store
+                      // rejects the create at action time too).
+                      disabled={!createValid || createSubmitting || !perms.fee_structure_edit}
+                      title={!perms.fee_structure_edit
+                        ? 'Read-only — fee structure editing is disabled for your school by the platform configuration'
+                        : undefined}
                     >
                       {createSubmitting ? (
                         <>
@@ -1434,7 +1456,7 @@ function DetailDrawerInner({
                       size="sm"
                       className="h-8 text-xs gap-1.5"
                       onClick={handlePublishNew}
-                      disabled={!createValid || createSubmitting || validationIssues.length > 0 || !perms.fee_structure_publish}
+                      disabled={!createValid || createSubmitting || validationIssues.length > 0 || !perms.fee_structure_publish || !perms.fee_structure_edit}
                       title={!perms.fee_structure_publish
                         ? 'Publishing is disabled for your role — save a draft and publish once the school enables fee_structure_publish'
                         : validationIssues.length > 0 ? 'Resolve validation issues first' : 'Create + immediately publish v1 as current'}
@@ -1515,91 +1537,11 @@ function DetailDrawerInner({
         onArchive={handleArchiveVersion}
       />
 
-      {/* Delete confirmation dialog (Fix 4 — FEE-CORRECT). */}
-      <AnimatePresence>
-        {deleteOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => !deleteSubmitting && setDeleteOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.96, opacity: 0, y: 8 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.96, opacity: 0, y: 8 }}
-              transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-              className="bg-card border border-border rounded-xl shadow-2xl max-w-md w-full overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="px-5 py-4 border-b border-border bg-rose-500/5">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 ring-1 ring-rose-500/20">
-                    <ShieldAlert className="h-4.5 w-4.5" />
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-bold truncate">Delete Fee Structure</h3>
-                    <p className="text-[11px] text-muted-foreground">{structure.className} · {structure.classLevel}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="p-5 space-y-3">
-                <p className="text-[12px] leading-relaxed text-muted-foreground">
-                  You are about to permanently delete the structure
-                  <span className="font-semibold text-foreground"> {structure.className}</span>.
-                  All version snapshots for this structure will be removed from the workspace.
-                </p>
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
-                  <p className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1.5 mb-1">
-                    <AlertTriangle className="h-3.5 w-3.5" /> What is preserved
-                  </p>
-                  <ul className="text-[10px] text-muted-foreground space-y-0.5 ml-5 list-disc">
-                    <li>Audit log entries (immutable record of the deletion)</li>
-                    <li>ChangeLog entries (financial history)</li>
-                    <li>Existing payments, receipts, and concessions</li>
-                  </ul>
-                </div>
-                <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[11px]">
-                  <p className="font-semibold mb-0.5">Annual total at deletion:</p>
-                  <p className="font-mono tabular-nums text-rose-700 dark:text-rose-300">
-                    {formatINR(structure.annual, true)} · {structure.components.filter((c) => c.active).length} active heads
-                  </p>
-                </div>
-              </div>
-              <div className="border-t border-border bg-muted/30 px-5 py-3 flex items-center justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => setDeleteOpen(false)}
-                  disabled={deleteSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  className="h-8 text-xs gap-1.5"
-                  onClick={confirmDelete}
-                  disabled={deleteSubmitting}
-                >
-                  {deleteSubmitting ? (
-                    <>
-                      <span className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-                      Deleting…
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="h-3.5 w-3.5" /> Delete Structure
-                    </>
-                  )}
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* SaaS-STAGE-2A (Task 7-b) — the permanent-delete confirmation dialog
+          was removed with the Delete action: fee_structure_delete is
+          platform-reserved and the principal UI never offers it. Principals
+          archive structures; the platform purges after the 30-day retention
+          window. */}
     </>
   )
 }
@@ -1816,6 +1758,9 @@ function RelinkFromCatalogueButton({
 interface FeeHeadRowProps {
   head: FeeHead
   editing: boolean
+  /** SaaS-STAGE-2A (Task 7-b) — when true (fee_structure_edit disabled),
+   *  every edit affordance in the row is disabled (read-only editor). */
+  locked?: boolean
   onChange: (patch: Partial<FeeHead>) => void
   onRemove: () => void
   /** PHASE 7 — Re-link from catalogue row action. Called when the
@@ -1826,7 +1771,9 @@ interface FeeHeadRowProps {
   onUnlink?: () => void
 }
 
-function FeeHeadRow({ head, editing, onChange, onRemove, onRelink, onUnlink }: FeeHeadRowProps) {
+function FeeHeadRow({ head, editing, locked, onChange, onRemove, onRelink, onUnlink }: FeeHeadRowProps) {
+  // SaaS-STAGE-2A (Task 7-b) — read-only editor when locked.
+  const editLocked = locked === true
   if (editing) {
     return (
       <div className="grid grid-cols-[1.5fr_0.8fr_0.9fr_auto_auto] gap-2 px-2.5 py-1.5 items-center text-[11px]">
@@ -1835,17 +1782,20 @@ function FeeHeadRow({ head, editing, onChange, onRemove, onRelink, onUnlink }: F
           onChange={(e) => onChange({ name: e.target.value })}
           placeholder="Fee head name"
           className="h-6 text-[11px]"
+          disabled={editLocked}
         />
         <MoneyInput
           value={head.amount}
           onChange={(v) => onChange({ amount: v ?? 0 })}
           className="h-6 text-[11px]"
           ariaLabel="Fee head amount"
+          disabled={editLocked}
         />
         <select
           value={head.frequency}
           onChange={(e) => onChange({ frequency: e.target.value as Frequency })}
           className="h-6 text-[11px] rounded-md border border-border bg-background px-1.5"
+          disabled={editLocked}
         >
           {FREQUENCIES.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
@@ -1856,6 +1806,7 @@ function FeeHeadRow({ head, editing, onChange, onRemove, onRelink, onUnlink }: F
               checked={head.mandatory}
               onChange={(e) => onChange({ mandatory: e.target.checked })}
               className="rounded"
+              disabled={editLocked}
             />
             <span className="text-[10px] text-muted-foreground">Mandatory</span>
           </label>
@@ -1865,6 +1816,7 @@ function FeeHeadRow({ head, editing, onChange, onRemove, onRelink, onUnlink }: F
               checked={head.active}
               onChange={(e) => onChange({ active: e.target.checked })}
               className="rounded"
+              disabled={editLocked}
             />
             <span className="text-[10px] text-muted-foreground">Enabled</span>
           </label>
@@ -1872,18 +1824,21 @@ function FeeHeadRow({ head, editing, onChange, onRemove, onRelink, onUnlink }: F
         {/* PHASE 7 — Re-link + Remove actions. The Re-link button opens
             a compact popover with the master catalogue so the principal
             can fix an uncatalogued head without leaving the drawer
-            (worklog Phase 5 next-round priority (f)). */}
+            (worklog Phase 5 next-round priority (f)).
+            SaaS-STAGE-2A (Task 7-b) — both hidden while locked. */}
         <div className="flex items-center justify-end gap-0.5">
-          {onRelink && (
+          {onRelink && !editLocked && (
             <RelinkFromCatalogueButton
               head={head}
               onRelink={onRelink}
               onUnlink={onUnlink}
             />
           )}
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-rose-600 hover:bg-rose-500/10" onClick={onRemove} title="Remove head">
-            <Trash2 className="h-3 w-3" />
-          </Button>
+          {!editLocked && (
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-rose-600 hover:bg-rose-500/10" onClick={onRemove} title="Remove head">
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
     )
@@ -1926,6 +1881,9 @@ function FeeHeadRow({ head, editing, onChange, onRemove, onRelink, onUnlink }: F
 
 interface AddHeadFormProps {
   existingNames: string[]
+  /** SaaS-STAGE-2A (Task 7-b) — read-only mode (fee_structure_edit off):
+   *  the picker and every input/add control are disabled. */
+  locked?: boolean
   onAdd: (head: Omit<FeeHead, 'id'>) => void
   onCancel: () => void
   /** Optional callback fired when the principal clicks "Add new to catalogue"
@@ -1935,7 +1893,9 @@ interface AddHeadFormProps {
   onOpenCatalogue?: () => void
 }
 
-function AddHeadForm({ existingNames, onAdd, onCancel, onOpenCatalogue }: AddHeadFormProps) {
+function AddHeadForm({ existingNames, locked, onAdd, onCancel, onOpenCatalogue }: AddHeadFormProps) {
+  // SaaS-STAGE-2A (Task 7-b) — read-only editor when locked.
+  const editLocked = locked === true
   // PHASE 6 — catalogue-aware add-head form. State now tracks both the
   // catalogue-derived fields (catalogueId + category + isTaxable + taxRate)
   // AND the legacy name/amount/frequency/mandatory fields so a principal
@@ -2019,6 +1979,7 @@ function AddHeadForm({ existingNames, onAdd, onCancel, onOpenCatalogue }: AddHea
               placeholder="Type the custom fee head name"
               className="h-7 text-xs"
               autoFocus
+              disabled={editLocked}
             />
             <Button
               type="button"
@@ -2031,6 +1992,7 @@ function AddHeadForm({ existingNames, onAdd, onCancel, onOpenCatalogue }: AddHea
                 // but clear catalogueId (it stays undefined for custom
                 // heads until they explicitly pick from the catalogue).
               }}
+              disabled={editLocked}
             >
               <Layers className="h-3 w-3" /> Pick from catalogue
             </Button>
@@ -2040,24 +2002,26 @@ function AddHeadForm({ existingNames, onAdd, onCancel, onOpenCatalogue }: AddHea
           </div>
         ) : (
           <div className="space-y-1.5">
-            <FeeHeadCataloguePicker
-              selectedCatalogueId={catalogueId}
-              onPick={(r) => {
-                setCatalogueId(r.catalogueId)
-                setName(r.name)
-                setAmount(r.amount)
-                setFrequency(r.frequency)
-                setCategory(r.category)
-                setIsTaxable(r.isTaxable ?? false)
-                setTaxRate(r.taxRate ?? 18)
-              }}
-              onUseCustom={() => {
-                setCustomMode(true)
-                setCatalogueId('')
-              }}
-              onAddToCatalogue={onOpenCatalogue}
-              pickerId="add-head-catalogue"
-            />
+            <div className={editLocked ? 'pointer-events-none opacity-60' : undefined} aria-disabled={editLocked}>
+              <FeeHeadCataloguePicker
+                selectedCatalogueId={catalogueId}
+                onPick={(r) => {
+                  setCatalogueId(r.catalogueId)
+                  setName(r.name)
+                  setAmount(r.amount)
+                  setFrequency(r.frequency)
+                  setCategory(r.category)
+                  setIsTaxable(r.isTaxable ?? false)
+                  setTaxRate(r.taxRate ?? 18)
+                }}
+                onUseCustom={() => {
+                  setCustomMode(true)
+                  setCatalogueId('')
+                }}
+                onAddToCatalogue={onOpenCatalogue}
+                pickerId="add-head-catalogue"
+              />
+            </div>
             {catalogueId && (
               <p className="text-[9px] text-emerald-700 dark:text-emerald-300 inline-flex items-center gap-1">
                 <Check className="h-2.5 w-2.5" />
@@ -2084,6 +2048,7 @@ function AddHeadForm({ existingNames, onAdd, onCancel, onOpenCatalogue }: AddHea
                 }}
                 placeholder="Fee head name (override or type custom)"
                 className="h-7 text-xs"
+                disabled={editLocked}
               />
             )}
             {isDuplicate && <p className="text-[9px] text-rose-600 mt-0.5">Name already exists in this structure</p>}
@@ -2093,20 +2058,22 @@ function AddHeadForm({ existingNames, onAdd, onCancel, onOpenCatalogue }: AddHea
             onChange={(v) => setAmount(v ?? 0)}
             className="h-7 text-xs"
             ariaLabel="New fee head amount"
+            disabled={editLocked}
           />
           <select
             value={frequency}
             onChange={(e) => setFrequency(e.target.value as Frequency)}
             className="h-7 text-xs rounded-md border border-border bg-background px-2"
+            disabled={editLocked}
           >
             {FREQUENCIES.map((f) => <option key={f} value={f}>{f}</option>)}
           </select>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1 text-[10px] cursor-pointer">
-              <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} className="rounded" />
+              <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} className="rounded" disabled={editLocked} />
               Mand.
             </label>
-            <Button size="sm" className="h-7 text-[10px] gap-1" disabled={!isValid} onClick={submit}>
+            <Button size="sm" className="h-7 text-[10px] gap-1" disabled={!isValid || editLocked} onClick={submit}>
               <Check className="h-3 w-3" /> Add
             </Button>
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onCancel} title="Cancel">
@@ -2188,6 +2155,8 @@ function ChangeLogRow({ log }: { log: FeeChangeLog }) {
 interface ExamFeeRowProps {
   entry: ExamFeeEntry
   editing: boolean
+  /** SaaS-STAGE-2A (Task 7-b) — read-only mode (fee_structure_edit off). */
+  locked?: boolean
   /** Lower-cased list of all exam types currently in the working schedule
    *  (including this row) — used to flag duplicate exam types. */
   existingTypes: string[]
@@ -2197,7 +2166,9 @@ interface ExamFeeRowProps {
   onRemove: () => void
 }
 
-function ExamFeeRow({ entry, editing, existingTypes, availableTypes, onChange, onRemove }: ExamFeeRowProps) {
+function ExamFeeRow({ entry, editing, locked, existingTypes, availableTypes, onChange, onRemove }: ExamFeeRowProps) {
+  // SaaS-STAGE-2A (Task 7-b) — read-only editor when locked.
+  const editLocked = locked === true
   if (editing) {
     const isDuplicate = existingTypes.filter((t) => t === entry.examType.trim().toLowerCase()).length > 1
     // Other rows may be re-pointed to any configured exam type that this
@@ -2213,6 +2184,7 @@ function ExamFeeRow({ entry, editing, existingTypes, availableTypes, onChange, o
             onChange={(e) => onChange({ examType: e.target.value })}
             className="h-6 w-full text-[11px] rounded-md border border-border bg-background px-1.5"
             title="Exam types configured in the Examination module"
+            disabled={editLocked}
           >
             {selectable.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -2223,6 +2195,7 @@ function ExamFeeRow({ entry, editing, existingTypes, availableTypes, onChange, o
           onChange={(v) => onChange({ amount: v ?? 0 })}
           className="h-6 text-[11px]"
           ariaLabel="Exam fee amount"
+          disabled={editLocked}
         />
         <MoneyInput
           value={entry.plannedInstances ?? 1}
@@ -2231,6 +2204,7 @@ function ExamFeeRow({ entry, editing, existingTypes, availableTypes, onChange, o
           className="h-6 text-[11px]"
           min={1}
           ariaLabel="Planned instances"
+          disabled={editLocked}
         />
         <div className="flex items-center justify-center">
           <label className="flex items-center gap-1 cursor-pointer">
@@ -2239,6 +2213,7 @@ function ExamFeeRow({ entry, editing, existingTypes, availableTypes, onChange, o
               checked={entry.mandatory}
               onChange={(e) => onChange({ mandatory: e.target.checked })}
               className="rounded"
+              disabled={editLocked}
             />
             <span className="text-[10px] text-muted-foreground">Mandatory</span>
           </label>
@@ -2250,14 +2225,17 @@ function ExamFeeRow({ entry, editing, existingTypes, availableTypes, onChange, o
               checked={entry.active}
               onChange={(e) => onChange({ active: e.target.checked })}
               className="rounded"
+              disabled={editLocked}
             />
             <span className="text-[10px] text-muted-foreground">Enabled</span>
           </label>
         </div>
         <div className="text-right">
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-rose-600 hover:bg-rose-500/10" onClick={onRemove} title="Remove exam fee">
-            <Trash2 className="h-3 w-3" />
-          </Button>
+          {!editLocked && (
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-rose-600 hover:bg-rose-500/10" onClick={onRemove} title="Remove exam fee">
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
     )
@@ -2313,13 +2291,17 @@ interface AddExamFeeFormProps {
   /** Exam types configured in the Examination module (source of truth). */
   availableTypes: string[]
   loadingTypes: boolean
+  /** SaaS-STAGE-2A (Task 7-b) — read-only mode (fee_structure_edit off). */
+  locked?: boolean
   onAdd: (entry: Omit<ExamFeeEntry, 'id'>) => void
   onCancel: () => void
   /** Cross-module navigation for the "Go to Examinations" empty state. */
   onNavigate?: (moduleKey: string) => void
 }
 
-function AddExamFeeForm({ existingTypes, availableTypes, loadingTypes, onAdd, onCancel, onNavigate }: AddExamFeeFormProps) {
+function AddExamFeeForm({ existingTypes, availableTypes, loadingTypes, locked, onAdd, onCancel, onNavigate }: AddExamFeeFormProps) {
+  // SaaS-STAGE-2A (Task 7-b) — read-only editor when locked.
+  const editLocked = locked === true
   // Remaining exam types = configured in the Examination module and NOT
   // yet in this structure's schedule.
   const remaining = availableTypes.filter(
@@ -2405,6 +2387,7 @@ function AddExamFeeForm({ existingTypes, availableTypes, loadingTypes, onAdd, on
                       setSelectedType(selected ? '' : t)
                       if (!selected) setAmount(null)
                     }}
+                    disabled={editLocked}
                     className={cn(
                       'w-full flex items-center gap-2 px-2.5 py-2 text-left transition-colors',
                       selected ? 'bg-emerald-500/10' : 'hover:bg-muted/40',
@@ -2435,6 +2418,7 @@ function AddExamFeeForm({ existingTypes, availableTypes, loadingTypes, onAdd, on
                     onChange={setAmount}
                     className="h-7 text-xs mt-0.5"
                     ariaLabel="Examination fee amount"
+                    disabled={editLocked}
                   />
                 </div>
                 <div>
@@ -2446,6 +2430,7 @@ function AddExamFeeForm({ existingTypes, availableTypes, loadingTypes, onAdd, on
                     className="h-7 text-xs mt-0.5"
                     min={1}
                     ariaLabel="Planned instances per year"
+                    disabled={editLocked}
                   />
                 </div>
                 <div className="flex items-end pb-1">
@@ -2455,6 +2440,7 @@ function AddExamFeeForm({ existingTypes, availableTypes, loadingTypes, onAdd, on
                       checked={mandatory}
                       onChange={(e) => setMandatory(e.target.checked)}
                       className="rounded"
+                      disabled={editLocked}
                     />
                     Mandatory
                   </label>
@@ -2470,7 +2456,7 @@ function AddExamFeeForm({ existingTypes, availableTypes, loadingTypes, onAdd, on
               <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onCancel}>
                 <X className="h-3 w-3" /> Done
               </Button>
-              <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={submit} disabled={!isValid}>
+              <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={submit} disabled={!isValid || editLocked}>
                 <Check className="h-3 w-3" /> Add to Draft
               </Button>
             </div>
