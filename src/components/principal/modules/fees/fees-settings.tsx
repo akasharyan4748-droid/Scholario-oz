@@ -202,7 +202,13 @@ function LateFeeSettings() {
           <Switch checked={local.enabled} onCheckedChange={(c) => setLocal({ ...local, enabled: c })} aria-label="Enable late fee" />
         </div>
         <p className="text-[10px] text-muted-foreground border-t border-border/60 pt-2.5">
-          A student 3 months overdue is charged <span className="font-bold tabular-nums text-foreground">{formatINR(local.amountPerMonth * 3, true)}</span> late fee, capped at {formatINR(local.maxLateFee, true)}.
+          Each billing period (instalment) unpaid past the {local.gracePeriodDays}-day grace accrues{' '}
+          <span className="font-bold tabular-nums text-foreground">{formatINR(local.amountPerMonth, true)}</span> per overdue month, capped at{' '}
+          <span className="font-bold tabular-nums text-foreground">{formatINR(local.maxLateFee, true)}</span>.
+          {local.appliesTo === 'mandatory_only'
+            ? ' Mandatory heads only — optional charges (Books, Uniform, Transport) and event-based additional charges are never late-fee\u2019d.'
+            : ' Applies to all heads, including optional opt-ins.'}
+          {local.enabled ? ' Applied automatically to overdue accounts.' : ' Automatic application is OFF — the rule is saved but nothing is charged until enabled.'}
         </p>
       </div>
     </SettingsCard>

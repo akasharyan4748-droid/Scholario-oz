@@ -16,11 +16,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, X, Wallet, IndianRupee, ChevronRight, ArrowLeft,
   Receipt, AlertCircle, FileText, History, ShieldCheck, User,
+  Check, Clock, Plus, Ban, Bus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useFeeData, useFeeStore, type StudentFeeAccount, type LedgerEntry } from '@/lib/store/fee-store'
+import { useFeeData, useFeeStore, studentOptionalHeadChoices, type StudentFeeAccount, type LedgerEntry, type ConcessionType } from '@/lib/store/fee-store'
+import { useStudentsStore } from '@/lib/store/students-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FeePanel, FeeStat, FeeStatusBadge, FeeEmptyState, ModeIcon, modeAccent, statusAccent, FeePill } from './fees-shared'
@@ -85,7 +89,16 @@ export function FeesStudentAccountsSection({ data, onCollect, focusStudent }: Pr
   const [search, setSearch] = useState('')
   const [classFilter, setClassFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [selected, setSelected] = useState<StudentFeeAccount | null>(null)
+  // The drawer keeps the SELECTED STUDENT ID, not an account snapshot —
+  // the account object is re-derived from useFeeData() on every store
+  // change, so KPIs, ledger and concessions stay live while the drawer
+  // is open (e.g. after applying an optional charge or granting a
+  // concession inside it).
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selected = useMemo(
+    () => (selectedId ? data.accounts.find((a) => a.studentId === selectedId) ?? null : null),
+    [data.accounts, selectedId],
+  )
 
   // Consume the deep-link: match by student name (exact → prefix → contains)
   // and open the account drawer; fall back to an honest info toast when the
@@ -101,7 +114,7 @@ export function FeesStudentAccountsSection({ data, onCollect, focusStudent }: Pr
       data.accounts.find((a) => name.startsWith(a.studentName.toLowerCase())) ??
       data.accounts.find((a) => a.studentName.toLowerCase().includes(name))
     if (match) {
-      setSelected(match)
+      setSelectedId(match.studentId)
       toast.success(`Opened ${match.studentName}'s fee account`, { description: 'Deep-linked from global search' })
     } else {
       toast.info(`${focusStudent.name} — fee directory`, {
@@ -214,7 +227,7 @@ export function FeesStudentAccountsSection({ data, onCollect, focusStudent }: Pr
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: Math.min(i * 0.02, 0.28) }}
-            onClick={() => setSelected(a)}
+            onClick={() => setSelectedId(a.studentId)}
             aria-label={`Open account for ${a.studentName}`}
             className="group rounded-xl border border-border bg-card p-4 text-left hover:border-emerald-500/40 hover:shadow-md transition-all"
           >
@@ -275,7 +288,7 @@ export function FeesStudentAccountsSection({ data, onCollect, focusStudent }: Pr
         {selected && (
           <StudentFeeAccountDrawer
             account={selected}
-            onClose={() => setSelected(null)}
+            onClose={() => setSelectedId(null)}
             onCollect={() => onCollect(selected.studentId)}
           />
         )}
@@ -509,6 +522,13 @@ function AccountOverview({ account }: { account: StudentFeeAccount }) {
         </div>
       </FeePanel>
 
+      {/* PART 9 — the per-student OPTIONAL-HEAD applicability boundary.
+          Optional heads (Books, Uniform…) exist in the class structure as
+          offerings; they become THIS student's charges ONLY through the
+          explicit toggles below (audited in the store action). Transport
+          follows bus enrolment and is shown read-only. */}
+      <AccountOptionalCharges studentId={account.studentId} />
+
       <FeePanel title="Status Timeline" subtitle="recent financial events">
         <div className="space-y-2">
           {account.transactions.slice(0, 5).map((t) => (
@@ -536,6 +556,72 @@ function AccountOverview({ account }: { account: StudentFeeAccount }) {
         </div>
       </FeePanel>
     </div>
+  )
+}
+
+// ─── Optional Charges (per-student applicability controls) ──────────
+
+function AccountOptionalCharges({ studentId }: { studentId: string }) {
+  const setOptionalHeadApplicable = useFeeStore((s) => s.setOptionalHeadApplicable)
+  const students = useStudentsStore((s) => s.students)
+  // Derived per render from the live store — the parent re-derives the
+  // account object on every fee-store change, so toggles reflect instantly.
+  const choices = studentOptionalHeadChoices(studentId)
+  const student = students.find((s) => s.id === studentId)
+  if (choices.length === 0 && !student) return null
+
+  const handleToggle = (headId: string, applicable: boolean, name: string) => {
+    const result = setOptionalHeadApplicable(studentId, headId, applicable, 'Principal')
+    if (result.success) {
+      toast.success(applicable ? `${name} applied to this account` : `${name} removed from this account`, {
+        description: 'Future charges only — recorded payments and issued receipts are unchanged.',
+      })
+    } else if (result.error) {
+      toast.error(result.error)
+    }
+  }
+
+  return (
+    <FeePanel title="Optional Charges" subtitle="applied per student — never automatic">
+      <div className="space-y-1">
+        {choices.map((c) => (
+          <div key={c.headId} className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-2.5 py-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium truncate">{c.name}</p>
+              <p className="text-[9px] text-muted-foreground">{formatINR(c.amount, true)} · {c.frequency} · optional</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className={cn('text-[9px] font-semibold', c.applicable ? 'text-emerald-600' : 'text-muted-foreground')}>
+                {c.applicable ? 'Applied' : 'Not applied'}
+              </span>
+              <Switch
+                checked={c.applicable}
+                onCheckedChange={(v) => handleToggle(c.headId, v, c.name)}
+                aria-label={`${c.applicable ? 'Remove' : 'Apply'} ${c.name} for this student`}
+              />
+            </div>
+          </div>
+        ))}
+        {/* Transport is NOT an opt-in head — it follows bus enrolment. */}
+        {student && (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-border/60 px-2.5 py-1.5 bg-muted/20">
+            <div className="min-w-0 flex items-center gap-2">
+              <Bus className="h-3 w-3 text-muted-foreground shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium truncate">Transport</p>
+                <p className="text-[9px] text-muted-foreground">follows bus service enrolment — not a per-head opt-in</p>
+              </div>
+            </div>
+            <span className={cn('text-[9px] font-semibold shrink-0', student.transport ? 'text-emerald-600' : 'text-muted-foreground')}>
+              {student.transport ? 'Enrolled' : 'Not enrolled'}
+            </span>
+          </div>
+        )}
+      </div>
+      <p className="text-[10px] text-muted-foreground border-t border-border/60 pt-2 mt-2">
+        Applying an optional head adds its charge to this account's future dues and ledger. Recorded payments and issued receipts are never rewritten.
+      </p>
+    </FeePanel>
   )
 }
 
@@ -671,32 +757,221 @@ function AccountReceipts({ account, onView }: { account: StudentFeeAccount; onVi
 }
 
 function AccountConcessions({ account }: { account: StudentFeeAccount }) {
+  // PART 11 — concessions are AUDITABLE RECORDS (type · %/amount ·
+  // effective period · approval status · approver · reason), not a bare
+  // scalar. Approved + effective records are exactly what computeAccount
+  // subtracts from the applicable amount — the tab can never disagree
+  // with the account's Concession tile.
+  const concessions = useFeeStore((s) => s.concessions)
+  const concessionRule = useFeeStore((s) => s.concessionRule)
+  const requestConcession = useFeeStore((s) => s.requestConcession)
+  const approveConcession = useFeeStore((s) => s.approveConcession)
+  const rejectConcession = useFeeStore((s) => s.rejectConcession)
+  const [grantOpen, setGrantOpen] = useState(false)
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+
+  const records = useMemo(
+    () => concessions.filter((c) => c.studentId === account.studentId),
+    [concessions, account.studentId],
+  )
+
+  const statusPill = (status: string) => {
+    if (status === 'Approved') return <FeePill accent={statusAccent('Paid')}>Approved</FeePill>
+    if (status === 'Pending') return <FeePill accent="bg-amber-500/10 text-amber-700 dark:text-amber-300">Pending approval</FeePill>
+    return <FeePill accent="bg-rose-500/10 text-rose-700 dark:text-rose-300">Rejected</FeePill>
+  }
+
   return (
-    <FeePanel title="Concessions" subtitle="approved fee concessions on this account">
-      {account.concession > 0 ? (
-        <div className="space-y-2">
-          <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-3">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-xs font-semibold">Core Fee Concession</p>
-              <FeePill accent={statusAccent('Paid')}>Approved</FeePill>
+    <FeePanel
+      title="Concessions"
+      subtitle="approved concessions reduce the applicable amount — auditable, never rewriting past payments"
+      action={(
+        <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => setGrantOpen((v) => !v)}>
+          <Plus className="h-3 w-3" /> Grant Concession
+        </Button>
+      )}
+    >
+      {/* Grant form — pre-fills the school's configured percentages so the
+          Concession Rules settings have a real effect. When the rule does
+          not require approval, the record is granted directly. */}
+      {grantOpen && (
+        <GrantConcessionForm
+          rule={concessionRule}
+          onSubmit={(input) => {
+            const result = requestConcession({ ...input, studentId: account.studentId, actor: 'Principal' })
+            if (result.success) {
+              toast.success(
+                concessionRule.requiresApproval ? 'Concession requested — awaiting approval' : 'Concession granted',
+                { description: `${input.type} · ${input.basis === 'percent' ? `${input.value}%` : formatINR(input.value, true)}` },
+              )
+              setGrantOpen(false)
+            } else if (result.error) {
+              toast.error(result.error)
+            }
+          }}
+          onCancel={() => setGrantOpen(false)}
+        />
+      )}
+
+      <div className="space-y-2">
+        {records.map((c) => (
+          <div key={c.id} className={cn(
+            'rounded-lg border p-2.5',
+            c.status === 'Approved' ? 'bg-emerald-500/5 border-emerald-500/20'
+              : c.status === 'Pending' ? 'bg-amber-500/5 border-amber-500/20'
+                : 'bg-rose-500/5 border-rose-500/20',
+          )}>
+            <div className="flex items-center justify-between mb-1 gap-2">
+              <p className="text-xs font-semibold truncate">{c.type}</p>
+              {statusPill(c.status)}
             </div>
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-muted-foreground">Original Fee: {formatINR(account.totalApplicable, true)}</span>
-              <span className="font-bold text-emerald-600 tabular-nums">−{formatINR(account.concession, true)}</span>
+              <span className="text-muted-foreground">
+                {c.basis === 'percent' ? `${c.value}% of applicable` : `${formatINR(c.value, true)} per session`} · from {c.effectiveFrom}{c.effectiveTo ? ` to ${c.effectiveTo}` : ''}
+              </span>
+              <span className={cn('font-bold tabular-nums', c.status === 'Approved' ? 'text-emerald-600' : 'text-muted-foreground')}>
+                {c.basis === 'percent' ? `−${c.value}%` : `−${formatINR(c.value, true)}`}
+              </span>
             </div>
-            {/* Approval metadata (approver, date) is not modelled in the data
-                layer yet — a synthetic line used to hardcode
-                "Approved By: Principal · Date: 2025-04-02" here; dropped
-                rather than fabricate provenance. */}
+            <p className="text-[10px] text-muted-foreground mt-1">{c.reason}</p>
+            <p className="text-[9px] text-muted-foreground mt-0.5">
+              Requested by {c.requestedBy} · {formatDate(c.requestedAt)}
+              {c.approvedBy ? ` · Approved by ${c.approvedBy} · ${formatDate(c.approvedAt!)}` : ''}
+              {c.rejectedReason ? ` · Rejected: ${c.rejectedReason}` : ''}
+            </p>
+            {c.status === 'Pending' && (
+              <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border/40">
+                <Button
+                  size="sm" className="h-6 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => {
+                    const r = approveConcession(c.id, 'Principal')
+                    if (r.success) toast.success('Concession approved', { description: 'Reduces the applicable amount from its effective date — past payments untouched.' })
+                  }}
+                >
+                  <Check className="h-3 w-3" /> Approve
+                </Button>
+                {rejectingId === c.id ? (
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <Input
+                      autoFocus value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
+                      placeholder="Reason for rejection…" className="h-6 text-[10px]"
+                    />
+                    <Button
+                      size="sm" variant="outline" className="h-6 text-[10px] gap-1 shrink-0"
+                      onClick={() => {
+                        const r = rejectConcession(c.id, 'Principal', rejectReason.trim() || 'No reason recorded')
+                        if (r.success) { toast.success('Concession rejected'); setRejectingId(null); setRejectReason('') }
+                      }}
+                    >
+                      Confirm
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-6 text-[10px] shrink-0" onClick={() => { setRejectingId(null); setRejectReason('') }}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1" onClick={() => { setRejectingId(c.id); setRejectReason('') }}>
+                    <Ban className="h-3 w-3" /> Reject
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
+        ))}
+
+        {records.length === 0 && !grantOpen && (
+          <FeeEmptyState icon={<IndianRupee className="h-5 w-5" />} title="No concessions" description="Granted concessions appear here with their full approval trail." />
+        )}
+
+        {records.length > 0 && (
           <p className="text-[10px] text-muted-foreground">
-            Concession does not change past payments. Original amounts remain on record.
+            Concessions never change past payments. Original amounts remain on record; the concession reduces the applicable amount from its effective date.
           </p>
-        </div>
-      ) : (
-        <FeeEmptyState icon={<IndianRupee className="h-5 w-5" />} title="No concessions" description="Approved concessions will appear here." />
-      )}
+        )}
+      </div>
     </FeePanel>
+  )
+}
+
+// ─── Grant Concession form (compact, pre-filled from school rules) ──
+
+const CONCESSION_TYPES: ConcessionType[] = ['Sibling Discount', 'Staff Ward', 'Scholarship', 'Other']
+
+function GrantConcessionForm({
+  rule, onSubmit, onCancel,
+}: {
+  rule: { siblingDiscountPct: number; staffWardDiscountPct: number; scholarshipDiscountPct: number; requiresApproval: boolean }
+  onSubmit: (input: { type: ConcessionType; basis: 'percent' | 'amount'; value: number; reason: string; effectiveFrom: string }) => void
+  onCancel: () => void
+}) {
+  const [type, setType] = useState<ConcessionType>('Sibling Discount')
+  const [basis, setBasis] = useState<'percent' | 'amount'>('percent')
+  const [value, setValue] = useState<number>(rule.siblingDiscountPct)
+  const [reason, setReason] = useState('')
+  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().split('T')[0])
+
+  // The school's configured percentage pre-fills by type — the Concession
+  // Rules settings drive real defaults, not display-only numbers.
+  const pickType = (t: ConcessionType) => {
+    setType(t)
+    if (basis === 'percent') {
+      setValue(t === 'Sibling Discount' ? rule.siblingDiscountPct : t === 'Staff Ward' ? rule.staffWardDiscountPct : t === 'Scholarship' ? rule.scholarshipDiscountPct : value || 10)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-2.5 space-y-2 mb-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        New concession {rule.requiresApproval ? '· will require approval' : '· granted immediately (school policy)'}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-[10px]">Type</Label>
+          <select value={type} onChange={(e) => pickType(e.target.value as ConcessionType)} className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs">
+            {CONCESSION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px]">Basis</Label>
+          <div className="flex gap-1">
+            {(['percent', 'amount'] as const).map((b) => (
+              <button
+                key={b} type="button" aria-pressed={basis === b}
+                onClick={() => setBasis(b)}
+                className={cn(
+                  'flex-1 h-8 rounded-md border text-[10px] font-medium transition-colors',
+                  basis === b ? 'border-primary bg-primary/5 text-primary' : 'border-border text-muted-foreground hover:border-primary/40',
+                )}
+              >
+                {b === 'percent' ? '% of applicable' : 'Flat ₹'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px]">{basis === 'percent' ? 'Percent (%)' : 'Amount (₹)'}</Label>
+          <Input type="number" min={0} value={value} onChange={(e) => setValue(Number(e.target.value))} className="h-8 text-xs tabular-nums" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px]">Effective from</Label>
+          <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className="h-8 text-xs" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-[10px]">Reason (required)</Label>
+        <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Elder sibling also enrolled in Class 8" className="h-8 text-xs" />
+      </div>
+      <div className="flex items-center justify-end gap-1.5">
+        <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={onCancel}>Cancel</Button>
+        <Button
+          size="sm" className="h-7 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+          onClick={() => onSubmit({ type, basis, value, reason, effectiveFrom })}
+        >
+          <Check className="h-3 w-3" /> {rule.requiresApproval ? 'Submit for approval' : 'Grant'}
+        </Button>
+      </div>
+    </div>
   )
 }
 
@@ -762,9 +1037,19 @@ function AccountDues({ account, onCollect }: { account: StudentFeeAccount; onCol
 
 function AccountAudit({ account }: { account: StudentFeeAccount }) {
   const allAudit = useFeeStore((s) => s.audit)
-  const audit = useMemo(() => allAudit.filter((a) =>
-    a.entityId === account.studentId || account.transactions.some((t) => t.id === a.entityId)
-  ), [allAudit, account.studentId, account.transactions])
+  const concessions = useFeeStore((s) => s.concessions)
+  // Traceable events for THIS account (PART 22): entries addressed to the
+  // student (payments, applicability changes) + concession lifecycle
+  // events (requested/approved/rejected — their entityId is the concession
+  // record id) + events on this account's transactions.
+  const audit = useMemo(() => {
+    const myConcessionIds = new Set(concessions.filter((c) => c.studentId === account.studentId).map((c) => c.id))
+    return allAudit.filter((a) =>
+      a.entityId === account.studentId
+      || myConcessionIds.has(a.entityId)
+      || account.transactions.some((t) => t.id === a.entityId)
+    )
+  }, [allAudit, concessions, account.studentId, account.transactions])
   return (
     <FeePanel title="Activity History" subtitle="record of payment actions on this account">
       <div className="space-y-2">

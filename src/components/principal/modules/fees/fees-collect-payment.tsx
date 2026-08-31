@@ -32,7 +32,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { useFeeStore, useFeeData, type PaymentMode, type StudentFeeAccount } from '@/lib/store/fee-store'
+import { useFeeStore, useFeeData, studentBillableHeads, type BillableHeadOption, type PaymentMode, type StudentFeeAccount } from '@/lib/store/fee-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { formatINR } from '@/lib/format'
 import { ModeIcon, modeAccent, FeeStatusBadge } from './fees-shared'
@@ -57,31 +57,13 @@ interface Props {
   onRecorded?: () => void
 }
 
-// FEE-POLICY — purposes reflect the 2025-26 schedule (no fictional heads).
-const PURPOSE_OPTIONS = [
-  'Tuition — Monthly Instalment',
-  'Term 1 Tuition (Apr–Jun)',
-  'Term 2 Tuition (Jul–Sep)',
-  'Term 3 Tuition (Oct–Dec)',
-  'Examination Fee — Session',
-  'Board Form Fee',
-  'Transport Fee — Monthly',
-  'Registration Fee',
-  'Late Fee',
-]
-
-const CORE_FEE_HEADS = [
-  'Tuition',
-  'Management & Maintenance',
-  'Transport',
-  'Examination Fee',
-  'Board Form Fee',
-  'Registration Fee',
-  'Physics Practical Fee',
-  'Chemistry Practical Fee',
-  'Biology Practical Fee',
-  'Late Fee',
-]
+// FEE-POLICY — purposes are derived from each head's ACTUAL frequency.
+// G6 (PART 3/13) — the hardcoded CORE_FEE_HEADS list and the fabricated
+// Term 1/2/3 PURPOSE_OPTIONS are retired. Billable heads + purposes are
+// DERIVED from the selected student's applicable fee policy through the
+// canonical `studentBillableHeads` selector (fee-store) — one derivation,
+// no parallel vocabulary, no charges without a configured source.
+const DEFAULT_FEE_HEAD = 'Tuition'
 
 export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, onRecorded }: Props) {
   const students = useStudentsStore((s) => s.students)
@@ -101,8 +83,8 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(preselectStudentId ?? null)
   const [amount, setAmount] = useState<number>(0)
-  const [purpose, setPurpose] = useState<string>(PURPOSE_OPTIONS[0])
-  const [feeHead, setFeeHead] = useState<string>('Tuition')
+  const [purpose, setPurpose] = useState<string>('')
+  const [feeHead, setFeeHead] = useState<string>(DEFAULT_FEE_HEAD)
   // ─── WHAT THE PAYMENT IS FOR (Core fee vs Additional charge) ─────
   // When set, the payment is recorded with category='ADDITIONAL' and
   // bound to the charge — it reduces the student's ADDITIONAL outstanding
@@ -126,8 +108,8 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
       setStage(preselectStudentId ? 'review' : 'find')
       setSelectedId(preselectStudentId ?? null)
       setAmount(0)
-      setPurpose(PURPOSE_OPTIONS[0])
-      setFeeHead('Tuition')
+      setPurpose('')
+      setFeeHead(DEFAULT_FEE_HEAD)
       setAdditionalChargeId(null)
       setMode('UPI')
       setReferenceNo('')
@@ -186,6 +168,35 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
   const outstanding = selectedAccount?.outstanding ?? 0
   const lateFee = selectedAccount?.lateFee ?? 0
   const totalDue = selectedAccount?.totalDue ?? 0
+
+  // G6 — the selected student's billable heads, derived from THEIR fee
+  // policy (structure heads incl. per-student optional opt-ins, per-exam
+  // schedule entries, Late Fee when the rule is on). Re-derived whenever
+  // the student changes so the dropdown can never offer a charge without
+  // a configured source.
+  const billableHeads = useMemo<BillableHeadOption[]>(
+    () => (selectedStudent ? studentBillableHeads(selectedStudent.id) : []),
+    [selectedStudent],
+  )
+  const purposeForHead = (value: string): string =>
+    billableHeads.find((o) => o.value === value)?.purpose ?? billableHeads[0]?.purpose ?? 'Fee payment'
+
+  // Keep the selected head valid for THIS student: when the student
+  // changes (or the derived list first becomes available), fall back to
+  // Tuition if present, else the first billable option.
+  useEffect(() => {
+    if (billableHeads.length === 0) return
+    const current = billableHeads.find((o) => o.value === feeHead)
+    if (!current) {
+      const fallback = billableHeads.find((o) => o.value === DEFAULT_FEE_HEAD) ?? billableHeads[0]
+      setFeeHead(fallback.value)
+      setPurpose(fallback.purpose)
+    } else if (!purpose) {
+      setPurpose(current.purpose)
+    }
+    // billableHeads is the driver; feeHead/purpose are intentionally read
+    // once per derivation (a stale-closure re-run would clobber user picks).
+  }, [billableHeads])
 
   const handleSubmit = () => {
     // Idempotency guard: prevent re-entry from a double-click or a stale
@@ -308,8 +319,8 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
   const collectAnother = () => {
     setSelectedId(null)
     setAmount(0)
-    setPurpose(PURPOSE_OPTIONS[0])
-    setFeeHead('Tuition')
+    setPurpose('')
+    setFeeHead(DEFAULT_FEE_HEAD)
     setMode('UPI')
     setReferenceNo('')
     setMeta({})
@@ -425,8 +436,8 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
                         type="button"
                         onClick={() => {
                           setAdditionalChargeId(null)
-                          setFeeHead('Tuition')
-                          setPurpose(PURPOSE_OPTIONS[0])
+                          setFeeHead(DEFAULT_FEE_HEAD)
+                          setPurpose(purposeForHead(DEFAULT_FEE_HEAD))
                           setAmount(outstanding > 0 ? outstanding : 0)
                         }}
                         className={cn(
@@ -499,11 +510,22 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
                   {!selectedCharge && (
                     <div className="space-y-1.5">
                       <Label className="text-[11px]">Fee Head</Label>
-                      <select value={feeHead} onChange={(e) => setFeeHead(e.target.value)} className="w-full h-9 rounded-md border border-border bg-background px-2 text-xs">
-                        {CORE_FEE_HEADS.map((h) => (
-                          <option key={h} value={h}>{h}</option>
+                      <select
+                        value={feeHead}
+                        onChange={(e) => { setFeeHead(e.target.value); setPurpose(purposeForHead(e.target.value)) }}
+                        className="w-full h-9 rounded-md border border-border bg-background px-2 text-xs"
+                      >
+                        {billableHeads.map((h) => (
+                          <option key={h.value} value={h.value}>
+                            {h.label}{h.kind === 'optional' ? ' (optional)' : h.kind === 'exam' ? ' · per exam' : h.kind === 'late-fee' ? ' · penalty' : ''}
+                          </option>
                         ))}
                       </select>
+                      {billableHeads.length === 0 && (
+                        <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                          <AlertCircle className="h-2.5 w-2.5" /> No configured fee heads apply to this student.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -512,7 +534,7 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
                   <div className="space-y-1.5">
                     <Label className="text-[11px]">Purpose</Label>
                     <select value={purpose} onChange={(e) => setPurpose(e.target.value)} className="w-full h-9 rounded-md border border-border bg-background px-2 text-xs">
-                      {PURPOSE_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                      {Array.from(new Set([purpose, ...billableHeads.map((h) => h.purpose)])).filter(Boolean).map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>
                 )}

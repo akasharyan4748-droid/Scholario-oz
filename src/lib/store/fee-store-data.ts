@@ -27,6 +27,7 @@ import type {
   FeeTransaction, CashRequest, AuditRecord, PaymentModeConfig, LateFeeRule,
   ConcessionRule, ReceiptSettings, GatewayConfig, BankAccount, UpiQrConfig,
   Settlement, ReconciliationRecord, WebhookEvent, AdditionalCharge,
+  StudentConcession,
 } from './fee-store'
 import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
 import { SS } from './students-store/seed-data'
@@ -234,27 +235,148 @@ export function computeStructureBaseTotal(structure: Pick<FeeStructureConfig, 'c
 }
 
 /**
- * Per-student head applicability gate (FEE-POLICY + SaaS-STAGE-2A §6):
- *   Transport → charged ONLY when the student is actually enrolled.
+ * Per-student head applicability gate (FEE-POLICY + SaaS-STAGE-2A §6 +
+ * optional-head APPLICABILITY BOUNDARY):
+ *
+ *   CATALOGUE  → available fee type (master definitions)
+ *   STRUCTURE  → fee configured/offered for the class
+ *   STUDENT    → fee actually applicable to THIS student (this gate)
+ *   LEDGER     → actual charge (computeAccount, only for applicable heads)
+ *
+ *   Transport → charged ONLY when the student is actually enrolled
+ *   (student.transport) — never because the head exists in the structure.
  *   OPTIONAL heads (mandatory === false — e.g. Books & Material, Uniform
- *     & Sports Kit) are NEVER auto-billed. They are catalogue offerings
- *     selectable per structure and, later, per student (explicit opt-in
- *     applicability — the student-account layer stays capable of it).
+ *     & Sports Kit) are NEVER auto-billed. They become applicable ONLY
+ *     through an explicit per-student opt-in (`opts.optedInHeadIds` —
+ *     fee-store.optionalHeadApplicability), so "Catalogue Books Fee ≠
+ *     every student's Books Fee". Omitting `opts` keeps the strict
+ *     never-auto-bill behaviour (aggregate/defensive callers).
  *   Everything else follows from structure membership (stream-level
  *   practicals are already bound via applicableClassIds).
  */
 export function isHeadApplicableToStudent(
-  head: Pick<FeeHead, 'category' | 'name' | 'mandatory'>,
+  head: Pick<FeeHead, 'id' | 'category' | 'name' | 'mandatory'>,
   student: { transport?: boolean; hostel?: boolean } | null | undefined,
+  opts?: { optedInHeadIds?: string[] },
 ): boolean {
   // Defensive aggregate path (no student context) — exclude conditional
   // and optional charges.
   if (!student) return head.category !== 'Transport' && head.mandatory !== false
   if (head.category === 'Transport') return Boolean(student.transport)
-  // Optional heads require an explicit per-student applicability (not
-  // modelled yet) — they must not silently become payable for everyone.
-  if (head.mandatory === false) return false
+  // Optional heads require an explicit per-student opt-in — they must not
+  // silently become payable for everyone.
+  if (head.mandatory === false) {
+    return Boolean(opts?.optedInHeadIds?.includes(head.id))
+  }
   return true
+}
+
+// ─── BILLING SCHEDULE ENGINE (frequency-aware accounting layer) ────────
+//
+// The ACCOUNTING layer must understand the actual billing frequency: a
+// ₹250/month Tuition is APR ₹250 + MAY ₹250 + … (12 scheduled charges),
+// not one pretend "Annual Tuition ₹3,000". The UI may keep summarising
+// ₹3,000/yr — totals are IDENTICAL either way; only the ledger's
+// granularity becomes honest. One-Time heads emit exactly ONE charge so
+// an Admission Fee ₹5,000 one-time can never become ₹5,000 every month.
+
+/** Day of month a period's fee falls due (school policy). */
+export const BILLING_DUE_DAY = 10
+
+/** One scheduled billing period of the academic session (April–March). */
+export interface BillingPeriod {
+  /** Human label, e.g. "Apr 2026". */
+  label: string
+  /** ISO due date (yyyy-mm-dd), e.g. "2026-04-10". */
+  date: string
+}
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * Scheduled billing periods for a frequency within an academic session
+ * (Apr→Mar). Monthly = 12, Quarterly = 4 (Apr/Jul/Oct/Jan), Per Term = 3
+ * (Apr/Aug/Dec), Half-Yearly = 2 (Apr/Oct), Annual = 1 (Apr), One-Time = 1
+ * (Apr — charged once, at session start).
+ */
+export function billingPeriodsFor(frequency: FeeHead['frequency'], sessionStartYear: number): BillingPeriod[] {
+  // Start month index (0-based): April = 3.
+  const monthOffsets: Record<FeeHead['frequency'], number[]> = {
+    'Monthly': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    'Quarterly': [0, 3, 6, 9],
+    'Per Term': [0, 4, 8],
+    'Half-Yearly': [0, 6],
+    'Annual': [0],
+    'One-Time': [0],
+  }
+  return monthOffsets[frequency].map((offset) => {
+    const month = (3 + offset) % 12
+    const year = sessionStartYear + Math.floor((3 + offset) / 12)
+    return {
+      label: `${MONTH_SHORT[month]} ${year}`,
+      date: `${year}-${String(month + 1).padStart(2, '0')}-${String(BILLING_DUE_DAY).padStart(2, '0')}`,
+    }
+  })
+}
+
+/** One per-period (or per-instance) scheduled charge emitted to the ledger. */
+export interface ScheduledCharge {
+  date: string
+  feeHead: string
+  amount: number
+  description: string
+  /** Ledger entryType — exam-like heads keep their Exam Fee type. */
+  entryType: 'core' | 'exam'
+  /** Whether the charge originates from a MANDATORY head (drives the
+   *  late-fee rule's appliesTo='mandatory_only' behaviour). Optional
+   *  opt-in heads and Transport are never late-fee'd under that policy. */
+  fromMandatoryHead: boolean
+  /** True for Additional-Charge lines — never late-fee'd (they carry
+   *  their own due dates and event semantics). */
+  isAdditional?: boolean
+}
+
+/**
+ * Expand ONE recurring fee head into its scheduled per-period charges.
+ * Σ(amount per period) === amount × FREQUENCY_MULTIPLIER — the annual
+ * total every summary shows is unchanged; only granularity is honest.
+ */
+export function expandHeadChargeEntries(head: FeeHead, sessionStartYear: number): ScheduledCharge[] {
+  const isExamLike = head.category === 'Exam' || head.category === 'Board' || /exam/i.test(head.name)
+  return billingPeriodsFor(head.frequency, sessionStartYear).map((p) => ({
+    date: p.date,
+    feeHead: head.name,
+    amount: head.amount,
+    description: `${head.frequency} charge — ${head.name} · ${p.label}`,
+    entryType: isExamLike ? ('exam' as const) : ('core' as const),
+    fromMandatoryHead: head.mandatory !== false,
+  }))
+}
+
+/**
+ * Expand ONE exam-fee schedule entry into PER-INSTANCE scheduled charges
+ * (Unit Test × 4 → four lines). EXAM FEE CONFIGURATION ≠ ACTUAL
+ * EXAMINATION EVENT: the description marks the charge as SCHEDULED — the
+ * schedule creates the fee plan, the Examination module conducts the
+ * exams. All instances are dated at session start (the fee schedule is
+ * a session-level plan; no fake exam dates are invented).
+ */
+export function expandExamChargeEntries(
+  entry: { id: string; examType: string; amount: number; plannedInstances?: number },
+  sessionStartYear: number,
+): ScheduledCharge[] {
+  const instances = entry.plannedInstances ?? 1
+  const start = `${sessionStartYear}-04-${String(BILLING_DUE_DAY).padStart(2, '0')}`
+  return Array.from({ length: instances }, (_, i) => ({
+    date: start,
+    feeHead: `Exam Fee — ${entry.examType}`,
+    amount: entry.amount,
+    description: instances > 1
+      ? `Scheduled per-exam fee — ${entry.examType} (instance ${i + 1} of ${instances}) · charged when conducted`
+      : `Scheduled per-exam fee — ${entry.examType} · charged when conducted`,
+    entryType: 'exam' as const,
+    fromMandatoryHead: true,
+  }))
 }
 
 /**
@@ -355,6 +477,62 @@ export const SEED_ADDITIONAL_CHARGES: AdditionalCharge[] = [
     status: 'Active',
   },
 ]
+
+// ─── Concession seed (PART 11 — auditable concession records) ─────────
+//
+// Every register scholarship (`student.scholarship > 0`) becomes an
+// APPROVED concession record so the account's concession total stays
+// EXACTLY what it was (₹500 per scholarship student) while gaining type,
+// approver, reason and audit provenance. computeAccount uses records when
+// they exist and falls back to the register scalar only for legacy
+// persisted namespaces without records — no data ever regresses.
+export const SEED_CONCESSIONS: StudentConcession[] = SS
+  .filter((s) => s.scholarship > 0 && s.status === 'Active')
+  .map((s) => ({
+    id: `CONC-${s.id}-SEED`,
+    studentId: s.id,
+    type: 'Scholarship' as const,
+    basis: 'amount' as const,
+    value: s.scholarship,
+    appliesTo: 'core_all' as const,
+    effectiveFrom: '2026-04-01',
+    status: 'Approved' as const,
+    reason: 'Register scholarship — seeded concession (sibling/scholarship policy)',
+    requestedBy: 'Principal',
+    requestedAt: '2026-04-01T09:00:00.000Z',
+    approvedBy: 'Principal',
+    approvedAt: '2026-04-01T09:05:00.000Z',
+  }))
+
+// ─── Optional-head per-student opt-in seed (PART 9) ────────────────────
+//
+// Books & Uniform are optional structure heads. Opt-ins demonstrate the
+// FULL applicability matrix on ONE class's roster (first class, first
+// three students — deterministic ids):
+//   student 1 → Books ✓ AND Uniform ✓
+//   student 2 → Books ✓, Uniform ✗
+//   student 3 → Books ✗, Uniform ✓
+// Everyone else: neither (the default — optional ≠ automatic).
+function buildOptionalHeadOptins(): Record<string, string[]> {
+  const headIdFor = (structureClassId: string, name: string): string | undefined =>
+    FEE_STRUCTURES.find((f) => f.classId === structureClassId)?.components.find((h) => h.name === name)?.id
+  const classId = ACADEMIC_CLASSES[0]?.id
+  if (!classId) return {}
+  const booksId = headIdFor(classId, 'Books & Material')
+  const uniformId = headIdFor(classId, 'Uniform & Sports Kit')
+  const roster = SS.filter((s) => s.classId === classId).slice(0, 3)
+  const map: Record<string, string[]> = {}
+  const assign = (studentId: string | undefined, headId: string | undefined) => {
+    if (!studentId || !headId) return
+    map[studentId] = [...(map[studentId] ?? []), headId]
+  }
+  assign(roster[0]?.id, booksId)
+  assign(roster[0]?.id, uniformId)
+  assign(roster[1]?.id, booksId)
+  assign(roster[2]?.id, uniformId)
+  return map
+}
+export const SEED_OPTIONAL_HEAD_OPTINS: Record<string, string[]> = buildOptionalHeadOptins()
 
 // ─── Phase 3: seed version snapshots from FEE_STRUCTURES ────────────
 // Derived so live structures and immutable history stay in lockstep.

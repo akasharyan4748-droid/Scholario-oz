@@ -66,11 +66,16 @@ import {
   SEED_CASH_REQUESTS,
   SEED_AUDIT,
   SEED_ADDITIONAL_CHARGES,
+  SEED_CONCESSIONS,
+  SEED_OPTIONAL_HEAD_OPTINS,
   isHeadApplicableToStudent,
+  expandHeadChargeEntries,
+  expandExamChargeEntries,
+  billingPeriodsFor,
   DEFAULT_ADMISSION_POLICY,
   CURRENT_ACADEMIC_YEAR,
 } from './fee-store-data'
-import type { AdmissionFeePolicy } from './fee-store-data'
+import type { AdmissionFeePolicy, ScheduledCharge } from './fee-store-data'
 export {
   FREQUENCY_MULTIPLIER,
   VALID_FREQUENCIES,
@@ -83,6 +88,9 @@ export {
   DEFAULT_RECEIPT_SETTINGS,
   SEED_FEE_TRANSACTIONS,
   CURRENT_ACADEMIC_YEAR,
+  billingPeriodsFor,
+  expandHeadChargeEntries,
+  expandExamChargeEntries,
 }
 export type { AdmissionFeePolicy }
 
@@ -137,6 +145,10 @@ export type AuditAction =
   | 'cash.rejected'
   | 'cash.clarification'
   | 'concession.granted'
+  | 'concession.requested'
+  | 'concession.rejected'
+  | 'fee_applicability.changed'
+  | 'settings.changed'
   | 'fee_structure.changed'
   | 'payment.reversed'
   | 'refund.approved'
@@ -683,7 +695,7 @@ export interface AuditRecord {
   timestamp: string
   /** Entity affected (transaction id, fee head id, student id, etc.). */
   entityId: string
-  entityType: 'transaction' | 'cash_request' | 'fee_head' | 'fee_structure' | 'payment_mode' | 'concession' | 'receipt' | 'gateway' | 'bank_account' | 'upi_qr' | 'settlement' | 'reconciliation' | 'webhook' | 'additional_charge'
+  entityType: 'transaction' | 'cash_request' | 'fee_head' | 'fee_structure' | 'payment_mode' | 'concession' | 'receipt' | 'gateway' | 'bank_account' | 'upi_qr' | 'settlement' | 'reconciliation' | 'webhook' | 'additional_charge' | 'settings' | 'student'
   description: string
   before?: string
   after?: string
@@ -730,6 +742,41 @@ export interface ReceiptSettings {
    *  been consolidated away; '80mm' may still arrive from old persisted
    *  state and is migrated to 'A5'. */
   paperSize: 'A5' | 'A4'
+}
+
+// ─── STUDENT CONCESSION (auditable concession records) ───────────────
+//
+// A concession is a first-class financial record, not a bare scalar:
+// type · percent-or-amount · applicable scope · student/account ·
+// effective period · approval status · approvedBy · reason — and every
+// transition (requested / approved / rejected) emits an immutable audit
+// entry. Concessions reduce the APPLICABLE amount → net payable →
+// outstanding; they NEVER rewrite historical payments.
+export type ConcessionType = 'Sibling Discount' | 'Staff Ward' | 'Scholarship' | 'Other'
+export type ConcessionStatus = 'Pending' | 'Approved' | 'Rejected'
+
+export interface StudentConcession {
+  id: string
+  studentId: string
+  type: ConcessionType
+  /** 'percent' = % of the applicable amount; 'amount' = flat ₹ per session. */
+  basis: 'percent' | 'amount'
+  /** Percent (0-100) when basis='percent'; rupees when basis='amount'. */
+  value: number
+  /** v1 scope: 'core_all' = the student's full applicable school fees
+   *  (core + exam). Per-head scoping is deliberately NOT modelled yet —
+   *  add an appliesToHeadIds only when a real workflow needs it. */
+  appliesTo: 'core_all'
+  effectiveFrom: string
+  effectiveTo?: string
+  status: ConcessionStatus
+  reason: string
+  requestedBy: string
+  requestedAt: string
+  approvedBy?: string
+  approvedAt?: string
+  /** Principal's reason when rejecting (audit trail). */
+  rejectedReason?: string
 }
 
 // ─── Payment Infrastructure Types (Phase 4) ──────────────────────────
@@ -1086,6 +1133,14 @@ interface FeeState {
   settlements: Settlement[]
   reconciliationRecords: ReconciliationRecord[]
   webhookEvents: WebhookEvent[]
+  /** Approved/pending concession records — the auditable source of every
+   *  rupee reduced from an account's applicable amount. */
+  concessions: StudentConcession[]
+  /** Per-student OPTIONAL-head opt-ins (PART 9 applicability boundary):
+   *  studentId → FeeHead.ids of optional heads (Books, Uniform…) the
+   *  school explicitly applied to THIS student. Never auto-populated —
+   *  optional ≠ automatic. */
+  optionalHeadApplicability: Record<string, string[]>
 
   // mutations
   recordPayment: (input: PaymentInput) => { success: boolean; transaction?: FeeTransaction; error?: string; duplicateTransactionId?: string }
@@ -1155,6 +1210,20 @@ interface FeeState {
   updateConcessionRule: (patch: Partial<ConcessionRule>) => void
   updateAdmissionPolicy: (patch: Partial<AdmissionFeePolicy>) => void
   updateReceiptSettings: (patch: Partial<ReceiptSettings>) => void
+  // ─── Concessions (auditable records) ────────────────────────────────
+  /** Request (or directly grant, when the school's concession rule does
+   *  not require approval) a concession for a student. Audited. */
+  requestConcession: (input: { studentId: string; type: ConcessionType; basis: 'percent' | 'amount'; value: number; reason: string; effectiveFrom?: string; actor?: string }) => { success: boolean; concession?: StudentConcession; error?: string }
+  /** Approve a Pending concession — it starts reducing the account's
+   *  applicable amount on its effectiveFrom. Audited. */
+  approveConcession: (id: string, actor?: string) => { success: boolean; error?: string }
+  /** Reject a Pending concession. Reason preserved. Audited. */
+  rejectConcession: (id: string, actor?: string, reason?: string) => { success: boolean; error?: string }
+  // ─── Optional-head applicability (PART 9 boundary) ────────────────
+  /** Apply / remove an OPTIONAL structure head (Books, Uniform…) for ONE
+   *  student. Only affects future applicability + ledger charges — never
+   *  rewrites historical payments. Audited. */
+  setOptionalHeadApplicable: (studentId: string, headId: string, applicable: boolean, actor?: string) => { success: boolean; error?: string }
   // ─── Phase 4 — payment infrastructure mutations ──────────────────
   connectGateway: (provider: GatewayProvider, merchantId: string, apiKeyId: string, environment: GatewayEnvironment) => void
   disconnectGateway: () => void
@@ -1383,6 +1452,8 @@ export const useFeeStore = create<FeeState>()(
   settlements: SEED_SETTLEMENTS,
   reconciliationRecords: SEED_RECONCILIATION_RECORDS,
   webhookEvents: SEED_WEBHOOK_EVENTS,
+  concessions: SEED_CONCESSIONS,
+  optionalHeadApplicability: SEED_OPTIONAL_HEAD_OPTINS,
 
   recordPayment: (input) => {
     const state = get()
@@ -2902,21 +2973,192 @@ export const useFeeStore = create<FeeState>()(
 
   updateLateFeeRule: (patch) => {
     const state = get()
-    const before = JSON.stringify(state.lateFeeRule)
-    set({ lateFeeRule: { ...state.lateFeeRule, ...patch } })
-    // Note: we don't add audit for settings — too noisy. Only fee head / structure / payment.
+    const before = { ...state.lateFeeRule }
+    const after = { ...state.lateFeeRule, ...patch }
+    set({
+      lateFeeRule: after,
+      // PART 22 — settings changes are financial governance: every rule
+      // change is traceable (what changed, who changed it, when).
+      audit: pushAudit(state, {
+        action: 'settings.changed',
+        actor: 'Principal',
+        entityId: 'lateFeeRule',
+        entityType: 'settings',
+        description: `Late fee rule updated — ${formatINR(after.amountPerMonth, true)}/month, ${after.gracePeriodDays}-day grace, max ${formatINR(after.maxLateFee, true)}, ${after.appliesTo === 'mandatory_only' ? 'mandatory heads only' : 'all heads'}, ${after.enabled ? 'automatic' : 'manual'}${before.enabled !== after.enabled ? ` (was ${before.enabled ? 'automatic' : 'manual'})` : ''}`,
+        before: JSON.stringify(before),
+        after: JSON.stringify(after),
+      }),
+    })
   },
 
   updateConcessionRule: (patch) => {
-    set((state) => ({ concessionRule: { ...state.concessionRule, ...patch } }))
+    const state = get()
+    const before = { ...state.concessionRule }
+    const after = { ...state.concessionRule, ...patch }
+    set({
+      concessionRule: after,
+      audit: pushAudit(state, {
+        action: 'settings.changed',
+        actor: 'Principal',
+        entityId: 'concessionRule',
+        entityType: 'settings',
+        description: `Concession rule updated — sibling ${after.siblingDiscountPct}% · staff ward ${after.staffWardDiscountPct}% · scholarship ${after.scholarshipDiscountPct}%${after.requiresApproval ? ' · principal approval required' : ''}`,
+        before: JSON.stringify(before),
+        after: JSON.stringify(after),
+      }),
+    })
   },
 
   updateAdmissionPolicy: (patch) => {
-    set((state) => ({ admissionPolicy: { ...state.admissionPolicy, ...patch } }))
+    const state = get()
+    const before = { ...state.admissionPolicy }
+    const after = { ...state.admissionPolicy, ...patch }
+    set({
+      admissionPolicy: after,
+      audit: pushAudit(state, {
+        action: 'settings.changed',
+        actor: 'Principal',
+        entityId: 'admissionPolicy',
+        entityType: 'settings',
+        description: `One-time entry fee policy ${after.enabled ? 'enabled' : 'disabled'} — admission ${formatINR(after.boysAmount, true)} one-time, girls free above Class ${after.girlsFreeAboveGrade}`,
+        before: JSON.stringify(before),
+        after: JSON.stringify(after),
+      }),
+    })
   },
 
   updateReceiptSettings: (patch) => {
-    set((state) => ({ receiptSettings: { ...state.receiptSettings, ...patch } }))
+    const state = get()
+    const before = { ...state.receiptSettings }
+    const after = { ...state.receiptSettings, ...patch }
+    set({
+      receiptSettings: after,
+      audit: pushAudit(state, {
+        action: 'settings.changed',
+        actor: 'Principal',
+        entityId: 'receiptSettings',
+        entityType: 'settings',
+        description: `Receipt settings updated — prefix ${after.prefix}, next number ${after.startNumber}, ${after.paperSize} format`,
+        before: JSON.stringify(before),
+        after: JSON.stringify(after),
+      }),
+    })
+  },
+
+  // ─── Concession records (PART 11 — auditable, reconciled) ──────────
+  requestConcession: (input) => {
+    const state = get()
+    const student = useStudentsStore.getState().students.find((s) => s.id === input.studentId)
+    if (!student) return { success: false, error: 'Student not found in canonical record.' }
+    if (!input.value || input.value <= 0) return { success: false, error: 'Concession value must be greater than zero.' }
+    if (input.basis === 'percent' && input.value > 100) return { success: false, error: 'Percentage concession cannot exceed 100%.' }
+    if (!input.reason?.trim()) return { success: false, error: 'A reason is required for every concession.' }
+    const requiresApproval = state.concessionRule.requiresApproval
+    const nowIso = new Date().toISOString()
+    const concession: StudentConcession = {
+      id: `CONC-${Date.now().toString(36)}`,
+      studentId: student.id,
+      type: input.type,
+      basis: input.basis,
+      value: input.value,
+      appliesTo: 'core_all',
+      effectiveFrom: input.effectiveFrom ?? new Date().toISOString().split('T')[0],
+      status: requiresApproval ? 'Pending' : 'Approved',
+      reason: input.reason.trim(),
+      requestedBy: input.actor ?? 'Principal',
+      requestedAt: nowIso,
+      ...(requiresApproval ? {} : { approvedBy: input.actor ?? 'Principal', approvedAt: nowIso }),
+    }
+    set({
+      concessions: [concession, ...state.concessions],
+      audit: pushAudit(state, {
+        action: requiresApproval ? 'concession.requested' : 'concession.granted',
+        actor: input.actor ?? 'Principal',
+        entityId: concession.id,
+        entityType: 'concession',
+        description: requiresApproval
+          ? `Concession requested for ${student.name} — ${input.type}, ${input.basis === 'percent' ? `${input.value}%` : formatINR(input.value, true)} (${concession.reason})`
+          : `Concession granted for ${student.name} — ${input.type}, ${input.basis === 'percent' ? `${input.value}%` : formatINR(input.value, true)} (no approval required by school policy)`,
+      }),
+    })
+    return { success: true, concession }
+  },
+
+  approveConcession: (id, actor) => {
+    const state = get()
+    const conc = state.concessions.find((c) => c.id === id)
+    if (!conc) return { success: false, error: 'Concession not found.' }
+    if (conc.status !== 'Pending') return { success: false, error: `This concession is already ${conc.status.toLowerCase()}.` }
+    const student = useStudentsStore.getState().students.find((s) => s.id === conc.studentId)
+    set({
+      concessions: state.concessions.map((c) => c.id !== id ? c : {
+        ...c,
+        status: 'Approved' as const,
+        approvedBy: actor ?? 'Principal',
+        approvedAt: new Date().toISOString(),
+      }),
+      audit: pushAudit(state, {
+        action: 'concession.granted',
+        actor: actor ?? 'Principal',
+        entityId: id,
+        entityType: 'concession',
+        description: `Concession APPROVED for ${student?.name ?? conc.studentId} — ${conc.type}, ${conc.basis === 'percent' ? `${conc.value}%` : formatINR(conc.value, true)}, effective ${conc.effectiveFrom}. Applies to future dues only — past payments untouched.`,
+      }),
+    })
+    return { success: true }
+  },
+
+  rejectConcession: (id, actor, reason) => {
+    const state = get()
+    const conc = state.concessions.find((c) => c.id === id)
+    if (!conc) return { success: false, error: 'Concession not found.' }
+    if (conc.status !== 'Pending') return { success: false, error: `This concession is already ${conc.status.toLowerCase()}.` }
+    const student = useStudentsStore.getState().students.find((s) => s.id === conc.studentId)
+    set({
+      concessions: state.concessions.map((c) => c.id !== id ? c : {
+        ...c,
+        status: 'Rejected' as const,
+        rejectedReason: reason,
+      }),
+      audit: pushAudit(state, {
+        action: 'concession.rejected',
+        actor: actor ?? 'Principal',
+        entityId: id,
+        entityType: 'concession',
+        description: `Concession REJECTED for ${student?.name ?? conc.studentId} — ${conc.type}${reason ? ` — ${reason}` : ''}. Applicable amount unchanged.`,
+      }),
+    })
+    return { success: true }
+  },
+
+  // ─── Optional-head applicability (PART 9 — per-student opt-in) ──────
+  setOptionalHeadApplicable: (studentId, headId, applicable, actor) => {
+    const state = get()
+    const student = useStudentsStore.getState().students.find((s) => s.id === studentId)
+    if (!student) return { success: false, error: 'Student not found in canonical record.' }
+    // The head must exist in the student's structure AND be optional —
+    // mandatory heads and Transport (own enrolment gate) are not opt-in.
+    const structure = findStructureForStudent(student.className, student.classId)
+    const head = structure?.components.find((h) => h.id === headId)
+    if (!structure || !head) return { success: false, error: 'Fee head not found in this student\'s fee structure.' }
+    if (head.category === 'Transport') return { success: false, error: 'Transport applicability follows bus enrolment, not per-head opt-in.' }
+    if (head.mandatory !== false) return { success: false, error: 'Only optional heads (Books, Uniform…) can be applied per student.' }
+    const current = state.optionalHeadApplicability[studentId] ?? []
+    const next = applicable
+      ? (current.includes(headId) ? current : [...current, headId])
+      : current.filter((id) => id !== headId)
+    if (next.length === current.length && applicable) return { success: true } // already applied — no-op
+    set({
+      optionalHeadApplicability: { ...state.optionalHeadApplicability, [studentId]: next },
+      audit: pushAudit(state, {
+        action: 'fee_applicability.changed',
+        actor: actor ?? 'Principal',
+        entityId: studentId,
+        entityType: 'student',
+        description: `${head.name} (${formatINR(head.amount, true)} ${head.frequency}) ${applicable ? 'APPLIED to' : 'REMOVED from'} ${student.name}'s account. Future charges only — recorded payments and issued receipts are unchanged.`,
+      }),
+    })
+    return { success: true }
   },
 
   // ─── Phase 4 — payment infrastructure mutations ──────────────────
@@ -3227,7 +3469,7 @@ export const useFeeStore = create<FeeState>()(
   // `additionalCharges` array (event-based charges like the Class 8
   // Educational Tour) when the persisted state predates the key. Never
   // overwrites user-created charges; never touches transactions.
-  version: 9,
+  version: 10,
   migrate: (persistedState: any, fromVersion: number) => {
     // v5 — session rollover reset: the whole demo dataset moved from the
     // archived 2025-26 session into the live 2026-27 session (CURRENT_ACADEMIC_YEAR).
@@ -3327,6 +3569,20 @@ export const useFeeStore = create<FeeState>()(
       }
       return st
     }
+    // v10 — CONCESSION RECORDS + OPTIONAL-HEAD OPT-INS: seed the auditable
+    // concession records (register scholarships → approved records) and
+    // the optional-head applicability map. Never overwrites existing
+    // records when a namespace already carries them.
+    if (fromVersion < 10 && persistedState && typeof persistedState === 'object') {
+      const st = persistedState as Record<string, any>
+      return {
+        ...st,
+        concessions: Array.isArray(st.concessions) ? st.concessions : SEED_CONCESSIONS,
+        optionalHeadApplicability: st.optionalHeadApplicability && typeof st.optionalHeadApplicability === 'object'
+          ? st.optionalHeadApplicability
+          : SEED_OPTIONAL_HEAD_OPTINS,
+      }
+    }
     return persistedState
   },
   // Persist only DATA, never the mutation functions. Zustand re-binds
@@ -3353,6 +3609,8 @@ export const useFeeStore = create<FeeState>()(
     settlements: state.settlements,
     reconciliationRecords: state.reconciliationRecords,
     webhookEvents: state.webhookEvents,
+    concessions: state.concessions,
+    optionalHeadApplicability: state.optionalHeadApplicability,
   }),
 }))
 
@@ -3363,6 +3621,8 @@ function computeAccount(
   transactions: FeeTransaction[],
   lateFeeRule: LateFeeRule,
   additionalCharges: AdditionalCharge[],
+  concessions: StudentConcession[] = [],
+  optionalHeadApplicability: Record<string, string[]> = {},
 ): StudentFeeAccount {
   // Fix 3 (FEE-CORRECT): compute the ACADEMIC YEAR TOTAL from the matching
   // FeeStructureConfig (using `computeHeadsTotal` with the frequency
@@ -3379,29 +3639,47 @@ function computeAccount(
   // Removing the legacy "Exam" Per Term fee head reduced the recurring
   // total; the per-exam schedule compensates so the student's annual
   // obligation stays sensible.
-  // FEE-PER-CLASS: try an EXACT className match first (e.g. student
-  // className="Class 9" → FS04 with className="Class 9"). If no structure
-  // has that exact className, fall back to classLevel substring matching
-  // (e.g. student className="Class 4" → no exact match → classLevel=
-  // "Primary" → finds FS02 with classLevel="Primary"). Backward-
-  // compatible with the pre-FEE-PER-CLASS seed (range names like
-  // "Class 9–10" never exact-match a real student className, so they
-  // fall through to the classLevel path).
   // FEE-PER-CLASS: try an EXACT classId/classId-stream match first. Passes
   // the student's classId so Class 11/12 stream students resolve to THEIR
   // stream structure (PCM vs PCB differ in practical fees).
   const structure = findStructureForStudent(student.className, student.classId)
-  // FEE-POLICY: only ACTIVE heads applicable to THIS student are billed.
-  // Transport, e.g., is charged exclusively to students actually enrolled
-  // in transport (student.transport gate — see isHeadApplicableToStudent).
+  // FEE-POLICY + PART 9: only ACTIVE heads applicable to THIS student are
+  // billed. Transport is charged exclusively to students enrolled in
+  // transport; OPTIONAL heads (Books, Uniform…) apply ONLY through the
+  // explicit per-student opt-in map — never automatically.
+  const optedInHeadIds = optionalHeadApplicability[student.id] ?? []
   const applicableHeads = structure
-    ? structure.components.filter((c) => c.active && isHeadApplicableToStudent(c, student))
+    ? structure.components.filter((c) => c.active && isHeadApplicableToStudent(c, student, { optedInHeadIds }))
     : []
   const regularFeesTotal = structure ? computeHeadsTotal(applicableHeads) : student.feeTotal
   const examFeeTotal = structure ? computeExamFeeTotal(structure.examFeeSchedule) : 0
   const totalApplicable = regularFeesTotal + examFeeTotal
 
-  const concession = student.scholarship ?? 0
+  // ─── CONCESSION (PART 11 — auditable records) ──────────────────────
+  // Approved, currently-effective concession records for THIS student are
+  // the source of truth. Percent concessions reduce by a share of the
+  // applicable amount; amount concessions by a flat figure. The register
+  // scalar (`student.scholarship`) is only a LEGACY FALLBACK for persisted
+  // namespaces that predate records — with records present the scalar is
+  // ignored, so a newly granted concession can never double-count with it.
+  const today = new Date().toISOString().split('T')[0]
+  const myConcessions = concessions.filter(
+    (c) => c.studentId === student.id && c.status === 'Approved'
+      && c.effectiveFrom <= today && (!c.effectiveTo || c.effectiveTo >= today),
+  )
+  let concession: number
+  let concessionDescription: string
+  if (myConcessions.length > 0) {
+    concession = myConcessions.reduce((sum, c) => {
+      const amount = c.basis === 'percent' ? Math.round((totalApplicable * c.value) / 100) : c.value
+      return sum + amount
+    }, 0)
+    concession = Math.min(concession, totalApplicable)
+    concessionDescription = `${Array.from(new Set(myConcessions.map((c) => c.type))).join(' + ')} concession applied`
+  } else {
+    concession = student.scholarship ?? 0
+    concessionDescription = 'Sibling / scholarship concession applied'
+  }
   const netPayable = totalApplicable - concession
 
   // ─── CORE vs ADDITIONAL split (the accounting rule) ────────────────
@@ -3473,144 +3751,189 @@ function computeAccount(
     outstanding: Math.max(0, additionalTotal - additionalChargesForAccount.reduce((sum, c) => sum + c.paid, 0)),
   }
 
-  const outstanding = Math.max(0, netPayable - paid)
-  const isOverdue = student.feeStatus === 'Pending'
-  const lateFee = isOverdue && lateFeeRule.enabled ? Math.min(lateFeeRule.amountPerMonth * 3, lateFeeRule.maxLateFee) : 0
-  const totalDue = outstanding + lateFee
-  const status: FeePaymentStatus = outstanding === 0 ? 'Paid' : isOverdue ? 'Overdue' : paid > 0 ? 'Partially Paid' : 'Due'
-  const daysOverdue = isOverdue ? 90 : outstanding > 0 ? 30 : 0
-
-  // Build chronological ledger.
-  // Each fee head becomes a single ledger entry representing the ACADEMIC
-  // YEAR TOTAL for that head (amount × frequency multiplier). The
-  // description uses the frequency label (e.g. "Monthly charge — Tuition")
-  // so the ledger reads correctly for both per-period and annual heads.
+  // ─── LATE FEE (PART 12 — rule-driven, schedule-derived) ─────────────
   //
-  // FEE-EXAM: each active exam fee schedule entry is appended as a
-  // separate ledger line — the feeHead reads "Exam Fee — <examType>"
-  // and the description uses "Per-exam fee — <examType>".
+  // The old implementation was `min(amountPerMonth × 3, max)` gated on the
+  // register's feeStatus — hardcoded 3 months, grace + appliesTo unused and
+  // `daysOverdue` literally 90/30. Now the LATE FEE IS DERIVED FROM THE
+  // BILLING SCHEDULE:
+  //   1. Core+exam charges expand into per-period scheduled charges
+  //      (Monthly Tuition → Apr ₹250, May ₹250 …).
+  //   2. Countable core money (Previous-Receipts carry + transactions) is
+  //      allocated OLDEST-FIRST against those charges.
+  //   3. A charge is OVERDUE when it remains partly unpaid beyond
+  //      dueDate + gracePeriodDays. `appliesTo: 'mandatory_only'`
+  //      excludes optional opt-in heads (Books/Uniform), Transport and
+  //      Additional Charges — late fee NEVER lands on optional charges.
+  //   4. lateFee = min(amountPerMonth × overdue months, maxLateFee);
+  //      daysOverdue = the true age of the oldest unpaid past-due charge.
+  const sessionStartYear = Number(CURRENT_ACADEMIC_YEAR.split('-')[0])
+  const sessionStart = `${sessionStartYear}-04-01`
+  const todayMs = new Date(`${today}T00:00:00`).getTime()
+  const DAY_MS = 86_400_000
+
+  const scheduledCharges: ScheduledCharge[] = []
+  for (const head of applicableHeads) scheduledCharges.push(...expandHeadChargeEntries(head, sessionStartYear))
+  for (const exam of (structure?.examFeeSchedule ?? []).filter((e) => e.active)) {
+    scheduledCharges.push(...expandExamChargeEntries(exam, sessionStartYear))
+  }
+  scheduledCharges.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+
+  // Countable core credits, chronologically: the offline-history carry
+  // (Previous Receipts, lands at session start) + every countable
+  // core/exam transaction. ADDITIONAL money is excluded — it pays
+  // event charges, never instalments.
+  const coreCredits: Array<{ date: string; amount: number }> = []
+  if (canonicalPrevPaid > 0) coreCredits.push({ date: sessionStart, amount: canonicalPrevPaid })
+  for (const t of coreTxns) coreCredits.push({ date: t.date, amount: t.amount })
+  coreCredits.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+
+  // Oldest-first allocation: each credit reduces the earliest charge that
+  // still has a remaining balance.
+  const chargeRemaining = scheduledCharges.map((c) => ({ ...c, remaining: c.amount }))
+  let creditIdx = 0
+  for (const credit of coreCredits) {
+    let pool = credit.amount
+    while (pool > 0 && creditIdx < chargeRemaining.length) {
+      const charge = chargeRemaining[creditIdx]
+      if (charge.remaining <= 0) {
+        creditIdx += 1
+        continue
+      }
+      const applied = Math.min(pool, charge.remaining)
+      charge.remaining -= applied
+      pool -= applied
+      if (charge.remaining <= 0) creditIdx += 1
+    }
+    if (pool <= 0 && creditIdx >= chargeRemaining.length) break
+  }
+
+  // Overdue evaluation.
+  const graceDays = Math.max(0, lateFeeRule.gracePeriodDays)
+  let earliestOverdueDueMs: number | null = null
+  for (const charge of chargeRemaining) {
+    if (charge.remaining <= 0) continue
+    if (charge.isAdditional) continue
+    if (lateFeeRule.appliesTo === 'mandatory_only' && !charge.fromMandatoryHead) continue
+    const dueMs = new Date(`${charge.date}T00:00:00`).getTime()
+    if (todayMs <= dueMs + graceDays * DAY_MS) continue
+    if (earliestOverdueDueMs === null || dueMs < earliestOverdueDueMs) earliestOverdueDueMs = dueMs
+  }
+  let monthsOverdue = 0
+  if (earliestOverdueDueMs !== null) {
+    const graceEndMs = earliestOverdueDueMs + graceDays * DAY_MS
+    monthsOverdue = Math.floor((todayMs - graceEndMs) / (30 * DAY_MS)) + 1
+  }
+  const lateFee = earliestOverdueDueMs !== null && lateFeeRule.enabled
+    ? Math.min(lateFeeRule.amountPerMonth * monthsOverdue, lateFeeRule.maxLateFee)
+    : 0
+  const daysOverdue = earliestOverdueDueMs !== null ? Math.max(0, Math.floor((todayMs - earliestOverdueDueMs) / DAY_MS)) : 0
+
+  const outstanding = Math.max(0, netPayable - paid)
+  const totalDue = outstanding + lateFee
+  // Status derives from the FINANCIAL position (register feeStatus stays a
+  // register-level field): anything unpaid past its grace window is
+  // Overdue, regardless of how much was paid so far.
+  const isOverdue = daysOverdue > 0
+  const status: FeePaymentStatus = outstanding === 0 ? 'Paid' : isOverdue ? 'Overdue' : paid > 0 ? 'Partially Paid' : 'Due'
+
+  // ─── Build the chronological ledger (FREQUENCY-AWARE, PART 5) ──────
+  //
+  // Each recurring head becomes its scheduled PER-PERIOD charges
+  // (Monthly Tuition ₹250 → Apr ₹250 / May ₹250 / …), exam-fee schedule
+  // entries expand PER INSTANCE (Unit Test × 4 → four scheduled lines —
+  // configuration ≠ a conducted examination), Additional Charges carry
+  // their own due dates, and payments interleave in date order. Σ(charges)
+  // is IDENTICAL to the annual summary — only the granularity is honest —
+  // so the closing balance still lands exactly on `outstanding + lateFee
+  // (+ additional position)`.
   const ledger: LedgerEntry[] = []
-  const billedHeads = applicableHeads
   if (structure) {
-    let balance = 0
-    billedHeads.forEach((c) => {
-      const annualHeadCharge = c.amount * (FREQUENCY_MULTIPLIER[c.frequency] ?? 1)
-      balance += annualHeadCharge
-      // Exam-like recurring heads (Board Examination Fee, Examination Fee)
-      // are labelled Exam Fee in the ledger's Type column even though they
-      // live in the regular structure.
-      const isExamLikeHead = c.category === 'Exam' || c.category === 'Board' || /exam/i.test(c.name)
-      ledger.push({
-        id: `LED-${student.id}-${c.id}`,
-        date: '2026-04-01',
-        feeHead: c.name,
-        charge: annualHeadCharge,
+    const datedEntries: Array<Omit<LedgerEntry, 'balance'>> = []
+    for (const charge of scheduledCharges) {
+      datedEntries.push({
+        id: `LED-${student.id}-${charge.feeHead}-${charge.date}-${datedEntries.length}`,
+        date: charge.date,
+        feeHead: charge.feeHead,
+        charge: charge.amount,
         payment: 0,
-        balance,
-        description: `${c.frequency} charge — ${c.name}`,
-        entryType: isExamLikeHead ? 'exam' : 'core',
+        description: charge.description,
+        entryType: charge.entryType,
       })
-    })
-    // FEE-EXAM: per-exam fee charges (one ledger line per active entry).
-    // The charge per entry = amount × plannedInstances (the estimated
-    // annual exam fee for that exam type). The description shows
-    // "Per-exam fee — <examType> × N" so the parent can understand.
-    const activeExamFees = (structure.examFeeSchedule ?? []).filter((e) => e.active)
-    activeExamFees.forEach((e, idx) => {
-      const instances = e.plannedInstances ?? 1
-      const annualExamCharge = e.amount * instances
-      balance += annualExamCharge
-      ledger.push({
-        id: `LED-${student.id}-EXAM-${idx}-${e.id}`,
-        date: '2026-04-01',
-        feeHead: `Exam Fee — ${e.examType}`,
-        charge: annualExamCharge,
-        payment: 0,
-        balance,
-        description: `Per-exam fee — ${e.examType} × ${instances}`,
-        entryType: 'exam',
-      })
-    })
+    }
     // ADDITIONAL CHARGES — one ledger line per active charge, dated by the
     // charge's due date so event-based obligations read chronologically.
     additionalChargesForAccount.forEach((c) => {
-      balance += c.amount
-      ledger.push({
+      datedEntries.push({
         id: `LED-${student.id}-ADDL-${c.chargeId}`,
         date: c.dueDate,
         feeHead: c.name,
         charge: c.amount,
         payment: 0,
-        balance,
         description: `${c.category} charge${c.reference ? ` — ${c.reference}` : ''} · ${c.mandatory ? 'Mandatory' : 'Optional'}`,
         entryType: 'additional',
       })
     })
     if (concession > 0) {
-      balance -= concession
-      ledger.push({
+      datedEntries.push({
         id: `LED-${student.id}-CONC`,
         date: '2026-04-02',
         feeHead: 'Concession',
         charge: -concession,
         payment: 0,
-        balance,
-        description: 'Sibling / scholarship concession applied',
+        description: concessionDescription,
         entryType: 'concession',
       })
     }
     // Previous Receipts — the offline-history portion of the canonical
     // register balance (student.feePaid) that has no digitised transaction.
-    // Without this line the ledger would close at
-    // payable − Σ(receipts) and contradict the account's outstanding
-    // (= payable − feePaid − live receipts). Emitted before the payment
-    // walk so the running balance lands exactly on `outstanding`.
     if (canonicalPrevPaid !== 0) {
-      balance -= canonicalPrevPaid
-      ledger.push({
+      datedEntries.push({
         id: `LED-${student.id}-PREV`,
-        date: '2026-04-01',
+        date: sessionStart,
         feeHead: 'Previous Receipts',
         charge: 0,
         payment: canonicalPrevPaid,
-        balance,
         description: 'Collections carried from the Students register (offline history)',
         entryType: 'payment',
       })
     }
     if (lateFee > 0) {
-      balance += lateFee
-      ledger.push({
+      datedEntries.push({
         id: `LED-${student.id}-LF`,
-        date: '2026-07-08',
+        date: today,
         feeHead: 'Late Fee',
         charge: lateFee,
         payment: 0,
-        balance,
-        description: 'Late payment penalty',
+        description: `Late fee — ${monthsOverdue} month${monthsOverdue === 1 ? '' : 's'} overdue beyond the ${graceDays}-day grace (${formatINR(lateFeeRule.amountPerMonth, true)}/month, capped ${formatINR(lateFeeRule.maxLateFee, true)})`,
         entryType: 'late-fee',
       })
     }
-    // Sort transactions by date and apply payments. Only countable money
-    // (Success / Under Verification) reduces the running balance — Failed
-    // and Refunded transactions are never real money received, and letting
-    // them through would make the ledger's closing balance contradict the
-    // account's computed outstanding (paid only counts countable txns).
+    // Payments — only countable money (Success / Under Verification)
+    // reduces the running balance; Failed and Refunded transactions are
+    // never real money received.
     const sortedTxns = studentTxns.filter(countable).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     for (const t of sortedTxns) {
-      balance -= t.amount
       const cat = txnCategory(t)
-      ledger.push({
+      datedEntries.push({
         id: `LED-${student.id}-${t.id}`,
         date: t.date,
         feeHead: t.feeHead,
         charge: 0,
         payment: t.amount,
-        balance,
         description: cat === 'ADDITIONAL' ? `${t.purpose} (additional charge payment)` : t.purpose,
         receiptNo: t.receiptNo,
         entryType: 'payment',
       })
+    }
+    // Chronological order (stable for same-day entries), then the running
+    // balance walk — the ledger's closing balance reconciles with the
+    // account's outstanding + late fee to the rupee.
+    datedEntries.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    let balance = 0
+    for (const entry of datedEntries) {
+      balance += entry.charge - entry.payment
+      ledger.push({ ...entry, balance })
     }
   }
 
@@ -3640,8 +3963,115 @@ export function getStudentBalanceDue(studentId: string): number | null {
   const state = useFeeStore.getState()
   const student = useStudentsStore.getState().students.find((s) => s.id === studentId)
   if (!student) return null
-  const acct = computeAccount(student, state.transactions, state.lateFeeRule, state.additionalCharges)
+  const acct = computeAccount(student, state.transactions, state.lateFeeRule, state.additionalCharges, state.concessions, state.optionalHeadApplicability)
   return acct.outstanding
+}
+
+// ─── Canonical selectors: billable heads + optional-head choices ─────
+//
+// ONE derivation of "what can this student legitimately be charged for"
+// (PART 3 — every charge originates from a configured fee policy). The
+// Collect flow consumes these so a payment can never be recorded against
+// a head that does not exist in the student's applicable structure, and
+// newly configured heads appear automatically — no hardcoded head lists.
+
+export interface BillableHeadOption {
+  /** Value written to the transaction's feeHead. */
+  value: string
+  label: string
+  /** Frequency-derived purpose label (receipt text). */
+  purpose: string
+  kind: 'core' | 'optional' | 'exam' | 'late-fee'
+  /** Per-period (recurring) / per-instance (exam) suggested amount. */
+  suggestedAmount?: number
+}
+
+/** Receipt purpose label derived from the head's ACTUAL frequency — never
+ *  a fabricated term/period structure the school has not configured. */
+export function instalmentPurpose(frequency: FeeHead['frequency'], head: string): string {
+  switch (frequency) {
+    case 'Monthly': return `Monthly instalment — ${head}`
+    case 'Quarterly': return `Quarterly instalment — ${head}`
+    case 'Per Term': return `Term instalment — ${head}`
+    case 'Half-Yearly': return `Half-yearly charge — ${head}`
+    case 'One-Time': return `One-time charge — ${head}`
+    default: return `Annual charge — ${head}`
+  }
+}
+
+/**
+ * Billable payment targets for ONE student, derived from their applicable
+ * structure heads (incl. per-student optional opt-ins), the exam-fee
+ * schedule (per exam type) and the Late Fee line when the rule is on.
+ */
+export function studentBillableHeads(studentId: string): BillableHeadOption[] {
+  const state = useFeeStore.getState()
+  const student = useStudentsStore.getState().students.find((s) => s.id === studentId)
+  if (!student) return []
+  const optedIn = state.optionalHeadApplicability[studentId] ?? []
+  const structure = findStructureForStudent(student.className, student.classId)
+  const options: BillableHeadOption[] = []
+  if (structure) {
+    for (const head of structure.components) {
+      if (!head.active) continue
+      if (!isHeadApplicableToStudent(head, student, { optedInHeadIds: optedIn })) continue
+      options.push({
+        value: head.name,
+        label: head.name,
+        purpose: instalmentPurpose(head.frequency, head.name),
+        kind: head.mandatory === false ? 'optional' : 'core',
+        suggestedAmount: head.amount,
+      })
+    }
+    for (const exam of (structure.examFeeSchedule ?? []).filter((e) => e.active)) {
+      options.push({
+        value: `Exam Fee — ${exam.examType}`,
+        label: `Exam Fee — ${exam.examType}`,
+        purpose: `Examination fee — ${exam.examType}`,
+        kind: 'exam',
+        suggestedAmount: exam.amount,
+      })
+    }
+  }
+  if (state.lateFeeRule.enabled) {
+    options.push({ value: 'Late Fee', label: 'Late Fee', purpose: 'Late fee settlement', kind: 'late-fee' })
+  }
+  return options
+}
+
+export interface OptionalHeadChoice {
+  headId: string
+  name: string
+  amount: number
+  frequency: FeeHead['frequency']
+  /** Whether this optional head is CURRENTLY applied to the student. */
+  applicable: boolean
+}
+
+/**
+ * The OPTIONAL heads of the student's structure with their per-student
+ * applicability state (PART 9 boundary). Powers the Student Account's
+ * Optional Charges controls — the one place optional heads are applied
+ * or removed for a student (audited in the store action).
+ */
+export function studentOptionalHeadChoices(studentId: string): OptionalHeadChoice[] {
+  const state = useFeeStore.getState()
+  const student = useStudentsStore.getState().students.find((s) => s.id === studentId)
+  if (!student) return []
+  const structure = findStructureForStudent(student.className, student.classId)
+  if (!structure) return []
+  const optedIn = state.optionalHeadApplicability[studentId] ?? []
+  // Transport is excluded — its applicability follows bus enrolment
+  // (student.transport), never a per-head opt-in.
+  return structure.components
+    .filter((h) => h.active && h.mandatory === false && h.category !== 'Transport')
+    .map((h) => ({
+      headId: h.id,
+      name: h.name,
+      amount: h.amount,
+      frequency: h.frequency,
+      applicable: optedIn.includes(h.id),
+    }))
 }
 
 // ─── Hook: Canonical Fee Data ────────────────────────────────────────
@@ -3661,10 +4091,12 @@ export function useFeeData(academicYear: string = CURRENT_ACADEMIC_YEAR) {
   const concessionRule = useFeeStore((s) => s.concessionRule)
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
   const audit = useFeeStore((s) => s.audit)
+  const concessions = useFeeStore((s) => s.concessions)
+  const optionalHeadApplicability = useFeeStore((s) => s.optionalHeadApplicability)
 
   return useMemo(() => {
     const activeStudents = students.filter((s) => s.status === 'Active')
-    const accounts = activeStudents.map((s) => computeAccount(s, transactions, lateFeeRule, additionalCharges))
+    const accounts = activeStudents.map((s) => computeAccount(s, transactions, lateFeeRule, additionalCharges, concessions, optionalHeadApplicability))
 
     const totalExpected = accounts.reduce((sum, a) => sum + a.netPayable, 0)
     const totalCollected = accounts.reduce((sum, a) => sum + a.paid, 0)
@@ -4084,7 +4516,7 @@ export function useFeeData(academicYear: string = CURRENT_ACADEMIC_YEAR) {
         },
       },
     }
-  }, [students, transactions, cashRequests, feeStructures, versions, changeLog, additionalCharges, paymentModes, lateFeeRule, concessionRule, receiptSettings, audit, academicYear])
+  }, [students, transactions, cashRequests, feeStructures, versions, changeLog, additionalCharges, paymentModes, lateFeeRule, concessionRule, receiptSettings, audit, academicYear, concessions, optionalHeadApplicability])
 }
 
 // ─── Helper: format INR ──────────────────────────────────────────────
