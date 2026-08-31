@@ -115,10 +115,14 @@ export const TENANTS: SchoolTenant[] = [
     config: configWith({
       // §24 School B — Fee Management ON, editing/publishing OFF (read-only
       // structures), online payments OFF, examinations ON with Pattern B.
+      // One-time entry fee policy is also platform-restricted here: the
+      // Principal SEES the policy but cannot change it (permission model
+      // demo out of the box).
       capabilities: {
         fee_structure_edit: false,
         fee_structure_publish: false,
         fee_structure_archive: false,
+        fee_entry_policy_manage: false,
       },
       subFeatures: { fee_online_payments: false },
       examTemplateId: 'quarterly-hy-annual',

@@ -103,6 +103,7 @@ export const CAPABILITY_CATALOG: CapabilityDef[] = [
   { key: 'fee_structure_archive', label: 'Fee Structure Archiving', description: 'Principal may archive structures (30-day retention applies)' },
   { key: 'fee_structure_delete', label: 'Permanent Delete', description: 'Reserved for the platform (retention expiry or Super Admin). Principals never permanently delete fee structures', platformReserved: true },
   { key: 'fee_catalogue_manage', label: 'Catalogue Management', description: 'Principal may create / edit / archive fee-head catalogue defaults' },
+  { key: 'fee_entry_policy_manage', label: 'One-Time Fee Policy', description: 'Principal may manage one-time entry fee policy (admission / registration applicability)' },
 ]
 
 // ─── Examination templates ──────────────────────────────────────────────

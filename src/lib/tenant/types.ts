@@ -100,6 +100,7 @@ export type CapabilityKey =
   | 'fee_structure_archive'
   | 'fee_structure_delete'
   | 'fee_catalogue_manage'
+  | 'fee_entry_policy_manage'
 
 /** Which default examination pattern the school follows (see EXAM_TEMPLATES). */
 export type ExamTemplateId = 'ut4-hy-annual' | 'quarterly-hy-annual'

@@ -12,7 +12,7 @@
  *
  * Keys follow the agreed capability vocabulary:
  *   fee_structure_edit / fee_structure_publish / fee_structure_archive /
- *   fee_structure_delete / fee_catalogue_manage
+ *   fee_structure_delete / fee_catalogue_manage / fee_entry_policy_manage
  *
  * PLATFORM-RESERVED CAPABILITY: fee_structure_delete is ALWAYS false for
  * school roles. Principals archive structures; permanent deletion belongs
@@ -44,6 +44,7 @@ const ALL_CAPABILITY_KEYS: CapabilityKey[] = [
   'fee_structure_archive',
   'fee_structure_delete',
   'fee_catalogue_manage',
+  'fee_entry_policy_manage',
 ]
 
 /**
@@ -59,6 +60,7 @@ const ROLE_BASE: Record<PrincipalRole, EffectivePermissions> = {
     fee_structure_archive: true,
     fee_structure_delete: false, // platform-reserved
     fee_catalogue_manage: true,
+    fee_entry_policy_manage: true,
   },
   teacher: {
     fee_structure_edit: false,
@@ -66,6 +68,7 @@ const ROLE_BASE: Record<PrincipalRole, EffectivePermissions> = {
     fee_structure_archive: false,
     fee_structure_delete: false,
     fee_catalogue_manage: false,
+    fee_entry_policy_manage: false,
   },
   student: {
     fee_structure_edit: false,
@@ -73,6 +76,7 @@ const ROLE_BASE: Record<PrincipalRole, EffectivePermissions> = {
     fee_structure_archive: false,
     fee_structure_delete: false,
     fee_catalogue_manage: false,
+    fee_entry_policy_manage: false,
   },
   superadmin: {
     fee_structure_edit: true,
@@ -80,6 +84,7 @@ const ROLE_BASE: Record<PrincipalRole, EffectivePermissions> = {
     fee_structure_archive: true,
     fee_structure_delete: true, // platform actor
     fee_catalogue_manage: true,
+    fee_entry_policy_manage: true,
   },
 }
 

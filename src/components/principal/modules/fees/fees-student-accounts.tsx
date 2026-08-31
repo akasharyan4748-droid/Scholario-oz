@@ -279,7 +279,10 @@ export function FeesStudentAccountsSection({ data, onCollect, focusStudent }: Pr
                 : <StatTile label="Due" value="Clear" accent="emerald" align="right" className="px-2 py-1.5" />}
             </div>
             <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border/40 text-[10px] text-muted-foreground">
-              <span>{a.transactions.length} {a.transactions.length === 1 ? 'transaction' : 'transactions'}</span>
+              {/* Same record set the Payments tab shows (digitised
+                  transactions + the offline-history carry when present) —
+                  the card can never contradict the account's Paid tile. */}
+              <span>{a.transactions.length + (a.previousReceipts ? 1 : 0)} payment record{(a.transactions.length + (a.previousReceipts ? 1 : 0)) === 1 ? '' : 's'}</span>
               <span className="inline-flex items-center gap-0.5 group-hover:text-emerald-600 transition-colors">
                 Open Account <ChevronRight className="h-3 w-3" />
               </span>
@@ -754,8 +757,15 @@ function AccountLedger({ ledger }: { ledger: LedgerEntry[] }) {
 }
 
 function AccountPayments({ account, onViewReceipt }: { account: StudentFeeAccount; onViewReceipt: (id: string) => void }) {
+  // PAID ↔ PAYMENTS INVARIANT: everything counted in the account's Paid
+  // tile appears here. `previousReceipts` (the offline-history carry the
+  // Fee Ledger already prints as its "Previous Receipts" line) is part of
+  // `paid`, so it leads the table as its own record — the surface can
+  // never claim "0 payments" while the header shows money collected.
+  const carry = account.previousReceipts
+  const recordCount = account.transactions.length + (carry ? 1 : 0)
   return (
-    <FeePanel title="Payment History" subtitle={`${account.transactions.length} recorded payments`} bodyClassName="p-0">
+    <FeePanel title="Payment History" subtitle={`${recordCount} payment record${recordCount === 1 ? '' : 's'}`} bodyClassName="p-0">
       <div className="overflow-x-auto max-h-[28rem]">
         <table className="w-full text-xs min-w-[32rem]">
           <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_hsl(var(--border))]">
@@ -770,6 +780,31 @@ function AccountPayments({ account, onViewReceipt }: { account: StudentFeeAccoun
             </tr>
           </thead>
           <tbody>
+            {/* Offline-history carry — money collected before the digital
+                transaction window, carried in the canonical Students
+                register. NOT a fabricated row: it is the exact value the
+                ledger prints as "Previous Receipts", and the exact amount
+                included in the Paid tile. No receipt/mode exists for it —
+                those columns honestly show “—”. */}
+            {carry && (
+              <tr className="border-t border-border/40 bg-muted/30" data-testid="payment-history-carry">
+                <td className="px-3 py-2.5">
+                  <p className="text-[11px] font-medium">Previous Receipts</p>
+                  <p className="text-[9px] text-muted-foreground">{carry.description}</p>
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-emerald-600">{formatINR(carry.amount)}</td>
+                <td className="px-3 py-2.5 text-center text-muted-foreground">—</td>
+                <td className="px-3 py-2.5 text-center">
+                  <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground ring-1 ring-border">Recorded</span>
+                </td>
+                <td className="px-3 py-2.5 text-muted-foreground text-[10px]">{formatDate(carry.date)}</td>
+                <td className="px-3 py-2.5 text-muted-foreground text-[10px]">—</td>
+                {/* No individual digitised receipt exists for offline
+                    history — the A5 receipt engine renders receipts FROM
+                    recorded payments, so this row has no View action. */}
+                <td className="px-3 py-2.5 text-right text-muted-foreground text-[10px]" aria-hidden>—</td>
+              </tr>
+            )}
             {account.transactions.map((t) => (
               <tr key={t.id} className="border-t border-border/40 hover:bg-muted/30">
                 <td className="px-3 py-2.5 font-mono text-[10px]">{t.receiptNo}</td>
@@ -798,7 +833,7 @@ function AccountPayments({ account, onViewReceipt }: { account: StudentFeeAccoun
                 </td>
               </tr>
             ))}
-            {account.transactions.length === 0 && (
+            {recordCount === 0 && (
               <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">
                 No payments recorded yet. Payments recorded through Collect appear here with their receipts.
               </td></tr>
@@ -808,6 +843,7 @@ function AccountPayments({ account, onViewReceipt }: { account: StudentFeeAccoun
       </div>
       <p className="text-[10px] text-muted-foreground border-t border-border/40 px-3 py-2">
         Receipts are generated from recorded payments — open any row's receipt to view or print the A5 dual copy.
+        {carry && ' Previous Receipts are carried from the Students register and included in Paid.'}
       </p>
     </FeePanel>
   )

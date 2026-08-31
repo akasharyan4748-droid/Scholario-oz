@@ -184,6 +184,43 @@ export const useTenantStore = create<TenantState>()(
       version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ activeTenantId: s.activeTenantId, configs: s.configs, changeLog: s.changeLog }),
+      /**
+       * Rehydrate merge — persisted per-tenant configs are merged OVER the
+       * seeded defaults KEY-BY-KEY for the maps (features / subFeatures /
+       * capabilities), never wholesale. This is what makes adding a new
+       * catalog key (e.g. the fee_entry_policy_manage capability) safe for
+       * browsers with older persisted state: keys the persisted config
+       * doesn't know about fall back to the platform seed (the catalog
+       * default), while every key it DOES know about keeps its persisted
+       * value. Without this, a new capability would read as `undefined` in
+       * the School Control Center toggle and `!== false` in permission
+       * resolution — two different truths for the same flag.
+       */
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<TenantState>
+        const seeded = seedConfigs()
+        const configs: Record<TenantId, TenantConfig> = { ...current.configs }
+        const persistedConfigs = (p.configs ?? {}) as Record<TenantId, TenantConfig>
+        for (const id of Object.keys(persistedConfigs)) {
+          const pc = persistedConfigs[id]
+          if (!pc) continue
+          const base = configs[id] ?? seeded[id]
+          if (!base) continue
+          configs[id] = {
+            ...base,
+            ...pc,
+            features: { ...base.features, ...(pc.features ?? {}) },
+            subFeatures: { ...base.subFeatures, ...(pc.subFeatures ?? {}) },
+            capabilities: { ...base.capabilities, ...(pc.capabilities ?? {}) },
+          }
+        }
+        return {
+          ...current,
+          activeTenantId: p.activeTenantId ?? current.activeTenantId,
+          configs,
+          changeLog: p.changeLog ?? current.changeLog,
+        }
+      },
     }
   )
 )

@@ -34,7 +34,7 @@ import {
   ArrowLeft, Pencil, Plus, History, Copy, Trash2, X, Check,
   Layers, Calendar, User, RotateCcw, Archive, FileText, AlertCircle,
   CheckCircle2, Save, Sparkles, ShieldAlert, Award, Lock,
-  CalendarCheck2,
+  CalendarCheck2, Eye,
   // PHASE 7 — Re-link from catalogue row action icons.
   Link2, Link2Off, Search, ChevronDown,
 } from 'lucide-react'
@@ -475,6 +475,16 @@ function DetailDrawerInner({
   }
 
   const handleDuplicate = () => {
+    // Permission guard mirrors the store: createFeeStructure is store-denied
+    // without fee_structure_edit — the button is hidden in that state, so a
+    // call reaching here is a direct invocation. Honest denial, never a
+    // silent no-op.
+    if (!perms.fee_structure_edit) {
+      toast.error('Duplicate unavailable', {
+        description: 'Fee structure editing is disabled for your school by the platform configuration.',
+      })
+      return
+    }
     const newId = createFeeStructure({
       category: `${structure.category} (Copy)`,
       className: `${structure.className} — Draft Copy`,
@@ -907,48 +917,68 @@ function DetailDrawerInner({
             <div className="border-b border-border bg-muted/20 px-3 py-1.5 flex items-center gap-0.5 overflow-x-auto">
               {!editing ? (
                 <>
-                  {isLockedCurrent && !liveEditWindow.live ? (
-                    // PART 8/10 — published current-session structure: no
-                    // unrestricted Edit. Request a temporary window instead.
-                    // SaaS-STAGE-2A (Task 7-b) — disabled when the school's
-                    // configuration makes the editor read-only.
-                    <Button
-                      size="sm" variant="ghost"
-                      className="h-7 text-xs gap-1 text-amber-600 hover:bg-amber-500/10"
-                      onClick={handleRequestEdit}
-                      disabled={!canEdit}
-                      title={!canEdit
-                        ? 'Read-only — fee structure editing is disabled for your school by the platform configuration'
-                        : 'Current fee structure is locked because it is already active for students'}
-                    >
-                      <ShieldAlert className="h-3 w-3" /> Request Edit
-                    </Button>
+                  {canEdit ? (
+                    // Permission AVAILABLE — the legitimate controlled-edit
+                    // actions render normally. Published current-session
+                    // structures stay locked (PART 8/10): a temporary
+                    // editing window is requested instead of unrestricted
+                    // Edit.
+                    <>
+                      {isLockedCurrent && !liveEditWindow.live ? (
+                        <Button
+                          size="sm" variant="ghost"
+                          className="h-7 text-xs gap-1 text-amber-600 hover:bg-amber-500/10"
+                          onClick={handleRequestEdit}
+                          title="Current fee structure is locked because it is already active for students"
+                        >
+                          <ShieldAlert className="h-3 w-3" /> Request Edit
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm" variant="ghost" className="h-7 text-xs gap-1"
+                          onClick={handleStartEdit}
+                          title="Edit heads and amounts"
+                        >
+                          <Pencil className="h-3 w-3" /> Edit
+                        </Button>
+                      )}
+                      {isLockedCurrent && liveEditWindow.live && (
+                        <Badge variant="outline" className="text-[9px] h-5 gap-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20">
+                          <ShieldAlert className="h-2.5 w-2.5" /> Edit window {formatCountdownShort(liveEditWindow.msLeft)}
+                        </Badge>
+                      )}
+                      {isLockedCurrent && liveEditWindow.live && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => { closeStructureEditWindow('Principal'); toast.info('Editing window closed — the structure is locked again.') }}>
+                          <Lock className="h-3 w-3" /> End window
+                        </Button>
+                      )}
+                    </>
                   ) : (
-                    <Button
-                      size="sm" variant="ghost" className="h-7 text-xs gap-1"
-                      onClick={handleStartEdit}
-                      disabled={!canEdit}
-                      title={!canEdit ? 'Read-only — fee structure editing is disabled for your school by the platform configuration' : 'Edit heads and amounts'}
+                    // Permission UNAVAILABLE — the UI must never imply the
+                    // Principal can edit. NO Edit, NO Request Edit, NO
+                    // edit-window controls: a plain "View only" state makes
+                    // the platform permission visible at a glance.
+                    <Badge
+                      variant="outline"
+                      data-testid="structure-view-only"
+                      className="text-[9px] h-5 gap-1 bg-muted/60 text-muted-foreground border-border shrink-0"
+                      title="Fee structure editing is disabled for your school by the platform configuration"
                     >
-                      <Pencil className="h-3 w-3" /> Edit
-                    </Button>
-                  )}
-                  {isLockedCurrent && liveEditWindow.live && (
-                    <Badge variant="outline" className="text-[9px] h-5 gap-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20">
-                      <ShieldAlert className="h-2.5 w-2.5" /> Edit window {formatCountdownShort(liveEditWindow.msLeft)}
+                      <Eye className="h-2.5 w-2.5" /> View Only
                     </Badge>
-                  )}
-                  {isLockedCurrent && liveEditWindow.live && (
-                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => { closeStructureEditWindow('Principal'); toast.info('Editing window closed — the structure is locked again.') }}>
-                      <Lock className="h-3 w-3" /> End window
-                    </Button>
                   )}
                   <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setHistoryOpen(true)}>
                     <History className="h-3 w-3" /> History
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={handleDuplicate}>
-                    <Copy className="h-3 w-3" /> Duplicate
-                  </Button>
+                  {/* Duplicate CREATES a draft (an edit-capability action,
+                      store-denied without fee_structure_edit) — it is hidden
+                      when the school's configuration makes structures
+                      read-only instead of presenting a silent no-op. */}
+                  {canEdit && (
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={handleDuplicate}>
+                      <Copy className="h-3 w-3" /> Duplicate
+                    </Button>
+                  )}
                   {currentVersion && (
                     <Button
                       size="sm" variant="ghost" className="h-7 text-xs gap-1 text-amber-600"

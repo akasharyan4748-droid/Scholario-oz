@@ -108,6 +108,7 @@ const CAPABILITY_DENIALS: Record<CapabilityKey, string> = {
   fee_structure_archive: 'Fee structure archiving is disabled for your school by the platform configuration.',
   fee_structure_delete: 'Permanent delete is reserved for the Scholario platform. Schools archive structures; the platform purges after the retention window.',
   fee_catalogue_manage: 'Fee catalogue management is disabled for your school by the platform configuration.',
+  fee_entry_policy_manage: 'One-time entry fee policy management is disabled for your school by the platform configuration.',
 }
 
 /** Returns null when the ACTIVE tenant grants the capability, else the denial reason. */
@@ -450,6 +451,16 @@ export interface StudentFeeAccount {
   lastPaymentDate: string | null
   daysOverdue: number
   transactions: FeeTransaction[]
+  /**
+   * Offline-history carry ("Previous Receipts") — the portion of the
+   * register's collected-to-date (student.feePaid) that has NO digitised
+   * transaction row. EXACTLY the same derivation the Fee Ledger renders
+   * as its "Previous Receipts" line (computed once in computeAccount —
+   * never re-derived in the UI), surfaced on the account so Payment
+   * History and the Paid tile can never disagree: previousReceipts + the
+   * countable transaction rows == `paid`. Null when there is no carry.
+   */
+  previousReceipts: { amount: number; date: string; description: string } | null
   guardianName: string
   guardianPhone: string
   /** Chronological ledger entries (charges + payments). */
@@ -3010,6 +3021,11 @@ export const useFeeStore = create<FeeState>()(
   },
 
   updateAdmissionPolicy: (patch) => {
+    // Capability guard (SaaS-STAGE-2A pattern — enforced at the STORE level,
+    // not just the UI): the one-time entry fee policy is editable only when
+    // the school's platform configuration grants fee_entry_policy_manage.
+    // Super Admin → capability ON → Principal may manage; OFF → view-only.
+    if (platformCapabilityDenial('fee_entry_policy_manage')) return
     const state = get()
     const before = { ...state.admissionPolicy }
     const after = { ...state.admissionPolicy, ...patch }
@@ -3945,6 +3961,14 @@ function computeAccount(
     outstanding, lateFee, totalDue, status,
     lastPaymentDate: studentTxns[0]?.date ?? null, daysOverdue,
     transactions: studentTxns,
+    // Payment-History consistency (PAID ↔ PAYMENTS): the offline-history
+    // carry is part of `paid`, so it MUST be part of the payment surface
+    // too — the same value the ledger prints as its "Previous Receipts"
+    // line. Only a positive carry is a payment record; negative drift is
+    // a data-repair concern the ledger already exposes honestly.
+    previousReceipts: canonicalPrevPaid > 0
+      ? { amount: canonicalPrevPaid, date: sessionStart, description: 'Collections carried from the Students register (offline history)' }
+      : null,
     guardianName: student.guardianName,
     guardianPhone: student.guardianPhone,
     ledger,

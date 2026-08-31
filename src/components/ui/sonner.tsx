@@ -8,8 +8,10 @@ import { Toaster as Sonner, ToasterProps } from "sonner"
  *
  * • Primary text (title): full-contrast foreground, semibold, 13px — dark on
  *   light surfaces, light on dark surfaces, never washed out.
- * • Secondary text (description): foreground at 62% opacity — clearly softer
- *   than the title yet comfortably readable (WCAG AA on both themes).
+ * • Secondary text (description): the app's semantic muted-foreground tone —
+ *   the SAME accessible secondary color every other surface in Scholario
+ *   uses (WCAG AA on both themes). Deliberately NOT an alpha/opacity mix:
+ *   percentage-faded foreground reads as pale gray and fails readability.
  * • Compact footprint: 12px description, tight padding, small radius so
  *   notifications inform instead of dominate. Rich-colors keep the success /
  *   error / warning icon accents.
@@ -37,7 +39,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
             "group-[.toaster]:shadow-lg group-[.toaster]:rounded-lg group-[.toaster]:text-[13px]",
           title: "[&_div[data-title]]:text-[13px] [&_div[data-title]]:font-semibold [&_div[data-title]]:tracking-[-0.01em] [&_div[data-title]]:text-foreground",
           description:
-            "[&_div[data-description]]:text-[12px] [&_div[data-description]]:leading-snug [&_div[data-description]]:opacity-100 [&_div[data-description]]:!text-[color-mix(in_oklab,var(--foreground)_64%,transparent)]",
+            "[&_div[data-description]]:text-[12px] [&_div[data-description]]:leading-snug [&_div[data-description]]:opacity-100 [&_div[data-description]]:!text-muted-foreground",
           closeButton:
             "group-[.toaster]:border-border group-[.toaster]:bg-muted group-[.toaster]:text-foreground",
         },

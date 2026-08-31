@@ -2,47 +2,49 @@
 
 /**
  * FeesSettingsSection — Fee Management module settings (FEE-SPECIFIC RULES
- * ONLY).
+ * ONLY, Principal-first).
  *
- * ARCHITECTURE (FIN-CENTRAL-1): global payment infrastructure (methods,
- * bank accounts, UPI/QR, gateway) and school-wide receipts now live in the
- * CENTRAL Finance Settings (Finance Dashboard → Settings). They are
- * configured once at the school level and consumed here through the shared
- * fee-store — this page never duplicates them. A compact link card keeps
- * the central surface discoverable from Fee Management.
+ * The Principal reads this screen as "What can I control about fees?" —
+ * short titles, live status, compact controls, minimal helper text. No
+ * architecture descriptions, no routes, no implementation narration.
+ * (The former "Payment Channels & Receipts" pointer card was removed:
+ * payment infrastructure lives in central Finance Settings and was never
+ * configurable here — pointing at it was developer-facing noise.)
  *
- * What remains here is genuinely fee-specific:
+ * What lives here is genuinely fee-specific POLICY:
  *
- *   1. Payment Channels & Receipts — pointer to the central Finance Settings
- *   2. Late Fee Rules       — per-month amount, grace period, max
- *   3. Concession Rules     — sibling / staff ward / scholarship %
- *   4. One-Time Entry Fees  — admission policy snapshot (read-only values)
- *   5. Controlled-Edit Policy — documents the ACTUAL structure versioning
+ *   1. Late Fee Rules        — per-month amount, grace period, max, scope
+ *   2. Concession Rules      — sibling / staff ward / scholarship %
+ *   3. One-Time Entry Fees   — PERMISSION-GATED policy card (admission /
+ *                              registration applicability; amounts stay in
+ *                              their canonical sources — this card never
+ *                              creates a second amount value)
+ *   4. Controlled-Edit Policy — the actual structure versioning behaviour
+ *
+ * Permission model (Super Admin → school capability → Principal):
+ *   fee_entry_policy_manage grants the One-Time Entry Fee EDIT controls.
+ *   Without it the Principal sees the live policy read-only — no editable
+ *   controls, no misleading "request" actions. The store action enforces
+ *   the same capability (defence in depth), matching every other fee
+ *   capability.
  *
  * Card anatomy mirrors Salary Settings via the shared SettingsCard
- * primitive (modules/shared/settings-card.tsx): rounded-xl border bg-card
- * p-4, [10px] uppercase muted label + small muted icon, right-aligned
- * action, shadcn Switch toggles, label-left/control-right rows.
+ * primitive (modules/shared/settings-card.tsx): one flat card per group,
+ * clean rows, no box-inside-box nesting.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  AlertTriangle, Gift,
-  Check, Archive, CreditCard, ArrowUpRight,
-  Lock, UserPlus, ShieldCheck,
+  AlertTriangle, Gift, Check, Archive, Lock, UserPlus, ShieldCheck, Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useFeeStore } from '@/lib/store/fee-store'
-import { useFocusStore } from '@/lib/store/focus-store'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
-// SaaS-STAGE-2A (Task 7-b) — tenant-aware feature gates: the gateway/
-// connect surface and the receipt-settings pointer follow the ACTIVE
-// school's platform configuration (fee_online_payments / receipt_templates).
-import { useFeatureGate } from '@/lib/tenant/store'
+import { useEffectiveFeeCapabilities } from '@/lib/tenant/store'
 import { SettingsCard } from '../shared/settings-card'
 import { toast } from 'sonner'
 
@@ -55,97 +57,35 @@ function RuleChip({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function FeesSettingsSection({ onNavigate }: { onNavigate?: (moduleKey: string) => void } = {}) {
+/** Non-interactive "view only" pill — makes a platform-restricted setting
+ *  visible as such without implying any editable or requestable action. */
+function ViewOnlyChip({ label = 'View only' }: { label?: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground ring-1 ring-border"
+      title="Managed under a platform permission you have not been granted"
+    >
+      <Eye className="h-2.5 w-2.5" aria-hidden /> {label}
+    </span>
+  )
+}
+
+export function FeesSettingsSection() {
   return (
     // No page heading / banner — the "Settings" tab establishes context and
     // content starts immediately (Salary Settings benchmark).
     <div className="space-y-4">
-      <CentralFinanceSettingsLink onNavigate={onNavigate} />
       <LateFeeSettings />
       <ConcessionSettings />
-      <AdmissionFeesCard />
+      <EntryFeePolicyCard />
       <PoliciesSettings />
     </div>
   )
 }
 
-// ─── Central Finance Settings pointer — payment infrastructure and
-// receipts are school-wide, not fee-specific. One compact card keeps the
-// central surface discoverable without duplicating any configuration.
-
-function CentralFinanceSettingsLink({ onNavigate }: { onNavigate?: (moduleKey: string) => void }) {
-  const setFocus = useFocusStore((s) => s.setFocus)
-  const gatewayConfig = useFeeStore((s) => s.gatewayConfig)
-  const paymentModes = useFeeStore((s) => s.paymentModes)
-  // SaaS-STAGE-2A (Task 7-b) — school-level sub-feature gates.
-  //   · fee_online_payments OFF → the gateway/connect UI is REPLACED by a
-  //     compact muted locked notice (no connect/disable controls, no
-  //     gateway provider summary); office/teacher/class-teacher collection
-  //     is unaffected.
-  //   · receipt_templates OFF → the receipt-settings pointer is replaced by
-  //     the same style locked notice; receipts keep the default A5
-  //     Landscape Dual Copy format (never thermal).
-  const gate = useFeatureGate()
-  const onlinePayments = gate.isSubFeatureEnabled('fee_online_payments')
-  const receiptTemplates = gate.isSubFeatureEnabled('receipt_templates')
-
-  const open = () => {
-    // Focus request makes the Finance Dashboard land on its Settings tab.
-    setFocus({ type: 'finance-settings', id: 'finance-settings', title: 'Finance Settings', moduleKey: 'finance' })
-    onNavigate?.('finance')
-  }
-
-  const enabledCount = paymentModes.filter((m) => m.active).length
-  // Gateway provider info is part of the online-payments sub-feature —
-  // never advertised when the school's configuration disables it.
-  const summary = onlinePayments && gatewayConfig
-    ? `gateway ${gatewayConfig.provider} · ${gatewayConfig.environment}`
-    : `${enabledCount} of ${paymentModes.length} methods enabled`
-
-  return (
-    <SettingsCard
-      label="Payment Channels & Receipts"
-      icon={<CreditCard />}
-      summary={summary}
-      action={
-        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={open}>
-          Open Finance Settings <ArrowUpRight className="h-3 w-3" />
-        </Button>
-      }
-    >
-      {/* SaaS-STAGE-2A (Task 7-b) — locked gateway notice replaces the
-          gateway/connect UI when online payments are disabled for the
-          school (platform configuration). */}
-      {!onlinePayments && (
-        <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2.5 flex items-start gap-2.5" data-testid="fee-settings-gateway-locked">
-          <Lock className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium text-foreground">Online payments are not enabled for your school (platform configuration)</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Office, teacher and class-teacher collections continue normally; receipts unaffected.</p>
-          </div>
-        </div>
-      )}
-      {/* SaaS-STAGE-2A (Task 7-b) — locked receipt-settings notice replaces
-          the paper/format pointer when receipt templates are disabled.
-          A5 dual-copy stays the default language (no thermal). */}
-      {!receiptTemplates ? (
-        <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2.5 flex items-start gap-2.5" data-testid="fee-settings-receipt-locked">
-          <Lock className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium text-foreground">Receipt template settings are not enabled for your school (platform configuration)</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Issued receipts keep the default A5 Landscape Dual Copy format.</p>
-          </div>
-        </div>
-      ) : (
-        <p className="text-[11px] text-muted-foreground">
-          Payment methods, bank accounts, UPI/QR, the gateway and receipt numbering are configured once at the school level — in Finance → Finance Dashboard → Settings — and used by fee collection, additional collections and application payments.
-        </p>
-      )}
-    </SettingsCard>
-  )
-}
-
 // ─── Late Fee Rules ────────────────────────────────────────────────
+// Principal reading: ₹50/month · max ₹500 · 7-day grace · mandatory heads
+// only · applied automatically. The engine consumes the exact same rule.
 
 function LateFeeSettings() {
   const rule = useFeeStore((s) => s.lateFeeRule)
@@ -173,6 +113,7 @@ function LateFeeSettings() {
           <RuleChip>max {formatINR(local.maxLateFee, true)}</RuleChip>
           <RuleChip>grace {local.gracePeriodDays}d</RuleChip>
           <RuleChip>{local.appliesTo === 'mandatory_only' ? 'mandatory heads' : 'all heads'}</RuleChip>
+          <RuleChip>{local.enabled ? 'applied automatically' : 'manual — engine off'}</RuleChip>
         </div>
         {/* Rule inputs — 2-col grid of labeled fields */}
         <div className="grid grid-cols-2 gap-3">
@@ -196,19 +137,17 @@ function LateFeeSettings() {
             </select>
           </div>
         </div>
-        {/* Master switch */}
+        {/* Master switch — clean row, no nested bordered box */}
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-medium">Automatically apply to overdue accounts</p>
           <Switch checked={local.enabled} onCheckedChange={(c) => setLocal({ ...local, enabled: c })} aria-label="Enable late fee" />
         </div>
+        {/* One short engine-behaviour line — the chips above carry the values. */}
         <p className="text-[10px] text-muted-foreground border-t border-border/60 pt-2.5">
-          Each billing period (instalment) unpaid past the {local.gracePeriodDays}-day grace accrues{' '}
-          <span className="font-bold tabular-nums text-foreground">{formatINR(local.amountPerMonth, true)}</span> per overdue month, capped at{' '}
-          <span className="font-bold tabular-nums text-foreground">{formatINR(local.maxLateFee, true)}</span>.
-          {local.appliesTo === 'mandatory_only'
-            ? ' Mandatory heads only — optional charges (Books, Uniform, Transport) and event-based additional charges are never late-fee\u2019d.'
-            : ' Applies to all heads, including optional opt-ins.'}
-          {local.enabled ? ' Applied automatically to overdue accounts.' : ' Automatic application is OFF — the rule is saved but nothing is charged until enabled.'}
+          Each instalment unpaid past the {local.gracePeriodDays}-day grace accrues{' '}
+          <span className="font-semibold tabular-nums text-foreground">{formatINR(local.amountPerMonth, true)}</span>/month, capped{' '}
+          <span className="font-semibold tabular-nums text-foreground">{formatINR(local.maxLateFee, true)}</span>.
+          {local.appliesTo === 'mandatory_only' ? ' Optional and additional charges are never late-fee\u2019d.' : ' Applies to all heads.'}
         </p>
       </div>
     </SettingsCard>
@@ -259,13 +198,13 @@ function ConcessionSettings() {
             <Input type="number" value={local.scholarshipDiscountPct} onChange={(e) => setLocal({ ...local, scholarshipDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
           </div>
         </div>
-        {/* Toggles */}
-        <div className="divide-y divide-border/60 rounded-lg border border-border/60">
-          <div className="flex items-center justify-between gap-3 px-2.5 py-2">
+        {/* Toggles — clean rows, no nested bordered container */}
+        <div className="space-y-2 border-t border-border/60 pt-2.5">
+          <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium">Require Principal approval</p>
             <Switch checked={local.requiresApproval} onCheckedChange={(c) => setLocal({ ...local, requiresApproval: c })} aria-label="Require principal approval" />
           </div>
-          <div className="flex items-center justify-between gap-3 px-2.5 py-2">
+          <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium">Enable concessions on student accounts</p>
             <Switch checked={local.enabled} onCheckedChange={(c) => setLocal({ ...local, enabled: c })} aria-label="Enable concessions" />
           </div>
@@ -275,74 +214,201 @@ function ConcessionSettings() {
   )
 }
 
-// ─── One-Time Entry Fees (admission policy snapshot) ──────────────
-// Reads admissionPolicy ({enabled, boysAmount, girlsFreeAboveGrade}) from
-// useFeeStore; the only editable control is the master Switch which calls
-// updateAdmissionPolicy({ enabled }) (store action — no local draft state).
-function AdmissionFeesCard() {
+// ─── One-Time Entry Fees — PERMISSION-GATED policy card ───────────
+//
+// POLICY, not fee-head configuration: the Catalogue already defines fee
+// heads, so this card never duplicates amounts. It answers:
+//   · Is one-time entry fee collection enabled?
+//   · Which fees apply, where, and to whom?
+//   · Who is allowed to change this?
+//
+// Canonical amount sources (never duplicated here):
+//   · Admission Fee  → admissionPolicy (the SAME value the admission
+//     engine charges via admissionFeeFor() — this card is its only editor)
+//   · Registration Fee → the published fee structures (catalogue head
+//     fh-2 components) — DERIVED live below, so the card can never drift
+//     from what structures actually charge.
+//
+// One-time stays one-time: the billing engine expands only frequency
+// 'One-Time' heads into a single charge — this card changes policy
+// fields, never frequency semantics.
+
+function EntryFeePolicyCard() {
   const admissionPolicy = useFeeStore((s) => s.admissionPolicy)
   const updateAdmissionPolicy = useFeeStore((s) => s.updateAdmissionPolicy)
+  const feeStructures = useFeeStore((s) => s.feeStructures)
+  const perms = useEffectiveFeeCapabilities()
+  const canManage = perms.fee_entry_policy_manage
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(admissionPolicy)
 
-  const handleToggle = () => {
-    const next = !admissionPolicy.enabled
-    updateAdmissionPolicy({ enabled: next })
-    toast.success(next ? 'One-time entry fees enabled' : 'One-time entry fees disabled')
+  // Registration Fee applicability is DERIVED from the live fee
+  // structures (canonical source) — draft copies are excluded because a
+  // draft charges nobody.
+  const registration = useMemo(() => {
+    const entries = feeStructures
+      .filter((st) => !/draft/i.test(st.className))
+      .flatMap((st) => st.components
+        .filter((c) => c.active && (c.catalogueId === 'fh-2' || c.name === 'Registration Fee'))
+        .map((c) => ({ className: st.className, amount: c.amount })))
+    return {
+      found: entries.length > 0,
+      classes: Array.from(new Set(entries.map((e) => e.className))),
+      amounts: Array.from(new Set(entries.map((e) => e.amount))),
+    }
+  }, [feeStructures])
+
+  const startEdit = () => setDraft(admissionPolicy)
+
+  const save = () => {
+    if (!canManage) {
+      // Defence in depth — the store action enforces the same capability.
+      toast.error('Not permitted', { description: 'One-time entry fee policy management is disabled for your school by the platform configuration.' })
+      return
+    }
+    updateAdmissionPolicy(draft)
+    toast.success('One-time entry fee policy updated', {
+      description: draft.enabled
+        ? `Enabled — boys ${formatINR(draft.boysAmount)} one-time, girls free above Class ${draft.girlsFreeAboveGrade}. Applies to future admission events; recorded payments are unchanged.`
+        : 'Disabled — no entry fees will be charged at future admission events. Recorded payments are unchanged.',
+    })
+    setEditing(false)
   }
 
   return (
     <SettingsCard
       label="One-Time Entry Fees"
       icon={<UserPlus />}
-      summary={admissionPolicy.enabled ? 'on' : 'off'}
+      summary={admissionPolicy.enabled ? 'enabled' : 'off'}
       action={
-        <Switch
-          checked={admissionPolicy.enabled}
-          onCheckedChange={handleToggle}
-          aria-label="Enable one-time entry fees"
-        />
+        editing ? (
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setEditing(false); setDraft(admissionPolicy) }}>Cancel</Button>
+            <Button size="sm" className="h-8 text-xs gap-1" onClick={save}>
+              <Check className="h-3 w-3" /> Save
+            </Button>
+          </div>
+        ) : canManage ? (
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => { startEdit(); setEditing(true) }}>
+            Edit applicability
+          </Button>
+        ) : (
+          <ViewOnlyChip label="View only" />
+        )
       }
-      className={cn(!admissionPolicy.enabled && 'opacity-70')}
     >
-      <div className="divide-y divide-border/60 rounded-lg border border-border/60">
-        <div className="flex items-center justify-between gap-3 px-2.5 py-2.5 text-xs">
-          <p className="font-medium shrink-0">Admission Fee</p>
-          <p className="text-[11px] text-muted-foreground text-right min-w-0">
-            boys <span className="font-semibold tabular-nums text-foreground">{formatINR(admissionPolicy.boysAmount)}</span> one-time · girls free above Class{' '}
-            <span className="font-semibold tabular-nums text-foreground">{admissionPolicy.girlsFreeAboveGrade}</span>
-          </p>
-        </div>
-        <div className="flex items-center justify-between gap-3 px-2.5 py-2.5 text-xs">
-          <p className="font-medium shrink-0">Registration Fee</p>
-          <p className="text-[11px] text-muted-foreground text-right min-w-0">
-            <span className="font-semibold tabular-nums text-foreground">₹300</span> at Class 9 &amp; 11 entry points
-          </p>
-        </div>
+      <div className="space-y-3">
+        {/* EDIT STATE — the policy fields, exactly what the admission
+            engine consumes. Compact: one switch row + two inputs. */}
+        {editing && canManage ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium">Collect one-time entry fees</p>
+                <p className="text-[10px] text-muted-foreground">Charged only at admission events — never with recurring dues</p>
+              </div>
+              <Switch checked={draft.enabled} onCheckedChange={(c) => setDraft({ ...draft, enabled: c })} aria-label="Enable one-time entry fees" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-[11px]">Admission Fee — Boys (₹)</Label>
+                <Input
+                  type="number" min={0}
+                  value={draft.boysAmount}
+                  onChange={(e) => setDraft({ ...draft, boysAmount: Math.max(0, Number(e.target.value)) })}
+                  className="h-8 text-xs tabular-nums mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-[11px]">Girls Exempt Above Class</Label>
+                <select
+                  value={draft.girlsFreeAboveGrade}
+                  onChange={(e) => setDraft({ ...draft, girlsFreeAboveGrade: Number(e.target.value) })}
+                  className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>Class {n}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* VIEW STATE — status · who can manage · applicability.
+                Clean rows: no nested boxes, no paragraphs. */}
+            <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-[11px]">
+              <span className="text-muted-foreground">Status
+                <span className={cn('ml-1.5 font-semibold', admissionPolicy.enabled ? 'text-emerald-600' : 'text-muted-foreground')}>
+                  {admissionPolicy.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </span>
+              <span className="text-muted-foreground">Who can manage
+                <span className="ml-1.5 font-semibold text-foreground">{canManage ? 'Principal' : 'Platform (Super Admin)'}</span>
+              </span>
+            </div>
+
+            {/* Applicability — fee / amount / applies to / eligibility */}
+            <div className="divide-y divide-border/40 border-t border-b border-border/40">
+              <div className="py-2">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <p className="font-medium shrink-0">Admission Fee</p>
+                  <p className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+                    {formatINR(admissionPolicy.boysAmount)} <span className="tabular-nums">· one-time</span>
+                  </p>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  New admissions · boys; girls free above Class <span className="font-medium tabular-nums">{admissionPolicy.girlsFreeAboveGrade}</span>
+                </p>
+              </div>
+              <div className="py-2">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <p className="font-medium shrink-0">Registration Fee</p>
+                  <p className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+                    {registration.found
+                      ? (registration.amounts.length === 1 ? `${formatINR(registration.amounts[0])} · one-time` : 'per class structure · one-time')
+                      : '—'}
+                  </p>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                  {registration.found
+                    ? `${registration.classes.join(' · ')} entry · all new entrants`
+                    : 'Not set in any published fee structure'}
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* One honest scope line — where amounts live, and the one-time
+            guarantee (engine rule, unchanged). */}
+        <p className="text-[10px] text-muted-foreground">
+          Amounts live in their canonical sources — admission in this policy, registration in the published fee structures — so they can never diverge.
+          Entry fees are charged once and never become recurring dues.{canManage ? '' : ' Changes are managed by the platform (Super Admin).'}
+        </p>
       </div>
-      <p className="text-[10px] text-muted-foreground">
-        Charged only during admission events — never billed with monthly dues.
-      </p>
     </SettingsCard>
   )
 }
 
-// ─── Controlled-Edit Policy — documents the ACTUAL version mechanics
-// implemented across Fee Structures (publish → lock → window).
+// ─── Controlled-Edit Policy — the ACTUAL version mechanics implemented
+// across Fee Structures (publish → lock → window), as short rules.
 
 const POLICY_ROWS = [
   {
     icon: <Lock className="h-3.5 w-3.5 shrink-0 text-sky-600 mt-0.5" />,
     lead: 'Publish locks.',
-    text: 'A fee structure is immutable once published for the current session — later changes open a controlled revision and create a new version, never overwriting the old one.',
+    text: 'A published structure is immutable — later changes open a controlled revision and create a new version; the old one is never overwritten.',
   },
   {
     icon: <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 mt-0.5" />,
     lead: '60% guardian approval.',
-    text: 'A revision affecting existing charges applies only after at least 60% of affected families approve, or when the window deadline passes.',
+    text: 'A revision affecting existing charges applies only after 60% of affected families approve, or when the window deadline passes.',
   },
   {
     icon: <Archive className="h-3.5 w-3.5 shrink-0 text-amber-600 mt-0.5" />,
     lead: 'Archive, never delete.',
-    text: 'Published structures, recorded payments and issued receipts are part of the permanent financial record — archived, not removed.',
+    text: 'Published structures, recorded payments and issued receipts are permanent financial records — archived, not removed.',
   },
 ]
 
