@@ -72,10 +72,10 @@ import {
   expandHeadChargeEntries,
   expandExamChargeEntries,
   billingPeriodsFor,
-  DEFAULT_ADMISSION_POLICY,
+  DEFAULT_ENTRY_FEE_POLICY,
   CURRENT_ACADEMIC_YEAR,
 } from './fee-store-data'
-import type { AdmissionFeePolicy, ScheduledCharge } from './fee-store-data'
+import type { EntryFeePolicy, ScheduledCharge } from './fee-store-data'
 export {
   FREQUENCY_MULTIPLIER,
   VALID_FREQUENCIES,
@@ -92,7 +92,8 @@ export {
   expandHeadChargeEntries,
   expandExamChargeEntries,
 }
-export type { AdmissionFeePolicy }
+export type { EntryFeePolicy, EntryFeeAudience, EntryFeeRule } from './fee-store-data'
+export { entryFeeApplies, admissionFeeFor } from './fee-store-data'
 
 // ─── Tenant capability enforcement (SaaS-STAGE-2A) ───────────────────
 //
@@ -1133,8 +1134,10 @@ interface FeeState {
   paymentModes: PaymentModeConfig[]
   lateFeeRule: LateFeeRule
   concessionRule: ConcessionRule
-  /** One-time entry-fee policy (admission events only — never monthly billing). */
-  admissionPolicy: AdmissionFeePolicy
+  /** One-time entry-fee policy (admission events only — never monthly billing).
+   *  Applicability is the extensible EntryFeeAudience model; amounts stay
+   *  canonical (admission: admissionAmount — the engine's own value). */
+  entryFeePolicy: EntryFeePolicy
   receiptSettings: ReceiptSettings
   receiptCounter: number
   // ─── Payment infrastructure state (Phase 4) ───
@@ -1219,7 +1222,7 @@ interface FeeState {
   togglePaymentMode: (id: PaymentMode) => void
   updateLateFeeRule: (patch: Partial<LateFeeRule>) => void
   updateConcessionRule: (patch: Partial<ConcessionRule>) => void
-  updateAdmissionPolicy: (patch: Partial<AdmissionFeePolicy>) => void
+  updateEntryFeePolicy: (patch: Partial<EntryFeePolicy>) => void
   updateReceiptSettings: (patch: Partial<ReceiptSettings>) => void
   // ─── Concessions (auditable records) ────────────────────────────────
   /** Request (or directly grant, when the school's concession rule does
@@ -1453,7 +1456,7 @@ export const useFeeStore = create<FeeState>()(
   paymentModes: DEFAULT_PAYMENT_MODES,
   lateFeeRule: DEFAULT_LATE_FEE_RULE,
   concessionRule: DEFAULT_CONCESSION_RULE,
-  admissionPolicy: DEFAULT_ADMISSION_POLICY,
+  entryFeePolicy: DEFAULT_ENTRY_FEE_POLICY,
   receiptSettings: DEFAULT_RECEIPT_SETTINGS,
   receiptCounter: 1060,
   // ─── Payment infrastructure state (Phase 4) ───
@@ -3020,23 +3023,35 @@ export const useFeeStore = create<FeeState>()(
     })
   },
 
-  updateAdmissionPolicy: (patch) => {
+  updateEntryFeePolicy: (patch) => {
     // Capability guard (SaaS-STAGE-2A pattern — enforced at the STORE level,
     // not just the UI): the one-time entry fee policy is editable only when
     // the school's platform configuration grants fee_entry_policy_manage.
     // Super Admin → capability ON → Principal may manage; OFF → view-only.
     if (platformCapabilityDenial('fee_entry_policy_manage')) return
     const state = get()
-    const before = { ...state.admissionPolicy }
-    const after = { ...state.admissionPolicy, ...patch }
+    const before = { ...state.entryFeePolicy }
+    const after = { ...state.entryFeePolicy, ...patch }
+    const ruleLine = after.rules
+      .map((r) => {
+        const a = r.applies
+        const n = (a.classIds ?? []).length
+        const who =
+          a.scope === 'all' ? 'all students'
+          : a.scope === 'gender' ? (a.gender === 'boys' ? 'boys' : 'girls')
+          : a.scope === 'classes' ? `${n} class${n === 1 ? '' : 'es'}`
+          : `${a.gender === 'boys' ? 'boys' : 'girls'} in ${n} class${n === 1 ? '' : 'es'}`
+        return `${r.id} → ${who}`
+      })
+      .join(' · ')
     set({
-      admissionPolicy: after,
+      entryFeePolicy: after,
       audit: pushAudit(state, {
         action: 'settings.changed',
         actor: 'Principal',
-        entityId: 'admissionPolicy',
+        entityId: 'entryFeePolicy',
         entityType: 'settings',
-        description: `One-time entry fee policy ${after.enabled ? 'enabled' : 'disabled'} — admission ${formatINR(after.boysAmount, true)} one-time, girls free above Class ${after.girlsFreeAboveGrade}`,
+        description: `One-time entry fee policy updated — ${after.enabled ? 'enabled' : 'disabled'}, admission ${formatINR(after.admissionAmount, true)} one-time (${ruleLine})`,
         before: JSON.stringify(before),
         after: JSON.stringify(after),
       }),
@@ -3485,7 +3500,7 @@ export const useFeeStore = create<FeeState>()(
   // `additionalCharges` array (event-based charges like the Class 8
   // Educational Tour) when the persisted state predates the key. Never
   // overwrites user-created charges; never touches transactions.
-  version: 10,
+  version: 11,
   migrate: (persistedState: any, fromVersion: number) => {
     // v5 — session rollover reset: the whole demo dataset moved from the
     // archived 2025-26 session into the live 2026-27 session (CURRENT_ACADEMIC_YEAR).
@@ -3505,7 +3520,7 @@ export const useFeeStore = create<FeeState>()(
         paymentModes: DEFAULT_PAYMENT_MODES,
         lateFeeRule: DEFAULT_LATE_FEE_RULE,
         concessionRule: DEFAULT_CONCESSION_RULE,
-        admissionPolicy: DEFAULT_ADMISSION_POLICY,
+        entryFeePolicy: DEFAULT_ENTRY_FEE_POLICY,
         receiptSettings: DEFAULT_RECEIPT_SETTINGS,
         receiptCounter: 1060,
         gatewayConfig: SEED_GATEWAY_CONFIG,
@@ -3588,15 +3603,36 @@ export const useFeeStore = create<FeeState>()(
     // v10 — CONCESSION RECORDS + OPTIONAL-HEAD OPT-INS: seed the auditable
     // concession records (register scholarships → approved records) and
     // the optional-head applicability map. Never overwrites existing
-    // records when a namespace already carries them.
+    // records when a namespace already carries them. Falls through so the
+    // v11 entry-fee model migration still runs for older namespaces.
     if (fromVersion < 10 && persistedState && typeof persistedState === 'object') {
       const st = persistedState as Record<string, any>
+      if (!Array.isArray(st.concessions)) st.concessions = SEED_CONCESSIONS
+      if (!(st.optionalHeadApplicability && typeof st.optionalHeadApplicability === 'object')) {
+        st.optionalHeadApplicability = SEED_OPTIONAL_HEAD_OPTINS
+      }
+    }
+    // v11 — ENTRY-FEE POLICY MODEL: the rigid AdmissionFeePolicy
+    // {enabled, boysAmount, girlsFreeAboveGrade} becomes the extensible
+    // EntryFeePolicy {enabled, admissionAmount, rules}. The old shape
+    // migrates losslessly: the admission amount carries over, and the
+    // seeded rules reproduce the school's displayed policy (admission →
+    // boys; registration → Class 9 + both Class 11 streams — the entry
+    // points its published structures charge). Namespaces that already
+    // carry the new model pass through untouched.
+    if (fromVersion < 11 && persistedState && typeof persistedState === 'object') {
+      const st = persistedState as Record<string, any>
+      const legacy = st.admissionPolicy
+      const alreadyNew = st.entryFeePolicy && Array.isArray(st.entryFeePolicy.rules)
+      if (alreadyNew) return { ...st, admissionPolicy: undefined }
       return {
         ...st,
-        concessions: Array.isArray(st.concessions) ? st.concessions : SEED_CONCESSIONS,
-        optionalHeadApplicability: st.optionalHeadApplicability && typeof st.optionalHeadApplicability === 'object'
-          ? st.optionalHeadApplicability
-          : SEED_OPTIONAL_HEAD_OPTINS,
+        admissionPolicy: undefined,
+        entryFeePolicy: {
+          enabled: legacy?.enabled ?? DEFAULT_ENTRY_FEE_POLICY.enabled,
+          admissionAmount: typeof legacy?.boysAmount === 'number' ? legacy.boysAmount : DEFAULT_ENTRY_FEE_POLICY.admissionAmount,
+          rules: DEFAULT_ENTRY_FEE_POLICY.rules.map((r) => ({ ...r, applies: { ...r.applies, ...(r.applies.classIds ? { classIds: [...r.applies.classIds] } : {}) } })),
+        },
       }
     }
     return persistedState
@@ -3616,7 +3652,7 @@ export const useFeeStore = create<FeeState>()(
     paymentModes: state.paymentModes,
     lateFeeRule: state.lateFeeRule,
     concessionRule: state.concessionRule,
-    admissionPolicy: state.admissionPolicy,
+    entryFeePolicy: state.entryFeePolicy,
     receiptSettings: state.receiptSettings,
     receiptCounter: state.receiptCounter,
     gatewayConfig: state.gatewayConfig,

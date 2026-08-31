@@ -36,7 +36,7 @@ export const useSchoolSettingsStore = create<SchoolSettingsState>()(
       // entries and patches the existing ones' names/types to match
       // the new seed WITHOUT losing any user-edited catalogue entries
       // they may have added on top.
-      version: 5,
+      version: 6,
       migrate: (persistedState: any, fromVersion: number) => {
         // ─── v4 — ACTIVE SESSION REALIGNMENT (SaaS-STAGE-1) ────────────
         // The active session must agree with the live fee dataset
@@ -114,6 +114,26 @@ export const useSchoolSettingsStore = create<SchoolSettingsState>()(
               const seedFh6 = initialState.fees.feeHeads.find((f) => f.id === 'fh-6')
               if (seedFh6) fh6.description = seedFh6.description
             }
+          }
+        }
+        // ─── v6 — PRINCIPAL-FIRST DESCRIPTIONS ──────────────────────
+        // fh-2 / fh-6 descriptions previously carried internal engineering
+        // vocabulary. Replace them ONLY when the persisted text is still
+        // the untouched seed — user-authored descriptions are preserved.
+        if (fromVersion < 6 && persistedState?.fees?.feeHeads) {
+          const legacyDescriptions: Record<string, string[]> = {
+            'fh-2': [
+              'Admission: boys ₹500 one-time (girls free above Class 5). Registration ₹300 for Class 9 & 11 entry points. SaaS-STAGE-2A §5: charged at admission events — schools that levy it EVERY academic year simply switch this head’s frequency to Annual (one model, policy-driven frequency).',
+            ],
+            'fh-6': [
+              'SaaS-STAGE-2A §4/§7: per-examination charge (never ×12) — the school’s exam pattern maps amounts per exam type (Pattern A: UT×4 + Half-Yearly + Annual · Pattern B: Quarterly + Half-Yearly + Annual). Fee configuration ≠ exam creation: actual exams are produced in the Examination module.',
+              'Session-wide exam conduct charge — see Fee Structure (exam fee schedule).',
+            ],
+          }
+          for (const head of persistedState.fees.feeHeads) {
+            const legacy = legacyDescriptions[head.id]
+            const seed = initialState.fees.feeHeads.find((f) => f.id === head.id)
+            if (head && legacy?.includes(head.description) && seed) head.description = seed.description
           }
         }
         return persistedState

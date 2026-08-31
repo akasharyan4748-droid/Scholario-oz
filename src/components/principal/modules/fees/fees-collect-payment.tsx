@@ -656,9 +656,8 @@ export function CollectPaymentModal({ open, onOpenChange, preselectStudentId, on
                 <div className="rounded-lg bg-muted/30 border border-border p-2.5 flex items-start gap-2">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
                   <p className="text-[10px] text-muted-foreground">
-                    If this was an accidental double-click, the original payment is safe —
-                    the system blocked the duplicate (idempotency guard). Review the
-                    transaction in the Transactions tab and retry only if needed.
+                    No money was moved. A payment can never be recorded twice by accident —
+                    check the Transactions tab before retrying.
                   </p>
                 </div>
               </motion.div>

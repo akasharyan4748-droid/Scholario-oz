@@ -182,16 +182,11 @@ export function FeeReceiptA5Preview({
     return () => ro.disconnect()
   }, [])
 
-  const formatLabel =
-    settings.paperSize === 'A4'
-      ? 'A4 portrait · 2 receipts per sheet · each receipt = A5 landscape area'
-      : 'A5 landscape (210 × 148 mm) · Student copy + School copy on one sheet'
-
   return (
     <div className="flex flex-col items-center w-full">
       {(onPrint || onDownload || onClose) && (
         <div className="flex items-center justify-between w-full mb-2.5">
-          <p className="text-[11px] font-semibold text-muted-foreground">Receipt preview · {settings.paperSize} format</p>
+          <p className="text-[11px] font-semibold text-muted-foreground">Receipt</p>
           <div className="flex items-center gap-1">
             {onPrint && (
               <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onPrint}>
@@ -221,10 +216,6 @@ export function FeeReceiptA5Preview({
           </div>
         </div>
       </div>
-
-      <p className="text-[9px] text-muted-foreground mt-1.5">
-        {formatLabel}
-      </p>
     </div>
   )
 }

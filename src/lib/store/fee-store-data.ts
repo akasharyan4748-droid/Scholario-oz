@@ -14,9 +14,10 @@
  *   Subject/Practical ...... ₹300 per applicable lab subject per session
  *                            (Physics / Chemistry / Biology) — senior-secondary
  *                            science streams only.
- *   Admission Fee .......... rule-based, NOT billed with regular fees:
- *                            boys ₹500 one-time; girls free above Class 5
- *                            (see DEFAULT_ADMISSION_POLICY + admissionFeeFor()).
+ *   Admission Fee .......... policy-driven, NOT billed with regular fees:
+ *                            ₹500 one-time, charged only to the students the
+ *                            entry-fee policy includes
+ *                            (see DEFAULT_ENTRY_FEE_POLICY + admissionFeeFor()).
  *
  * Extracted from fee-store.ts (V6 modularization pass). Behaviour-preserving:
  * fee-store.ts re-exports previously public symbols so imports keep working.
@@ -392,32 +393,96 @@ export function computeExamFeeTotal(schedule: ExamFeeSchedule | undefined | null
 }
 
 // ─── One-time entry fees (admission events ONLY — never monthly billing) ──
+//
+// Model (WHAT vs WHO kept strictly separate):
+//   · WHAT the fee is  → the Fee Head Catalogue (headId) + the canonical
+//     amount (admission: policy.admissionAmount — the value the admission
+//     engine charges; registration: the published fee structures).
+//   · WHO it applies to → EntryFeeAudience, an extensible applicability
+//     rule that can express: everyone, selected classes, one gender,
+//     or classes ∩ gender. Sections can slot in later without a model
+//     change (classIds already point at canonical AcademicClassDef ids).
 
-export interface AdmissionFeePolicy {
+export type EntryFeeGender = 'boys' | 'girls'
+export type EntryFeeScope = 'all' | 'classes' | 'gender' | 'classes_gender'
+
+export interface EntryFeeAudience {
+  scope: EntryFeeScope
+  /** Required when the scope involves gender. */
+  gender?: EntryFeeGender
+  /** Canonical AcademicClassDef ids — required when the scope involves classes. */
+  classIds?: string[]
+}
+
+export interface EntryFeeRule {
+  /** Stable id — 'admission' and 'registration' are seeded; future entry fees extend the list. */
+  id: string
+  /** Fee Head Catalogue id this rule points at (canonical fee identity). */
+  headId: string
+  /** WHO receives the fee. */
+  applies: EntryFeeAudience
+}
+
+export interface EntryFeePolicy {
   enabled: boolean
-  /** One-time admission fee for BOYS, Nursery through Class 12. */
-  boysAmount: number
-  /** Girls above this grade are exempt (school policy: free after Class 5). */
-  girlsFreeAboveGrade: number
+  /** Canonical one-time admission amount (the value admissionFeeFor charges). */
+  admissionAmount: number
+  rules: EntryFeeRule[]
 }
 
-export const DEFAULT_ADMISSION_POLICY: AdmissionFeePolicy = {
+/** The demo school's policy: admission fee for boys; registration at the
+ *  Class 9 / Class 11 entry points (both streams). */
+export const DEFAULT_ENTRY_FEE_POLICY: EntryFeePolicy = {
   enabled: true,
-  boysAmount: 500,
-  girlsFreeAboveGrade: 5,
+  admissionAmount: 500,
+  rules: [
+    { id: 'admission', headId: 'fh-2', applies: { scope: 'gender', gender: 'boys' } },
+    { id: 'registration', headId: 'fh-2', applies: { scope: 'classes', classIds: ['C12', 'C14-PCM', 'C14-PCB'] } },
+  ],
 }
 
-/** Applicability rule used at admission time (based on gender + grade). */
+/** Does this applicability rule include the given student? The ONE matcher
+ *  every entry-fee decision goes through (admission engine + previews). */
+export function entryFeeApplies(
+  audience: EntryFeeAudience,
+  input: { gender?: string; classId?: string; className?: string },
+): boolean {
+  const wantsGender = audience.scope === 'gender' || audience.scope === 'classes_gender'
+  const wantsClasses = audience.scope === 'classes' || audience.scope === 'classes_gender'
+  if (wantsGender) {
+    const g = (input.gender ?? '').toLowerCase()
+    const isBoy = g === 'male' || g === 'boy'
+    const isGirl = g === 'female' || g === 'girl'
+    if (audience.gender === 'boys' && !isBoy) return false
+    if (audience.gender === 'girls' && !isGirl) return false
+  }
+  if (wantsClasses) {
+    const ids = audience.classIds ?? []
+    if (ids.length === 0) return false
+    if (input.classId && ids.includes(input.classId)) return true
+    // Fall back to class-name matching (students without a classId).
+    if (input.className) {
+      const named = ACADEMIC_CLASSES.filter((c) => ids.includes(c.id)).map((c) => c.name)
+      if (named.includes(input.className)) return true
+    }
+    return false
+  }
+  return true
+}
+
+/**
+ * One-time admission fee for a student under the current policy.
+ * Amount comes from policy.admissionAmount; eligibility from the
+ * 'admission' rule's applicability. ₹0 when disabled / not applicable.
+ */
 export function admissionFeeFor(
-  policy: AdmissionFeePolicy,
-  input: { gender?: string; grade?: number },
+  policy: EntryFeePolicy,
+  input: { gender?: string; classId?: string; className?: string },
 ): number {
   if (!policy.enabled) return 0
-  const g = (input.gender ?? '').toLowerCase()
-  if (g === 'female' || g === 'girl') {
-    return input.grade != null && input.grade > policy.girlsFreeAboveGrade ? 0 : policy.boysAmount
-  }
-  return policy.boysAmount
+  const rule = policy.rules.find((r) => r.id === 'admission')
+  if (!rule) return 0
+  return entryFeeApplies(rule.applies, input) ? policy.admissionAmount : 0
 }
 
 // ─── ADDITIONAL CHARGES seed ──────────────────────────────────────────

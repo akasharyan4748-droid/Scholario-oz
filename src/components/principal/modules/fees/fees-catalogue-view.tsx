@@ -325,12 +325,12 @@ export function FeesCatalogueView({ onBack }: Props) {
             </tbody>
           </table>
         </div>
-        {/* Immutability rule — always visible so the boundary is never a surprise */}
+        {/* Boundary rule — always visible so the boundary is never a surprise */}
         <div className="border-t border-border/60 px-4 py-2 flex items-start gap-2 text-[10px] text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" aria-hidden />
           <p>
-            Catalogue edits set <span className="font-semibold text-foreground">defaults for future structures only</span> —
-            published Fee Structure versions keep their immutable snapshots, and existing transactions are never recalculated.
+            Catalogue edits apply to <span className="font-semibold text-foreground">new structures only</span> —
+            existing structures, payments and receipts are unchanged.
           </p>
         </div>
       </div>

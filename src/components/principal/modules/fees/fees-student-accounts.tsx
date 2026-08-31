@@ -493,7 +493,7 @@ function AccountOverview({ account }: { account: StudentFeeAccount }) {
     <div className="space-y-3">
       {/* CORE vs ADDITIONAL position — the two are shown as separate groups
           so the Principal never reads one mixed number. */}
-      <FeePanel title="Account Position" subtitle="core fees and additional charges are tracked separately">
+      <FeePanel title="Account Position" subtitle="core fees and additional charges">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Core School Fees */}
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
@@ -619,7 +619,7 @@ function LedgerAccessCard({ onOpen }: { onOpen: () => void }) {
       </span>
       <span className="flex-1 min-w-0">
         <span className="block text-xs font-semibold">View Fee Ledger</span>
-        <span className="block text-[10px] text-muted-foreground">every charge and payment — chronological, with running balance</span>
+        <span className="block text-[10px] text-muted-foreground">every charge and payment, with running balance</span>
       </span>
       <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-emerald-600 transition-colors" />
     </button>
@@ -686,7 +686,7 @@ function AccountOptionalCharges({ studentId }: { studentId: string }) {
         )}
       </div>
       <p className="text-[10px] text-muted-foreground border-t border-border/60 pt-2 mt-2">
-        Applying an optional head adds its charge to this account's future dues and ledger. Recorded payments and issued receipts are never rewritten.
+        Turning a head on adds it to this account's future dues. Past payments and receipts never change.
       </p>
     </FeePanel>
   )
@@ -842,8 +842,8 @@ function AccountPayments({ account, onViewReceipt }: { account: StudentFeeAccoun
         </table>
       </div>
       <p className="text-[10px] text-muted-foreground border-t border-border/40 px-3 py-2">
-        Receipts are generated from recorded payments — open any row's receipt to view or print the A5 dual copy.
-        {carry && ' Previous Receipts are carried from the Students register and included in Paid.'}
+        Open any recorded payment to view or print its receipt.
+        {carry && ' Previous Receipts are included in Paid.'}
       </p>
     </FeePanel>
   )
@@ -878,7 +878,7 @@ function AccountConcessions({ account }: { account: StudentFeeAccount }) {
   return (
     <FeePanel
       title="Concessions"
-      subtitle="approved concessions reduce the applicable amount — auditable, never rewriting past payments"
+      subtitle="approved concessions reduce the payable amount"
       action={(
         <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => setGrantOpen((v) => !v)}>
           <Plus className="h-3 w-3" /> Grant Concession
@@ -1070,7 +1070,7 @@ function GrantConcessionForm({
 
 function AccountDues({ account, onCollect }: { account: StudentFeeAccount; onCollect: () => void }) {
   return (
-    <FeePanel title="Dues & Outstanding" subtitle="core fees and additional charges, separately">
+    <FeePanel title="Dues & Outstanding" subtitle="core fees and additional charges">
       <div className="space-y-3">
         {/* Core */}
         <div>
@@ -1144,7 +1144,7 @@ function AccountAudit({ account }: { account: StudentFeeAccount }) {
     )
   }, [allAudit, concessions, account.studentId, account.transactions])
   return (
-    <FeePanel title="Activity History" subtitle="account-level financial activity — payments, receipts, concessions, applicability">
+    <FeePanel title="Activity History" subtitle="payments, receipts, concessions and policy changes">
       <div className="space-y-2">
         {audit.length > 0 ? audit.map((a) => (
           <div key={a.id} className="flex items-start gap-2 rounded-md border border-border/40 px-2 py-1.5">
