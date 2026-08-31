@@ -1090,3 +1090,19 @@ Stage Summary:
 - Root cause of flaky/old-looking preview = platform keepalive loops + duplicate watchdogs fighting over :3000 and stale browser chunks — NOT code. All latest work (git HEAD 8bd7de0) confirmed live and rendering in the browser.
 - User guidance: hard-refresh the preview tab (Ctrl+Shift+R / Cmd+Shift+R) or close+reopen the preview; if data looks older it's the fresh demo seed (prior QA wiped mutations).
 - keepalive.sh remains on disk but is NOT running; if it respawns after a platform restart, kill it again (it targets a standalone build that can never exist in this sandbox).
+
+---
+Task ID: PREVIEW-STABILIZE-2
+Agent: Z.ai Code (main thread)
+Task: User follow-up "This is not what we were creating, we were even much ahead of this" — locate the true latest state and explain what the user is seeing.
+
+Work Log:
+- GIT FORENSICS: git fetch pulled 2 extra remote branches (origin/development, origin/stable). Compared ALL heads: origin/main == origin/development == fcec284 (Aug 28 05:10 "restore Fee Structures card-grid listing") = merge-base of local; origin/stable = e1c9ed4 (Aug 24). LOCAL MAIN (fded714) is strictly AHEAD of every other branch by 10+ commits (all Aug 28→30 work: finance dashboard, payments rework, A5 receipts, PAY-POLISH-2, fee model change). Reflog shows no lost commits after Aug 30 10:52 (only platform snapshot amends). Working tree clean. CONCLUSION: local main is provably the most advanced state that exists anywhere; no "much ahead" work exists outside it.
+- ROOT CAUSE of user's perception: browser sessions are per-device. The user's browser holds NO auth cookie (QA logins live in agent-browser sessions), so their preview opens at the PUBLIC MARKETING WEBSITE + login portal — which was built at the very START of the project (Aug 26-27) and therefore IS the oldest-looking surface, while all the recent work (Aug 28-30) is deep inside the ERP behind login. Secondary: demo data store was re-seeded to fresh seed state during prior QA wipes, so in-app data can also look "reset".
+- FRESH-VISITOR FLOW VERIFIED (agent-browser isolated session, zero stored state): / → public website → "Login Portal" → role chips ("Quick demo access — one tap to sign in": Principal/Teacher/Student/Super Admin) → tapping "Principal" chip auto-fills principal@greenwood.edu.in + password → "Sign In" → lands in latest Principal ERP dashboard ("Good morning, Dr. Ananya", full sidebar). Login chips auto-FILL but do not auto-SUBMIT — one extra Sign In click required.
+- Screenshots already on file: screenshots/verify-fee-structures-latest.png (latest Fee Structures rework), verify-payments-latest.png (latest Payments rework).
+
+Stage Summary:
+- No code was ever old or lost: local main > all remote branches; live :3000 serves it (HTTP 200).
+- User sees the public website because their browser has no session — they must sign in (Login Portal → Principal chip → Sign In) to reach the latest ERP.
+- Potential UX improvement (NOT done, needs user approval): landing page could offer a clearer "Sign in to the live ERP" CTA, and demo chips could auto-submit.
