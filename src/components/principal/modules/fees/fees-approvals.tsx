@@ -52,7 +52,7 @@ import { useFeeData, useFeeStore, type CashRequest, type FeeTransaction } from '
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Panel } from '../shared/panel'
-import { FeeEmptyState, FeeStatusBadge, ModeIcon, modeAccent, paymentStatusLabel, TxnDateTime, DateTimeText } from './fees-shared'
+import { FeeEmptyState, FeeStatusBadge, ModeIcon, modeAccent, paymentStatusLabel, TxnDateTime, DateTimeText, SourceChip } from './fees-shared'
 import { toast } from 'sonner'
 
 // Rejection reasons (structured list + "Other" with custom text) — catalog UNCHANGED.
@@ -93,10 +93,13 @@ function QueueStatusChip({ status }: { status: CashRequest['status'] }) {
   )
 }
 
-/** Who recorded the payment awaiting verification (PAY-REWORK-1). */
+/** Who recorded the payment awaiting verification — SaaS-STAGE-1 keeps ONE
+ *  source vocabulary everywhere (shared SourceChip); this helper is kept
+ *  for confirmation-modal copy. */
 function collectorLabel(role: FeeTransaction['collectorRole'], collectedBy: string): string {
-  if (role === 'teacher') return `Teacher ${collectedBy}`
-  if (role === 'self') return 'Self-submitted'
+  if (role === 'teacher') return `Teacher · ${collectedBy}`
+  if (role === 'class_teacher') return `Class Teacher · ${collectedBy}`
+  if (role === 'self') return 'Student self-service'
   return `Office · ${collectedBy}`
 }
 
@@ -281,17 +284,8 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
                       </span>
                     </td>
                     <td className="px-3 py-2.5 hidden md:table-cell">
-                      <span
-                        className={cn(
-                          'inline-flex max-w-[120px] items-center truncate px-1.5 py-0.5 rounded text-[9px] font-semibold',
-                          t.collectorRole === 'teacher'
-                            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                            : 'bg-sky-500/10 text-sky-700 dark:text-sky-300',
-                        )}
-                        title={`Collected by ${t.collectedBy}`}
-                      >
-                        {collectorLabel(t.collectorRole, t.collectedBy)}
-                      </span>
+                      {/* Operational source (SaaS-STAGE-1): shared chip vocabulary */}
+                      <SourceChip role={t.collectorRole} collectedBy={t.collectedBy} maxW="max-w-[130px]" />
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap hidden lg:table-cell"><TxnDateTime transaction={t} /></td>
                     <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground hidden 2xl:table-cell">{t.referenceNo ?? '—'}</td>
@@ -347,12 +341,7 @@ export function FeesVerificationQueue({ data }: { data: ReturnType<typeof useFee
                         </span>
                       </td>
                       <td className="px-3 py-2.5 hidden md:table-cell">
-                        <span
-                          className="inline-flex max-w-[120px] items-center truncate px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                          title={`Cash collected by ${r.collectedBy}`}
-                        >
-                          Teacher · {r.collectedBy}
-                        </span>
+                        <SourceChip role="teacher" collectedBy={r.collectedBy} maxW="max-w-[130px]" />
                       </td>
                       <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap hidden lg:table-cell"><DateTimeText date={r.collectedAt} instant={r.collectedAt.includes('T') ? r.collectedAt : null} /></td>
                       <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground hidden 2xl:table-cell">{r.referenceNo ?? '—'}</td>

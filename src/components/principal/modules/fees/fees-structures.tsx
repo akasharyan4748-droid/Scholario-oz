@@ -33,7 +33,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Layers, History, MoreHorizontal, Plus, ChevronRight, Calendar,
   FileText, Archive, Copy, Trash2, AlertTriangle, ShieldAlert,
-  GraduationCap, ShieldCheck,
+  GraduationCap, ShieldCheck, CalendarCheck2, BookOpen,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -61,6 +61,11 @@ import { cn } from '@/lib/utils'
 import { FeesStructuresDetailDrawer } from './fees-structures-detail'
 import { FeesStructuresHistoryDialog } from './fees-structures-history'
 import { VersionStatusPill, StructureStatusBadge } from './fees-structures-shared'
+// SaaS-STAGE-1 — the Catalogue is a FULL CONTENT-AREA VIEW (never a modal):
+// the Fee Structures header carries the only entry point, and opening it
+// swaps THIS tab's content area while the app shell stays untouched.
+import { FeesCatalogueView } from './fees-catalogue-view'
+import { useAcademicSession } from '@/lib/academic-session'
 import { toast } from 'sonner'
 
 // TASK 2-c — flattened to chip tones only (the old `bar`/`dot` fields
@@ -107,6 +112,37 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
   const [deleteTarget, setDeleteTarget] = useState<FeeStructureConfig | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
+  // FEE-CREATE-DRAWER — "New Structure" (toolbar) opens the same
+  // right-side detail drawer used by existing structures, but in
+  // `mode='create'`. The button's onClick toggles `createMode`
+  // (no record is written); the drawer handles its own Save Draft /
+  // Publish New Version / Cancel flow. On Save Draft (or Publish) the
+  // drawer calls `onCreated(id)` which closes create-mode and re-opens
+  // the drawer in view mode with the new structure id.
+  const [createMode, setCreateMode] = useState(false)
+
+  const openCreateDrawer = () => {
+    setCreateMode(true)
+  }
+
+  const closeCreateDrawer = () => {
+    setCreateMode(false)
+  }
+
+  // SaaS-STAGE-1 — Catalogue Management content-area swap. While open, the
+  // structures toolbar + grid are replaced by the full-size Catalogue view;
+  // the app shell (sidebar / header / Fee Management tabs) never changes.
+  // List state (open drawer / history / filters) is preserved on Back.
+  const [catalogueOpen, setCatalogueOpen] = useState(false)
+  const openCatalogue = () => {
+    setOpenStructureId(null)
+    setHistoryStructure(null)
+    setCreateMode(false)
+    setCatalogueOpen(true)
+  }
+  // Active academic session — DERIVED, read-only (lib/academic-session.ts).
+  const session = useAcademicSession()
+
 
   // PHASE 5 — Bulk Apply to Level dialog state. Lets the principal pick
   // a source structure (e.g. Class 2 Primary) and apply it to all OTHER
@@ -129,22 +165,14 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
     return () => window.removeEventListener('fee-open-structure', handler)
   }, [])
 
-  // FEE-CREATE-DRAWER — "New Structure" (toolbar) opens the same
-  // right-side detail drawer used by existing structures, but in
-  // `mode='create'`. The button's onClick toggles `createMode`
-  // (no record is written); the drawer handles its own Save Draft /
-  // Publish New Version / Cancel flow. On Save Draft (or Publish) the
-  // drawer calls `onCreated(id)` which closes create-mode and re-opens
-  // the drawer in view mode with the new structure id.
-  const [createMode, setCreateMode] = useState(false)
-
-  const openCreateDrawer = () => {
-    setCreateMode(true)
-  }
-
-  const closeCreateDrawer = () => {
-    setCreateMode(false)
-  }
+  // SaaS-STAGE-1 — the Add-Head picker's "+ Add new to catalogue" footer
+  // used to dispatch this event with NO listener (dead shortcut). It now
+  // opens the Catalogue content-area view, exactly like the header button.
+  useEffect(() => {
+    const handler = () => openCatalogue()
+    window.addEventListener('fee-open-catalogue', handler)
+    return () => window.removeEventListener('fee-open-catalogue', handler)
+  }, [])
 
   // FEE-CREATE-DRAWER — when the drawer's own Delete action succeeds,
   // close the drawer if it was showing the deleted structure.
@@ -380,6 +408,15 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
+      {/* SaaS-STAGE-1 — Catalogue Management content-area swap: while the
+          catalogue is open it REPLACES this tab's content (toolbar + grid).
+          The app shell — sidebar, application header, Fee Management tabs —
+          is untouched. "Back to Fee Structures" returns with list state
+          preserved. */}
+      {catalogueOpen ? (
+        <FeesCatalogueView onBack={() => setCatalogueOpen(false)} />
+      ) : (
+      <>
       {/* UX-REFINE — the "Fee Structures" tab already establishes context,
           so the page opens straight into useful controls: summary badges
           left, Archived filter + New Structure right. No repeated page
@@ -392,8 +429,19 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
           <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40">
             <GraduationCap className="h-2.5 w-2.5" /> {activeClassCount} active class{activeClassCount === 1 ? '' : 'es'}
           </Badge>
+          {/* SaaS-STAGE-1 — the active academic session is DERIVED (read-only,
+              lib/academic-session.ts): the Principal selects the class; the
+              system supplies the session. Never hand-typed. */}
+          <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-muted/40" title="Active academic session (read-only, from school configuration)">
+            <CalendarCheck2 className="h-2.5 w-2.5" /> {session.label}
+          </Badge>
         </div>
         <div className="flex items-center gap-2">
+          {/* SaaS-STAGE-1 — the ONLY catalogue entry point. Opens the full
+              content-area Catalogue Management view (no modal). */}
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={openCatalogue}>
+            <BookOpen className="h-3.5 w-3.5" /> Catalogue
+          </Button>
           {archivedCount > 0 && (
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowArchived((v) => !v)}>
               {showArchived ? 'Hide Archived' : `Archived (${archivedCount})`}
@@ -534,8 +582,10 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
             </p>
           </div>
 
-          {/* Actions — clear primary (Open →), quiet secondary (History),
-              overflow right. Wiring unchanged (TASK 2-c). */}
+          {/* Actions — clear primary (Open →) + overflow right. The
+              redundant per-card History button is REMOVED (SaaS-STAGE-1):
+              version history already lives inside the structure detail
+              (History button) and stays reachable from the More menu. */}
           <div className="flex items-center gap-1.5 pt-2 mt-auto border-t border-border/40" onClick={(e) => e.stopPropagation()}>
             <Button
               size="sm"
@@ -544,15 +594,6 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
               onClick={() => setOpenStructureId(f.id)}
             >
               Open <ChevronRight className="h-3 w-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-[11px] gap-1"
-              onClick={() => setHistoryStructure(f)}
-              title="View version history"
-            >
-              <History className="h-3 w-3" /> History
             </Button>
             <div className="flex-1" />
             <DropdownMenu>
@@ -605,6 +646,8 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
             was removed: creation now lives in the toolbar's primary
             "New Structure" button (same drawer, mode='create'). */}
       </div>
+      </>
+      )}
 
       {/* Detail drawer — existing structure */}
       <AnimatePresence>

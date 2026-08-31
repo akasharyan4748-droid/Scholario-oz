@@ -34,6 +34,7 @@ import {
   ArrowLeft, Pencil, Plus, History, Copy, Trash2, X, Check,
   Layers, Calendar, User, RotateCcw, Archive, FileText, AlertCircle,
   CheckCircle2, Save, Sparkles, ShieldAlert, AlertTriangle, Award, Lock,
+  CalendarCheck2,
   // PHASE 7 — Re-link from catalogue row action icons.
   Link2, Link2Off, Search, ChevronDown,
 } from 'lucide-react'
@@ -67,6 +68,11 @@ import {
 import { FeesStructuresConfirmDialog } from './fees-structures-confirm'
 import { FeesStructuresHistoryDialog } from './fees-structures-history'
 import { VersionStatusPill } from './fees-structures-shared'
+// SaaS-STAGE-1 — the active academic session is DERIVED (read-only) and
+// effective permissions come from the school configuration (never
+// hard-coded role checks in the UI).
+import { useAcademicSession } from '@/lib/academic-session'
+import { getEffectivePermissions } from '@/lib/permissions'
 // Canonical monetary input — permanently fixes the leading-zero bug
 // (select-all-and-type, paste, clearing, leading "04…") on every amount
 // field in this editor.
@@ -187,6 +193,11 @@ function DetailDrawerInner({
   // EXAM INTEGRATION — the exam types available to the Examination Fee
   // Schedule, fetched from the Examination module (source of truth).
   const { types: examTypeDefs, loading: examTypesLoading } = useExamTypeDefinitions()
+  // SaaS-STAGE-1 — session is DERIVED (read-only) and permissions come
+  // from the school configuration. Publish-disabled schools can still
+  // edit + save drafts; publish/archive/delete actions are gated below.
+  const session = useAcademicSession()
+  const perms = getEffectivePermissions('principal')
   // PHASE 7 — Re-link from catalogue row action. Wires the existing
   // `linkHeadToCatalogue` store action (added in Phase 6 for the
   // Normalize drawer) to a compact per-row popover trigger in the
@@ -234,12 +245,12 @@ function DetailDrawerInner({
   // shows the class's `name` (e.g. "Class 10") and the subtitle shows
   // the class's `level` + AY (e.g. "Secondary · AY 2025-2026").
   //
-  // Defaults are intentionally EMPTY for `createClassId` and
-  // `createAcademicYear` (the create-mode header shows a placeholder
-  // option "Select class" and a placeholder "AY 2025-2026" rather than
-  // pre-selecting a value). Effective date still defaults to today.
+  // Defaults are intentionally EMPTY for `createClassId` (the create-mode
+  // header shows a placeholder option "Select class"). SaaS-STAGE-1: the
+  // academic session is NOT an input at all — it is derived read-only from
+  // the active session (lib/academic-session.ts) and stamped on save.
+  // Effective date still defaults to today.
   const [createClassId, setCreateClassId] = useState<string>('')
-  const [createAcademicYear, setCreateAcademicYear] = useState('')
   const [createEffectiveDate, setCreateEffectiveDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [createNotes, setCreateNotes] = useState('')
   const [createSubmitting, setCreateSubmitting] = useState(false)
@@ -280,7 +291,6 @@ function DetailDrawerInner({
       // academic year, effective date = today, no notes.
       if (isCreateMode) {
         setCreateClassId('')
-        setCreateAcademicYear('')
         setCreateEffectiveDate(new Date().toISOString().split('T')[0])
         setCreateNotes('')
         setCreateSubmitting(false)
@@ -565,25 +575,19 @@ function DetailDrawerInner({
     if (!isCreateMode) return false
     return (
       createClassId.trim().length > 0 ||
-      createAcademicYear.trim().length > 0 ||
       createEffectiveDate !== new Date().toISOString().split('T')[0] ||
       createNotes.trim().length > 0 ||
       workingHeads.length > 0 ||
       workingExamSchedule.length > 0
     )
-  }, [isCreateMode, createClassId, createAcademicYear, createEffectiveDate, createNotes, workingHeads, workingExamSchedule])
+  }, [isCreateMode, createClassId, createEffectiveDate, createNotes, workingHeads, workingExamSchedule])
 
-  // FEE-PER-CLASS — the FeeStructureConfig type has no `academicYear`
-  // field, so we fold the academic year + notes into the `notes` prop
-  // (preserving the convention the previous create-modal used). Notes
-  // are no longer surfaced in the create-mode header UI (per spec —
-  // "Remove notes from the primary create UI"), but the field is kept
-  // on the state so the existing FEE-CREATE-UI notes input below the
-  // main flow (if re-enabled later) still works. The Academic Year
-  // is always folded in so the version record carries it.
+  // FEE-PER-CLASS — notes are folded into the `notes` prop. SaaS-STAGE-1:
+  // the Academic Year is NO LONGER typed by the user — it is derived from
+  // the active session and passed as `academicYear` to createFeeStructure
+  // (stamped on the structure + every version snapshot).
   const buildCreateNotes = () => {
     const parts: string[] = []
-    if (createAcademicYear.trim()) parts.push(`Academic Year: ${createAcademicYear.trim()}`)
     if (createNotes.trim()) parts.push(createNotes.trim())
     return parts.length > 0 ? parts.join(' · ') : undefined
   }
@@ -609,6 +613,7 @@ function DetailDrawerInner({
         notes: buildCreateNotes(),
         actor: 'Principal',
         examFeeSchedule: workingExamSchedule.length > 0 ? workingExamSchedule : undefined,
+        academicYear: session.id,
       })
       setCreateSubmitting(false)
       if (newId) {
@@ -637,6 +642,7 @@ function DetailDrawerInner({
         notes: buildCreateNotes(),
         actor: 'Principal',
         examFeeSchedule: workingExamSchedule.length > 0 ? workingExamSchedule : undefined,
+        academicYear: session.id,
       })
       if (!newId) {
         setCreateSubmitting(false)
@@ -814,17 +820,18 @@ function DetailDrawerInner({
                     <h2 className="text-base font-bold truncate">
                       {selectedClass ? selectedClass.name : 'Create New Fee Structure'}
                     </h2>
-                    {/* Subtitle — level + AY when a class is selected,
-                        "Select a class to begin" placeholder otherwise. */}
+                    {/* Subtitle — level + AY when a class is selected.
+                        SaaS-STAGE-1: the session is DERIVED, never typed. */}
                     <p className="text-[11px] text-muted-foreground">
                       {selectedClass
-                        ? `${selectedClass.level} · AY ${createAcademicYear.trim() || CURRENT_ACADEMIC_YEAR}`
+                        ? `${selectedClass.level} · ${session.label}`
                         : 'Select a class to begin'}
                     </p>
-                    {/* Compact inline metadata inputs — Class select +
-                        AY + Effective Date. Wraps on narrow viewports.
-                        Mirrors the existing view header's
-                        "category · classLevel · AY · effective" density. */}
+                    {/* Compact inline metadata — Class select + READ-ONLY
+                        session badge + Effective Date. The session comes
+                        from the school's active academic session (the
+                        Principal selects the CLASS; the SYSTEM supplies
+                        the session). Wraps on narrow viewports. */}
                     <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                       <select
                         value={createClassId}
@@ -840,12 +847,13 @@ function DetailDrawerInner({
                           return <option key={c.id} value={c.id}>{label}</option>
                         })}
                       </select>
-                      <Input
-                        value={createAcademicYear}
-                        onChange={(e) => setCreateAcademicYear(e.target.value)}
-                        placeholder={`AY ${CURRENT_ACADEMIC_YEAR}`}
-                        className="h-7 text-xs w-28"
-                      />
+                      <Badge
+                        variant="outline"
+                        className="h-7 text-[10px] gap-1 bg-muted/40 shrink-0"
+                        title="Active academic session — read-only, supplied by the school configuration"
+                      >
+                        <CalendarCheck2 className="h-2.5 w-2.5" /> {session.label}
+                      </Badge>
                       <Input
                         type="date"
                         value={createEffectiveDate}
@@ -883,8 +891,15 @@ function DetailDrawerInner({
                   </span>
                   <div className="min-w-0">
                     <h2 className="text-base font-bold truncate">{structure.className}</h2>
+                    {/* SaaS-STAGE-1 — dedupe + snapshot: category and level are
+                        the same value post FEE-PER-CLASS ("Pre-Primary ·
+                        Pre-Primary · AY …" bug), and published structures keep
+                        the session snapshot they were published under. */}
                     <p className="text-[11px] text-muted-foreground">
-                      {structure.category} · {structure.classLevel} · AY {CURRENT_ACADEMIC_YEAR}
+                      {[structure.classLevel, structure.category !== structure.classLevel ? structure.category : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      {' · '}{(structure.academicYear ?? CURRENT_ACADEMIC_YEAR).replace('-', '–')}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
                       <span className="inline-flex items-center gap-1"><Calendar className="h-2.5 w-2.5" /> Effective {formatDate(structure.effectiveFrom)}</span>
@@ -943,7 +958,12 @@ function DetailDrawerInner({
                     <Copy className="h-3 w-3" /> Duplicate
                   </Button>
                   {currentVersion && (
-                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-amber-600" onClick={handleArchiveCurrent}>
+                    <Button
+                      size="sm" variant="ghost" className="h-7 text-xs gap-1 text-amber-600"
+                      onClick={handleArchiveCurrent}
+                      disabled={!perms.fee_structure_archive}
+                      title={perms.fee_structure_archive ? 'Archive the current version' : 'Archiving is disabled for your role by the school configuration'}
+                    >
                       <Archive className="h-3 w-3" /> Archive
                     </Button>
                   )}
@@ -952,13 +972,16 @@ function DetailDrawerInner({
                     variant="ghost"
                     className={cn('h-7 text-xs gap-1 ml-auto', currentVersion ? 'text-muted-foreground/60' : 'text-rose-600 hover:bg-rose-500/10')}
                     onClick={handleDelete}
-                    title={currentVersion ? 'Cannot delete a published structure — archive instead' : 'Delete this structure'}
+                    disabled={!perms.fee_structure_delete}
+                    title={!perms.fee_structure_delete
+                      ? 'Deleting is disabled for your role by the school configuration'
+                      : currentVersion ? 'Cannot delete a published structure — archive instead' : 'Delete this structure'}
                   >
                     <Trash2 className="h-3 w-3" /> Delete
                   </Button>
                   {scheduledVersions.length > 0 && (
                     <Badge variant="outline" className="text-[9px] h-5 gap-1 ml-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20">
-                      <Sparkles className="h-2.5 w-2.5" /> {scheduledVersions.length} scheduled
+                      <Sparkles className="h-2.5 w-2.5" /> {scheduledVersions.length} ready to publish
                     </Badge>
                   )}
                   {draftVersions.length > 0 && (
@@ -973,11 +996,23 @@ function DetailDrawerInner({
                     <X className="h-3 w-3" /> Discard
                   </Button>
                   {!isLockedCurrent && (
-                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setConfirmMode('schedule')}>
+                    <Button
+                      size="sm" variant="outline" className="h-7 text-xs gap-1"
+                      onClick={() => setConfirmMode('schedule')}
+                      disabled={!perms.fee_structure_publish}
+                      title={perms.fee_structure_publish ? 'Schedule for a future effective date' : 'Publishing is disabled for your role by the school configuration'}
+                    >
                       <Calendar className="h-3 w-3" /> Schedule
                     </Button>
                   )}
-                  <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handlePublish} disabled={!hasEdits || validationIssues.length > 0}>
+                  <Button
+                    size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={handlePublish}
+                    disabled={!hasEdits || validationIssues.length > 0 || !perms.fee_structure_publish}
+                    title={!perms.fee_structure_publish
+                      ? 'Publishing is disabled for your role — you can edit and save drafts, but publishing requires the fee_structure_publish permission'
+                      : undefined}
+                  >
                     <Check className="h-3 w-3" /> {isLockedCurrent ? 'Submit Revision' : 'Publish New Version'}
                   </Button>
                 </>
@@ -1289,6 +1324,9 @@ function DetailDrawerInner({
 
             {/* Scheduled / Draft versions inline notice — hidden in
                 create mode (no versions yet). */}
+            {/* SaaS-STAGE-1 — version lifecycle vocabulary: scheduled =
+                "Ready for publish" (Promote → Publish now); drafts stay
+                mutable until published. Saving a draft NEVER makes it live. */}
             {!isCreateMode && (scheduledVersions.length > 0 || draftVersions.length > 0) && (
               <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
                 <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 mb-1 flex items-center gap-1.5">
@@ -1297,23 +1335,28 @@ function DetailDrawerInner({
                 <div className="space-y-1">
                   {scheduledVersions.map((v) => (
                     <div key={v.id} className="flex items-center justify-between text-[10px]">
-                      <span>Version {v.version} · scheduled for {formatDate(v.effectiveFrom)}</span>
+                      <span>
+                        Version {v.version} · <span className="text-sky-700 dark:text-sky-300 font-medium">Ready for publish</span>
+                        {' '}— effective {formatDate(v.effectiveFrom)}
+                      </span>
                       <div className="flex items-center gap-1">
                         <Button
                           size="sm"
                           variant="ghost"
                           className="h-5 text-[9px] text-sky-600 px-1"
+                          disabled={!perms.fee_structure_publish}
+                          title={perms.fee_structure_publish ? 'Publish this version now' : 'Publishing is disabled for your role by the school configuration'}
                           onClick={() => {
-                            // Promote the scheduled version immediately.
+                            // Publish the scheduled version immediately.
                             // FEE-EXAM: pass the scheduled version's
                             // examFeeSchedule snapshot so the promoted
                             // current version carries the same per-exam
                             // fees the Principal configured at schedule time.
-                            const newId = publishFeeStructureVersion(structure.id, v.heads, new Date().toISOString().split('T')[0], `Promoted from scheduled v${v.version}`, 'Principal', v.examFeeSchedule)
-                            if (newId) toast.success('Scheduled version promoted to current')
+                            const newId = publishFeeStructureVersion(structure.id, v.heads, new Date().toISOString().split('T')[0], `Published from scheduled v${v.version}`, 'Principal', v.examFeeSchedule)
+                            if (newId) toast.success('Version published — now current')
                           }}
                         >
-                          Promote
+                          Publish now
                         </Button>
                         <Button
                           size="sm"
@@ -1328,7 +1371,10 @@ function DetailDrawerInner({
                   ))}
                   {draftVersions.map((v) => (
                     <div key={v.id} className="flex items-center justify-between text-[10px]">
-                      <span>Version {v.version} · draft (created {formatDate(v.createdAt)})</span>
+                      <span>
+                        Version {v.version} · <span className="font-medium">Draft</span>
+                        {' '}(created {formatDate(v.createdAt)}) — not live until published
+                      </span>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -1388,8 +1434,10 @@ function DetailDrawerInner({
                       size="sm"
                       className="h-8 text-xs gap-1.5"
                       onClick={handlePublishNew}
-                      disabled={!createValid || createSubmitting || validationIssues.length > 0}
-                      title={validationIssues.length > 0 ? 'Resolve validation issues first' : 'Create + immediately publish v1 as current'}
+                      disabled={!createValid || createSubmitting || validationIssues.length > 0 || !perms.fee_structure_publish}
+                      title={!perms.fee_structure_publish
+                        ? 'Publishing is disabled for your role — save a draft and publish once the school enables fee_structure_publish'
+                        : validationIssues.length > 0 ? 'Resolve validation issues first' : 'Create + immediately publish v1 as current'}
                     >
                       {createSubmitting ? (
                         <>
@@ -1416,14 +1464,21 @@ function DetailDrawerInner({
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleDiscard}>Cancel</Button>
                     {!isLockedCurrent && (
-                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleSchedule} disabled={!hasEdits || validationIssues.length > 0}>
+                      <Button
+                        variant="outline" size="sm" className="h-8 text-xs gap-1.5"
+                        onClick={handleSchedule}
+                        disabled={!hasEdits || validationIssues.length > 0 || !perms.fee_structure_publish}
+                        title={perms.fee_structure_publish ? undefined : 'Publishing is disabled for your role by the school configuration'}
+                      >
                         <Calendar className="h-3.5 w-3.5" /> Schedule
                       </Button>
                     )}
                     <Button
                       size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                      onClick={handlePublish} disabled={!hasEdits || validationIssues.length > 0}
-                      title={isLockedCurrent ? 'Creates a PROPOSED version — 60% guardian acknowledgement required before it can be published' : undefined}
+                      onClick={handlePublish} disabled={!hasEdits || validationIssues.length > 0 || !perms.fee_structure_publish}
+                      title={!perms.fee_structure_publish
+                        ? 'Publishing is disabled for your role by the school configuration'
+                        : isLockedCurrent ? 'Creates a PROPOSED version — 60% guardian acknowledgement required before it can be published' : undefined}
                     >
                       <Check className="h-3.5 w-3.5" /> {isLockedCurrent ? 'Submit Revision' : 'Publish New Version'}
                     </Button>

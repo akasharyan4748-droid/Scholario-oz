@@ -1106,3 +1106,20 @@ Stage Summary:
 - No code was ever old or lost: local main > all remote branches; live :3000 serves it (HTTP 200).
 - User sees the public website because their browser has no session — they must sign in (Login Portal → Principal chip → Sign In) to reach the latest ERP.
 - Potential UX improvement (NOT done, needs user approval): landing page could offer a clearer "Sign in to the live ERP" CTA, and demo chips could auto-submit.
+
+---
+Task ID: SaaS-STAGE-1
+Agent: Z.ai Code (main thread)
+Task: Multi-school SaaS correction — Stage 1 "Restore Principal Fee Management" per 12-phase directive. INSPECTION FIRST (4 parallel agents), then plan, then implement.
+
+Work Log (INSPECTION FINDINGS):
+- fee-store.ts: per-class structures (FeeStructureConfig, classId-bound); version statuses 'current|scheduled|archived|draft' (= Current/Ready-for-publish/Archived/Draft); publishFeeStructureVersion creates immutable version + supersedes + audit + changelog + parent notify; revisions w/ 60% ack; archive/delete guarded. NO permissions primitives (hard-coded actor 'Principal'); NO tenancy (persist 'scholario-fee-store-v1', zero schoolId).
+- Transactions (fees-transactions.tsx 719L): TxStatTile KPI strip (NOT the Overview SummaryCard recipe), 9-col compact table, filters search/class/mode/status/fee-head/type (NO source), inline-wrap mobile (NOT collapsible). SearchFilterBar (shared/search-filter-bar.tsx) exists but 85L no-collapse, consumed only by students/classes; fees hand-rolls richer variant.
+- Source labels inconsistent: recent-payments 'Office|Teacher · name|Self-service' vs approvals 'Office · X|Teacher X|Self-submitted'. Gateway NEVER a source chip (detail-drawer channel info only; verifiedBy 'razorpay · auto-confirmed').
+- Receipts: fee-receipt-a5.tsx = canonical A5/A4 engine (5 importers). fees-receipt.tsx = competing thermal renderer (ReceiptPreview/printReceipt/downloadReceiptHTML; 3 importers gated on paperSize==='80mm'; default paperSize IS '80mm').
+- Structures: cards mirror Salary benchmark closely; REDUNDANT per-card History button (history also in detail + More menu); detail header duplicates level ('Pre-Primary · Pre-Primary · AY 2026-2027' since category===classLevel); create-mode has FREE-TEXT session input (violates session-derived rule); structure.academicYear snapshot exists but header shows CURRENT_ACADEMIC_YEAR.
+- Catalogue: school-settings-store.fees.feeHeads (fh-1..19) has FULL CRUD (add/update/archive/restore/remove) but only a create-only UI in School Settings; fee-head-catalogue-picker = pick-only (used once in detail AddHeadForm); 'fee-open-catalogue' CustomEvent dispatched w/ NO listener (dead); fees-master-catalogue.tsx = dead designed deep-page (unimported).
+- Auth/tenancy: server REAL (AuthUser.schoolId, schoolScoped(), ~40 routes scoped, User.email globally unique, seed = 1 demo tenant); client DEMO (auth-store 4 hardcoded roles, no schoolId, login ignores API response); superadmin 15 files (~15% live); all client stores global single-tenant (no schoolId anywhere in src/lib/store).
+- Session: fee CURRENT_ACADEMIC_YEAR '2026-2027'; school-settings academics.currentSession '2025–2026' (STALE) + mock/school.ts academicYear '2025–2026' (STALE); no authoritative active-session accessor.
+
+STAGE 1 PLAN (files to REUSE): fee-store versioning engine AS-IS; fee-receipt-a5 AS-IS; fees-catalogue-shared helpers; school-settings fee-head CRUD as catalogue source; fee-head-catalogue-picker AS-IS (+ wire dead event); salary-structures benchmark; shared/summary-card recipe. RETIRE: fees-receipt.tsx (thermal), fees-master-catalogue.tsx (dead duplicate), TxStatTile (→ SummaryCard). NEW: shared filter-toolbar (desktop inline + mobile Filter sheet), fees-catalogue-view.tsx, lib/academic-session.ts, lib/permissions.ts (fee_structure_edit/publish/archive/delete effective flags).

@@ -24,7 +24,7 @@ import { useFeeData, useFeeStore, type StudentFeeAccount, type LedgerEntry } fro
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FeePanel, FeeStat, FeeStatusBadge, FeeEmptyState, ModeIcon, modeAccent, statusAccent, FeePill } from './fees-shared'
-import { ReceiptPreview, downloadReceiptHTML, printReceipt } from './fees-receipt'
+import { FeeReceiptA5Preview, printReceiptA5, downloadReceiptA5 } from './fee-receipt-a5'
 import { toast } from 'sonner'
 
 interface Props {
@@ -417,12 +417,13 @@ function StudentFeeAccountDrawer({ account, onClose, onCollect }: { account: Stu
                 onClick={(e) => e.stopPropagation()}
                 className="bg-card border border-border rounded-xl p-4 max-h-[90vh] overflow-y-auto"
               >
-                <ReceiptPreview
+                {/* Canonical A5 dual-copy receipt (SaaS-STAGE-1 consolidation) */}
+                <FeeReceiptA5Preview
                   transaction={selectedReceipt}
                   settings={receiptSettings}
                   onClose={() => setSelectedReceiptId(null)}
-                  onPrint={() => { printReceipt(selectedReceipt, receiptSettings); toast.success('Print dialog opened') }}
-                  onDownload={() => { downloadReceiptHTML(selectedReceipt, receiptSettings); toast.success('Receipt downloaded', { description: `${selectedReceipt.receiptNo}.html` }) }}
+                  onPrint={() => { printReceiptA5(selectedReceipt, receiptSettings); useFeeStore.getState().markReceiptHandled(selectedReceipt.id, 'Principal'); toast.success('Print dialog opened') }}
+                  onDownload={() => { downloadReceiptA5(selectedReceipt, receiptSettings); useFeeStore.getState().markReceiptHandled(selectedReceipt.id, 'Principal'); toast.success('Receipt downloaded', { description: `${selectedReceipt.receiptNo}.html` }) }}
                 />
               </motion.div>
             </motion.div>

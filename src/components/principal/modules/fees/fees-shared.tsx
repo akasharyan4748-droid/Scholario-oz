@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDate, formatTime } from '@/lib/format'
-import type { FeeTransaction, PaymentMode } from '@/lib/store/fee-store'
+import { collectorSourceLabel, type FeeTransaction, type PaymentMode } from '@/lib/store/fee-store'
 import { Panel } from '../shared/panel'
 
 // ─── Tab type ────────────────────────────────────────────────────────
@@ -282,6 +282,57 @@ export function FeeStatusBadge({ status }: { status: string }) {
       {status}
     </span>
   )
+}
+
+// ─── SourceChip — operational payment source (SaaS-STAGE-1) ──────────
+// ONE vocabulary on every fee surface: Office / Teacher / Class Teacher /
+// Student. Gateway is a payment CHANNEL (mode/processor) and NEVER renders
+// as a source — online gateway-confirmed payments still show the counter
+// or portal that operationally owns the collection.
+
+const SOURCE_TONES: Record<string, string> = {
+  Office: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
+  Teacher: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  'Class Teacher': 'bg-sky-500/10 text-sky-700 dark:text-sky-300',
+  Student: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
+}
+
+export function SourceChip({
+  role, collectedBy, className, showName = true, maxW = 'max-w-[140px]',
+}: {
+  role: FeeTransaction['collectorRole']
+  collectedBy?: string
+  className?: string
+  showName?: boolean
+  maxW?: string
+}) {
+  const label = collectorSourceLabel(role)
+  const isOffice = !role || role === 'principal'
+  // Office chips stay clean ('Office'); collector names enrich the
+  // teacher/class-teacher chips; student self-service stays 'Student'.
+  const nameSuffix = showName && !isOffice && role !== 'self' && collectedBy ? ` · ${collectedBy}` : ''
+  const title = isOffice
+    ? 'Collected at the school office'
+    : role === 'self'
+      ? 'Self-service payment via the student portal'
+      : `Collected by ${label.toLowerCase()} ${collectedBy ?? ''}`.trim()
+  return (
+    <span
+      className={cn('inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap', maxW, 'truncate', SOURCE_TONES[label], className)}
+      title={title}
+    >
+      {label}
+      {nameSuffix}
+    </span>
+  )
+}
+
+/** Filter facet value for a transaction's operational source. */
+export function txnSourceKey(t: Pick<FeeTransaction, 'collectorRole'>): 'office' | 'teacher' | 'class_teacher' | 'self' {
+  if (t.collectorRole === 'teacher') return 'teacher'
+  if (t.collectorRole === 'class_teacher') return 'class_teacher'
+  if (t.collectorRole === 'self') return 'self'
+  return 'office'
 }
 
 // ─── Reduced motion + print styles ──────────────────────────────────

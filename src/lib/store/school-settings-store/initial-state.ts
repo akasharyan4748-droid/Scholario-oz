@@ -55,7 +55,10 @@ export const initialState: StateShape = {
   },
 
   academics: {
-    currentSession: '2025–2026',
+    // SaaS-STAGE-1 — the active session MUST agree with the live fee data
+    // (fee-store CURRENT_ACADEMIC_YEAR '2026-2027'). This value is the
+    // source read by lib/academic-session.ts — never hand-typed in UIs.
+    currentSession: '2026–2027',
     academicSessions: ['2023–2024', '2024–2025', '2025–2026', '2026–2027'],
     board: 'CBSE Central Board of Secondary Education',
     curriculum: 'NCERT & Experiential Learning Framework',

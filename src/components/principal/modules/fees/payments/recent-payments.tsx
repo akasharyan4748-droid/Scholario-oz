@@ -37,7 +37,7 @@ import { useFeeStore, useFeeData, type FeeTransaction } from '@/lib/store/fee-st
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Panel } from '../../shared/panel'
-import { FeeStatusBadge, ModeIcon, modeAccent, paymentStatusLabel, TxnDateTime, txnRecordedAt } from '../fees-shared'
+import { FeeStatusBadge, ModeIcon, modeAccent, paymentStatusLabel, TxnDateTime, txnRecordedAt, SourceChip } from '../fees-shared'
 import { ReceiptRowActions, ReceiptViewDialog, printReceiptsA5Bulk, downloadReceiptsA5Bulk } from '../fee-receipt-a5'
 import { toast } from 'sonner'
 
@@ -202,7 +202,6 @@ export function RecentPayments({
             </thead>
             <tbody>
               {visible.map((t) => {
-                const isOffice = !t.collectorRole || t.collectorRole === 'principal'
                 const canSelect = t.status === 'Success'
                 return (
                   <tr
@@ -243,17 +242,9 @@ export function RecentPayments({
                       </span>
                     </td>
                     <td className="px-3 py-2.5 hidden md:table-cell">
-                      <span
-                        className={cn(
-                          'inline-flex max-w-[130px] truncate px-1.5 py-0.5 rounded text-[9px] font-semibold',
-                          isOffice
-                            ? 'bg-slate-500/10 text-slate-600 dark:text-slate-300'
-                            : 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-                        )}
-                        title={`Collected by ${isOffice ? 'school office' : t.collectedBy}`}
-                      >
-                        {isOffice ? 'Office' : t.collectorRole === 'teacher' ? `Teacher · ${t.collectedBy}` : 'Self-service'}
-                      </span>
+                      {/* Operational source (SaaS-STAGE-1): one shared chip —
+                          Office / Teacher / Class Teacher / Student. */}
+                      <SourceChip role={t.collectorRole} collectedBy={t.collectedBy} maxW="max-w-[130px]" />
                     </td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell">
                       <TxnDateTime transaction={t} />

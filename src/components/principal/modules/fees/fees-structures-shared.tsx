@@ -20,9 +20,14 @@ const STATUS_STYLES: Record<FeeStructureStatus, string> = {
   archived: 'bg-muted text-muted-foreground ring-border/40',
 }
 
+// SaaS-STAGE-1 lifecycle vocabulary — status labels follow the agreed
+// flow: Draft → Save Draft → Ready for publish → Publish/Implement →
+// Current (archived history stays read-only). The store's internal
+// status unions are UNCHANGED ('current' | 'scheduled' | 'archived' |
+// 'draft'); only the DISPLAY labels adopt the vocabulary.
 const STATUS_LABEL: Record<FeeStructureStatus, string> = {
   current: 'Current',
-  scheduled: 'Scheduled',
+  scheduled: 'Ready for publish',
   draft: 'Draft',
   archived: 'Archived',
 }

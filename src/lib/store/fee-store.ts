@@ -83,6 +83,23 @@ export type { AdmissionFeePolicy }
 export type PaymentMode = 'UPI' | 'Card' | 'Net Banking' | 'Cash' | 'Cheque' | 'Bank Transfer'
 export type PaymentStatus = 'Success' | 'Pending' | 'Failed' | 'Under Verification' | 'Refunded'
 export type FeePaymentStatus = 'Paid' | 'Partially Paid' | 'Due' | 'Overdue' | 'On Hold'
+
+/**
+ * Operational payment SOURCE (SaaS-STAGE-1) — who/where the money was
+ * collected through. Gateway is a payment CHANNEL (processing method),
+ * never a source label: source chips always read Office / Teacher /
+ * Class Teacher / Student self-service, regardless of whether the mode
+ * was UPI, Card, or a gateway-confirmed online payment.
+ */
+export type CollectorRole = 'principal' | 'teacher' | 'class_teacher' | 'self'
+
+/** Source label used across ALL fee surfaces (one vocabulary). */
+export function collectorSourceLabel(role: FeeTransaction['collectorRole']): string {
+  if (role === 'teacher') return 'Teacher'
+  if (role === 'class_teacher') return 'Class Teacher'
+  if (role === 'self') return 'Student'
+  return 'Office'
+}
 export type AuditAction =
   | 'payment.recorded'
   | 'cash.submitted'
@@ -354,13 +371,17 @@ export interface FeeTransaction {
   applicationId?: string
   /** WHO recorded this payment — drives the verification lifecycle
    *  (PAY-REWORK-1). 'principal' = school office / Principal (authorised
-   *  finance role — payment is verified at record time). 'teacher' = class
+   *  finance role — payment is verified at record time). 'teacher' =
    *  teacher collection (ALWAYS requires Principal verification before it
-   *  counts as officially paid). 'self' = student/guardian self-service
-   *  submission (manual transfer reference — requires verification; a real
-   *  gateway webhook would confirm these automatically in future).
-   *  Absent on legacy seed rows — treat as 'principal'. */
-  collectorRole?: 'principal' | 'teacher' | 'self'
+   *  counts as officially paid). 'class_teacher' = Class Teacher
+   *  collection (same verification rule as teacher — SaaS-STAGE-1 source
+   *  vocabulary: Office / Teacher / Class Teacher). 'self' = student/
+   *  guardian self-service submission (manual transfer reference —
+   *  requires verification; a real gateway webhook would confirm these
+   *  automatically in future). Absent on legacy seed rows — treat as
+   *  'principal'. Gateway is a payment CHANNEL (gateway/gatewayPaymentId
+   *  fields), never a collector role. */
+  collectorRole?: CollectorRole
   /** Receipt lifecycle: when this payment's receipt was first printed or
    *  downloaded by an authorised user. A payment with a handled receipt is
    *  completed activity (settles into Transactions view); the payment
@@ -663,11 +684,14 @@ export interface ReceiptSettings {
   startNumber: number
   footerMessage: string
   showAuthorizedSignature: boolean
-  /** Print format. A5 landscape = one student per page (Student + School
-   *  copy side-by-side). A4 portrait = TWO students per page (each student
-   *  occupies one A5-landscape area → 4 receipt copies on the sheet).
-   *  80mm = legacy thermal counter slip. */
-  paperSize: '80mm' | 'A5' | 'A4'
+  /** Print format of THE ONE canonical receipt design (SaaS-STAGE-1):
+   *  A5 landscape = one student per page (Student + School copy
+   *  side-by-side with tear line — canonical). A4 portrait = TWO students
+   *  per page (each occupies one A5-landscape area → 4 copies/sheet) —
+   *  the same design, denser sheet. The legacy 80mm thermal renderer has
+   *  been consolidated away; '80mm' may still arrive from old persisted
+   *  state and is migrated to 'A5'. */
+  paperSize: 'A5' | 'A4'
 }
 
 // ─── Payment Infrastructure Types (Phase 4) ──────────────────────────
@@ -1126,6 +1150,11 @@ interface FeeState {
      *  falling back to className/classLevel. */
     classId?: string
     applicableClassIds?: string[]
+    /** SaaS-STAGE-1 — session snapshot. The caller derives it from the
+     *  ACTIVE academic session (lib/academic-session.ts) — the Principal
+     *  never types it. Omitting falls back to CURRENT_ACADEMIC_YEAR so
+     *  legacy callers keep the session-scoped behaviour. */
+    academicYear?: string
   }) => string
   /** Publish a new CURRENT version (immediately effective). Marks prior as archived.
    *  Returns new versionId. Triggers parent notification.
@@ -1220,10 +1249,11 @@ export interface PaymentInput {
    *  application id, stamped on the transaction for permanent linkage. */
   applicationId?: string
   /** WHO is recording the payment (PAY-REWORK-1). 'principal' → verified
-   *  immediately (authorised finance role at the counter). 'teacher' →
-   *  Under Verification (cannot self-verify). 'self' → Under Verification
-   *  (student/guardian manual submission — never auto-paid). */
-  collectorRole?: 'principal' | 'teacher' | 'self'
+   *  immediately (authorised finance role at the counter). 'teacher' /
+   *  'class_teacher' → Under Verification (cannot self-verify). 'self' →
+   *  Under Verification (student/guardian manual submission — never
+   *  auto-paid). */
+  collectorRole?: CollectorRole
   // ─── Gateway-confirmed payments (spec: gateway confirmations are NEVER
   // held for manual Principal verification) ───
   /** Provider that processed and CONFIRMED the payment (razorpay/cashfree/
@@ -1407,7 +1437,7 @@ export const useFeeStore = create<FeeState>()(
       status:
         gatewayConfirmed || input.collectorRole === 'principal'
           ? 'Success'
-          : input.collectorRole === 'teacher' || input.collectorRole === 'self' || input.mode === 'Cash'
+          : input.collectorRole === 'teacher' || input.collectorRole === 'class_teacher' || input.collectorRole === 'self' || input.mode === 'Cash'
             ? 'Under Verification'
             : 'Success',
       date: new Date().toISOString().split('T')[0],
@@ -2082,6 +2112,9 @@ export const useFeeStore = create<FeeState>()(
       // when undefined).
       ...(input.classId ? { classId: input.classId } : {}),
       ...(input.applicableClassIds ? { applicableClassIds: [...input.applicableClassIds] } : {}),
+      // SaaS-STAGE-1 — session snapshot for this structure (never typed by
+      // the user; derived from the active academic session upstream).
+      academicYear: input.academicYear ?? CURRENT_ACADEMIC_YEAR,
     }
     const newVersion: FeeStructureVersion = {
       id: versionId,
@@ -3081,7 +3114,7 @@ export const useFeeStore = create<FeeState>()(
   // `additionalCharges` array (event-based charges like the Class 8
   // Educational Tour) when the persisted state predates the key. Never
   // overwrites user-created charges; never touches transactions.
-  version: 7,
+  version: 9,
   migrate: (persistedState: any, fromVersion: number) => {
     // v5 — session rollover reset: the whole demo dataset moved from the
     // archived 2025-26 session into the live 2026-27 session (CURRENT_ACADEMIC_YEAR).
@@ -3153,6 +3186,33 @@ export const useFeeStore = create<FeeState>()(
         })
       }
       return out
+    }
+    // v8 — RECEIPT CONSOLIDATION (SaaS-STAGE-1): the legacy 80mm thermal
+    // renderer is retired in favour of the ONE canonical A5 dual-copy
+    // design. Persisted '80mm' paperSize migrates to 'A5' (A4 stays).
+    if (fromVersion < 8 && persistedState && typeof persistedState === 'object') {
+      const st = persistedState as Record<string, any>
+      if (st.receiptSettings?.paperSize === '80mm') {
+        return { ...st, receiptSettings: { ...st.receiptSettings, paperSize: 'A5' } }
+      }
+      return st
+    }
+    // v9 — SOURCE VOCABULARY (SaaS-STAGE-1): seed-matched rows copy the
+    // seed's collectorRole (teacher / class_teacher) so the operational
+    // Source chips + filter carry real data. Never mutates amounts/status.
+    if (fromVersion < 9 && persistedState && typeof persistedState === 'object') {
+      const st = persistedState as Record<string, any>
+      if (Array.isArray(st.transactions)) {
+        return {
+          ...st,
+          transactions: st.transactions.map((t: any) => {
+            if (!t || typeof t !== 'object' || t.collectorRole) return t
+            const seed = SEED_TRANSACTIONS.find((s) => s.id === t.id)
+            return seed?.collectorRole ? { ...t, collectorRole: seed.collectorRole, collectedBy: seed.collectedBy } : t
+          }),
+        }
+      }
+      return st
     }
     return persistedState
   },

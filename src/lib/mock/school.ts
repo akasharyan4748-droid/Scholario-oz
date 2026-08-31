@@ -13,8 +13,9 @@ export const school = {
   principal: "Dr. Sarah Jenkins",
   vicePrincipal: "Mr. Suresh Nair",
   established: 2020,
-  academicYear: "2025–2026",
-  session: "2025-2026",
+  // SaaS-STAGE-1 — aligned with the active academic session (fee data is 2026-2027)
+  academicYear: "2026–2027",
+  session: "2026-2027",
   totalStudents: 1842,
   totalTeachers: 96,
   totalStaff: 124,

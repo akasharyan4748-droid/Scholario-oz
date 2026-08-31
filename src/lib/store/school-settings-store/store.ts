@@ -26,8 +26,18 @@ export const useSchoolSettingsStore = create<SchoolSettingsState>()(
       // entries and patches the existing ones' names/types to match
       // the new seed WITHOUT losing any user-edited catalogue entries
       // they may have added on top.
-      version: 3,
+      version: 4,
       migrate: (persistedState: any, fromVersion: number) => {
+        // ─── v4 — ACTIVE SESSION REALIGNMENT (SaaS-STAGE-1) ────────────
+        // The active session must agree with the live fee dataset
+        // ('2026-2027'). Old persisted state carried the stale
+        // '2025–2026' value; patch it forward (keeps any later value
+        // the user already moved to).
+        if (fromVersion < 4 && persistedState?.academics) {
+          if (persistedState.academics.currentSession === '2025–2026' || persistedState.academics.currentSession === '2025-2026') {
+            persistedState.academics.currentSession = initialState.academics.currentSession
+          }
+        }
         if (fromVersion < 2 && persistedState?.fees?.feeHeads) {
           const seeded = new Map<string, any>(initialState.fees.feeHeads.map((f) => [f.id, f]))
           // Merge: keep user-added heads (id not in seed), patch seeded

@@ -10,7 +10,8 @@
  *   • A4 PORTRAIT — 210 × 297 mm — TWO students per page, each student's
  *     complete dual-copy receipt occupying one A5-landscape area (4 copies
  *     on the sheet; a student's two copies are never split across pages).
- *   • 80mm — legacy thermal counter slip (fees-receipt.tsx).
+ *   (SaaS-STAGE-1: the legacy 80mm thermal renderer was consolidated into
+ *   this canonical design; '80mm' persisted settings migrate to 'A5'.)
  *
  * Layout rules (final UI/UX spec §1): the copy fills the printable area
  * NATURALLY — sections distribute leftover height evenly between them
@@ -184,15 +185,13 @@ export function FeeReceiptA5Preview({
   const formatLabel =
     settings.paperSize === 'A4'
       ? 'A4 portrait · 2 receipts per sheet · each receipt = A5 landscape area'
-      : settings.paperSize === 'A5'
-        ? 'A5 landscape (210 × 148 mm) · Student copy + School copy on one sheet'
-        : 'A5 preview · prints per Receipt Settings (80mm thermal)'
+      : 'A5 landscape (210 × 148 mm) · Student copy + School copy on one sheet'
 
   return (
     <div className="flex flex-col items-center w-full">
       {(onPrint || onDownload || onClose) && (
         <div className="flex items-center justify-between w-full mb-2.5">
-          <p className="text-[11px] font-semibold text-muted-foreground">Receipt preview · {settings.paperSize === '80mm' ? 'A5' : settings.paperSize} format</p>
+          <p className="text-[11px] font-semibold text-muted-foreground">Receipt preview · {settings.paperSize} format</p>
           <div className="flex items-center gap-1">
             {onPrint && (
               <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onPrint}>

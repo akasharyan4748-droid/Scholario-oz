@@ -3,61 +3,53 @@
 /**
  * FeesTransactionsSection — serious financial transaction table.
  *
- * - Filters: session, date range, class, payment mode, status, fee head
- * - Search: student, receipt, transaction id
+ * - KPI cards in the shared Overview SummaryCard language (SaaS-STAGE-1):
+ *   Transactions · Total Collected · Avg. Transaction
+ * - Filters: search, class, mode, status, fee head, type, SOURCE
+ *   (Office / Teacher / Class Teacher / Student — operational source;
+ *   gateway is a channel, never a source). Desktop = inline selects via
+ *   the shared FilterToolbar; tablet/mobile = ONE compact Filters button
+ *   opening the filter sheet (reusable pattern for the whole app).
  * - Row actions: View, Print, Download (with tooltips) — no redundant Reprint
  * - Row click: opens a slide-from-right Transaction Detail Drawer showing
  *   student info, fee info, payment info, gateway info (if available),
  *   offline info, balance before/after, receipt actions, and audit info.
  *
  * Phase 4 fixes (FEE-SETTINGS-TXN):
- *   - Summary metrics now count ONLY successful transactions for amounts
- *     (Total Amount / Avg. Transaction). A separate count shows the success
- *     count vs the filtered-total count so the operator sees what's settled
- *     versus what's pending/failed.
- *   - Empty state copy updated to "No transactions match your filters."
- *   - Export now generates a real CSV from the filtered rows and reports
- *     the actual filtered count in the toast (previously a placeholder).
+ *   - Summary metrics count ONLY successful transactions for amounts
+ *     (Total Amount / Avg. Transaction). The Transactions count shows the
+ *     success vs other split so the operator sees settled vs pending.
+ *   - Export generates a real CSV from the filtered rows.
  *   - Detail drawer wired to real FeeTransaction fields (incl. gateway,
- *     settlement, reconciliation, refund fields) and to the student account
- *     ledger for the balance before/after computation.
+ *     settlement, reconciliation, refund fields).
  *
- * Phase 2-e polish (FEE-SETTINGS-TXN): summary chips became three benchmark
- * micro-stat tiles; filters moved into an always-visible SearchFilterBar-style
- * toolbar (search + Class/Mode/Status/Fee Head/Type selects + active-count
- * badge + reset ghost + CSV export); the Type column merged into the Fee Head
- * cell as a tiny category dot (Core emerald / Exam cyan / Additional violet);
- * Collected By now lives in the detail drawer only; ledger table classes
- * tightened to the module table recipe (h-10 muted/40 header · py-2.5 text-xs
- * cells · tabular-nums numerics · mono receipt refs · hover:bg-muted/30).
- * All handlers, exports and the detail drawer flow are behaviour-identical.
+ * SaaS-STAGE-1 receipt consolidation: ONE canonical A5/A4 dual-copy
+ * receipt engine (fee-receipt-a5.tsx) — the legacy thermal renderer and
+ * the '80mm' paper option are retired.
  */
 
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Search, Download, Printer, Eye,
-  Receipt as ReceiptIcon, X, User, Calendar,
+  Download, Printer, Eye,
+  Receipt as ReceiptIcon, User, Calendar,
   CreditCard, Landmark, ArrowRightLeft, ShieldCheck, AlertCircle,
   FileText, Banknote, Smartphone, Wallet,
+  ArrowUpRight, ReceiptText, IndianRupee,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet'
 import {
-  useFeeData, useFeeStore, txnCategory,
+  useFeeData, useFeeStore, txnCategory, collectorSourceLabel,
   type FeeTransaction, type PaymentMode, type PaymentStatus, type TransactionCategory,
 } from '@/lib/store/fee-store'
 import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { FeePanel, FeeEmptyState, ModeIcon, modeAccent, FeeStatusBadge, TxnDateTime } from './fees-shared'
-import { ReceiptPreview, downloadReceiptHTML, printReceipt } from './fees-receipt'
+import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
+import { FilterToolbar } from '../shared/filter-toolbar'
+import { FeePanel, FeeEmptyState, ModeIcon, modeAccent, FeeStatusBadge, TxnDateTime, SourceChip, txnSourceKey } from './fees-shared'
 import { FeeReceiptA5Preview, printReceiptA5, downloadReceiptA5 } from './fee-receipt-a5'
 import { toast } from 'sonner'
 
@@ -95,17 +87,14 @@ interface Props {
   onCollect?: () => void
 }
 
-// Benchmark micro-stat tile (matches the Student Accounts StatTile recipe):
-// muted chip chrome, 9px uppercase label, bold tabular value, optional sub line.
-function TxStatTile({ label, value, sub, valueClassName }: { label: string; value: React.ReactNode; sub?: React.ReactNode; valueClassName?: string }) {
-  return (
-    <div className="rounded-lg bg-muted/40 px-2.5 py-1.5">
-      <p className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">{label}</p>
-      <p className={cn('text-sm font-bold tabular-nums mt-0.5', valueClassName)}>{value}</p>
-      {sub && <p className="text-[9px] text-muted-foreground mt-0.5 truncate">{sub}</p>}
-    </div>
-  )
-}
+// Mobile-only source facet label mapping (kept beside the table).
+const SOURCE_OPTIONS = [
+  { value: 'all', label: 'All Sources' },
+  { value: 'office', label: 'Office' },
+  { value: 'teacher', label: 'Teacher' },
+  { value: 'class_teacher', label: 'Class Teacher' },
+  { value: 'self', label: 'Student self-service' },
+]
 
 export function FeesTransactionsSection({ data }: Props) {
   const { transactions, accounts } = data
@@ -118,21 +107,19 @@ export function FeesTransactionsSection({ data }: Props) {
   const [feeHeadFilter, setFeeHeadFilter] = useState('all')
   // FINANCIAL TYPE filter — Core Fee / Examination Fee / Additional Charge.
   const [typeFilter, setTypeFilter] = useState<'all' | TransactionCategory>('all')
+  // OPERATIONAL SOURCE filter (SaaS-STAGE-1) — Office / Teacher /
+  // Class Teacher / Student self-service. Gateway is a channel, not a source.
+  const [sourceFilter, setSourceFilter] = useState('all')
   const [viewReceipt, setViewReceipt] = useState<FeeTransaction | null>(null)
 
-  // Format-aware receipt actions (PAY-REWORK-1): the paper-size setting in
-  // Finance Settings selects the dual-copy sheet (A5 landscape 1/page ·
-  // A4 portrait 2/page) or the 80mm thermal slip; printing/downloading
-  // stamps the receipt lifecycle marker.
+  // Canonical A5/A4 receipt engine only (thermal consolidated away).
   const doPrint = (t: FeeTransaction) => {
-    if (receiptSettings.paperSize !== '80mm') printReceiptA5(t, receiptSettings)
-    else printReceipt(t, receiptSettings)
+    printReceiptA5(t, receiptSettings)
     useFeeStore.getState().markReceiptHandled(t.id, 'Principal')
     toast.success('Print dialog opened')
   }
   const doDownload = (t: FeeTransaction) => {
-    if (receiptSettings.paperSize !== '80mm') downloadReceiptA5(t, receiptSettings)
-    else downloadReceiptHTML(t, receiptSettings)
+    downloadReceiptA5(t, receiptSettings)
     useFeeStore.getState().markReceiptHandled(t.id, 'Principal')
     toast.success('Receipt downloaded', { description: `${t.receiptNo}.html` })
   }
@@ -156,9 +143,10 @@ export function FeesTransactionsSection({ data }: Props) {
       if (classFilter !== 'all' && t.className !== classFilter) return false
       if (feeHeadFilter !== 'all' && t.feeHead !== feeHeadFilter) return false
       if (typeFilter !== 'all' && txnCategory(t) !== typeFilter) return false
+      if (sourceFilter !== 'all' && txnSourceKey(t) !== sourceFilter) return false
       return true
     })
-  }, [transactions, search, modeFilter, statusFilter, classFilter, feeHeadFilter, typeFilter])
+  }, [transactions, search, modeFilter, statusFilter, classFilter, feeHeadFilter, typeFilter, sourceFilter])
 
   // ─── Summary metrics (FIX) ────────────────────────────────────────
   // Only count transactions with status === 'Success' for amount totals.
@@ -174,12 +162,12 @@ export function FeesTransactionsSection({ data }: Props) {
   const totalCount = filtered.length
   const avgAmount = successCount > 0 ? Math.round(totalAmount / successCount) : 0
 
-  const activeFiltersCount = (modeFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (classFilter !== 'all' ? 1 : 0) + (feeHeadFilter !== 'all' ? 1 : 0) + (typeFilter !== 'all' ? 1 : 0)
+  const activeFiltersCount = (modeFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (classFilter !== 'all' ? 1 : 0) + (feeHeadFilter !== 'all' ? 1 : 0) + (typeFilter !== 'all' ? 1 : 0) + (sourceFilter !== 'all' ? 1 : 0)
 
   // Reset ghost in the toolbar — same fields the old collapsible panel's
   // "Clear Filters" button cleared (search text intentionally untouched).
   const handleResetFilters = () => {
-    setModeFilter('all'); setStatusFilter('all'); setClassFilter('all'); setFeeHeadFilter('all'); setTypeFilter('all')
+    setModeFilter('all'); setStatusFilter('all'); setClassFilter('all'); setFeeHeadFilter('all'); setTypeFilter('all'); setSourceFilter('all')
   }
 
   const handleExport = () => {
@@ -187,11 +175,11 @@ export function FeesTransactionsSection({ data }: Props) {
       toast.info('Nothing to export', { description: 'No transactions match the current filters.' })
       return
     }
-    const headers = ['Receipt No', 'Transaction ID', 'Student', 'Admission No', 'Class', 'Fee Head', 'Type', 'Amount', 'Mode', 'Status', 'Date', 'Collected By', 'Verified By', 'Reference No', 'Gateway', 'Gateway Payment ID', 'Settlement ID', 'UTR', 'Academic Year']
+    const headers = ['Receipt No', 'Transaction ID', 'Student', 'Admission No', 'Class', 'Fee Head', 'Type', 'Amount', 'Mode', 'Source', 'Status', 'Date', 'Collected By', 'Verified By', 'Reference No', 'Gateway', 'Gateway Payment ID', 'Settlement ID', 'UTR', 'Academic Year']
     const rows = filtered.map((t) => [
       t.receiptNo, t.id, t.studentName, t.admissionNo, t.className, t.feeHead,
       txnCategoryLabel(txnCategory(t)),
-      String(t.amount), t.mode, t.status, t.date, t.collectedBy,
+      String(t.amount), t.mode, collectorSourceLabel(t.collectorRole), t.status, t.date, t.collectedBy,
       t.verifiedBy ?? '', t.referenceNo ?? '',
       t.gateway ?? '', t.gatewayPaymentId ?? '', t.settlementId ?? '', t.utr ?? '', t.academicYear,
     ])
@@ -216,101 +204,58 @@ export function FeesTransactionsSection({ data }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* No page heading — the "Transactions" tab already establishes
-          context (UX-REFINE); the page opens straight into live totals. */}
-
-      {/* Summary strip — benchmark micro-stat tiles (amounts from Success only; the
-          Transactions tile carries the success vs other split as its sub line) */}
-      <div className="grid grid-cols-3 gap-3">
-        <TxStatTile
+      {/* KPI cards — the shared Overview SummaryCard language (SaaS-STAGE-1):
+          amounts from Success only; the Transactions card carries the
+          success vs other split as its sub line. */}
+      <SummaryCardGrid columns={3}>
+        <SummaryCard
           label="Transactions"
           value={totalCount}
-          sub={
-            <>
-              <span className="text-emerald-600 font-semibold">{successCount} successful</span>
-              {' · '}
-              <span className="text-amber-600 font-semibold">{totalCount - successCount} other</span>
-            </>
-          }
+          tone="slate"
+          icon={<ReceiptText className="h-4 w-4" />}
+          sub={`${successCount} successful · ${totalCount - successCount} other`}
         />
-        <TxStatTile label="Total Amount" value={formatINR(totalAmount, true)} valueClassName="text-emerald-600" sub="successful only · across filtered rows" />
-        <TxStatTile label="Avg. Transaction" value={formatINR(avgAmount, true)} sub="per successful payment" />
-      </div>
+        <SummaryCard
+          label="Total Collected"
+          value={formatINR(totalAmount, true)}
+          tone="emerald"
+          icon={<IndianRupee className="h-4 w-4" />}
+          sub="successful only · across filtered rows"
+          delay={0.05}
+        />
+        <SummaryCard
+          label="Avg. Transaction"
+          value={formatINR(avgAmount, true)}
+          tone="teal"
+          icon={<ArrowUpRight className="h-4 w-4" />}
+          sub="per successful payment"
+          delay={0.1}
+        />
+      </SummaryCardGrid>
 
-      {/* Toolbar — SearchFilterBar-style composition: search (pl-9 h-9 text-xs)
-          + compact facet Selects (Class · Mode · Status · Fee Head · Type) +
-          active-count badge + reset ghost + CSV export right-aligned. Same
-          filter setters as the previous collapsible panel, now always visible. */}
-      <div className="flex flex-col lg:flex-row gap-2 items-stretch lg:items-center justify-between">
-        <div className="flex flex-col md:flex-row gap-2 items-stretch md:items-center md:flex-wrap flex-1 min-w-0">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student / receipt / transaction ID…" className="pl-9 h-9 text-xs" />
-          </div>
-          <Select value={classFilter} onValueChange={(v) => setClassFilter(v)}>
-            <SelectTrigger className="h-9 text-xs w-full md:w-[130px] xl:w-[140px]"><SelectValue placeholder="All Classes" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Classes</SelectItem>
-              {classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={modeFilter} onValueChange={(v) => setModeFilter(v as 'all' | PaymentMode)}>
-            <SelectTrigger className="h-9 text-xs w-full md:w-[130px] xl:w-[140px]"><SelectValue placeholder="All Modes" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Modes</SelectItem>
-              <SelectItem value="UPI">UPI</SelectItem>
-              <SelectItem value="Card">Card</SelectItem>
-              <SelectItem value="Net Banking">Net Banking</SelectItem>
-              <SelectItem value="Cash">Cash</SelectItem>
-              <SelectItem value="Cheque">Cheque</SelectItem>
-              <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | PaymentStatus)}>
-            <SelectTrigger className="h-9 text-xs w-full md:w-[130px] xl:w-[140px]"><SelectValue placeholder="All Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="Success">Success</SelectItem>
-              <SelectItem value="Pending">Pending</SelectItem>
-              <SelectItem value="Under Verification">Under Verification</SelectItem>
-              <SelectItem value="Failed">Failed</SelectItem>
-              <SelectItem value="Refunded">Refunded</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={feeHeadFilter} onValueChange={(v) => setFeeHeadFilter(v)}>
-            <SelectTrigger className="h-9 text-xs w-full md:w-[130px] xl:w-[140px]"><SelectValue placeholder="All Heads" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Heads</SelectItem>
-              {feeHeads.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          {/* FINANCIAL TYPE — Core Fee / Examination Fee / Additional Charge */}
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as 'all' | TransactionCategory)}>
-            <SelectTrigger className="h-9 text-xs w-full md:w-[130px] xl:w-[140px]"><SelectValue placeholder="All Types" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="CORE">Core Fee</SelectItem>
-              <SelectItem value="EXAMINATION">Examination Fee</SelectItem>
-              <SelectItem value="ADDITIONAL">Additional Charge</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {activeFiltersCount > 0 && (
-            <>
-              <Badge variant="secondary" className="text-[11px] font-semibold tabular-nums">
-                {activeFiltersCount} active
-              </Badge>
-              <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={handleResetFilters}>
-                <X className="h-3.5 w-3.5" /> Reset
-              </Button>
-            </>
-          )}
+      {/* Toolbar — shared responsive FilterToolbar (SaaS-STAGE-1):
+          desktop = search + Class/Mode/Status/Fee Head/Type/Source inline;
+          tablet/mobile = ONE compact Filters button → filter sheet. */}
+      <FilterToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search student / receipt / transaction ID…"
+        activeCount={activeFiltersCount}
+        onReset={handleResetFilters}
+        filters={[
+          { id: 'class', label: 'Class', value: classFilter, onChange: setClassFilter, placeholder: 'All Classes', options: [{ value: 'all', label: 'All Classes' }, ...classes.map((c) => ({ value: c, label: c }))] },
+          { id: 'mode', label: 'Mode', value: modeFilter, onChange: (v) => setModeFilter(v as 'all' | PaymentMode), placeholder: 'All Modes', options: [{ value: 'all', label: 'All Modes' }, { value: 'UPI', label: 'UPI' }, { value: 'Card', label: 'Card' }, { value: 'Net Banking', label: 'Net Banking' }, { value: 'Cash', label: 'Cash' }, { value: 'Cheque', label: 'Cheque' }, { value: 'Bank Transfer', label: 'Bank Transfer' }] },
+          { id: 'status', label: 'Status', value: statusFilter, onChange: (v) => setStatusFilter(v as 'all' | PaymentStatus), placeholder: 'All Status', options: [{ value: 'all', label: 'All Status' }, { value: 'Success', label: 'Success' }, { value: 'Pending', label: 'Pending' }, { value: 'Under Verification', label: 'Under Verification' }, { value: 'Failed', label: 'Failed' }, { value: 'Refunded', label: 'Refunded' }] },
+          { id: 'head', label: 'Fee Head', value: feeHeadFilter, onChange: setFeeHeadFilter, placeholder: 'All Heads', options: [{ value: 'all', label: 'All Heads' }, ...feeHeads.map((h) => ({ value: h, label: h }))] },
+          { id: 'type', label: 'Type', value: typeFilter, onChange: (v) => setTypeFilter(v as 'all' | TransactionCategory), placeholder: 'All Types', options: [{ value: 'all', label: 'All Types' }, { value: 'CORE', label: 'Core Fee' }, { value: 'EXAMINATION', label: 'Examination Fee' }, { value: 'ADDITIONAL', label: 'Additional Charge' }] },
+          { id: 'source', label: 'Source', value: sourceFilter, onChange: setSourceFilter, placeholder: 'All Sources', options: SOURCE_OPTIONS },
+        ]}
+        actions={
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExport}>
             <Download className="h-3.5 w-3.5" /> Export
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Transactions table — module ledger recipe: flush p-0 body inside the
           rounded-xl bordered panel; SOLID sticky header row (opaque bg so
@@ -328,6 +273,7 @@ export function FeesTransactionsSection({ data }: Props) {
                 <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden md:table-cell">Fee Head</th>
                 <th className="text-right px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Amount</th>
                 <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden sm:table-cell">Mode</th>
+                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden xl:table-cell">Source</th>
                 <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Status</th>
                 <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden lg:table-cell">Date</th>
                 <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Actions</th>
@@ -363,6 +309,11 @@ export function FeesTransactionsSection({ data }: Props) {
                         {t.mode}
                       </span>
                     </td>
+                    {/* Operational source (SaaS-STAGE-1): Office / Teacher /
+                        Class Teacher / Student — never the gateway channel. */}
+                    <td className="px-3 py-2.5 text-center hidden xl:table-cell">
+                      <SourceChip role={t.collectorRole} collectedBy={t.collectedBy} maxW="max-w-[120px]" />
+                    </td>
                     <td className="px-3 py-2.5 text-center"><FeeStatusBadge status={t.status} /></td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell whitespace-nowrap"><TxnDateTime transaction={t} /></td>
                     <td className="px-3 py-2.5 text-center">
@@ -385,7 +336,7 @@ export function FeesTransactionsSection({ data }: Props) {
                 )
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={9} className="py-12"><FeeEmptyState icon={<ReceiptIcon className="h-6 w-6" />} title="No transactions match your filters" description="Try adjusting the search or filter criteria." /></td></tr>
+                <tr><td colSpan={10} className="py-12"><FeeEmptyState icon={<ReceiptIcon className="h-6 w-6" />} title="No transactions match your filters" description="Try adjusting the search or filter criteria." /></td></tr>
               )}
             </tbody>
           </table>
@@ -409,23 +360,14 @@ export function FeesTransactionsSection({ data }: Props) {
               className="bg-card border border-border rounded-xl p-4 max-h-[90vh] overflow-y-auto w-[min(56rem,calc(100vw-2rem))]"
               onClick={(e) => e.stopPropagation()}
             >
-              {receiptSettings.paperSize !== '80mm' ? (
-                <FeeReceiptA5Preview
-                  transaction={viewReceipt}
-                  settings={receiptSettings}
-                  onClose={() => setViewReceipt(null)}
-                  onPrint={() => doPrint(viewReceipt)}
-                  onDownload={() => doDownload(viewReceipt)}
-                />
-              ) : (
-                <ReceiptPreview
-                  transaction={viewReceipt}
-                  settings={receiptSettings}
-                  onClose={() => setViewReceipt(null)}
-                  onPrint={() => doPrint(viewReceipt)}
-                  onDownload={() => doDownload(viewReceipt)}
-                />
-              )}
+              {/* THE canonical A5/A4 dual-copy receipt (thermal consolidated away) */}
+              <FeeReceiptA5Preview
+                transaction={viewReceipt}
+                settings={receiptSettings}
+                onClose={() => setViewReceipt(null)}
+                onPrint={() => doPrint(viewReceipt)}
+                onDownload={() => doDownload(viewReceipt)}
+              />
             </motion.div>
           </motion.div>
         )}
