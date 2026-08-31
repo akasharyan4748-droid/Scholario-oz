@@ -1073,3 +1073,20 @@ Stage Summary:
 - MOST LIKELY ROOT CAUSE of preview outage: .zscripts/keepalive.sh production-standalone watchdog (×2) — pkills every Next process and crash-loops on a never-built .next/standalone/server.js; not a code error (tsc 0, eslint clean).
 - Recommended (awaiting user approval, NOT executed): kill the 2 keepalive.sh PIDs, remove/quarantine the 4 competing supervisor scripts (or gate keepalive to packaged-applet context only), start `bun run dev`; then cleanup rounds (QA PNGs + DB binaries out of git, 13 unused deps, dead components, one-shot scripts, event-stream duplicate).
 - Full 10-section report delivered in chat; user will decide what to remove/keep/refactor/fix.
+
+---
+Task ID: PREVIEW-STABILIZE-1
+Agent: Z.ai Code (main thread)
+Task: User reported "preview was not opening but suddenly opened and it's some older version" — diagnose, restore a stable preview serving the LATEST code, and prove which version is live.
+
+Work Log:
+- DIAGNOSIS (live): 7 competing processes — TWO .zscripts/keepalive.sh loops (PIDs 1325+1337, the AUDIT-1 culprit: poll :3000/logo.svg every 2s, on hiccup `pkill -9 -f next` then try non-existent .next/standalone/server.js) + FOUR `bun run dev` wrappers spawning DUPLICATE mini-services (2× dev-server watchdog, 2× event-stream). One watchdog won :3000 (next-server v16.3.2 PID 1550, started 04:42, fresh from current source); the duplicate watchdog kept spawning `bun run dev` → EADDRINUSE crash-loop every 3s in dev.log.
+- WHY "older version": (a) keepalive pkilled healthy servers at random → preview down ("not opening"); (b) when it reappeared, the user's browser tab replayed STALE cached chunks — dev.log shows ChunkLoadError (/_next/static/chunks/*) from a reconnecting old tab → user saw an old/broken mix; (c) demo data store was re-seeded to fresh seed state during prior QA wipes, so data can also look "older". CODE was never old: git working tree clean, HEAD 8bd7de0 = latest (Payments rework + PAY-POLISH-2 + Fee Structures per-class auto-structures rework).
+- CLEANUP: killed keepalive.sh ×2 (1325, 1337), duplicate dev-server watchdog (1307→1327 — the EADDRINUSE loop source), duplicate event-stream (1331→1371). Kept exactly ONE healthy tree: 1310→1326 (dev-server watchdog)→1537→1538→1550 (next-server :3000) + 1316→1362 (event-stream :3003). Retry loop stopped (no more "Restarting in 3s" entries; "Watchdog alive" heartbeat only).
+- VERIFIED LATEST UI via agent-browser (isolated session, principal@demoschool.edu): (1) public landing loads; (2) Principal panel → Fee Management → Fee Structures tab = LATEST rework: chips "12 structures · 12 active classes", "+ New Structure", per-class cards (Pre-Nursery/Pre-Primary clean hierarchy — no duplicate session text, no Master Catalogue launcher — removed architecture), Current v1 + effective 01 Apr 2026 + Session exams ₹700 · 3 planned; (3) Payments tab = LATEST PAY-POLISH-2: Today/This Week/This Month summary cards, Recent Payments as Transactions-style dense table with date+secondary-time ("27 Aug 2026 · 04:11 AM"), Mode/Source chips, receipt row actions. Screenshots: screenshots/verify-fee-structures-latest.png, verify-payments-latest.png.
+- Final state: single next-server on :3000 (HTTP 200), event-stream on :3003, zero crash-loops.
+
+Stage Summary:
+- Root cause of flaky/old-looking preview = platform keepalive loops + duplicate watchdogs fighting over :3000 and stale browser chunks — NOT code. All latest work (git HEAD 8bd7de0) confirmed live and rendering in the browser.
+- User guidance: hard-refresh the preview tab (Ctrl+Shift+R / Cmd+Shift+R) or close+reopen the preview; if data looks older it's the fresh demo seed (prior QA wiped mutations).
+- keepalive.sh remains on disk but is NOT running; if it respawns after a platform restart, kill it again (it targets a standalone build that can never exist in this sandbox).
