@@ -6,17 +6,36 @@
  * Phase 1: SearchFilterBar-style filter toolbar — free-text search (name /
  *   ID / admission / roll / class / section) composed with Class and Status
  *   selects feeding the visible grid below.
- * Phase 2: When a student is selected → opens a full student fee account
- *   workspace drawer with tabs:
- *   Overview · Fee Ledger · Payments · Receipts · Concessions · Dues · Audit
+ * Phase 2: When a student is selected → opens the student fee account
+ *   workspace drawer with THREE top-level tabs (deliberate information
+ *   architecture — the underlying ERP keeps every financial concept while
+ *   the Principal-facing surface stays simple; UX benchmark: Salary &
+ *   Payroll → Employee Account drawer):
+ *
+ *   Account  — the student's current financial position: account position
+ *              (core vs additional), dues/outstanding, concessions and
+ *              optional-charge applicability — with the detailed Fee Ledger
+ *              one contextual action away ("View Fee Ledger →").
+ *   Payments — recorded PAYMENT history (payment = resulting financial
+ *              record; collection = the workflow that creates it — the two
+ *              are never merged). Each payment row carries its A5 dual-copy
+ *              receipt action.
+ *   History  — auditable account-level financial activity (payments,
+ *              receipts, concession lifecycle, applicability changes).
+ *
+ * The former top-level Fee Ledger / Receipts / Concessions / Dues tabs were
+ * RE-HOMED, not deleted: ledger → contextual sub-view of Account;
+ * receipts → per-payment receipt actions in Payments; concessions + dues →
+ * compact sections inside Account. One canonical implementation each —
+ * no parallel v2 components.
  */
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, X, Wallet, IndianRupee, ChevronRight, ArrowLeft,
-  Receipt, AlertCircle, FileText, History, ShieldCheck, User,
-  Check, Clock, Plus, Ban, Bus,
+  AlertCircle, FileText, History, ShieldCheck, User,
+  Check, Plus, Ban, Bus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -299,11 +318,23 @@ export function FeesStudentAccountsSection({ data, onCollect, focusStudent }: Pr
 
 // ─── Student Fee Account Drawer ──────────────────────────────────────
 
-type AccountTab = 'overview' | 'ledger' | 'payments' | 'receipts' | 'concessions' | 'dues' | 'audit'
+// THREE top-level tabs (see the file-header IA note): Account · Payments ·
+// History. The Fee Ledger is a CONTEXTUAL SUB-VIEW of Account (ledgerOpen),
+// not a tab — progressive disclosure, not information deletion.
+type AccountTab = 'account' | 'payments' | 'history'
 
 function StudentFeeAccountDrawer({ account, onClose, onCollect }: { account: StudentFeeAccount; onClose: () => void; onCollect: () => void }) {
-  const [tab, setTab] = useState<AccountTab>('overview')
+  const [tab, setTab] = useState<AccountTab>('account')
+  const [ledgerOpen, setLedgerOpen] = useState(false)
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null)
+
+  // Tab switch wrapper — the ledger sub-view lives under the Account tab
+  // only; leaving Account always collapses it so a returning visit starts
+  // at the position summary.
+  const goTab = (t: AccountTab) => {
+    setLedgerOpen(false)
+    setTab(t)
+  }
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
 
   const selectedReceipt = account.transactions.find((t) => t.id === selectedReceiptId)
@@ -377,20 +408,18 @@ function StudentFeeAccountDrawer({ account, onClose, onCollect }: { account: Stu
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs — exactly three top-level sections: Account · Payments ·
+            History (IA refactor). Fee Ledger / Receipts / Concessions / Dues
+            are re-homed contextually — see the file-header note. */}
         <div className="shrink-0 border-b border-border bg-muted/20 px-3 py-1.5 flex items-center gap-0.5 overflow-x-auto">
           {[
-            { value: 'overview' as const, label: 'Overview', icon: <User className="h-3 w-3" /> },
-            { value: 'ledger' as const, label: 'Fee Ledger', icon: <History className="h-3 w-3" /> },
+            { value: 'account' as const, label: 'Account', icon: <User className="h-3 w-3" /> },
             { value: 'payments' as const, label: 'Payments', icon: <Wallet className="h-3 w-3" /> },
-            { value: 'receipts' as const, label: 'Receipts', icon: <Receipt className="h-3 w-3" /> },
-            { value: 'concessions' as const, label: 'Concessions', icon: <IndianRupee className="h-3 w-3" /> },
-            { value: 'dues' as const, label: 'Dues', icon: <AlertCircle className="h-3 w-3" /> },
-            { value: 'audit' as const, label: 'History', icon: <ShieldCheck className="h-3 w-3" /> },
+            { value: 'history' as const, label: 'History', icon: <ShieldCheck className="h-3 w-3" /> },
           ].map((t) => (
             <button
               key={t.value}
-              onClick={() => setTab(t.value)}
+              onClick={() => goTab(t.value)}
               className={cn(
                 'inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap',
                 tab === t.value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
@@ -404,13 +433,22 @@ function StudentFeeAccountDrawer({ account, onClose, onCollect }: { account: Stu
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4">
-          {tab === 'overview' && <AccountOverview account={account} />}
-          {tab === 'ledger' && <AccountLedger ledger={account.ledger} />}
-          {tab === 'payments' && <AccountPayments account={account} />}
-          {tab === 'receipts' && <AccountReceipts account={account} onView={(id) => { setSelectedReceiptId(id); setTab('receipts') }} />}
-          {tab === 'concessions' && <AccountConcessions account={account} />}
-          {tab === 'dues' && <AccountDues account={account} onCollect={onCollect} />}
-          {tab === 'audit' && <AccountAudit account={account} />}
+          {tab === 'account' && (
+            ledgerOpen
+              ? (
+                <div className="space-y-3">
+                  {/* Contextual ledger sub-view — the EXISTING canonical
+                      AccountLedger, unchanged; reached via "View Fee Ledger →". */}
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 -ml-2" onClick={() => setLedgerOpen(false)}>
+                    <ArrowLeft className="h-3.5 w-3.5" /> Back to Account
+                  </Button>
+                  <AccountLedger ledger={account.ledger} />
+                </div>
+              )
+              : <AccountHome account={account} onCollect={onCollect} onOpenLedger={() => setLedgerOpen(true)} />
+          )}
+          {tab === 'payments' && <AccountPayments account={account} onViewReceipt={(id) => setSelectedReceiptId(id)} />}
+          {tab === 'history' && <AccountAudit account={account} />}
         </div>
 
         {/* Receipt preview modal-in-drawer */}
@@ -528,34 +566,60 @@ function AccountOverview({ account }: { account: StudentFeeAccount }) {
           explicit toggles below (audited in the store action). Transport
           follows bus enrolment and is shown read-only. */}
       <AccountOptionalCharges studentId={account.studentId} />
-
-      <FeePanel title="Status Timeline" subtitle="recent financial events">
-        <div className="space-y-2">
-          {account.transactions.slice(0, 5).map((t) => (
-            <div key={t.id} className="flex items-center gap-2 text-xs">
-              <span className={cn('inline-flex items-center justify-center h-6 w-6 rounded-md ring-1', modeAccent(t.mode))}>
-                <ModeIcon mode={t.mode} className="h-3 w-3" />
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{t.purpose}</p>
-                <p className="text-[9px] text-muted-foreground">{formatDate(t.date)} · {t.receiptNo}</p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="font-bold tabular-nums text-emerald-600">{formatINR(t.amount, true)}</p>
-                <FeeStatusBadge status={t.status} />
-              </div>
-            </div>
-          ))}
-          {account.transactions.length === 0 && (
-            <FeeEmptyState
-              icon={<Wallet className="h-5 w-5" />}
-              title="No receipts recorded yet"
-              description="Collections for this account are tracked at account level — transaction receipts appear here as payments are recorded."
-            />
-          )}
-        </div>
-      </FeePanel>
     </div>
+  )
+}
+
+// ─── Account tab composition (IA refactor) ─────────────────────────
+
+/**
+ * AccountHome — the Account tab's landing composition. Answers ONE question
+ * for the Principal: "what is this student's financial position?"
+ *
+ * Order of reading:
+ *   1. Account Position (core vs additional) + optional-charge applicability
+ *   2. Dues / Outstanding (with the real late-fee engine's overdue banner)
+ *   3. Concessions (compact, auditable records — reuses the canonical
+ *      AccountConcessions including its legitimate grant workflow)
+ *   4. "View Fee Ledger →" — progressive-disclosure access to the full
+ *      billing-frequency-aware ledger (rendered by the canonical
+ *      AccountLedger as a contextual sub-view; never duplicated).
+ *
+ * The former "Status Timeline" preview was folded away deliberately: its
+ * payment events live in Payments, its audit events live in History —
+ * duplicating them here added cognitive load without new information.
+ */
+function AccountHome({ account, onCollect, onOpenLedger }: { account: StudentFeeAccount; onCollect: () => void; onOpenLedger: () => void }) {
+  return (
+    <div className="space-y-3">
+      <AccountOverview account={account} />
+      <AccountDues account={account} onCollect={onCollect} />
+      <AccountConcessions account={account} />
+      <LedgerAccessCard onOpen={onOpenLedger} />
+    </div>
+  )
+}
+
+/** Secondary contextual action — opens the EXISTING detailed Fee Ledger
+ *  (Date · Description · Type · Charge · Payment · Balance, billing-frequency
+ *  aware) as a sub-view of the Account tab. A navigation affordance only:
+ *  zero financial logic of its own. */
+function LedgerAccessCard({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      onClick={onOpen}
+      aria-label="View the detailed fee ledger"
+      className="group w-full flex items-center gap-2.5 rounded-lg border border-dashed border-border hover:border-emerald-500/40 bg-muted/20 hover:bg-muted/40 transition-colors px-3 py-2.5 text-left"
+    >
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground group-hover:bg-emerald-500/10 group-hover:text-emerald-600 transition-colors">
+        <History className="h-3.5 w-3.5" />
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-xs font-semibold">View Fee Ledger</span>
+        <span className="block text-[10px] text-muted-foreground">every charge and payment — chronological, with running balance</span>
+      </span>
+      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-emerald-600 transition-colors" />
+    </button>
   )
 }
 
@@ -689,7 +753,7 @@ function AccountLedger({ ledger }: { ledger: LedgerEntry[] }) {
   )
 }
 
-function AccountPayments({ account }: { account: StudentFeeAccount }) {
+function AccountPayments({ account, onViewReceipt }: { account: StudentFeeAccount; onViewReceipt: (id: string) => void }) {
   return (
     <FeePanel title="Payment History" subtitle={`${account.transactions.length} recorded payments`} bodyClassName="p-0">
       <div className="overflow-x-auto max-h-[28rem]">
@@ -702,6 +766,7 @@ function AccountPayments({ account }: { account: StudentFeeAccount }) {
               <th className="text-center px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Status</th>
               <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Date</th>
               <th className="text-left px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground">Collected By</th>
+              <th className="text-right px-3 py-2 text-[9px] uppercase font-semibold text-muted-foreground"><span className="sr-only">Receipt document</span>A5</th>
             </tr>
           </thead>
           <tbody>
@@ -718,40 +783,32 @@ function AccountPayments({ account }: { account: StudentFeeAccount }) {
                 <td className="px-3 py-2.5 text-center"><FeeStatusBadge status={t.status} /></td>
                 <td className="px-3 py-2.5 text-muted-foreground text-[10px]">{formatDate(t.date)}</td>
                 <td className="px-3 py-2.5 text-muted-foreground text-[10px]">{t.collectedBy}</td>
+                {/* Receipt belongs to the payment record — each row carries
+                    its existing A5 dual-copy receipt action (canonical engine,
+                    opened via the drawer-level preview modal). */}
+                <td className="px-3 py-2.5 text-right">
+                  <Button
+                    size="sm" variant="ghost"
+                    className="h-6 px-1.5 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
+                    onClick={() => onViewReceipt(t.id)}
+                    aria-label={`View A5 receipt ${t.receiptNo}`}
+                  >
+                    <FileText className="h-3 w-3" /> View
+                  </Button>
+                </td>
               </tr>
             ))}
             {account.transactions.length === 0 && (
-              <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No payments recorded yet.</td></tr>
+              <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">
+                No payments recorded yet. Payments recorded through Collect appear here with their receipts.
+              </td></tr>
             )}
           </tbody>
         </table>
       </div>
-    </FeePanel>
-  )
-}
-
-function AccountReceipts({ account, onView }: { account: StudentFeeAccount; onView: (id: string) => void }) {
-  return (
-    <FeePanel title="Receipts" subtitle={`${account.transactions.length} receipts generated`}>
-      <div className="space-y-1.5">
-        {account.transactions.map((t) => (
-          <div key={t.id} className="flex items-center gap-2 rounded-md border border-border/60 hover:border-primary/40 transition-colors px-2.5 py-2.5">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600">
-              <Receipt className="h-3.5 w-3.5" />
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-mono font-semibold">{t.receiptNo}</p>
-              <p className="text-[9px] text-muted-foreground">{formatDate(t.date)} · {t.mode} · {formatINR(t.amount, true)}</p>
-            </div>
-            <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1" onClick={() => onView(t.id)}>
-              <FileText className="h-3 w-3" /> View
-            </Button>
-          </div>
-        ))}
-        {account.transactions.length === 0 && (
-          <FeeEmptyState icon={<Receipt className="h-5 w-5" />} title="No receipts generated" description="Receipts appear here after a payment is recorded." />
-        )}
-      </div>
+      <p className="text-[10px] text-muted-foreground border-t border-border/40 px-3 py-2">
+        Receipts are generated from recorded payments — open any row's receipt to view or print the A5 dual copy.
+      </p>
     </FeePanel>
   )
 }
@@ -1051,7 +1108,7 @@ function AccountAudit({ account }: { account: StudentFeeAccount }) {
     )
   }, [allAudit, concessions, account.studentId, account.transactions])
   return (
-    <FeePanel title="Activity History" subtitle="record of payment actions on this account">
+    <FeePanel title="Activity History" subtitle="account-level financial activity — payments, receipts, concessions, applicability">
       <div className="space-y-2">
         {audit.length > 0 ? audit.map((a) => (
           <div key={a.id} className="flex items-start gap-2 rounded-md border border-border/40 px-2 py-1.5">
