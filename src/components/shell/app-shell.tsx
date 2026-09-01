@@ -281,9 +281,10 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation menu"
               className="lg:hidden text-muted-foreground hover:text-foreground shrink-0 p-1 rounded-md hover:bg-muted"
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-5 w-5" aria-hidden="true" />
             </button>
             <h1 className="text-base font-semibold text-foreground truncate">
               {activeItem?.label ?? 'Dashboard'}

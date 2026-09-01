@@ -109,20 +109,51 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // 4. ANNOUNCEMENTS — notice board items
+    // 4. ANNOUNCEMENTS — notice board items.
+    // One announcement is fanned out per target class at publish time (identical
+    // title+message, different `audience`). Collapse those broadcast rows into a
+    // single result and surface the reach in the subtitle — mirrors the
+    // dedup logic in /api/notifications-feed.
     const notifications = await db.notification.findMany({
       where: {
         schoolId,
         OR: [{ title: { contains: q } }, { message: { contains: q } }],
       },
-      take,
+      take: 18,
       orderBy: { createdAt: 'desc' },
     })
+    const seenBroadcasts = new Set<string>()
+    const broadcastAudiences = new Map<string, string[]>()
     notifications.forEach((n) => {
+      const key = `${n.title}\u0000${n.message}`
+      if (seenBroadcasts.has(key)) {
+        const auds = broadcastAudiences.get(key)
+        if (auds && n.audience) auds.push(n.audience)
+        return
+      }
+      seenBroadcasts.add(key)
+      broadcastAudiences.set(key, n.audience ? [n.audience] : [])
+    })
+    let noticeCount = 0
+    notifications.forEach((n) => {
+      if (noticeCount >= take) return
+      const key = `${n.title}\u0000${n.message}`
+      const auds = broadcastAudiences.get(key) ?? []
+      if (auds.length === 0) return // already emitted (first row of this broadcast)
+      const audienceSummary =
+        auds.length > 1
+          ? ` · broadcast to ${auds.length} classes`
+          : auds[0]?.toUpperCase().startsWith('CLASS:')
+            ? ` · ${auds[0].slice(6).trim()}`
+            : ''
+      broadcastAudiences.set(key, [])
       results.push({
         id: `ntf-${n.id}`,
         title: n.title,
-        subtitle: n.message.length > 90 ? `${n.message.slice(0, 90)}…` : n.message,
+        subtitle:
+          n.message.length > 90
+            ? `${n.message.slice(0, 90)}…${audienceSummary}`
+            : `${n.message}${audienceSummary}`,
         category: 'Notices & Announcements',
         type: 'notice',
         moduleKey: 'communication',
@@ -132,6 +163,7 @@ export async function GET(req: NextRequest) {
         timestamp: n.createdAt.getTime(),
         keywords: `notice announcement ${n.audience} ${n.priority}`,
       })
+      noticeCount += 1
     })
 
     // 5. MESSAGES — inbox items addressed to the current user

@@ -5,6 +5,23 @@ import { cn } from '@/lib/utils'
 import type { SearchResultItem } from '@/lib/search-service'
 import { renderItemIcon, getBadgeStyle } from './utils'
 
+// DB-backed results carry epoch-millis timestamps — render a compact relative
+// age ("5m", "2h", "3d") so users can gauge freshness at a glance.
+function ResultTimestamp({ ts }: { ts?: number }) {
+  if (!ts || !Number.isFinite(ts)) return null
+  const diffMs = Date.now() - ts
+  if (diffMs < 0 || diffMs > 1000 * 60 * 60 * 24 * 60) return null // future or >60d — stale, hide
+  const min = Math.floor(diffMs / 60000)
+  if (min < 1) return <span>now</span>
+  if (min < 60) return <span>{min}m</span>
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return <span>{hr}h</span>
+  const day = Math.floor(hr / 24)
+  if (day < 7) return <span>{day}d</span>
+  const wk = Math.floor(day / 7)
+  return <span>{wk}w</span>
+}
+
 // Highlights case-insensitive query matches inside text with a soft primary tint
 function HighlightMatch({ text, query }: { text: string; query: string }) {
   const q = query.trim()
@@ -109,6 +126,14 @@ export function PaletteResultsList({
                       </p>
                     </div>
 
+                    {!isActive && item.timestamp && (
+                      <span
+                        className="shrink-0 text-[9px] font-medium text-muted-foreground/70 tabular-nums"
+                        aria-label="result age"
+                      >
+                        <ResultTimestamp ts={item.timestamp} />
+                      </span>
+                    )}
                     {isActive && (
                       <CornerDownLeft className="h-3.5 w-3.5 text-primary shrink-0" />
                     )}

@@ -130,3 +130,22 @@ Work Log:
 Stage Summary:
 - Scholario-OS polished to the Finance-module quality bar across Library, Certificates, Downloads, Inventory, Settings; role-aware data connectivity implemented for Library + Certificates (Teacher + Student views reading the same canonical stores); all quality gates green.
 - Remaining risks: (a) memory-constrained sandbox — follow the warm-compile workflow; (b) Super Admin / multi-tenant flows not re-verified this session (untouched code, previously verified per archived worklog); (c) cron webDevReview job to be registered for continuous QA.
+
+---
+Task ID: QA-R5
+Agent: Z.ai Code (main orchestrator)
+Task: Post-recovery QA sweep (principal/teacher/student/superadmin), bug fixes, notifications + search UX upgrades.
+
+Work Log:
+- Tool infrastructure recovered after ~5-round MCP outage (prod-wsmgr-svc session init 400s). Resumed immediately: worklog read → dev.log check → curl warm → browser QA.
+- QA SWEEP (all 4 roles, short browser bursts): landing page ✓; principal dashboard KPIs/alerts ✓; Library KPI strip reconciled (213 books / 13 active / 5 overdue / ₹120 fines) ✓; Certificates History 10 rows ✓; student My Library (2 issued / 1 overdue / ₹10 fine) + My Certificates (2 scoped) ✓; teacher School Library (borrowed + catalogue) ✓; ⌘K palette opens ✓; superadmin control plane (3 tenants, DSG-001/SPS-002 list, 49 modules) ✓ — closes prior risk (b) "Super Admin not re-verified". 390px scrollWidth===390 everywhere tested. Console 0 errors.
+- BUG#1 (a11y): mobile menu toggle in app-shell.tsx had NO aria-label (screen readers announce empty button) → added aria-label="Open navigation menu" + aria-hidden icon. Public-website toggle upgraded to state-aware label + aria-expanded.
+- BUG#2 (data/UX): /api/search returned class-fanned broadcast notices duplicated (per-class rows share title+message, different audience; staff see every class row → palette showed "Educational Tour ×2"). Root-caused via DB inspection (12 rows, 3 titles ×2 audiences CLASS:Class 4/6). Fixed in search route: take:18 fetch → dedupe by title\0message key (mirrors notifications-feed's seenBroadcasts) → single result with "· broadcast to 2 classes" (or "· Class 4") audience summary in subtitle; take-capped noticeCount.
+- FEATURE (notifications dropdown): added filter tablist (All/Unread/Messages/Notices) with live counts, disabled state when a filter has 0 items, filter reset on panel open; notification rows converted from clickable divs to real <button> elements (focus-visible ring, Enter/Space activation) — keyboard accessible; added Mail icon for MESSAGE and Megaphone for ANNOUNCEMENT types (previously fell to generic Bell); "+N more in this filter" overflow hint; "Mark all as read" gained CheckCheck icon + aria-label; empty states per-filter ("Nothing unread"/"No messages"/"No notices").
+- STYLING (command palette): DB-backed results now show compact relative age ("7h"/"5d") right-aligned in muted tabular-nums (hidden when row is active to avoid crowding the ↵ chevron; hidden when >60d stale); broadcast audience summaries (from BUG#2 fix) shown in result subtitles.
+- GATES: bunx tsc --noEmit 0 errors ✓; bun run lint clean ✓. Dev server OOM-killed once during tsc (expected, 4GB cgroup) — restarted via (bun run dev > /dev/null 2>&1 &), 12ms cache recovery, rewarmed via curl.
+- BROWSER RE-VERIFICATION: search "fee" → each tour notice appears EXACTLY ONCE with "· broadcast to 2 classes" subtitle ✓; palette timestamps render (aria-label result age nodes present) ✓; notifications tabs render with counts (All 8 / Unread 7 / Messages disabled 0 / Notices 8) and Unread filter shows unique rows as proper buttons ✓; tablist fits 326px inside panel at 390px viewport, no horizontal overflow ✓; superadmin demo feed tabs also render ✓; console 0 errors, 0 page errors ✓.
+
+Stage Summary:
+- Fixed 2 real bugs (search broadcast duplication, a11y labels), upgraded notifications dropdown with filter tabs + full keyboard accessibility, added palette result freshness timestamps. All 4 roles re-verified end-to-end; superadmin/multi-tenant risk from prior session now closed.
+- Remaining risks: (a) 4GB memory cgroup — dev server reached 2.8GB RSS; keep browser sessions short, warm via curl; (b) notifications-filter tab state is local (resets on open — by design); (c) no socket.io mini-service running (stream indicator off; DB-backed 60s polling still delivers feed) — optional to start :3003 service.
