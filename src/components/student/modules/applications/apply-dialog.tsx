@@ -51,6 +51,7 @@ import {
   type ApplicationFormField, type ApplicationSubmission, type SchoolApplication,
 } from '@/lib/store/applications-store'
 import { useFeeStore } from '@/lib/store/fee-store'
+import { SignaturePad, signatureComplete, type SignatureValue } from '@/components/shared/signature-pad/signature-pad'
 import { useSchoolSettingsStore } from '@/lib/store/school-settings-store/store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -91,6 +92,7 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
   const [attachments, setAttachments] = useState<Attachments>({})
   const [emergency, setEmergency] = useState<Record<string, { name: string; phone: string }>>({})
   const [consentAccepted, setConsentAccepted] = useState(false)
+  const [signature, setSignature] = useState<SignatureValue | null>(null)
   const [errors, setErrors] = useState<Errors>({})
   const [submitting, setSubmitting] = useState(false)
   const [paying, setPaying] = useState<PayMode | null>(null)
@@ -126,6 +128,7 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
           .map((f) => [f.id, { name: '', phone: '' }]),
       ))
       setConsentAccepted(false)
+      setSignature(null)
       setActiveSubmissionId(null)
     }
   }, [open, app, existingSubmission, initialStep])
@@ -173,6 +176,16 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
     }
     if (app.guardianConsent.required && app.guardianConsent.method === 'Digital' && !consentAccepted) {
       errs.consent = 'Guardian consent is required before submitting.'
+    }
+    // PART 19 — a required digital signature is a real captured signature,
+    // never fabricated. Only enforced on the initial submit (fix-mode keeps
+    // the original signature on record).
+    if (
+      !isFixMode && app.guardianConsent.required && app.guardianConsent.method === 'Digital'
+      && app.guardianConsent.signatureRequired !== false
+      && !signatureComplete(signature)
+    ) {
+      errs.signature = 'Capture the guardian’s signature (draw or type) to continue.'
     }
     setErrors(errs)
     if (Object.keys(errs).length > 0) {
@@ -223,6 +236,7 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
       answers,
       attachments: Object.keys(attachments).length ? attachments : undefined,
       consentAccepted,
+      signature: signatureComplete(signature) ? signature ?? undefined : undefined,
       submittedByRole: 'Student',
     })
 
@@ -487,6 +501,22 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                       </p>
                     )
                   )}
+                  {/* PART 19 — actual signature capture (draw/type) for
+                      digital-consent forms; it prints on the official A4. */}
+                  {app.guardianConsent.required && app.guardianConsent.method === 'Digital'
+                    && app.guardianConsent.signatureRequired !== false && !isFixMode && (
+                    <div className="mt-3">
+                      <SignaturePad
+                        value={signature}
+                        onChange={(v) => {
+                          setSignature(v)
+                          setErrors((prev) => { if (!prev.signature) return prev; const next = { ...prev }; delete next.signature; return next })
+                        }}
+                        defaultSigner={identity?.canonical.guardianName}
+                        error={errors.signature}
+                      />
+                    </div>
+                  )}
                   {errors.consent && <p className="mt-1 text-[10px] font-medium text-rose-600">{errors.consent}</p>}
                 </section>
 
@@ -509,6 +539,12 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                     <ReviewRow label="Destination" value={app.destination ?? '—'} />
                     <ReviewRow label="Tour date" value={app.eventDate ? formatDate(app.eventDate) : 'To be announced'} />
                     <ReviewRow label="Fee" value={needsPayment ? formatINR(amount) : 'Free'} />
+                    <ReviewRow
+                      label="Signature"
+                      value={signatureComplete(signature)
+                        ? `${signature!.mode === 'drawn' ? 'Drawn' : 'Typed'} — ${signature!.signerName || identity?.canonical.guardianName || 'guardian'}`
+                        : 'Not required'}
+                    />
                   </div>
                 </div>
                 <p className="px-1 text-[10.5px] leading-relaxed text-muted-foreground">

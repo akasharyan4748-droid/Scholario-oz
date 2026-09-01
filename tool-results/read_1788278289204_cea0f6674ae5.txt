@@ -1,0 +1,855 @@
+     1→'use client'
+     2→
+     3→/**
+     4→ * ApplyDialog — the student's Educational Tour application: fill → submit →
+     5→ * pay, inside ONE dialog.
+     6→ *
+     7→ * Structure mirrors the printed official form so what the student fills is
+     8→ * exactly what the school office files:
+     9→ *   1. Official document header (school, form no., session)
+    10→ *   2. Tour details (read-only — destination, dates, fee, in-charge)
+    11→ *   3. Student particulars (READ-ONLY, from the school record — applicants
+    12→ *      never edit their master record here; corrections go through the office)
+    13→ *   4. Guardian details (read-only)
+    14→ *   5. Tour-specific details (the template's editable questions — saved to
+    15→ *      the submission snapshot only, never the canonical student record)
+    16→ *   6. Declaration & guardian consent
+    17→ *   → review step: compact REVIEW APPLICATION summary before final submit
+    18→ *   → payment step: Online (instant receipt) or Cash / Pay at School
+    19→ *     (recorded Under Verification until the Principal confirms).
+    20→ *
+    21→ * MONEY RULE: payments go through fee-store recordPayment() only, bound to
+    22→ * the application's Additional Charge + applicationId — tour money is
+    23→ * separate from the student's annual fees and lands in the normal ledger.
+    24→ *
+    25→ * Idempotency: re-submitting an already-submitted form returns
+    26→ * existingSubmissionId from the store — we surface "You already applied"
+    27→ * and close instead of creating a duplicate.
+    28→ */
+    29→
+    30→import { useEffect, useState } from 'react'
+    31→import {
+    32→  Banknote, Bus, CalendarDays, CheckCircle2, CreditCard, FileUp, Info, Landmark,
+    33→  ShieldCheck, Trash2, User, Users,
+    34→} from 'lucide-react'
+    35→import {
+    36→  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+    37→} from '@/components/ui/dialog'
+    38→import { Button } from '@/components/ui/button'
+    39→import { Input } from '@/components/ui/input'
+    40→import { Label } from '@/components/ui/label'
+    41→import { Textarea } from '@/components/ui/textarea'
+    42→import { Badge } from '@/components/ui/badge'
+    43→import { Checkbox } from '@/components/ui/checkbox'
+    44→import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+    45→import {
+    46→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    47→} from '@/components/ui/select'
+    48→import { DatePicker } from '@/components/ui/date-picker'
+    49→import {
+    50→  useApplicationsStore, deriveSubmissionPayment, formPurposeOf,
+    51→  type ApplicationFormField, type ApplicationSubmission, type SchoolApplication,
+    52→} from '@/lib/store/applications-store'
+    53→import { useFeeStore } from '@/lib/store/fee-store'
+    54→import { useSchoolSettingsStore } from '@/lib/store/school-settings-store/store'
+    55→import { formatINR, formatDate } from '@/lib/format'
+    56→import { cn } from '@/lib/utils'
+    57→import { toast } from 'sonner'
+    58→import { addAuditEvent, type StudentIdentityPair } from './student'
+    59→
+    60→type PayMode = 'UPI' | 'Cash'
+    61→
+    62→interface ApplyDialogProps {
+    63→  open: boolean
+    64→  onOpenChange: (open: boolean) => void
+    65→  app: SchoolApplication | null
+    66→  /** Display + canonical identity pair resolved by the module. */
+    67→  identity: StudentIdentityPair | null
+    68→  /** Present when fixing a 'Correction Required' submission. */
+    69→  existingSubmission?: ApplicationSubmission | null
+    70→  /** 'payment' skips straight to the payment step (awaiting-payment rows). */
+    71→  initialStep?: 'form' | 'payment'
+    72→}
+    73→
+    74→type Answers = Record<string, string | string[] | boolean>
+    75→type Attachments = Record<string, { name: string; size: number }>
+    76→type Errors = Record<string, string>
+    77→
+    78→const EM_DASH = ' — '
+    79→
+    80→function splitEmergencyContact(value: Answers[string]): { name: string; phone: string } {
+    81→  if (typeof value === 'string' && value.includes(EM_DASH)) {
+    82→    const [name = '', phone = ''] = value.split(EM_DASH)
+    83→    return { name, phone }
+    84→  }
+    85→  return { name: '', phone: '' }
+    86→}
+    87→
+    88→export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmission = null, initialStep = 'form' }: ApplyDialogProps) {
+    89→  const [step, setStep] = useState<'form' | 'review' | 'payment'>(initialStep === 'payment' ? 'payment' : 'form')
+    90→  const [answers, setAnswers] = useState<Answers>({})
+    91→  const [attachments, setAttachments] = useState<Attachments>({})
+    92→  const [emergency, setEmergency] = useState<Record<string, { name: string; phone: string }>>({})
+    93→  const [consentAccepted, setConsentAccepted] = useState(false)
+    94→  const [errors, setErrors] = useState<Errors>({})
+    95→  const [submitting, setSubmitting] = useState(false)
+    96→  const [paying, setPaying] = useState<PayMode | null>(null)
+    97→  const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null)
+    98→
+    99→  const isFixMode = !!existingSubmission
+   100→  // Active school's own branding (tenant-scoped School Settings).
+   101→  const schGeneral = useSchoolSettingsStore((s) => s.general)
+   102→
+   103→  // ── Reset / prefill whenever the dialog opens for an application ──
+   104→  useEffect(() => {
+   105→    if (!open || !app) return
+   106→    setStep(initialStep === 'payment' ? 'payment' : 'form')
+   107→    setErrors({})
+   108→    setSubmitting(false)
+   109→    setPaying(null)
+   110→    if (existingSubmission) {
+   111→      setAnswers({ ...existingSubmission.answers })
+   112→      setAttachments(existingSubmission.attachments ? { ...existingSubmission.attachments } : {})
+   113→      setEmergency(Object.fromEntries(
+   114→        app.formFields
+   115→          .filter((f) => f.type === 'emergency-contact')
+   116→          .map((f) => [f.id, splitEmergencyContact(existingSubmission.answers[f.id])]),
+   117→      ))
+   118→      setConsentAccepted(!!existingSubmission.consentGivenAt)
+   119→      setActiveSubmissionId(existingSubmission.id)
+   120→    } else {
+   121→      setAnswers({})
+   122→      setAttachments({})
+   123→      setEmergency(Object.fromEntries(
+   124→        app.formFields
+   125→          .filter((f) => f.type === 'emergency-contact')
+   126→          .map((f) => [f.id, { name: '', phone: '' }]),
+   127→      ))
+   128→      setConsentAccepted(false)
+   129→      setActiveSubmissionId(null)
+   130→    }
+   131→  }, [open, app, existingSubmission, initialStep])
+   132→
+   133→  const amount = app?.payment.amount ?? 0
+   134→  const needsPayment = !!app && app.payment.mode !== 'None'
+   135→  const isTour = !!app && (app.category === 'Tour' || app.category === 'Trip' || app.templateKey === 'educational_tour')
+   136→
+   137→  const closeDialog = () => {
+   138→    onOpenChange(false)
+   139→  }
+   140→
+   141→  // ── Validation (application-specific fields + digital guardian consent) ──
+   142→  const validate = (): boolean => {
+   143→    if (!app) return false
+   144→    const errs: Errors = {}
+   145→    for (const f of app.formFields) {
+   146→      const v = answers[f.id]
+   147→      if (f.type === 'emergency-contact') {
+   148→        const { name, phone } = emergency[f.id] ?? { name: '', phone: '' }
+   149→        if (f.required && (!name.trim() || !phone.trim())) {
+   150→          errs[f.id] = 'Enter both a contact name and a phone number.'
+   151→        }
+   152→        continue
+   153→      }
+   154→      if (f.type === 'file') {
+   155→        if (f.required && !attachments[f.id]) errs[f.id] = 'Please attach a file.'
+   156→        continue
+   157→      }
+   158→      if (f.type === 'signature' || f.type === 'declaration') {
+   159→        if (f.required && v !== true) errs[f.id] = 'Tick the acknowledgement to continue.'
+   160→        continue
+   161→      }
+   162→      if (f.type === 'checkbox' || f.type === 'multiselect') {
+   163→        if (f.required && (!Array.isArray(v) || v.length === 0)) errs[f.id] = 'Pick at least one option.'
+   164→        continue
+   165→      }
+   166→      if (f.type === 'yesno') {
+   167→        if (f.required && typeof v !== 'boolean') errs[f.id] = 'Choose Yes or No.'
+   168→        continue
+   169→      }
+   170→      if (f.required && (typeof v !== 'string' || !v.trim())) {
+   171→        errs[f.id] = 'This field is required.'
+   172→      }
+   173→    }
+   174→    if (app.guardianConsent.required && app.guardianConsent.method === 'Digital' && !consentAccepted) {
+   175→      errs.consent = 'Guardian consent is required before submitting.'
+   176→    }
+   177→    setErrors(errs)
+   178→    if (Object.keys(errs).length > 0) {
+   179→      toast.error('Please complete the highlighted fields.')
+   180→      return false
+   181→    }
+   182→    return true
+   183→  }
+   184→
+   185→  // ── Submit (or resubmit after corrections) — reached from the review step ──
+   186→  const handleSubmit = () => {
+   187→    if (!app || !identity || submitting) return
+   188→    if (initialStep !== 'payment' && !validate()) {
+   189→      setStep('form')
+   190→      return
+   191→    }
+   192→
+   193→    setSubmitting(true)
+   194→
+   195→    if (isFixMode && existingSubmission) {
+   196→      const res = useApplicationsStore.getState().resubmitSubmission(
+   197→        existingSubmission.id,
+   198→        answers,
+   199→        Object.keys(attachments).length ? attachments : undefined,
+   200→        identity.canonical.name,
+   201→      )
+   202→      setSubmitting(false)
+   203→      if (!res.success) {
+   204→        toast.error(res.error ?? 'Could not resubmit.')
+   205→        return
+   206→      }
+   207→      const updated = useApplicationsStore.getState().submissions.find((s) => s.id === existingSubmission.id)
+   208→      const pay = updated ? deriveSubmissionPayment(app, updated) : null
+   209→      if (needsPayment && (!pay || pay.status === 'Not Paid')) {
+   210→        setActiveSubmissionId(existingSubmission.id)
+   211→        setStep('payment')
+   212→        toast.info('Corrections submitted — one more step: payment.')
+   213→      } else {
+   214→        toast.success('Corrections submitted for review.')
+   215→        closeDialog()
+   216→      }
+   217→      return
+   218→    }
+   219→
+   220→    const res = useApplicationsStore.getState().submitApplication({
+   221→      applicationId: app.id,
+   222→      student: identity.canonical,
+   223→      answers,
+   224→      attachments: Object.keys(attachments).length ? attachments : undefined,
+   225→      consentAccepted,
+   226→      submittedByRole: 'Student',
+   227→    })
+   228→
+   229→    if (res.success && res.existingSubmissionId) {
+   230→      // Idempotent hit — the store refused to duplicate. Be honest + close.
+   231→      setSubmitting(false)
+   232→      toast.info('You already applied', {
+   233→        description: 'A submission for this form already exists — nothing was duplicated.',
+   234→      })
+   235→      closeDialog()
+   236→      return
+   237→    }
+   238→    if (!res.success || !res.submission) {
+   239→      setSubmitting(false)
+   240→      toast.error(res.error ?? 'Submission failed.')
+   241→      return
+   242→    }
+   243→
+   244→    if (needsPayment) {
+   245→      setActiveSubmissionId(res.submission.id)
+   246→      setStep('payment')
+   247→      setSubmitting(false)
+   248→      toast.success('Application submitted — complete the payment to finish.', {
+   249→        description: formatINR(amount),
+   250→      })
+   251→    } else {
+   252→      setSubmitting(false)
+   253→      toast.success('Application submitted.', {
+   254→        description: 'Track its status under My submissions.',
+   255→      })
+   256→      closeDialog()
+   257→    }
+   258→  }
+   259→
+   260→  // ── Payment — the ONLY way money moves (canonical fee store) ──
+   261→  const runPayment = (mode: PayMode) => {
+   262→    if (!app || !identity || paying) return
+   263→    if (!app.payment.chargeId) return // guarded in the UI
+   264→    setPaying(mode)
+   265→    const res = useFeeStore.getState().recordPayment({
+   266→      studentId: identity.canonical.id,
+   267→      amount: app.payment.amount,
+   268→      mode,
+   269→      purpose: `Application: ${app.title}`,
+   270→      feeHead: app.payment.feeHeadLabel || app.title,
+   271→      collectedBy: 'Student Self-Service',
+   272→      additionalChargeId: app.payment.chargeId,
+   273→      applicationId: app.id,
+   274→      ...(mode === 'UPI' ? { referenceNo: `UPI-${Date.now()}` } : {}),
+   275→    })
+   276→    setPaying(null)
+   277→    if (!res.success || !res.transaction) {
+   278→      toast.error(res.error ?? 'Payment could not be recorded.')
+   279→      return
+   280→    }
+   281→    const receipt = res.transaction.receiptNo
+   282→    addAuditEvent({
+   283→      applicationId: app.id,
+   284→      submissionId: activeSubmissionId ?? undefined,
+   285→      ts: new Date().toISOString(),
+   286→      actor: identity.canonical.name,
+   287→      actorRole: 'Student',
+   288→      action: 'payment.completed',
+   289→      message: mode === 'Cash'
+   290→        ? `Cash ${formatINR(app.payment.amount)} recorded for "${app.title}" — receipt ${receipt}, awaiting verification by the Principal.`
+   291→        : `Paid ${formatINR(app.payment.amount)} online (UPI ref ${res.transaction.referenceNo ?? '—'}) for "${app.title}" — receipt ${receipt}.`,
+   292→    })
+   293→    if (mode === 'Cash') {
+   294→      toast.info('Recorded — awaiting cash verification by the Principal', {
+   295→        description: `Receipt ${receipt} · ${formatINR(app.payment.amount)} · ${app.title}`,
+   296→      })
+   297→    } else {
+   298→      toast.success(`Payment successful — receipt ${receipt}`, {
+   299→        description: `${formatINR(app.payment.amount)} paid for ${app.title}.`,
+   300→      })
+   301→    }
+   302→    closeDialog()
+   303→  }
+   304→
+   305→  const skipPayment = () => {
+   306→    toast.info('Payment skipped for now', {
+   307→      description: 'You can pay anytime from My submissions.',
+   308→    })
+   309→    closeDialog()
+   310→  }
+   311→
+   312→  return (
+   313→    <Dialog open={open} onOpenChange={(o) => { if (!o) closeDialog() }}>
+   314→      <DialogContent className="sm:max-w-lg max-h-[88vh] overflow-hidden flex flex-col">
+   315→        {app && identity && (
+   316→          <>
+   317→            <DialogHeader className="text-left shrink-0">
+   318→              <div className="flex items-start justify-between gap-3">
+   319→                <div className="min-w-0">
+   320→                  <DialogTitle className="text-base leading-snug">{app.title}</DialogTitle>
+   321→                  <DialogDescription className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+   322→                    <Badge variant="outline" className="text-[9px] h-4 px-1.5">Educational Tour</Badge>
+   323→                    <span>Deadline {formatDate(app.deadline)}</span>
+   324→                    {needsPayment && <span>· {formatINR(amount)}{app.payment.mode === 'Optional' ? ' (optional)' : ''}</span>}
+   325→                  </DialogDescription>
+   326→                </div>
+   327→                {step === 'payment' && (
+   328→                  <Badge variant="outline" className="shrink-0 text-[9px] h-4 px-1.5 border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+   329→                    Payment
+   330→                  </Badge>
+   331→                )}
+   332→                {step === 'review' && (
+   333→                  <Badge variant="outline" className="shrink-0 text-[9px] h-4 px-1.5 border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-400">
+   334→                    Review
+   335→                  </Badge>
+   336→                )}
+   337→              </div>
+   338→            </DialogHeader>
+   339→
+   340→            {step === 'form' ? (
+   341→              <div className="min-h-0 flex-1 overflow-y-auto -mx-1 px-1 space-y-4">
+   342→                {/* ── Official document header — the form reads as a real
+   343→                    school-issued document, not a SaaS card. ── */}
+   344→                <div className="rounded-lg border border-border bg-card px-3.5 py-3">
+   345→                  <div className="flex items-start justify-between gap-3 border-b border-dashed border-border pb-2.5">
+   346→                    <div className="min-w-0">
+   347→                      <p className="text-[13px] font-extrabold tracking-tight text-foreground leading-tight">{schGeneral.schoolName}</p>
+   348→                      {schGeneral.affiliation && <p className="text-[9px] text-muted-foreground mt-0.5">{schGeneral.affiliation}</p>}
+   349→                    </div>
+   350→                    <div className="text-right shrink-0">
+   351→                      <p className="text-[8px] uppercase tracking-[0.18em] text-muted-foreground">Form No.</p>
+   352→                      <p className="text-[10px] font-mono font-semibold">APPF-{app.id.slice(-8).toUpperCase()}</p>
+   353→                      <p className="text-[8px] uppercase tracking-[0.18em] text-muted-foreground mt-1">Session</p>
+   354→                      <p className="text-[10px] font-semibold">{app.academicYear}</p>
+   355→                    </div>
+   356→                  </div>
+   357→                  <p className="mt-2 text-[8.5px] uppercase tracking-[0.2em] text-muted-foreground">Official {formPurposeOf(app)} Form · {app.category}</p>
+   358→                  <p className="text-sm font-bold leading-tight mt-0.5">{app.title}</p>
+   359→                </div>
+   360→
+   361→                {/* ── Activity details (read-only) ── */}
+   362→                <section className="rounded-lg border border-border px-3.5 py-3">
+   363→                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">1. {isTour ? 'Tour' : 'Activity'} details</p>
+   364→                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+   365→                    {app.destination && <Particular icon={<Bus className="h-3 w-3" />} label="Destination" value={app.destination} />}
+   366→                    <Particular icon={<CalendarDays className="h-3 w-3" />} label={isTour ? 'Tour date' : 'Event date'} value={app.eventDate ? formatDate(app.eventDate) : 'To be announced'} />
+   367→                    <Particular icon={<CalendarDays className="h-3 w-3" />} label="Last date to apply" value={formatDate(app.deadline)} />
+   368→                    <Particular icon={<Landmark className="h-3 w-3" />} label="Fee per student" value={needsPayment ? `${formatINR(amount)}${app.payment.mode === 'Optional' ? ' (optional)' : ''}` : 'Free'} />
+   369→                    <Particular icon={<Users className="h-3 w-3" />} label="Teacher in-charge" value={app.inChargeName ?? 'To be assigned'} />
+   370→                  </div>
+   371→                  {app.description && (
+   372→                    <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground border-l-2 border-border pl-2.5">{app.description}</p>
+   373→                  )}
+   374→                </section>
+   375→
+   376→                {/* ── Student particulars (read-only, canonical record — §20/§21
+   377→                    minimal set: only what the form needs; DOB/blood group stay
+   378→                    in the school record) ── */}
+   379→                <section className="rounded-lg border border-border bg-muted/25 px-3.5 py-3">
+   380→                  <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+   381→                    <User className="h-3 w-3" /> 2. Student particulars
+   382→                  </p>
+   383→                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+   384→                    <Particular label="Name" value={identity.canonical.name} />
+   385→                    <Particular label="Admission no." value={identity.canonical.admissionNo} mono />
+   386→                    <Particular label="Class / Section" value={`${identity.canonical.className} — ${identity.canonical.section}`} />
+   387→                    <Particular label="Roll no." value={identity.canonical.rollNo} />
+   388→                  </div>
+   389→                  <p className="mt-2 text-[9.5px] text-muted-foreground">Taken from the school record — corrections go through the office.</p>
+   390→                </section>
+   391→
+   392→                {/* ── Guardian details (read-only) ── */}
+   393→                <section className="rounded-lg border border-border bg-muted/25 px-3.5 py-3">
+   394→                  <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+   395→                    <Users className="h-3 w-3" /> 3. Parent / guardian details
+   396→                  </p>
+   397→                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+   398→                    <Particular label="Guardian name" value={identity.canonical.guardianName} />
+   399→                    <Particular label="Guardian phone" value={identity.canonical.guardianPhone} />
+   400→                  </div>
+   401→                </section>
+   402→
+   403→                {/* ── Form questions (editable), grouped by section ── */}
+   404→                {(() => {
+   405→                  const groups = new Map<string, typeof app.formFields>()
+   406→                  for (const f of app.formFields) {
+   407→                    const key = f.section ?? 'Additional Questions'
+   408→                    const arr = groups.get(key) ?? []
+   409→                    arr.push(f)
+   410→                    groups.set(key, arr)
+   411→                  }
+   412→                  let sectionNo = 3
+   413→                  return Array.from(groups.entries()).map(([section, fields]) => {
+   414→                    sectionNo += 1
+   415→                    return (
+   416→                      <section key={section} className="space-y-3.5">
+   417→                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{sectionNo}. {section}</p>
+   418→                        {fields.map((f) => (
+   419→                          <FieldRenderer
+   420→                            key={f.id}
+   421→                            field={f}
+   422→                            value={answers[f.id]}
+   423→                            attachment={attachments[f.id]}
+   424→                            emergency={emergency[f.id] ?? { name: '', phone: '' }}
+   425→                            error={errors[f.id]}
+   426→                            onAnswer={(v) => {
+   427→                              setAnswers((prev) => ({ ...prev, [f.id]: v }))
+   428→                              setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
+   429→                            }}
+   430→                            onEmergency={(v) => {
+   431→                              setEmergency((prev) => ({ ...prev, [f.id]: v }))
+   432→                              setAnswers((prev) => ({ ...prev, [f.id]: [v.name.trim(), v.phone.trim()].filter(Boolean).join(EM_DASH) }))
+   433→                              setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
+   434→                            }}
+   435→                            onAttachment={(file) => {
+   436→                              setAttachments((prev) => {
+   437→                                const next = { ...prev }
+   438→                                if (file) next[f.id] = { name: file.name, size: file.size }
+   439→                                else delete next[f.id]
+   440→                                return next
+   441→                              })
+   442→                              setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
+   443→                            }}
+   444→                          />
+   445→                        ))}
+   446→                      </section>
+   447→                    )
+   448→                  })
+   449→                })()}
+   450→
+   451→                {/* ── Declaration & consent ── */}
+   452→                <section className="rounded-lg border border-border px-3.5 py-3">
+   453→                  <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+   454→                    <ShieldCheck className="h-3 w-3" /> Declaration &amp; guardian consent
+   455→                  </p>
+   456→                  <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
+   457→                    The particulars above are taken from the school record. All tour-specific information furnished is true to the best of my knowledge.
+   458→                  </p>
+   459→                  {app.guardianConsent.required && (
+   460→                    app.guardianConsent.method === 'Digital' ? (
+   461→                      <label
+   462→                        className={cn(
+   463→                          'mt-2 flex items-start gap-2.5 rounded-md p-2 -m-2 cursor-pointer',
+   464→                          errors.consent && 'ring-1 ring-rose-300 rounded-md',
+   465→                        )}
+   466→                      >
+   467→                        <Checkbox
+   468→                          checked={consentAccepted}
+   469→                          onCheckedChange={(c) => {
+   470→                            setConsentAccepted(c === true)
+   471→                            setErrors((prev) => { if (!prev.consent) return prev; const next = { ...prev }; delete next.consent; return next })
+   472→                          }}
+   473→                          className="mt-0.5"
+   474→                          aria-label="Guardian consent"
+   475→                        />
+   476→                        <span className="text-xs leading-relaxed">
+   477→                          {app.guardianConsent.statement ?? 'I give consent for my ward to participate.'}
+   478→                          <span className="block text-[9.5px] text-muted-foreground mt-0.5">
+   479→                            Tick to record digital consent from the guardian.
+   480→                          </span>
+   481→                        </span>
+   482→                      </label>
+   483→                    ) : (
+   484→                      <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+   485→                        <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
+   486→                        Consent is captured by the guardian&apos;s signature on the printed form handed to the school office.
+   487→                      </p>
+   488→                    )
+   489→                  )}
+   490→                  {errors.consent && <p className="mt-1 text-[10px] font-medium text-rose-600">{errors.consent}</p>}
+   491→                </section>
+   492→
+   493→                {app.physicalSignatureRequired && (
+   494→                  <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+   495→                    <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
+   496→                    After submitting, print the application from <span className="font-medium text-foreground">My submissions</span>, have the guardian sign it and hand it to the school office.
+   497→                  </p>
+   498→                )}
+   499→              </div>
+   500→            ) : step === 'review' ? (
+   501→              /* ── Review step — compact REVIEW APPLICATION before submit ── */
+   502→              <div className="min-h-0 flex-1 overflow-y-auto space-y-3 py-1">
+   503→                <div className="rounded-lg border border-border bg-card px-4 py-3.5">
+   504→                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Review application</p>
+   505→                  <div className="mt-2.5 space-y-1.5 text-xs">
+   506→                    <ReviewRow label="Student" value={identity.canonical.name} />
+   507→                    <ReviewRow label="Class" value={`${identity.canonical.className} — ${identity.canonical.section}`} />
+   508→                    <ReviewRow label="Tour" value={app.title} />
+   509→                    <ReviewRow label="Destination" value={app.destination ?? '—'} />
+   510→                    <ReviewRow label="Tour date" value={app.eventDate ? formatDate(app.eventDate) : 'To be announced'} />
+   511→                    <ReviewRow label="Fee" value={needsPayment ? formatINR(amount) : 'Free'} />
+   512→                  </div>
+   513→                </div>
+   514→                <p className="px-1 text-[10.5px] leading-relaxed text-muted-foreground">
+   515→                  Your school record particulars travel with this application as a permanent snapshot. Tour preferences you entered are saved with the submission — the master student record is not modified.
+   516→                </p>
+   517→                {app.physicalSignatureRequired && (
+   518→                  <p className="mx-1 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+   519→                    <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
+   520→                    After submitting, print the application from My submissions, have the guardian sign it and hand it to the school office.
+   521→                  </p>
+   522→                )}
+   523→              </div>
+   524→            ) : (
+   525→              <div className="min-h-0 flex-1 overflow-y-auto space-y-3 py-1">
+   526→                <div className="rounded-lg border border-border bg-muted/25 px-4 py-3.5">
+   527→                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Tour fee payable</p>
+   528→                  <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight">{formatINR(amount)}</p>
+   529→                  <p className="mt-1 text-[11px] text-muted-foreground">{app.payment.feeHeadLabel || app.title}</p>
+   530→                  <p className="mt-1.5 text-[10px] text-muted-foreground">
+   531→                    Collected separately from your annual fees via Fee Management — this payment is linked to this application only.
+   532→                  </p>
+   533→                </div>
+   534→
+   535→                {app.payment.chargeId ? (
+   536→                  <div className="grid gap-2">
+   537→                    <button
+   538→                      type="button"
+   539→                      onClick={() => runPayment('UPI')}
+   540→                      disabled={paying !== null}
+   541→                      className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
+   542→                    >
+   543→                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+   544→                        <CreditCard className="h-4 w-4" />
+   545→                      </span>
+   546→                      <span className="min-w-0 flex-1">
+   547→                        <span className="block text-xs font-semibold">Pay online — {formatINR(amount)}</span>
+   548→                        <span className="block text-[10px] text-muted-foreground">UPI · confirms instantly with a receipt</span>
+   549→                      </span>
+   550→                      {paying === 'UPI' && <span className="text-[10px] font-medium text-primary animate-pulse">Processing…</span>}
+   551→                    </button>
+   552→                    <button
+   553→                      type="button"
+   554→                      onClick={() => runPayment('Cash')}
+   555→                      disabled={paying !== null}
+   556→                      className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
+   557→                    >
+   558→                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+   559→                        <Banknote className="h-4 w-4" />
+   560→                      </span>
+   561→                      <span className="min-w-0 flex-1">
+   562→                        <span className="block text-xs font-semibold">Cash / Pay at school — {formatINR(amount)}</span>
+   563→                        <span className="block text-[10px] text-muted-foreground">Recorded now; the Principal verifies it in the payments queue</span>
+   564→                      </span>
+   565→                      {paying === 'Cash' && <span className="text-[10px] font-medium text-primary animate-pulse">Recording…</span>}
+   566→                    </button>
+   567→                  </div>
+   568→                ) : (
+   569→                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+   570→                    This form is not linked to a fee-ledger charge yet, so self-service payment is unavailable. Please pay at the school office.
+   571→                  </p>
+   572→                )}
+   573→              </div>
+   574→            )}
+   575→
+   576→            <DialogFooter className="shrink-0 border-t border-border pt-3 mt-1">
+   577→              {step === 'form' ? (
+   578→                <>
+   579→                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={closeDialog} disabled={submitting}>
+   580→                    Cancel
+   581→                  </Button>
+   582→                  <Button size="sm" className="h-8 text-xs" onClick={() => { if (validate()) setStep('review') }}>
+   583→                    Review Application
+   584→                  </Button>
+   585→                </>
+   586→              ) : step === 'review' ? (
+   587→                <>
+   588→                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setStep('form')} disabled={submitting}>
+   589→                    Back to form
+   590→                  </Button>
+   591→                  <Button size="sm" className="h-8 text-xs" onClick={handleSubmit} disabled={submitting}>
+   592→                    <CheckCircle2 className="h-3.5 w-3.5" />
+   593→                    {submitting ? 'Submitting…' : 'Submit Application'}
+   594→                  </Button>
+   595→                </>
+   596→              ) : (
+   597→                <div className="flex w-full items-center justify-between gap-2">
+   598→                  {app.payment.mode === 'Optional' ? (
+   599→                    <button type="button" onClick={skipPayment} className="text-[11px] font-medium text-muted-foreground underline-offset-2 hover:underline">
+   600→                      Skip for now
+   601→                    </button>
+   602→                  ) : (
+   603→                    <span className="text-[10px] text-muted-foreground">You can also pay later from My submissions.</span>
+   604→                  )}
+   605→                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={closeDialog}>
+   606→                    Close
+   607→                  </Button>
+   608→                </div>
+   609→              )}
+   610→            </DialogFooter>
+   611→          </>
+   612→        )}
+   613→      </DialogContent>
+   614→    </Dialog>
+   615→  )
+   616→}
+   617→
+   618→// ── Small pieces ───────────────────────────────────────────────────────
+   619→
+   620→function Particular({ label, value, mono, icon }: { label: string; value: string; mono?: boolean; icon?: React.ReactNode }) {
+   621→  return (
+   622→    <div className="min-w-0">
+   623→      <p className="text-[9px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">{icon}{label}</p>
+   624→      <p className={cn('truncate font-medium text-foreground', mono && 'font-mono text-[10.5px]')}>{value || '—'}</p>
+   625→    </div>
+   626→  )
+   627→}
+   628→
+   629→function ErrorLine({ msg }: { msg?: string }) {
+   630→  if (!msg) return null
+   631→  return <p className="mt-1 text-[10px] font-medium text-rose-600">{msg}</p>
+   632→}
+   633→
+   634→function ReviewRow({ label, value }: { label: string; value: string }) {
+   635→  return (
+   636→    <div className="flex items-center justify-between gap-3 border-b border-dashed border-border/50 pb-1.5 last:border-b-0">
+   637→      <span className="text-muted-foreground shrink-0">{label}</span>
+   638→      <span className="font-medium text-right truncate">{value}</span>
+   639→    </div>
+   640→  )
+   641→}
+   642→
+   643→interface FieldRendererProps {
+   644→  field: ApplicationFormField
+   645→  value: Answers[string]
+   646→  attachment?: { name: string; size: number }
+   647→  emergency: { name: string; phone: string }
+   648→  error?: string
+   649→  onAnswer: (v: Answers[string]) => void
+   650→  onEmergency: (v: { name: string; phone: string }) => void
+   651→  onAttachment: (file: File | null) => void
+   652→}
+   653→
+   654→function FieldRenderer({ field, value, attachment, emergency, error, onAnswer, onEmergency, onAttachment }: FieldRendererProps) {
+   655→  const toggleOption = (opt: string) => {
+   656→    const current = Array.isArray(value) ? value : []
+   657→    onAnswer(current.includes(opt) ? current.filter((o) => o !== opt) : [...current, opt])
+   658→  }
+   659→
+   660→  return (
+   661→    <div>
+   662→      <Label className="text-xs font-medium">
+   663→        {field.label}
+   664→        {field.required && <span className="text-rose-500 ml-0.5">*</span>}
+   665→      </Label>
+   666→      {field.helpText && <p className="mt-0.5 text-[10px] text-muted-foreground">{field.helpText}</p>}
+   667→
+   668→      <div className="mt-1.5">
+   669→        {field.type === 'text' && (
+   670→          <Input
+   671→            type="text"
+   672→            value={typeof value === 'string' ? value : ''}
+   673→            onChange={(e) => onAnswer(e.target.value)}
+   674→            className="h-8 text-xs"
+   675→            aria-label={field.label}
+   676→          />
+   677→        )}
+   678→
+   679→        {field.type === 'number' && (
+   680→          <Input
+   681→            type="number"
+   682→            value={typeof value === 'string' ? value : ''}
+   683→            onChange={(e) => onAnswer(e.target.value)}
+   684→            className="h-8 text-xs"
+   685→            aria-label={field.label}
+   686→          />
+   687→        )}
+   688→
+   689→        {/* Compact pop-over date picker (Examination-module pattern) — never
+   690→            the oversized native date input. */}
+   691→        {field.type === 'date' && (
+   692→          <DatePicker
+   693→            compact
+   694→            value={typeof value === 'string' ? value : ''}
+   695→            onChange={(v) => onAnswer(v)}
+   696→            placeholder="Select date"
+   697→          />
+   698→        )}
+   699→
+   700→        {field.type === 'longtext' && (
+   701→          <Textarea
+   702→            value={typeof value === 'string' ? value : ''}
+   703→            onChange={(e) => onAnswer(e.target.value)}
+   704→            rows={3}
+   705→            className="text-xs min-h-[64px]"
+   706→            aria-label={field.label}
+   707→          />
+   708→        )}
+   709→
+   710→        {field.type === 'dropdown' && (
+   711→          <Select value={typeof value === 'string' ? value : ''} onValueChange={(v) => onAnswer(v)}>
+   712→            <SelectTrigger className="h-8 text-xs" aria-label={field.label}><SelectValue placeholder="Select…" /></SelectTrigger>
+   713→            <SelectContent className="z-[70]">
+   714→              {(field.options ?? []).map((opt) => (
+   715→                <SelectItem key={opt} value={opt} className="text-xs">{opt}</SelectItem>
+   716→              ))}
+   717→            </SelectContent>
+   718→          </Select>
+   719→        )}
+   720→
+   721→        {field.type === 'radio' && (
+   722→          <RadioGroup
+   723→            value={typeof value === 'string' ? value : ''}
+   724→            onValueChange={(v) => onAnswer(v)}
+   725→            className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1.5"
+   726→            aria-label={field.label}
+   727→          >
+   728→            {(field.options ?? []).map((opt) => (
+   729→              <label key={opt} className="flex cursor-pointer items-center gap-1.5 text-xs">
+   730→                <RadioGroupItem value={opt} className="h-3.5 w-3.5" />
+   731→                {opt}
+   732→              </label>
+   733→            ))}
+   734→          </RadioGroup>
+   735→        )}
+   736→
+   737→        {(field.type === 'checkbox' || field.type === 'multiselect') && (
+   738→          <div className="flex flex-wrap gap-1.5">
+   739→            {(field.options ?? []).map((opt) => {
+   740→              const active = Array.isArray(value) && value.includes(opt)
+   741→              return (
+   742→                <button
+   743→                  key={opt}
+   744→                  type="button"
+   745→                  onClick={() => toggleOption(opt)}
+   746→                  aria-pressed={active}
+   747→                  className={cn(
+   748→                    'rounded-full border px-2.5 py-1 text-[11px] transition-colors',
+   749→                    active
+   750→                      ? 'border-primary/40 bg-primary/10 text-primary font-medium'
+   751→                      : 'border-border text-muted-foreground hover:bg-muted/60',
+   752→                  )}
+   753→                >
+   754→                  {opt}
+   755→                </button>
+   756→              )
+   757→            })}
+   758→          </div>
+   759→        )}
+   760→
+   761→        {field.type === 'yesno' && (
+   762→          <RadioGroup
+   763→            value={typeof value === 'boolean' ? (value ? 'yes' : 'no') : ''}
+   764→            onValueChange={(v) => onAnswer(v === 'yes')}
+   765→            className="mt-0.5 flex gap-x-4"
+   766→            aria-label={field.label}
+   767→          >
+   768→            <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+   769→              <RadioGroupItem value="yes" className="h-3.5 w-3.5" /> Yes
+   770→            </label>
+   771→            <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+   772→              <RadioGroupItem value="no" className="h-3.5 w-3.5" /> No
+   773→            </label>
+   774→          </RadioGroup>
+   775→        )}
+   776→
+   777→        {field.type === 'file' && (
+   778→          attachment ? (
+   779→            <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5">
+   780→              <span className="flex min-w-0 items-center gap-1.5 text-[11px]">
+   781→                <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+   782→                <span className="truncate font-medium">{attachment.name}</span>
+   783→                <span className="shrink-0 text-muted-foreground">({Math.max(1, Math.round(attachment.size / 1024))} KB)</span>
+   784→              </span>
+   785→              <button type="button" onClick={() => onAttachment(null)} aria-label="Remove file" className="shrink-0 text-muted-foreground hover:text-rose-600">
+   786→                <Trash2 className="h-3.5 w-3.5" />
+   787→              </button>
+   788→            </div>
+   789→          ) : (
+   790→            <input
+   791→              type="file"
+   792→              onChange={(e) => onAttachment(e.target.files?.[0] ?? null)}
+   793→              className="block w-full cursor-pointer rounded-md border border-input bg-transparent px-2 py-1.5 text-[11px] file:mr-2 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-[11px] file:font-medium hover:file:bg-muted/70"
+   794→              aria-label={field.label}
+   795→            />
+   796→          )
+   797→        )}
+   798→
+   799→        {field.type === 'emergency-contact' && (
+   800→          <div className="grid grid-cols-2 gap-2">
+   801→            <Input
+   802→              value={emergency.name}
+   803→              onChange={(e) => onEmergency({ ...emergency, name: e.target.value })}
+   804→              placeholder="Contact name"
+   805→              className="h-8 text-xs"
+   806→              aria-label={`${field.label} — name`}
+   807→            />
+   808→            <Input
+   809→              value={emergency.phone}
+   810→              onChange={(e) => onEmergency({ ...emergency, phone: e.target.value })}
+   811→              placeholder="Phone number"
+   812→              className="h-8 text-xs"
+   813→              aria-label={`${field.label} — phone`}
+   814→            />
+   815→          </div>
+   816→        )}
+   817→
+   818→        {field.type === 'signature' && (
+   819→          <div className="rounded-md border border-dashed border-border bg-muted/25 px-3 py-2.5">
+   820→            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   821→              <Info className="h-3.5 w-3.5 shrink-0" />
+   822→              Signed physically on the printed form.
+   823→            </p>
+   824→            <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+   825→              <Checkbox
+   826→                checked={value === true}
+   827→                onCheckedChange={(c) => onAnswer(c === true)}
+   828→                className="mt-px"
+   829→                aria-label={field.label}
+   830→              />
+   831→              I understand a physical signature is required
+   832→            </label>
+   833→          </div>
+   834→        )}
+   835→
+   836→        {field.type === 'declaration' && (
+   837→          <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-dashed border-border px-3 py-2.5">
+   838→            <Checkbox
+   839→              checked={value === true}
+   840→              onCheckedChange={(c) => onAnswer(c === true)}
+   841→              className="mt-0.5"
+   842→              aria-label={field.label}
+   843→            />
+   844→            <span className="text-xs leading-relaxed">
+   845→              {field.label}
+   846→              {field.helpText && <span className="block text-[9.5px] text-muted-foreground mt-0.5">{field.helpText}</span>}
+   847→            </span>
+   848→          </label>
+   849→        )}
+   850→      </div>
+   851→      <ErrorLine msg={error} />
+   852→    </div>
+   853→  )
+   854→}
+   855→

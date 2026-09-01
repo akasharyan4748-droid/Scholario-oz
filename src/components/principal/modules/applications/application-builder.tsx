@@ -172,6 +172,14 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
   const updateApplication = useApplicationsStore((s) => s.updateApplication)
   const teachers = useTeachersOptions()
   const publishedMoneyLocked = editing?.status === 'Published'
+  // PART 7 — structural safe-edit lock: a published form that has already
+  // received responses must never silently change its question set (the
+  // historical answers would dangle). Safe fields (title/description/
+  // deadline) stay editable.
+  const editingResponseCount = useApplicationsStore(
+    (s) => (editing ? s.submissions.filter((sub) => sub.applicationId === editing.id && sub.status !== 'Withdrawn').length : 0),
+  )
+  const questionsLocked = editing?.status === 'Published' && editingResponseCount > 0
 
   const [form, setForm] = useState<BuilderResult>(() => editing ? fromApp(editing) : freshDraft(fixedInCharge))
 
@@ -615,19 +623,32 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
         </div>
       </div>
 
-      {/* 6 — Form questions (editable §28: template pre-fills, Principal edits) */}
+      {/* 6 — Form questions (editable §28: template pre-fills, Principal edits.
+            PART 7: locked while a published form holds responses — the
+            historical answers must never dangle) */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Form Questions</p>
           <Badge variant="outline" className="text-[9px] h-4 px-1.5">{form.formFields.length} question{form.formFields.length === 1 ? '' : 's'}</Badge>
         </div>
-        <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 text-[10px] text-muted-foreground">
-          <Users className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-          <span>
-            Student particulars (name, admission no., class/section, guardian details) are captured
-            automatically from the school record at submission — applicants never re-type them, and they cannot edit the master record here.
-          </span>
-        </div>
+        {questionsLocked ? (
+          <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-[10px] text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/20">
+            <Lock className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>
+              <span className="font-semibold">Questions are locked</span> — {editingResponseCount} response{editingResponseCount === 1 ? '' : 's'} already
+              received; removing or re-typing a question would invalidate them. Title, description, deadline and other safe
+              details stay editable. Duplicate this form to build a new question set.
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 text-[10px] text-muted-foreground">
+            <Users className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>
+              Student particulars (name, admission no., class/section, guardian details) are captured
+              automatically from the school record at submission — applicants never re-type them, and they cannot edit the master record here.
+            </span>
+          </div>
+        )}
         <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
           {form.formFields.map((f) => {
             const options = f.options?.length ? ` · ${f.options.join(' / ')}` : ''
@@ -641,14 +662,16 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
                   <p className="text-[10px] text-muted-foreground">{f.section}{options}{f.helpText ? ` · ${f.helpText}` : ''}</p>
                 </div>
                 <Badge variant="outline" className="text-[8px] h-4 px-1.5 shrink-0 uppercase">{f.type === 'emergency-contact' ? 'name + phone' : f.type}</Badge>
-                <button
-                  type="button"
-                  onClick={() => patch({ formFields: form.formFields.filter((x) => x.id !== f.id) })}
-                  className="shrink-0 h-6 w-6 rounded-md text-muted-foreground/60 hover:text-rose-600 hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                  aria-label={`Remove question ${f.label}`}
-                >
-                  <Trash2 className="h-3 w-3 mx-auto" />
-                </button>
+                {!questionsLocked && (
+                  <button
+                    type="button"
+                    onClick={() => patch({ formFields: form.formFields.filter((x) => x.id !== f.id) })}
+                    className="shrink-0 h-6 w-6 rounded-md text-muted-foreground/60 hover:text-rose-600 hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    aria-label={`Remove question ${f.label}`}
+                  >
+                    <Trash2 className="h-3 w-3 mx-auto" />
+                  </button>
+                )}
               </div>
             )
           })}
@@ -658,7 +681,7 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
             </p>
           )}
         </div>
-        <AddQuestionRow onAdd={(field) => patch({ formFields: [...form.formFields, field] })} />
+        {!questionsLocked && <AddQuestionRow onAdd={(field) => patch({ formFields: [...form.formFields, field] })} />}
       </div>
     </div>
   )

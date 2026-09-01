@@ -1,0 +1,1578 @@
+APPLICATIONS & FORMS — FINAL PRODUCTION IMPLEMENTATION
+=======================================================
+
+We need to properly finish and redesign the Applications & Forms system in SCHOLARIO-OS.
+
+This is NOT just a UI polish task.
+
+The current implementation has three major problems:
+
+1. Form lifecycle is incomplete.
+2. Draft forms cannot be properly deleted/published.
+3. The actual application/consent document is still not implemented to the required professional A4 single-page standard.
+
+You must inspect the existing implementation, routes, components, database/schema, form relationships, collections, responses, permissions and existing UI before making changes.
+
+Do not create a disconnected mock implementation.
+Do not hardcode a separate demo system.
+Do not replace existing data with fake data.
+
+Reuse and improve the existing architecture.
+
+=======================================================
+PART 1 — APPLICATIONS & FORMS IS A GENERIC SYSTEM
+=======================================================
+
+Applications & Forms is NOT an Educational Tours module.
+
+Educational Tour is only ONE possible use case.
+
+The system must support things such as:
+
+- Educational Tour Consent
+- Sports Participation Consent
+- Competition Registration
+- Workshop Registration
+- Event Registration
+- Parent Consent
+- Student Declaration
+- General Application
+- Permission Form
+- Other school-created forms
+
+Therefore:
+
+DO NOT use "Tours" terminology globally.
+
+Do NOT use:
+
+"New Educational Tour"
+
+as the main creation action.
+
+Use:
+
+"+ New Form"
+
+The page description should remain generic, for example:
+
+"Create and manage school applications, registrations and consent forms"
+
+The form title/type should determine what the individual form is about.
+
+=======================================================
+PART 2 — FORM LIFECYCLE
+=======================================================
+
+Every newly created form MUST start as:
+
+DRAFT
+
+Never publish automatically.
+
+Correct lifecycle:
+
+CREATE
+↓
+DRAFT
+↓
+EDIT
+↓
+PREVIEW
+↓
+PUBLISH
+↓
+OPEN / ACTIVE
+↓
+CLOSE
+↓
+ARCHIVE
+
+A newly created form must never immediately become active.
+
+=======================================================
+PART 3 — DRAFT ACTIONS
+=======================================================
+
+For a DRAFT form, the Principal must have:
+
+- Edit
+- Preview
+- Publish
+- Duplicate as new draft
+- Delete draft
+
+The Principal must be able to delete a draft because mistakes happen.
+
+Example:
+
+Principal creates a form.
+
+Realizes:
+
+"Wrong fee"
+"Wrong date"
+"Wrong form"
+"Created by mistake"
+
+They should be able to simply delete the draft.
+
+Do NOT force them to publish first.
+
+Do NOT hide delete inside some unrelated settings screen.
+
+=======================================================
+PART 4 — DELETE DRAFT
+=======================================================
+
+When deleting a draft, use a proper confirmation dialog.
+
+Title:
+
+Delete draft?
+
+Message:
+
+"This form has not been published. Deleting it will permanently remove this draft."
+
+Actions:
+
+Cancel
+Delete Draft
+
+Actually delete the draft from the backend/database.
+
+Do not merely hide it from the UI.
+
+Do not use browser alert() unless the existing application architecture absolutely requires it.
+
+=======================================================
+PART 5 — PUBLISHED FORMS
+=======================================================
+
+Once published, destructive deletion must NOT be available.
+
+Published forms can contain:
+
+- responses
+- consent records
+- signatures
+- payment relationships
+- student information
+- historical records
+
+Therefore:
+
+PUBLISHED / OPEN:
+- View
+- Preview
+- Edit where safe
+- Close
+- Duplicate as new draft
+
+CLOSED:
+- View
+- Preview
+- Duplicate as new draft
+- Archive
+
+ARCHIVED:
+- View
+- Duplicate as new draft
+
+Do NOT expose Delete for published/closed/archived forms.
+
+=======================================================
+PART 6 — PUBLISH
+=======================================================
+
+A Draft must have a clear Publish action.
+
+The Principal should be able to:
+
+Save Draft
+Preview
+Publish
+
+Publishing should actually persist the status.
+
+On publish:
+
+DRAFT → OPEN/PUBLISHED
+
+After publishing:
+
+- form becomes available according to existing access/sharing rules
+- responses can be submitted
+- linked payment/collection functionality becomes active where applicable
+- Delete disappears
+
+Show a confirmation before publishing if appropriate:
+
+"Publish form?"
+
+"Once published, this form can be shared with students/parents and cannot be permanently deleted."
+
+Buttons:
+
+Cancel
+Publish Form
+
+=======================================================
+PART 7 — SAFE EDITING
+=======================================================
+
+Draft forms:
+
+Fully editable.
+
+Published forms:
+
+Allow safe edits.
+
+If responses already exist, prevent structural edits that could invalidate historical responses.
+
+For example:
+
+A field that has already received responses should not be silently deleted or changed into a different field type.
+
+If an edit is unsafe, clearly explain:
+
+"This field cannot be changed because responses have already been received."
+
+Never corrupt historical responses.
+
+=======================================================
+PART 8 — APPLICATIONS & FORMS LIST
+=======================================================
+
+The current table is directionally correct, but make it a proper generic form-management table.
+
+Columns:
+
+FORM
+TYPE
+IN-CHARGE
+DEADLINE
+RESPONSES
+PAYMENT
+STATUS
+ACTIONS
+
+Example:
+
+Educational Tour — Jaipur
+Consent
+Rohan Mehta
+15 Sep 2026
+4
+₹0 collected / ₹10,000 expected
+Open
+
+The first column should show the actual form title.
+
+Do not make everything appear as a tour.
+
+=======================================================
+PART 9 — ACTION MENU MUST BE STATE-AWARE
+=======================================================
+
+CURRENT PROBLEM:
+
+The Actions menu currently only has:
+
+View details
+Duplicate as new draft
+
+That is insufficient.
+
+Implement:
+
+DRAFT:
+- Edit
+- Preview
+- Publish
+- Duplicate as new draft
+- Delete draft
+
+OPEN / PUBLISHED:
+- View details
+- Preview
+- Edit
+- Close
+- Duplicate as new draft
+
+CLOSED:
+- View details
+- Preview
+- Duplicate as new draft
+- Archive
+
+ARCHIVED:
+- View details
+- Duplicate as new draft
+
+Do not show invalid actions.
+
+=======================================================
+PART 10 — FORM CREATION
+=======================================================
+
+"+ New Form" should open a proper creation flow.
+
+Every new form begins as DRAFT.
+
+Principal can configure:
+
+- Form title
+- Form type
+- Description
+- Deadline
+- Session
+- Target students/classes
+- Fields
+- Required/optional fields
+- Consent requirement
+- Signature requirement
+- Payment requirement
+- Optional linked collection
+- Submission rules
+
+At the end:
+
+Save Draft
+Preview
+Publish
+
+Do NOT auto-publish.
+
+=======================================================
+PART 11 — ACTUAL FORM EXPERIENCE
+=======================================================
+
+The existing application/consent form implementation is NOT acceptable.
+
+There is currently a web-style/multi-page form experience that does not match the required final product.
+
+Replace/improve it.
+
+There should be two distinct experiences:
+
+A. ONLINE FORM / SUBMISSION EXPERIENCE
+B. OFFICIAL A4 DOCUMENT / PRINT PREVIEW
+
+They are NOT the same thing.
+
+-------------------------------------------------------
+A. ONLINE FORM
+-------------------------------------------------------
+
+The online form should be simple and easy for a parent/student to complete.
+
+Use only the fields required by that specific form.
+
+Do not dump the entire student profile into every form.
+
+If student information already exists in SCHOLARIO, prefill it where appropriate.
+
+For example:
+
+Student Name
+Admission Number
+Class
+Section
+
+can be automatically populated when known.
+
+Do not ask the parent to manually type information the school already has unless there is a genuine reason.
+
+-------------------------------------------------------
+B. OFFICIAL A4 DOCUMENT
+-------------------------------------------------------
+
+This is the most important part.
+
+The submitted form must be representable as an official school document.
+
+The document MUST be:
+
+- A4 portrait
+- single page for normal forms
+- print-ready
+- PDF-ready
+- professionally typeset
+- clean
+- formal
+- restrained
+- readable
+- suitable for school records
+
+It should look like a professionally prepared Microsoft Word school proforma.
+
+It should NOT look like a SaaS dashboard.
+
+=======================================================
+PART 12 — VERY IMPORTANT: REFERENCE CODE
+=======================================================
+
+I am providing the following React code as a REFERENCE.
+
+READ IT CAREFULLY.
+
+It represents the general visual direction and document hierarchy I want.
+
+However:
+
+DO NOT COPY THIS CODE LITERALLY.
+
+DO NOT REPRODUCE THIS DOCUMENT EXACTLY.
+
+DO NOT TREAT ITS FIELDS AS MANDATORY.
+
+DO NOT HARD-CODE ITS SCHOOL NAME, STUDENT, TOUR, DATES, FEES OR CONTACT INFORMATION.
+
+DO NOT COPY every border, line, box, icon or section.
+
+Instead:
+
+USE IT AS A DESIGN REFERENCE.
+
+The most useful part of the reference is the overall concept:
+
+- professional school identity/header at the top
+- school name and affiliation
+- document title
+- activity/form information
+- student/parent details
+- concise declaration
+- signature area
+- A4 print layout
+- formal Word-like document hierarchy
+
+The HEADER / TOP PORTION of the reference is a particularly useful visual direction.
+
+However, the area BELOW the header must be redesigned better.
+
+The current reference uses too many borders, horizontal lines, boxed sections and visual separators.
+
+I DO NOT want the final SCHOLARIO document to become a collection of boxes.
+
+The final document should feel cleaner and more naturally typeset.
+
+Use:
+
+- typography
+- whitespace
+- alignment
+- subtle table structure where actually useful
+- restrained separators
+- proper hierarchy
+
+instead of putting a border around everything.
+
+Think:
+
+"professional school office document created in Microsoft Word"
+
+NOT:
+
+"web UI converted into PDF"
+
+=======================================================
+REFERENCE CODE — STUDY THIS, DO NOT COPY IT LITERALLY
+=======================================================
+
+[PASTE THE FOLLOWING REFERENCE CODE BELOW THIS LINE]
+
+-------------------------------------------------------
+
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  School,
+  Printer,
+  Edit3,
+  CheckCircle2,
+  PenTool,
+  RotateCcw,
+  Eye,
+  Phone,
+  User,
+  Heart,
+  Calendar,
+  MapPin
+} from 'lucide-react';
+
+export default function App() {
+  const [isEditing, setIsEditing] = useState(false);
+  const [signatureType, setSignatureType] = useState('draw'); // 'draw' | 'type'
+  const [typedSign, setTypedSign] = useState('Vikram Sharma');
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
+  const canvasRef = useRef(null);
+
+  // Standard Indian School Tour Consent Data
+  const [slipData, setSlipData] = useState({
+    // School Details
+    schoolName: "DELHI PUBLIC HERITAGE SENIOR SECONDARY SCHOOL",
+    schoolAffiliation: "Affiliated to CBSE, New Delhi | Affiliation No. 2130894",
+    schoolAddress: "Sector 14, Institutional Area, Ring Road, New Delhi - 110075",
+    refNo: "DPHS/TOUR/2026-27/CIR-09",
+    circularDate: "02-09-2026",
+
+    // Excursion Details
+    destination: "Jaipur – Jodhpur – Jaisalmer (Rajasthan)",
+    tourDates: "18th Oct to 23rd Oct 2026 (5 Nights / 6 Days)",
+    charges: "₹ 14,500/- per student",
+    teacherIncharge: "Dr. R. Sharma & Mrs. S. Menon (Vice Principal)",
+
+    // Student & Parent Details
+    studentName: "AARAV SHARMA",
+    admNo: "2021-8842",
+    gradeClass: "Class X",
+    section: "Section B",
+    rollNo: "24",
+    bloodGroup: "B+",
+    parentName: "Mr. Vikram Sharma",
+    parentRelation: "Father",
+    parentPhone: "9811223344",
+    alternatePhone: "9899887766 (Mother)",
+    residentialAddress: "Flat 402, Royal Palms, Sector 12 Dwarka, New Delhi - 110078",
+    emergencyContactPerson: "Mr. Suresh Sharma (Uncle) - 9871100223",
+    foodPreference: "Pure Vegetarian",
+    medicalNote: "Dust allergy (carries SOS medicine), otherwise medically fit",
+    
+    place: "New Delhi",
+    date: new Date().toLocaleDateString('en-GB')
+  });
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setSlipData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Canvas Handlers for Signature
+  useEffect(() => {
+    if (canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#0f172a';
+    }
+  }, [isEditing, signatureType]);
+
+  const startDraw = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || e.touches?.[0]?.clientX) - rect.left;
+    const y = (e.clientY || e.touches?.[0]?.clientY) - rect.top;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+    setHasDrawn(true);
+  };
+
+  const drawMove = (e) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || e.touches?.[0]?.clientX) - rect.left;
+    const y = (e.clientY || e.touches?.[0]?.clientY) - rect.top;
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDraw = () => setIsDrawing(false);
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawn(false);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans p-3 sm:p-6 antialiased">
+      {/* Action Top Bar */}
+      <div className="max-w-3xl mx-auto mb-4 bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-2 print:hidden">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-blue-950 text-amber-400 flex items-center justify-center font-bold">
+            <School className="w-4 h-4" />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-slate-900 leading-tight">
+              School Tour Consent Slip (सहमति पत्र)
+            </h1>
+            <p className="text-[11px] text-slate-500">Official CBSE / ICSE Excursion Proforma</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsEditing(!isEditing)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+              isEditing 
+                ? 'bg-blue-950 text-white shadow-xs' 
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+            }`}
+          >
+            {isEditing ? <Eye className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+            {isEditing ? 'View Final Slip' : 'Edit Details'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="px-4 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow transition-colors"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            Print / Save PDF
+          </button>
+        </div>
+      </div>
+
+      {/* EDIT MODAL / DRAWER (If User Clicks Edit) */}
+      {isEditing && (
+        <div className="max-w-3xl mx-auto mb-6 bg-white p-5 rounded-2xl border border-blue-200 shadow-md print:hidden animate-fadeIn">
+          <h2 className="text-xs font-black uppercase tracking-wider text-blue-950 mb-3 flex items-center gap-1.5">
+            <Edit3 className="w-4 h-4" /> Quick Edit Consent Details
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="sm:col-span-2">
+              <label className="font-bold text-slate-700">Student Name</label>
+              <input
+                type="text"
+                name="studentName"
+                value={slipData.studentName}
+                onChange={handleChange}
+                className="w-full mt-1 px-2.5 py-1.5 border border-slate-300 rounded font-bold uppercase"
+              />
+            </div>
+            <div>
+              <label className="font-bold text-slate-700">Scholar / Adm No.</label>
+              <input
+                type="text"
+                name="admNo"
+                value={slipData.admNo}
+                onChange={handleChange}
+                className="w-full mt-1 px-2.5 py-1.5 border border-slate-300 rounded font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700">Class & Section</label>
+              <div className="flex gap-1 mt-1">
+                <input
+                  type="text"
+                  name="gradeClass"
+                  value={slipData.gradeClass}
+                  onChange={handleChange}
+                  className="w-1/2 px-2 py-1.5 border border-slate-300 rounded"
+                />
+                <input
+                  type="text"
+                  name="section"
+                  value={slipData.section}
+                  onChange={handleChange}
+                  className="w-1/2 px-2 py-1.5 border border-slate-300 rounded"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700">Roll No.</label>
+              <input
+                type="text"
+                name="rollNo"
+                value={slipData.rollNo}
+                onChange={handleChange}
+                className="w-full mt-1 px-2.5 py-1.5 border border-slate-300 rounded"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700">Blood Group</label>
+              <input
+                type="text"
+                name="bloodGroup"
+                value={slipData.bloodGroup}
+                onChange={handleChange}
+                className="w-full mt-1 px-2.5 py-1.5 border border-slate-300 rounded font-bold text-red-700"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="font-bold text-slate-700">Father's / Mother's Name</label>
+              <input
+                type="text"
+                name="parentName"
+                value={slipData.parentName}
+                onChange={handleChange}
+                className="w-full mt-1 px-2.5 py-1.5 border border-slate-300 rounded"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700">Parent Mobile No.</label>
+              <input
+                type="tel"
+                name="parentPhone"
+                value={slipData.parentPhone}
+                onChange={handleChange}
+                className="w-full mt-1 px-2.5 py-1.5 border border-slate-300 rounded font-mono"
+              />
+            </div>
+
+            <div className="sm:col-span-3">
+              <label className="font-bold text-slate-700">Residential Address</label>
+              <input
+                type="text"
+                name="residentialAddress"
+                value={slipData.residentialAddress}
+                onChange={handleChange}
+                className="w-full mt-1 px-2.5 py-1.5 border border-slate-300 rounded"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="font-bold text-slate-700">Emergency Contact Person & Phone</label>
+              <input
+                type="text"
+                name="emergencyContactPerson"
+                value={slipData.emergencyContactPerson}
+                onChange={handleChange}
+                className="w-full mt-1 px-2.5 py-1.5 border border-slate-300 rounded"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700">Food Preference</label>
+              <select
+                name="foodPreference"
+                value={slipData.foodPreference}
+                onChange={handleChange}
+                className="w-full mt-1 px-2.5 py-1.5 border border-slate-300 rounded bg-white"
+              >
+                <option value="Pure Vegetarian">Pure Vegetarian</option>
+                <option value="Jain Meal (No Onion/Garlic)">Jain Meal</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="px-4 py-1.5 bg-blue-950 text-white rounded text-xs font-bold"
+            >
+              Done & View Slip
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* THE OFFICIAL CONSENT SLIP (PRINTABLE ON A SINGLE A4 PAGE) */}
+      <div className="max-w-3xl mx-auto bg-white text-slate-950 p-6 sm:p-10 rounded-xl shadow-xl border border-slate-300 print:shadow-none print:border-none print:p-0">
+        {/* Double Border Frame (Traditional Indian School Slip Format) */}
+        <div className="border-2 border-slate-900 p-5 relative">
+          
+          {/* 1. School Header */}
+          <div className="text-center border-b-2 border-slate-900 pb-3">
+            <div className="flex items-center justify-between">
+              <div className="w-14 h-14 border border-slate-900 rounded-full flex flex-col items-center justify-center p-1 flex-shrink-0">
+                <School className="w-7 h-7 text-slate-950" />
+                <span className="text-[6px] font-black uppercase">ESTD 1988</span>
+              </div>
+
+              <div className="flex-1 px-2">
+                <h1 className="text-base sm:text-lg font-serif font-black uppercase tracking-tight text-slate-950 leading-tight">
+                  {slipData.schoolName}
+                </h1>
+                <p className="text-[10px] font-bold text-slate-700 uppercase mt-0.5">
+                  {slipData.schoolAffiliation}
+                </p>
+                <p className="text-[9px] text-slate-600">
+                  {slipData.schoolAddress}
+                </p>
+              </div>
+
+              <div className="w-16 h-20 border border-dashed border-slate-500 rounded flex flex-col items-center justify-center p-1 text-center flex-shrink-0 bg-slate-50">
+                <span className="text-[7px] font-bold text-slate-500 uppercase leading-tight">
+                  Student Photo
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-2 pt-2 border-t border-slate-300 flex justify-between items-center text-[10px] font-bold text-slate-700">
+              <span>Circular Ref: <strong className="font-mono text-slate-950">{slipData.refNo}</strong></span>
+              <span>Date: <strong className="font-mono text-slate-950">{slipData.circularDate}</strong></span>
+            </div>
+          </div>
+
+          {/* 2. Slip Title */}
+          <div className="text-center my-3">
+            <span className="inline-block bg-slate-900 text-white px-4 py-0.5 text-xs font-serif font-bold uppercase tracking-wider">
+              Parent Consent Form • सहमति पत्र
+            </span>
+            <p className="text-[10px] font-bold text-slate-800 mt-0.5">
+              Educational Excursion: <span className="underline">{slipData.destination}</span>
+            </p>
+          </div>
+
+          {/* 3. Tour Information Note */}
+          <div className="bg-slate-50 border border-slate-400 p-2.5 mb-3 text-[10px] grid grid-cols-2 gap-x-4 gap-y-1">
+            <div><strong>Destination:</strong> {slipData.destination}</div>
+            <div><strong>Travel Duration:</strong> {slipData.tourDates}</div>
+            <div><strong>Tour Fee:</strong> {slipData.charges}</div>
+            <div><strong>Teacher In-Charge:</strong> {slipData.teacherIncharge}</div>
+          </div>
+
+          {/* 4. Student Particulars Table */}
+          <div className="mb-3">
+            <table className="w-full text-[10px] border-collapse border border-slate-400">
+              <tbody>
+                <tr className="border-b border-slate-300">
+                  <td className="p-1.5 bg-slate-100 font-semibold w-1/4 border-r border-slate-300">Name of Student:</td>
+                  <td className="p-1.5 font-bold uppercase text-slate-950 w-1/4 border-r border-slate-300">{slipData.studentName}</td>
+                  <td className="p-1.5 bg-slate-100 font-semibold w-1/4 border-r border-slate-300">Scholar / Adm No:</td>
+                  <td className="p-1.5 font-mono font-bold w-1/4">{slipData.admNo}</td>
+                </tr>
+                <tr className="border-b border-slate-300">
+                  <td className="p-1.5 bg-slate-100 font-semibold border-r border-slate-300">Class & Section:</td>
+                  <td className="p-1.5 font-bold border-r border-slate-300">{slipData.gradeClass} - {slipData.section}</td>
+                  <td className="p-1.5 bg-slate-100 font-semibold border-r border-slate-300">Roll No & Blood Group:</td>
+                  <td className="p-1.5 font-bold">{slipData.rollNo} / <span className="text-red-700">{slipData.bloodGroup}</span></td>
+                </tr>
+                <tr className="border-b border-slate-300">
+                  <td className="p-1.5 bg-slate-100 font-semibold border-r border-slate-300">Parent / Guardian Name:</td>
+                  <td className="p-1.5 border-r border-slate-300 font-medium">{slipData.parentName} ({slipData.parentRelation})</td>
+                  <td className="p-1.5 bg-slate-100 font-semibold border-r border-slate-300">Parent Mobile No:</td>
+                  <td className="p-1.5 font-mono font-bold">{slipData.parentPhone}</td>
+                </tr>
+                <tr className="border-b border-slate-300">
+                  <td className="p-1.5 bg-slate-100 font-semibold border-r border-slate-300">Residential Address:</td>
+                  <td colSpan={3} className="p-1.5">{slipData.residentialAddress}</td>
+                </tr>
+                <tr>
+                  <td className="p-1.5 bg-slate-100 font-semibold border-r border-slate-300">Emergency Contact:</td>
+                  <td className="p-1.5 border-r border-slate-300 font-semibold">{slipData.emergencyContactPerson}</td>
+                  <td className="p-1.5 bg-slate-100 font-semibold border-r border-slate-300">Food & Health Note:</td>
+                  <td className="p-1.5">{slipData.foodPreference} | {slipData.medicalNote}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* 5. The Undertaking Declaration (Pure Hindi/English Consent) */}
+          <div className="border border-slate-400 p-3 bg-slate-50/70 text-[10px] leading-relaxed text-justify mb-4 space-y-1.5">
+            <p className="font-bold text-slate-900 uppercase">
+              Parental Undertaking & Declaration (सहमति एवं घोषणा):
+            </p>
+            <p>
+              1. I hereby accord my full consent for my son/daughter <strong>{slipData.studentName}</strong>, of Class <strong>{slipData.gradeClass} - {slipData.section}</strong>, to join the school educational tour to <strong>{slipData.destination}</strong> from <strong>{slipData.tourDates}</strong>.
+            </p>
+            <p>
+              2. I confirm that my ward is physically and medically fit to travel. In case of any medical emergency, I authorize the school escort teachers to administer first-aid or arrange necessary medical care.
+            </p>
+            <p>
+              3. I have instructed my ward to strictly abide by the rules, teacher instructions, and maintain exemplary school discipline throughout the excursion.
+            </p>
+          </div>
+
+          {/* 6. Signatures Block */}
+          <div className="pt-4 border-t-2 border-slate-900 grid grid-cols-3 gap-4 text-center items-end text-[10px]">
+            <div className="space-y-4">
+              <span className="font-serif italic text-slate-700 text-xs">
+                {slipData.studentName ? slipData.studentName.split(' ')[0] : ''}
+              </span>
+              <div className="border-t border-slate-800 pt-1 font-bold text-slate-900">
+                Signature of Student
+                <p className="text-[8px] font-normal text-slate-500">(विद्यार्थी के हस्ताक्षर)</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <span className="font-serif italic font-bold text-blue-950 text-xs">
+                {typedSign || slipData.parentName}
+              </span>
+              <div className="border-t border-slate-800 pt-1 font-bold text-slate-950">
+                Signature of Parent / Guardian
+                <p className="text-[8px] font-normal text-slate-500">Date: {slipData.date} | Place: {slipData.place}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="w-12 h-12 border border-slate-800 rounded-full mx-auto flex items-center justify-center text-[7px] font-bold uppercase text-slate-800">
+                RECEIVED
+              </div>
+              <div className="border-t border-slate-800 pt-1 font-bold text-slate-950">
+                Class Teacher / Tour In-Charge
+                <p className="text-[8px] font-normal text-slate-500">(हस्ताक्षर एवं सील)</p>
+              </div>
+            </div>
+          </div>
+
+          {/* 7. Classic Indian School Tear-Off Counterfoil */}
+          <div className="mt-5 pt-3 border-t-2 border-dashed border-slate-500">
+            <div className="flex justify-between items-center text-[8px] font-mono text-slate-500 uppercase pb-1">
+              <span>✂ TEAR-OFF COUNTERFOIL (FOR CLASS TEACHER / SCHOOL OFFICE RECORD)</span>
+              <span>SLIP NO: DPHS-TOUR-2026/09</span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-400 p-2 text-[9px] flex justify-between items-center">
+              <div>
+                <p>
+                  Consent received for <strong>{slipData.studentName}</strong> ({slipData.gradeClass}-{slipData.section}, Roll: {slipData.rollNo}, Adm No: {slipData.admNo}).
+                </p>
+                <p className="text-slate-600">
+                  Excursion: <strong>{slipData.destination}</strong> | Parent Mob: <strong>{slipData.parentPhone}</strong>
+                </p>
+              </div>
+              <div className="text-right font-bold text-slate-900 flex-shrink-0">
+                <span className="inline-block px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded text-[8px]">
+                  ✓ Enrolled & Verified
+                </span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body {
+            background: white !important;
+            color: black !important;
+          }
+          header, button, .print\\:hidden {
+            display: none !important;
+          }
+          @page {
+            size: A4 portrait;
+            margin: 6mm 8mm;
+          }
+        }
+      `}} />
+    </div>
+  );
+}
+
+=======================================================
+END OF REFERENCE
+=======================================================
+
+
+IMPORTANT INTERPRETATION OF THE REFERENCE:
+
+The above code is NOT the final design.
+
+Use it to understand the level of professionalism and the type of document I want.
+
+The HEADER is a good reference.
+
+The content below the header needs to be improved.
+
+In particular, DO NOT blindly reproduce:
+
+- double outer borders
+- repeated horizontal lines
+- boxed tour information
+- heavily boxed student tables
+- large shaded areas
+- tear-off counterfoil
+- RECEIVED circle
+- unnecessary school-office sections
+- unnecessary icons
+- excessive separators
+
+Instead, redesign the lower part with much better information hierarchy.
+
+A good final document should be able to use:
+
+- a clean title
+- subtle subtitle
+- compact activity information
+- clean two-column student/guardian information
+- minimal table usage
+- a concise declaration
+- one clear consent checkbox/statement where appropriate
+- clean signature area
+- simple footer/reference if genuinely needed
+
+The document should breathe.
+
+It should not look cramped.
+
+It should not look like every piece of information is trapped inside a rectangle.
+
+=======================================================
+PART 13 — DYNAMIC A4 DOCUMENT
+=======================================================
+
+The final A4 renderer must be data-driven.
+
+For:
+
+Educational Tour Consent
+
+show relevant information such as:
+
+Activity / Destination
+Dates
+Fee
+Student
+Class
+Parent/Guardian
+Contact
+Required health/care information
+Consent
+Signature
+
+For:
+
+Sports Participation Consent
+
+show:
+
+Sport / Event
+Date
+Venue
+Student
+Parent/Guardian
+Consent
+Signature
+
+For:
+
+Workshop Registration
+
+show:
+
+Workshop
+Date
+Venue
+Fee if applicable
+Student
+Parent
+Signature
+
+For:
+
+General Application
+
+show only fields configured for that form.
+
+Do NOT show tour-specific information globally.
+
+=======================================================
+PART 14 — FIELDS MUST BE INTELLIGENT
+=======================================================
+
+Do not automatically include:
+
+- Blood group
+- Roll number
+- House
+- Student photo
+- Mother's phone
+- Father's phone
+- Residential address
+- Emergency contact
+- Food preference
+- Medical information
+
+unless the specific form requires/configures them.
+
+The form builder controls which fields are included.
+
+The A4 document renderer should only render configured/submitted fields.
+
+=======================================================
+PART 15 — A4 DESIGN
+=======================================================
+
+The A4 page should have approximately:
+
+TOP:
+School logo / school identity
+School name
+Affiliation/address/contact if configured
+
+Then:
+
+DOCUMENT TITLE
+
+Optional short subtitle / activity title
+
+Then:
+
+ACTIVITY / FORM DETAILS
+
+Then:
+
+STUDENT / APPLICANT DETAILS
+
+Then:
+
+PARENT / GUARDIAN DETAILS
+
+Then:
+
+ONLY relevant additional fields
+
+Then:
+
+CONSENT / DECLARATION
+
+Then:
+
+SIGNATURE / DATE / PLACE
+
+Use whitespace and typography rather than unnecessary boxes.
+
+The result should look like an actual official school proforma.
+
+=======================================================
+PART 16 — DO NOT FORCE EVERY FORM INTO THE SAME VISUAL TEMPLATE
+=======================================================
+
+The system should have a consistent document system, but the layout should adapt to the form.
+
+A simple registration form should not look like a medical consent form.
+
+A sports form should not contain tour information.
+
+A general application should not contain payment information unless configured.
+
+The renderer should intelligently compose the document based on the form schema.
+
+=======================================================
+PART 17 — SINGLE A4 PAGE
+=======================================================
+
+Normal forms MUST fit on one A4 portrait page.
+
+Use:
+
+@page {
+  size: A4 portrait;
+}
+
+and proper print CSS.
+
+The screen preview can show an A4 paper with subtle shadow.
+
+Print output must remove:
+
+- sidebar
+- navbar
+- buttons
+- dashboard
+- page background
+- web UI
+- controls
+
+Only the document prints.
+
+Do not depend on browser scaling.
+
+Do not produce a two-page document because of excessive padding or decorative elements.
+
+=======================================================
+PART 18 — DOCUMENT PREVIEW
+=======================================================
+
+Principal should be able to click:
+
+Preview
+
+and see the actual final A4 document.
+
+This is NOT a normal web form page.
+
+It should look like a physical A4 sheet.
+
+Provide:
+
+Edit
+Print / Save PDF
+
+outside the document in screen-only controls.
+
+The controls must disappear when printing.
+
+=======================================================
+PART 19 — SIGNATURE
+=======================================================
+
+Where the form requires a signature, support:
+
+- Draw signature
+- Type name
+
+Store the actual submitted signature.
+
+The final document must display the actual submitted signature.
+
+Do not display a fake signature automatically.
+
+If typed signing is selected, show the typed name appropriately.
+
+=======================================================
+PART 20 — COLLECTION RELATIONSHIP
+=======================================================
+
+Keep Forms and Additional Collections conceptually separate.
+
+FORM:
+Collects information / consent / registration.
+
+COLLECTION:
+Defines money to be collected.
+
+PAYMENT:
+Records actual money received.
+
+A form may optionally link to a collection.
+
+Example:
+
+Educational Tour — Jaipur
+Form:
+Educational Tour Consent
+
+Linked Collection:
+Educational Tour — Jaipur
+₹2,500 / student
+
+But a form does NOT require a collection.
+
+Example:
+
+Sports Participation Consent
+Payment: Not required
+
+should work perfectly.
+
+Likewise, a collection can exist without a form.
+
+Examples:
+
+Robotics Workshop
+School Development Fund
+Special Activity Fee
+
+Do not force an application form for these.
+
+=======================================================
+PART 21 — REAL DATA
+=======================================================
+
+Fix the current dashboard metrics.
+
+Do not show fake values.
+
+Examples:
+
+Active Forms
+Awaiting Review
+Awaiting Payment
+Total Responses
+
+must come from actual database records.
+
+If a metric has no real data, show 0.
+
+Do not hardcode demo numbers.
+
+=======================================================
+PART 22 — RESPONSE EXPERIENCE
+=======================================================
+
+When responses exist, Principal can view:
+
+- Applicant/student
+- Class/section
+- Parent/guardian
+- Submitted date
+- Response status
+- Payment status if applicable
+
+Opening a response should show the actual submitted information.
+
+Principal should be able to:
+
+View
+Print
+Save/Download the official A4 document
+
+The A4 document must contain the submitted values.
+
+=======================================================
+PART 23 — RECORD FILE
+=======================================================
+
+If "Record File" is retained, make it functional.
+
+It should provide useful access to historical/submitted application records.
+
+Do not keep a decorative button that does nothing.
+
+=======================================================
+PART 24 — DATABASE SAFETY
+=======================================================
+
+Inspect the current database before changing it.
+
+Reuse existing tables/relationships where possible.
+
+Do not create duplicate form/payment/collection systems.
+
+If schema changes are required:
+
+- make them minimal
+- preserve existing records
+- preserve relationships
+- preserve RLS
+- preserve authorization
+- avoid orphan records
+
+Lifecycle status must be persisted in the database.
+
+=======================================================
+PART 25 — EXISTING RECORDS
+=======================================================
+
+Existing records such as:
+
+Educational Tour — Jaipur
+Sonebhadra Tour
+
+must not be unnecessarily deleted or duplicated.
+
+Safely migrate their status if required.
+
+Do not create another duplicate version.
+
+=======================================================
+PART 26 — SECURITY
+=======================================================
+
+Only authorized Principal/Admin roles should be able to:
+
+- create
+- edit
+- publish
+- close
+- archive
+- delete drafts
+- view responses
+- access payment information
+- download official records
+
+Do not weaken existing security/RLS.
+
+=======================================================
+PART 27 — FINAL DELETE TEST
+=======================================================
+
+Test this exact flow:
+
++ New Form
+
+Create:
+
+Test Consent Form
+
+Save Draft.
+
+Expected:
+
+Status = Draft
+
+Actions:
+
+Edit
+Preview
+Publish
+Duplicate
+Delete Draft
+
+Click:
+
+Delete Draft
+
+Confirmation appears.
+
+Confirm.
+
+Expected:
+
+Draft is actually removed.
+
+No orphan payment/collection/application record is created.
+
+=======================================================
+PART 28 — FINAL PUBLISH TEST
+=======================================================
+
+Create:
+
+Educational Tour Consent
+
+Save Draft.
+
+Preview.
+
+Expected:
+
+Actual A4 single-page document.
+
+Then:
+
+Publish.
+
+Expected:
+
+Status becomes Open/Published.
+
+Delete is no longer available.
+
+Close is available.
+
+=======================================================
+PART 29 — FINAL A4 TEST
+=======================================================
+
+Open an actual form response.
+
+Click Preview.
+
+Expected:
+
+ONE A4 PORTRAIT PAGE.
+
+Professional school header.
+
+Dynamic school information.
+
+Dynamic form title.
+
+Dynamic activity information.
+
+Dynamic student information.
+
+Dynamic parent information.
+
+Dynamic consent text.
+
+Actual signature.
+
+Clean typography.
+
+Proper whitespace.
+
+No unnecessary borders.
+
+No dashboard UI.
+
+No second page for a normal form.
+
+Print.
+
+Expected:
+
+Only the A4 document prints.
+
+=======================================================
+PART 30 — DESIGN QUALITY BAR
+=======================================================
+
+The final design should feel like:
+
+"An official school document generated by a premium school ERP."
+
+NOT:
+
+"A web page printed onto paper."
+
+Use the SCHOLARIO visual language for the application UI.
+
+Use a more formal document language for the A4 output.
+
+Do not over-design the paper.
+
+Do not add decorative elements simply because space is available.
+
+The document should feel calm, official, structured and credible.
+
+=======================================================
+FINAL NON-NEGOTIABLE REQUIREMENTS
+=======================================================
+
+1. New Form ALWAYS starts as Draft.
+
+2. Draft MUST have Delete Draft.
+
+3. Draft MUST have Publish.
+
+4. Published forms MUST NOT have destructive Delete.
+
+5. Published/closed/archived records must preserve historical responses.
+
+6. Applications & Forms MUST remain generic, not tour-specific.
+
+7. "+ New Form" must replace "New Educational Tour" as the generic creation action.
+
+8. The actual online application/consent experience must be implemented.
+
+9. The actual A4 document must be implemented.
+
+10. A4 document MUST be single-page for normal forms.
+
+11. A4 document must be print-ready.
+
+12. The provided React code is ONLY a REFERENCE.
+
+13. Use the reference especially for the SCHOOL HEADER / DOCUMENT IDENTITY.
+
+14. Do NOT copy the reference literally.
+
+15. Do NOT reproduce its excessive borders and lines.
+
+16. The area below the header MUST be redesigned cleaner and more professional.
+
+17. Avoid unnecessary boxes, separators, icons and decorative elements.
+
+18. Do not force irrelevant fields into every form.
+
+19. Forms may optionally link to Additional Collections.
+
+20. Collections may exist independently of forms.
+
+21. All actions must work against real backend/database state.
+
+22. Do not leave placeholder functionality.
+
+23. Do not stop at visual changes.
+
+24. Test the complete lifecycle:
+
+CREATE → DRAFT → EDIT → PREVIEW → PUBLISH → SUBMIT → RESPONSE → PRINT → CLOSE → ARCHIVE
+
+and separately:
+
+CREATE → DRAFT → DELETE
+
+This should be implemented as a production-quality part of SCHOLARIO-OS, using the existing architecture rather than creating a disconnected demo.

@@ -275,6 +275,10 @@ export interface GuardianConsentConfig {
   /** Digital checkbox during submission vs physical signature on paper. */
   method: 'Digital' | 'Physical Signature'
   statement?: string
+  /** PART 19 — when true (default), digital consent also captures a real
+   *  signature (draw/type) at submit time. Opt out for legacy checkbox-only
+   *  forms. Absent on older records behaves as true. */
+  signatureRequired?: boolean
 }
 
 /** Physical signed-document workflow state. */
@@ -349,6 +353,16 @@ export interface ReviewNote {
   kind: 'note' | 'rejection' | 'correction' | 'approval'
 }
 
+/** A captured signature (spec PART 19). `data` is a PNG data-URL when the
+ *  guardian drew it, or the typed name when they typed it. */
+export interface SubmissionSignature {
+  mode: 'drawn' | 'typed'
+  data: string
+  /** Whose signature this claims to be (guardian name). */
+  signerName: string
+  signedAt: string
+}
+
 export interface ApplicationSubmission {
   id: string
   applicationId: string
@@ -380,6 +394,9 @@ export interface ApplicationSubmission {
   status: SubmissionWorkflowStatus
   /** Timestamp when digital guardian consent was ticked. */
   consentGivenAt?: string
+  /** Actual captured signature (PART 19) — absent on legacy submissions
+   *  (renders blank rules) and office-recorded (paper) submissions. */
+  signature?: SubmissionSignature
   physicalDoc: PhysicalDocState
   reviewNotes: ReviewNote[]
   reviewedBy?: string
@@ -644,6 +661,9 @@ interface ApplicationsState {
     answers: Record<string, string | string[] | boolean>
     attachments?: Record<string, { name: string; size: number }>
     consentAccepted: boolean
+    /** PART 19 — the captured guardian signature (required by the dialog
+     *  whenever the form's digital consent requires signing). */
+    signature?: SubmissionSignature
     submittedByRole?: 'Student' | 'Guardian'
   }) => { success: boolean; submission?: ApplicationSubmission; existingSubmissionId?: string; error?: string }
 
@@ -1336,6 +1356,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           mode: 'Digital',
           status: 'Submitted',
           consentGivenAt: app.guardianConsent.required && input.consentAccepted ? nowIso : undefined,
+          signature: input.signature,
           physicalDoc: {
             status: app.physicalSignatureRequired && app.guardianConsent.method === 'Physical Signature'
               ? 'Pending' : 'Not Required',

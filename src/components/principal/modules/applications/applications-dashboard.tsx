@@ -364,6 +364,7 @@ function Row({ app, index, submissions, onOpen, onEdit, onDelete }: {
   onDelete: () => void
 }) {
   const publishApplication = useApplicationsStore((s) => s.publishApplication)
+  const [confirmPublish, setConfirmPublish] = useState(false)
   const closeApplication = useApplicationsStore((s) => s.closeApplication)
   const reopenApplication = useApplicationsStore((s) => s.reopenApplication)
   const lockApplication = useApplicationsStore((s) => s.lockApplication)
@@ -384,11 +385,8 @@ function Row({ app, index, submissions, onOpen, onEdit, onDelete }: {
   if (app.status === 'Pending Approval') {
     actionItems.push({ label: 'Review & approve', icon: <CheckCircle2 className="h-3.5 w-3.5" />, onSelect: onOpen })
   }
-  if (app.status === 'Approved') {
-    actionItems.push({ label: 'Publish now', icon: <Send className="h-3.5 w-3.5" />, onSelect: () => {
-      const r = publishApplication(app.id, ACTOR)
-      toast[r.success ? 'success' : 'error'](r.success ? 'Published' : 'Publish failed', r.success ? { description: 'Eligible students have been notified.' } : { description: r.error })
-    } })
+  if (app.status === 'Approved' || app.status === 'Draft') {
+    actionItems.push({ label: 'Publish now', icon: <Send className="h-3.5 w-3.5" />, onSelect: () => setConfirmPublish(true) })
   }
   if (app.status === 'Changes Requested' || app.status === 'Rejected') {
     actionItems.push({ label: 'Edit & review note', icon: <PencilLine className="h-3.5 w-3.5" />, onSelect: onEdit })
@@ -529,6 +527,33 @@ function Row({ app, index, submissions, onOpen, onEdit, onDelete }: {
           </DropdownMenu>
         </div>
       </div>
+
+      {/* PART 6 — publish confirmation (honest one-way-door copy) */}
+      {confirmPublish && (
+        <AlertDialog open onOpenChange={(o) => { if (!o) setConfirmPublish(false) }}>
+          <AlertDialogContent className="max-w-sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Publish form?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Once published, “{app.title}” can be shared with students and parents and cannot be permanently deleted.
+                {submissions.length > 0 && ' Existing responses stay on record.'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setConfirmPublish(false)
+                  const r = publishApplication(app.id, ACTOR)
+                  toast[r.success ? 'success' : 'error'](r.success ? 'Published' : 'Publish failed', r.success ? { description: 'Eligible students have been notified.' } : { description: r.error })
+                }}
+              >
+                Publish Form
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </motion.div>
   )
 }

@@ -38,7 +38,7 @@ import type { ReactNode } from 'react'
 import { useSchoolSettingsStore } from '@/lib/store/school-settings-store/store'
 import {
   formPurposeOf,
-  type SchoolApplication, type ApplicationSubmission, type ReviewNote,
+  type SchoolApplication, type ApplicationSubmission, type ReviewNote, type SubmissionSignature,
 } from '@/lib/store/applications-store'
 import { formatINR, formatDate } from '@/lib/format'
 
@@ -376,6 +376,11 @@ export function ApplicationPrintDocument({
               <span className={`inline-block h-2.5 w-2.5 rounded-[2px] border ${sub?.consentGivenAt ? 'border-slate-600 bg-slate-600' : 'border-slate-300'}`} />
               Digital consent recorded{sub?.consentGivenAt ? ` · ${formatDate(sub.consentGivenAt)}` : ''}
             </span>
+            {sub?.signature && (
+              <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-[8.5px] font-semibold text-slate-600">
+                SIGNED DIGITALLY — {sub.signature.mode === 'drawn' ? 'DRAWN' : 'TYPED'}
+              </span>
+            )}
             {app.guardianConsent.method === 'Physical Signature' && (
               <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[8.5px] font-semibold text-amber-700">
                 GUARDIAN SIGNATURE REQUIRED BELOW
@@ -390,13 +395,33 @@ export function ApplicationPrintDocument({
         ))}
       </div>
 
-      {/* ── 9. Signature blocks ── */}
+      {/* ── 9. Signature blocks (PART 19/22 — the guardian's ACTUAL submitted
+           signature prints; student/teacher rules stay for wet-ink) ── */}
       <div className="mt-5 grid grid-cols-3 gap-6">
-        {[`Guardian\u2019s Signature`, `Student\u2019s Signature`, app.inChargeName ? `In-charge — ${app.inChargeName}` : `Teacher In-charge`].map((label) => (
+        {([
+          { label: `Guardian\u2019s Signature`, sig: sub?.signature },
+          { label: `Student\u2019s Signature`, sig: undefined },
+          { label: app.inChargeName ? `In-charge — ${app.inChargeName}` : `Teacher In-charge`, sig: undefined },
+        ] as Array<{ label: string; sig?: SubmissionSignature }>).map(({ label, sig }) => (
           <div key={label}>
-            <div className="h-10 border-b border-dotted border-slate-400" />
+            <div className="h-10 border-b border-dotted border-slate-400 flex items-end justify-center pb-0.5">
+              {sig && sig.mode === 'drawn' && sig.data.startsWith('data:image/png') ? (
+                <img src={sig.data} alt={`Signature of ${sig.signerName}`} className="max-h-[38px] max-w-full object-contain" />
+              ) : sig && sig.mode === 'typed' ? (
+                <span
+                  className="text-[17px] italic text-slate-800 leading-none"
+                  style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+                >
+                  {sig.data}
+                </span>
+              ) : null}
+            </div>
             <p className="mt-1 text-[9px] font-medium text-slate-500 text-center">{label}</p>
-            <p className="text-[8px] text-slate-400 text-center">Date: {sub ? formatDate(sub.submittedAt) : '____ / ____ / ______'}</p>
+            <p className="text-[8px] text-slate-400 text-center">
+              {sig
+                ? `Digitally ${sig.mode === 'drawn' ? 'drawn' : 'typed'} · ${formatDate(sig.signedAt)}`
+                : `Date: ${sub ? formatDate(sub.submittedAt) : '____ / ____ / ______'}`}
+            </p>
           </div>
         ))}
       </div>
