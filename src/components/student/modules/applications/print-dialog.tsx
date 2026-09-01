@@ -37,22 +37,12 @@ export function SubmissionDocumentDialog({ open, onOpenChange, app, sub }: Submi
   if (!app || !sub) return null
 
   const pay = deriveSubmissionPayment(app, sub)
-  // Payment history belonging to THIS application only — every receipt the
-  // student (or the office) recorded against it, read from the canonical
-  // fee ledger. Nothing else from the student's account is mixed in.
-  const history = applicationPayments(app).filter((t) => t.studentId === sub.studentId)
-  const paymentLines = app.payment.mode === 'None'
-    ? undefined
-    : [
-        { label: 'Payment status', value: pay.status },
-        ...history.map((t) => ({
-          label: `Receipt ${t.receiptNo}`,
-          value: `${formatINR(t.amount)} · ${t.mode} · ${formatDate(t.date)} · ${t.status === 'Success' ? 'Paid' : t.status}`,
-        })),
-        ...(pay.status === 'Not Paid'
-          ? [{ label: 'Balance', value: `${formatINR(Math.max(0, pay.expectedAmount - pay.paidAmount))} payable — pay online or at the school office` }]
-          : []),
-      ]
+  // Payment read-out is derived INSIDE the official document from the
+  // canonical fee ledger (payment status + receipt numbers on the slip).
+  void pay
+  void applicationPayments
+  void formatINR
+  void formatDate
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -65,7 +55,7 @@ export function SubmissionDocumentDialog({ open, onOpenChange, app, sub }: Submi
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-white p-4">
-          <ApplicationPrintDocument app={app} sub={sub} notes={sub.reviewNotes} paymentLines={paymentLines} />
+          <ApplicationPrintDocument app={app} sub={sub} notes={sub.reviewNotes} />
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border pt-3">

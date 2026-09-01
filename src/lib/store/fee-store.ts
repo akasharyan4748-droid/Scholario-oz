@@ -408,6 +408,10 @@ export interface FeeTransaction {
   reconciliationStatus?: ReconciliationStatus
   refundedAmount?: number
   refundReason?: string
+  /** When the (full or partial) refund was issued and by whom
+   *  (TOUR-CONSENT-1 §12 — refunds gate destructive deletion). */
+  refundedAt?: string
+  refundedBy?: string
   /** Principal's note when rejecting a direct cash verification. */
   verificationNote?: string
   /** When this payment belongs to an Applications & Forms submission, the
@@ -1189,6 +1193,11 @@ interface FeeState {
    *  including it immediately; historical payments + audit entries are
    *  preserved (never destructive). */
   cancelAdditionalCharge: (id: string, actor: string, reason?: string) => { success: boolean; error?: string }
+  /** TOUR-CONSENT-1 §12 — refund (full or partial) of a recorded tour
+   *  payment. The transaction row is NEVER deleted: refundedAmount/Reason
+   *  are stamped on it, the audit trail notes the refund, and receipt
+   *  history stays intact. Gates application deletion in the store. */
+  refundApplicationTransaction: (txnId: string, amount: number, reason: string, actor: string) => { success: boolean; error?: string }
   addFeeHead: (structureId: string, head: Omit<FeeHead, 'id'>) => { success: boolean; error?: string }
   updateFeeHead: (structureId: string, headId: string, patch: Partial<FeeHead>) => { success: boolean; error?: string }
   archiveFeeHead: (structureId: string, headId: string) => void
@@ -1921,6 +1930,40 @@ export const useFeeStore = create<FeeState>()(
         entityId: id,
         entityType: 'additional_charge',
         description: `Additional charge "${charge.name}" cancelled${reason ? ` — ${reason}` : ''}. ${collected > 0 ? `${formatINR(collected)} already collected is preserved on record.` : 'No payments were collected against it.'}`,
+      }),
+    })
+    return { success: true }
+  },
+
+  // TOUR-CONSENT-1 §12 — refund of an application tour payment.
+  refundApplicationTransaction: (txnId, amount, reason, actor) => {
+    const state = get()
+    const txn = state.transactions.find((t) => t.id === txnId)
+    if (!txn) return { success: false, error: 'Payment not found.' }
+    if (txn.status !== 'Success' && txn.status !== 'Under Verification') {
+      return { success: false, error: `Only a recorded payment can be refunded (this one is "${txn.status}").` }
+    }
+    const refundable = txn.amount - (txn.refundedAmount ?? 0)
+    if (amount <= 0) return { success: false, error: 'Enter the refund amount.' }
+    if (amount > refundable) {
+      return { success: false, error: `Only ${formatINR(refundable)} of ${formatINR(txn.amount)} is still refundable on ${txn.receiptNo}.` }
+    }
+    if (!reason.trim()) return { success: false, error: 'State the reason for the refund.' }
+    const nowIso = new Date().toISOString()
+    set({
+      transactions: state.transactions.map((t) => t.id !== txnId ? t : {
+        ...t,
+        refundedAmount: (t.refundedAmount ?? 0) + amount,
+        refundReason: reason.trim(),
+        refundedAt: nowIso,
+        refundedBy: actor,
+      }),
+      audit: pushAudit(state, {
+        action: 'refund.approved',
+        actor,
+        entityId: txnId,
+        entityType: 'transaction',
+        description: `Refund of ${formatINR(amount)} issued on ${txn.receiptNo} (${txn.studentName} · ${txn.feeHead}) — ${reason.trim()}`,
       }),
     })
     return { success: true }

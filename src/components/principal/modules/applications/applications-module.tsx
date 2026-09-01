@@ -6,9 +6,13 @@
  * to Fee Management without adding top-level Fee tabs).
  *
  * Internal view state keeps everything inside ONE normal module surface —
- * dashboard ⇄ builder ⇄ detail — no browser-level routes, exactly like the
- * Fees / Salary shells. Every action flows through applications-store and
- * (for money) fee-store pipelines.
+ * dashboard ⇄ session-config ⇄ detail — no browser-level routes, exactly
+ * like the Fees / Salary shells. Every action flows through
+ * applications-store and (for money) fee-store pipelines.
+ *
+ * TOUR-CONSENT-1: the module has exactly ONE built-in form — the fixed
+ * "Educational Tour — Parent Consent Form" template. The old generic
+ * builder is gone; "Use / Configure for Session" opens TourSessionConfig.
  */
 
 import { useEffect, useState } from 'react'
@@ -18,12 +22,12 @@ import {
 } from '@/lib/store/applications-store'
 import { PageTransition } from '@/components/shared/ui'
 import { ApplicationsDashboard } from './applications-dashboard'
-import { ApplicationBuilder } from './application-builder'
+import { TourSessionConfig } from './tour-session-config'
 import { ApplicationDetail } from './application-detail'
 
 type View =
   | { name: 'dashboard' }
-  | { name: 'builder'; editingId?: string }
+  | { name: 'config'; editingId?: string }
   | { name: 'detail'; appId: string }
 
 export function ApplicationsModule() {
@@ -54,12 +58,13 @@ export function ApplicationsModule() {
             {view.name === 'dashboard' && (
               <ApplicationsDashboard
                 onOpenApplication={(id) => setView({ name: 'detail', appId: id })}
-                onStartCreate={() => setView({ name: 'builder' })}
-                onStartEdit={(id) => setView({ name: 'builder', editingId: id })}
+                onStartCreate={() => setView({ name: 'config' })}
+                onStartEdit={(id) => setView({ name: 'config', editingId: id })}
               />
             )}
-            {view.name === 'builder' && (
-              <BuilderHost
+            {view.name === 'config' && (
+              <TourSessionConfig
+                key={view.editingId ?? 'new-session'}
                 editingId={view.editingId}
                 onClose={() => setView({ name: 'dashboard' })}
                 onSaved={(id) => setView({ name: 'detail', appId: id })}
@@ -69,35 +74,12 @@ export function ApplicationsModule() {
               <ApplicationDetail
                 app={useApplicationsStore.getState().applications.find((a) => a.id === view.appId)!}
                 onBack={() => setView({ name: 'dashboard' })}
-                onEdit={() => setView({ name: 'builder', editingId: view.appId })}
+                onEdit={() => setView({ name: 'config', editingId: view.appId })}
               />
             )}
           </motion.div>
         </AnimatePresence>
       </PageTransition>
     </div>
-  )
-}
-
-function BuilderHost({ editingId, onClose, onSaved }: {
-  editingId?: string
-  onClose: () => void
-  onSaved: (appId: string) => void
-}) {
-  const editing = useApplicationsStore((s) => s.applications.find((a) => a.id === editingId))
-  if (editingId && !editing) {
-    onClose()
-    return null
-  }
-  return (
-    <ApplicationBuilder
-      key={editing?.id ?? 'new'}
-      editing={editing}
-      onClose={onClose}
-      onSaved={() => {
-        if (editingId) onSaved(editingId)
-        else onClose()
-      }}
-    />
   )
 }

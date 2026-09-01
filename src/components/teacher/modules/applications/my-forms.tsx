@@ -19,7 +19,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, Bus, CalendarDays, CheckCircle2, ClipboardList, Download, FileText,
-  FlaskConical, Landmark, PencilLine, Plus, Send, ShieldAlert, Sparkles, Tag,
+  FlaskConical, Landmark, Layers, PencilLine, Plus, Send, ShieldAlert, Sparkles, Tag,
   Tent, Trophy, Award, HandHeart,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -33,7 +33,7 @@ import { useAuth } from '@/lib/store/auth-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { formatDate } from '@/lib/format'
 import { toast } from 'sonner'
-import { ApplicationBuilder } from '@/components/principal/modules/applications/application-builder'
+import { TourSessionConfig } from '@/components/principal/modules/applications/tour-session-config'
 import { applicationDocFileName, downloadApplicationDocument } from '@/components/principal/modules/applications/application-print'
 import { AppStatusBadge, ApplicationReviewDetail } from './review-detail'
 
@@ -127,22 +127,19 @@ export function MyFormsView() {
     )
   }
 
-  // ── Builder (create / edit my draft) ──
+  // ── Session setup (create / edit my tour draft) — the fixed template,
+  //    never a builder. Publishing still flows through the Principal
+  //    approval workflow (store-enforced). ──
   if (view.name === 'builder') {
     return (
-      <div className="space-y-4">
-        <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setView({ name: 'list' })}>
-          <ArrowLeft className="h-3 w-3" /> Back to my forms
-        </Button>
-        <ApplicationBuilder
-          key={editing?.id ?? 'teacher-new'}
-          editing={editing}
-          teacherMode
-          fixedInCharge={{ id: meId, name: meName }}
-          onClose={() => setView({ name: 'list' })}
-          onSaved={() => setView({ name: 'list' })}
-        />
-      </div>
+      <TourSessionConfig
+        key={editing?.id ?? 'teacher-new-session'}
+        editingId={editing?.id}
+        actorRole="Teacher"
+        teacherId={meId}
+        onClose={() => setView({ name: 'list' })}
+        onSaved={() => setView({ name: 'list' })}
+      />
     )
   }
 
@@ -158,7 +155,7 @@ export function MyFormsView() {
           Create the official form for your event → Principal approval → publish &amp; operate
         </p>
         <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={() => setView({ name: 'builder' })}>
-          <Plus className="h-3 w-3" /> New Form
+          <Layers className="h-3 w-3" /> Use Tour Template
         </Button>
       </div>
 

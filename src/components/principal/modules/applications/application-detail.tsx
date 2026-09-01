@@ -19,17 +19,21 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, CalendarClock, CheckCircle2, ChevronDown, ClipboardList, Copy,
-  Download, FileText, Landmark, Lock, PencilLine, Printer, Search, Send, ThumbsUp, Undo2,
-  UserCheck, Users, Wallet, XCircle, StickyNote, FileSignature, ExternalLink,
+  Download, FileOutput, FileText, Landmark, ListChecks, Lock, PencilLine, Printer, Search, Send, ThumbsUp, Undo2,
+  UserCheck, Users, Wallet, X, XCircle, StickyNote, FileSignature, ExternalLink,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -38,7 +42,7 @@ import { Panel } from '../shared/panel'
 import {
   useApplicationsStore,
   effectiveAppStatus, combinedSubmissionStatus, deriveSubmissionPayment,
-  applicationPayments,
+  applicationPayments, logApplicationAudit,
   isConsentSatisfied, type SchoolApplication, type ApplicationSubmission, type CombinedSubmissionStatus,
 } from '@/lib/store/applications-store'
 import { useFeeStore } from '@/lib/store/fee-store'
@@ -46,7 +50,7 @@ import { useStudentsStore } from '@/lib/store/students-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { ApplicationPrintDocument, printApplicationDocument, downloadApplicationDocument, applicationDocFileName } from './application-print'
+import { ApplicationPrintDocument, ApplicationPrintStack, TourAttendanceListDocument, type AttendanceRow, printApplicationDocument, printApplicationStack, printAttendanceList, downloadApplicationDocument, downloadApplicationStackHtml, applicationDocFileName, withOffscreenDocument } from './application-print'
 
 type DetailTab = 'overview' | 'form' | 'submissions' | 'payments' | 'documents' | 'activity'
 
@@ -699,7 +703,7 @@ function FactRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-// ─── Submissions tab ───────────────────────────────────────────────────
+// ─── Submissions tab (TOUR-CONSENT-1 §13/§14/§15/§16) ──────────────────
 
 function SubmissionsPanel({ app, submissions, onView, onRecordOffline }: {
   app: SchoolApplication
@@ -710,8 +714,11 @@ function SubmissionsPanel({ app, submissions, onView, onRecordOffline }: {
   const [search, setSearch] = useState('')
   const [payFilter, setPayFilter] = useState<'all' | CombinedSubmissionStatus>('all')
   const [className, setClassName] = useState<string>('all')
+  const [gender, setGender] = useState<string>('all')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const classOptions = useMemo(() => Array.from(new Set(submissions.map((s) => `${s.className}-${s.section}`))), [submissions])
+  const genderOptions = useMemo(() => Array.from(new Set(submissions.map((s) => s.gender).filter((g): g is string => !!g))), [submissions])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -720,19 +727,112 @@ function SubmissionsPanel({ app, submissions, onView, onRecordOffline }: {
         const cs = combinedSubmissionStatus(app, s)
         if (payFilter !== 'all' && cs !== payFilter) return false
         if (className !== 'all' && `${s.className}-${s.section}` !== className) return false
-        if (q && !(s.studentName.toLowerCase().includes(q) || s.admissionNo.toLowerCase().includes(q))) return false
+        if (gender !== 'all' && (s.gender ?? '—') !== gender) return false
+        if (q && !(s.studentName.toLowerCase().includes(q) || s.admissionNo.toLowerCase().includes(q) || (s.tourNo ?? '').toLowerCase().includes(q))) return false
         return true
       })
       .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
-  }, [submissions, app, search, payFilter, className])
+  }, [submissions, app, search, payFilter, className, gender])
+
+  // §14 — summary tiles over ALL submissions (not just the filtered view).
+  const tiles = useMemo(() => {
+    let paid = 0, unpaid = 0, pending = 0, verified = 0
+    for (const s of submissions) {
+      if (s.status === 'Withdrawn') continue
+      const pay = deriveSubmissionPayment(app, s)
+      if (pay.status === 'Paid') paid++
+      else if (pay.status === 'Awaiting Verification') pending++
+      else unpaid++
+      if (s.physicalDoc.status === 'Verified') verified++
+    }
+    return { total: submissions.filter((s) => s.status !== 'Withdrawn').length, paid, unpaid, pending, verified }
+  }, [submissions, app])
+
+  const toggle = (id: string) => setSelected((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const clearSelection = () => setSelected(new Set())
+  const selectedRows = filtered.filter((s) => selected.has(s.id))
+
+  // §15 — completed official A4 forms: one / selected / whole (filtered) set.
+  const printForms = (list: ApplicationSubmission[]) => {
+    if (list.length === 0) return
+    withOffscreenDocument(
+      (holder) => { if (holder.querySelector('.app-print-stack')) printApplicationStack() },
+      <ApplicationPrintStack items={list.map((s) => ({ app, sub: s }))} />,
+    )
+    toast.info(`Preparing ${list.length} form${list.length === 1 ? '' : 's'}…`, { description: 'One official A4 page per student.' })
+  }
+  const downloadForms = (list: ApplicationSubmission[]) => {
+    if (list.length === 0) return
+    withOffscreenDocument(
+      (holder) => {
+        const stack = holder.querySelector('.app-print-stack')
+        if (stack) downloadApplicationStackHtml(stack, `${app.title.replace(/\W+/g, '-')}-forms-${list.length}students`)
+      },
+      <ApplicationPrintStack items={list.map((s) => ({ app, sub: s }))} />,
+    )
+    toast.success(`Downloading ${list.length} completed form${list.length === 1 ? '' : 's'}`, { description: 'Print-ready official A4 document per student.' })
+  }
+
+  // §16 — attendance/master rows shared by the print list + CSV.
+  const listRows = (list: ApplicationSubmission[]): AttendanceRow[] =>
+    list.map((s, i) => {
+      const pay = deriveSubmissionPayment(app, s)
+      return {
+        serial: i + 1,
+        tourNo: s.tourNo ?? '—',
+        studentName: s.studentName,
+        className: s.className,
+        section: s.section,
+        gender: s.gender ?? '—',
+        rollNo: s.rollNo ?? '',
+        admissionNo: s.admissionNo,
+        guardianName: s.guardianName,
+        guardianPhone: s.guardianPhone,
+        payment: pay.status === 'Paid' ? 'Paid' : pay.status === 'Awaiting Verification' ? 'Pending verification' : 'Unpaid',
+        verification: s.physicalDoc.status === 'Verified' ? 'Verified' : s.status,
+      }
+    })
+
+  const printList = () => {
+    const rows = listRows(filtered)
+    withOffscreenDocument(
+      (holder) => { if (holder.querySelector('.tour-attendance-doc')) printAttendanceList() },
+      <TourAttendanceListDocument app={app} rows={rows} />,
+    )
+  }
+
+  const exportListCsv = () => {
+    const rows = listRows(filtered)
+    const headers = ['Serial No', 'Tour No', 'Student Name', 'Class', 'Section', 'Gender', 'Roll No', 'Admission No', 'Parent/Guardian', 'Mobile', 'Payment Status', 'Verification Status', 'Signature']
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const csv = [
+      headers.map(esc).join(','),
+      ...rows.map((r) => [r.serial, r.tourNo, r.studentName, r.className, r.section, r.gender, r.rollNo, r.admissionNo, r.guardianName, r.guardianPhone, r.payment, r.verification, ''].map(esc).join(',')),
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${app.title.replace(/\W+/g, '-')}-attendance-list.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    toast.success('Attendance list exported', { description: `${rows.length} students — carries a signature column for the trip.` })
+  }
 
   const exportCsv = () => {
-    const headers = ['Submission ID', 'Student', 'Admission No', 'Class', 'Section', 'Guardian', 'Guardian Phone', 'Submitted At', 'Mode', 'Consent', 'Document', 'Approval', 'Payment', 'Receipts']
+    const headers = ['Submission ID', 'Tour No', 'Student', 'Admission No', 'Class', 'Section', 'Gender', 'Guardian', 'Guardian Phone', 'Submitted At', 'Mode', 'Consent', 'Document', 'Approval', 'Payment', 'Receipts']
     const fieldCols = app.formFields.map((f) => f.label)
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const rows = filtered.map((s) => {
       const pay = deriveSubmissionPayment(app, s)
-      const base = [s.id, s.studentName, s.admissionNo, s.className, s.section, s.guardianName, s.guardianPhone, s.submittedAt, s.mode,
+      const base = [s.id, s.tourNo ?? '', s.studentName, s.admissionNo, s.className, s.section, s.gender ?? '', s.guardianName, s.guardianPhone, s.submittedAt, s.mode,
         isConsentSatisfied(app, s) ? 'Given' : 'Pending', s.physicalDoc.status, s.status, pay.status, pay.receiptNos.join('; ')]
       const answers = app.formFields.map((f) => {
         const v = s.answers[f.id]
@@ -760,8 +860,38 @@ function SubmissionsPanel({ app, submissions, onView, onRecordOffline }: {
       subtitle={`${filtered.length} of ${submissions.length} shown`}
       action={
         <div className="flex items-center gap-1.5 flex-wrap">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" disabled={filtered.length === 0}>
+                <FileOutput className="h-3 w-3" /> Forms <ChevronDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 z-[70]">
+              <DropdownMenuItem className="text-[11px]" onSelect={() => printForms(selectedRows.length > 0 ? selectedRows : filtered)}>
+                Print {selectedRows.length > 0 ? `${selectedRows.length} selected` : 'all shown'}
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-[11px]" onSelect={() => downloadForms(selectedRows.length > 0 ? selectedRows : filtered)}>
+                Download {selectedRows.length > 0 ? `${selectedRows.length} selected` : 'all shown'} (.html)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-[11px] text-muted-foreground" disabled>
+                Sets follow the active filters (class / gender / payment)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" disabled={filtered.length === 0}>
+                <ListChecks className="h-3 w-3" /> Attendance list <ChevronDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 z-[70]">
+              <DropdownMenuItem className="text-[11px]" onSelect={printList}>Print list (A4)</DropdownMenuItem>
+              <DropdownMenuItem className="text-[11px]" onSelect={exportListCsv}>Download list (CSV)</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={exportCsv} disabled={filtered.length === 0}>
-            <Download className="h-3 w-3" /> Export CSV
+            <Download className="h-3 w-3" /> Answers CSV
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={onRecordOffline}>
             <ClipboardList className="h-3 w-3" /> Record paper form
@@ -770,17 +900,45 @@ function SubmissionsPanel({ app, submissions, onView, onRecordOffline }: {
       }
       bodyClassName="p-0"
     >
-      {/* Filters */}
+      {/* §14 summary tiles */}
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-px border-b border-border/60 bg-border/40">
+        {[
+          { label: 'Submitted', value: tiles.total },
+          { label: 'Paid', value: tiles.paid, tone: 'emerald' },
+          { label: 'Unpaid', value: tiles.unpaid, tone: 'amber' },
+          { label: 'Payment verifying', value: tiles.pending, tone: 'amber' },
+          { label: 'Verified docs', value: tiles.verified },
+        ].map((t) => (
+          <div key={t.label} className="bg-card px-3 py-1.5">
+            <p className="text-[8.5px] uppercase font-semibold tracking-wider text-muted-foreground truncate">{t.label}</p>
+            <p className={cn('text-sm font-bold tabular-nums leading-tight',
+              t.tone === 'emerald' && 'text-emerald-600 dark:text-emerald-400',
+              t.tone === 'amber' && 'text-amber-600 dark:text-amber-400')}
+            >
+              {t.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* §14 filters — search · class · gender · payment/submission status */}
       <div className="flex items-center gap-2 flex-wrap px-4 py-2.5 border-b border-border/60">
         <div className="relative flex-1 min-w-[160px] max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input className="pl-8 h-8 text-xs" placeholder="Search student / admission no." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input className="pl-8 h-8 text-xs" placeholder="Search name / admission / serial" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <Select value={className} onValueChange={setClassName}>
           <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue /></SelectTrigger>
           <SelectContent className="z-[70]">
             <SelectItem value="all" className="text-xs">All classes</SelectItem>
             {classOptions.map((c) => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={gender} onValueChange={setGender}>
+          <SelectTrigger className="h-8 w-[110px] text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent className="z-[70]">
+            <SelectItem value="all" className="text-xs">All genders</SelectItem>
+            {genderOptions.map((g) => <SelectItem key={g} value={g} className="text-xs">{g}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={payFilter} onValueChange={(v) => setPayFilter(v as 'all' | CombinedSubmissionStatus)}>
@@ -792,6 +950,11 @@ function SubmissionsPanel({ app, submissions, onView, onRecordOffline }: {
             ))}
           </SelectContent>
         </Select>
+        {selected.size > 0 && (
+          <Button variant="ghost" size="sm" className="h-8 text-[11px] gap-1" onClick={clearSelection}>
+            <X className="h-3 w-3" /> {selected.size} selected
+          </Button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -811,15 +974,28 @@ function SubmissionsPanel({ app, submissions, onView, onRecordOffline }: {
             const pay = deriveSubmissionPayment(app, s)
             const consentOk = isConsentSatisfied(app, s)
             return (
-              <motion.div key={s.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-4 py-2.5 hover:bg-muted/25 transition-colors">
+              <motion.div key={s.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={cn('px-4 py-2.5 hover:bg-muted/25 transition-colors', selected.has(s.id) && 'bg-emerald-500/[0.04]')}>
                 <div className="flex items-center gap-3">
+                  <Checkbox
+                    checked={selected.has(s.id)}
+                    onCheckedChange={() => toggle(s.id)}
+                    aria-label={`Select ${s.studentName}'s form for bulk actions`}
+                    className="h-3.5 w-3.5 shrink-0"
+                  />
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-500/10 ring-1 ring-slate-500/20 text-[9px] font-semibold text-slate-600 dark:text-slate-300">
                     {s.studentName.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('')}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate">{s.studentName}</p>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <p className="text-xs font-semibold truncate">{s.studentName}</p>
+                      {s.tourNo && (
+                        <span className="shrink-0 rounded bg-muted px-1 py-px font-mono text-[8.5px] text-muted-foreground" title="Permanent tour serial / attendance number">
+                          {s.tourNo}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-muted-foreground truncate">
-                      {s.className}-{s.section} · {s.admissionNo} · {new Date(s.submittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      {s.className}-{s.section} · {s.admissionNo}{s.gender ? ` · ${s.gender}` : ''} · {new Date(s.submittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                       {!consentOk && app.guardianConsent.required && ' · consent pending'}
                       {s.resubmissionCount > 0 && ` · resubmitted ×${s.resubmissionCount}`}
                     </p>
@@ -913,7 +1089,11 @@ function PaymentsPanel({ app, submissions, charge }: {
                     'text-[9px] font-semibold',
                     t.status === 'Success' ? 'text-emerald-600 dark:text-emerald-400' : t.status === 'Under Verification' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400',
                   )}>{t.status === 'Success' ? 'Paid' : t.status}</p>
+                  {(t.refundedAmount ?? 0) > 0 && (
+                    <p className="text-[9px] font-semibold text-violet-600 dark:text-violet-400">refunded {formatINR(t.refundedAmount ?? 0, true)}</p>
+                  )}
                 </div>
+                <RefundButton appId={app.id} txnId={t.id} amount={t.amount} refunded={t.refundedAmount ?? 0} status={t.status} studentName={t.studentName} />
               </div>
             ))}
           </div>
@@ -1148,22 +1328,33 @@ function SubmissionDialog({ open, app, sub, onClose }: {
               app={app}
               sub={sub}
               notes={sub.reviewNotes}
-              paymentLines={app.payment.mode !== 'None' ? [
-                { label: 'Payment status', value: pay.status },
-                ...applicationPayments(app)
-                  .filter((t) => t.studentId === sub.studentId)
-                  .map((t) => ({
-                    label: `Receipt ${t.receiptNo}`,
-                    value: `${formatINR(t.amount)} · ${t.mode} · ${formatDate(t.date)} · ${t.status === 'Success' ? 'Paid' : t.status}`,
-                  })),
-              ] : []}
             />
           </div>
           <div className="flex items-center justify-end gap-1.5 mt-2.5">
-            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => printApplicationDocument()}>
+            <Button
+              variant="outline" size="sm" className="h-7 text-[11px] gap-1"
+              onClick={() => {
+                logApplicationAudit({
+                  ts: new Date().toISOString(), applicationId: app.id, submissionId: sub.id,
+                  actor: 'Dr. Ananya Iyer', actorRole: 'Principal', action: 'form.printed',
+                  message: `Official completed form printed — ${sub.studentName}${sub.tourNo ? ` (${sub.tourNo})` : ''}.`,
+                })
+                printApplicationDocument()
+              }}
+            >
               <Printer className="h-3 w-3" /> Print
             </Button>
-            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => downloadApplicationDocument(applicationDocFileName({ app, sub }))}>
+            <Button
+              variant="outline" size="sm" className="h-7 text-[11px] gap-1"
+              onClick={() => {
+                logApplicationAudit({
+                  ts: new Date().toISOString(), applicationId: app.id, submissionId: sub.id,
+                  actor: 'Dr. Ananya Iyer', actorRole: 'Principal', action: 'form.downloaded',
+                  message: `Official completed form downloaded — ${sub.studentName}${sub.tourNo ? ` (${sub.tourNo})` : ''}.`,
+                })
+                downloadApplicationDocument(applicationDocFileName({ app, sub }))
+              }}
+            >
               <Download className="h-3 w-3" /> Download
             </Button>
           </div>
@@ -1363,5 +1554,60 @@ function useActiveStudents(): RosterEntry[] {
         id: st.id, name: st.name, admissionNo: st.admissionNo, className: st.className, classId: st.classId, section: st.section, guardianName: st.guardianName, guardianPhone: st.guardianPhone,
       })),
     [students],
+  )
+}
+
+// ─── §12 — refund workflow (proper refund before any deletion) ─────────
+
+function RefundButton({ appId, txnId, amount, refunded, status, studentName }: {
+  appId: string
+  txnId: string
+  amount: number
+  refunded: number
+  status: string
+  studentName: string
+}) {
+  const refundable = amount - refunded
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('Tour cancelled by the school — fee refunded in full.')
+  const refundableStatus = status === 'Success' || status === 'Under Verification'
+  if (!refundableStatus || refundable <= 0) return null
+  const run = () => {
+    const res = useFeeStore.getState().refundApplicationTransaction(txnId, refundable, reason, 'Dr. Ananya Iyer')
+    if (!res.success) { toast.error(res.error ?? 'Refund failed.'); return }
+    toast.success(`Refund issued — ${formatINR(refundable)} returned for ${studentName}.`, {
+      description: 'The receipt history stays intact in Fee Management.',
+    })
+    logApplicationAudit({
+      ts: new Date().toISOString(), applicationId: appId,
+      actor: 'Dr. Ananya Iyer', actorRole: 'Principal', action: 'payment.refunded',
+      message: `Refund of ${formatINR(refundable)} issued for ${studentName} — ${reason.trim()}`,
+    })
+    setOpen(false)
+  }
+  return (
+    <>
+      <Button variant="ghost" size="sm" className="h-7 shrink-0 text-[10px] gap-1 text-violet-600 hover:text-violet-700" onClick={() => setOpen(true)}>
+        <Undo2 className="h-3 w-3" /> Refund
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Refund tour payment</DialogTitle>
+            <DialogDescription className="text-[11px]">
+              {formatINR(refundable)} refundable to {studentName} — the payment record itself is never deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label className="text-[11px]">Reason</Label>
+            <Textarea className="min-h-[60px] text-xs" value={reason} onChange={(e) => setReason(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button size="sm" className="h-8 bg-violet-600 text-xs text-white hover:bg-violet-700" onClick={run}>Issue refund</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

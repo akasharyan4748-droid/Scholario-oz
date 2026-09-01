@@ -216,10 +216,7 @@ export function ReviewDialog({ app, sub, onClose }: {
             <ApplicationPrintDocument
               app={app}
               sub={sub}
-              paymentLines={app.payment.mode !== 'None' ? [
-                { label: 'Payment status', value: pay.status },
-                ...(pay.receiptNos.length ? [{ label: 'Receipts', value: pay.receiptNos.join(', ') }] : []),
-              ] : []}
+              notes={sub.reviewNotes}
             />
           </div>
           <div className="flex items-center justify-end gap-1.5 mt-2.5">

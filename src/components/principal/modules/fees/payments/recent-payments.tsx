@@ -53,12 +53,19 @@ export function RecentPayments({
 }) {
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
   const applications = useApplicationsStore((s) => s.applications)
+  const submissions = useApplicationsStore((s) => s.submissions)
   // APPS-FIN-LINK-1 — application-bound payments (tour submissions) show
   // WHICH form they belong to. Content-addressed lookup: rows whose
   // application no longer resolves simply render without the sub-line.
   const appTitleById = useMemo(
     () => new Map(applications.map((a) => [a.id, a.title])) as Map<string, string>,
     [applications],
+  )
+  // Permanent tour serial per (application, student) — printed on the
+  // connected-payment line so staff can reconcile receipts to tour numbers.
+  const tourNoBySub = useMemo(
+    () => new Map(submissions.map((s) => [`${s.applicationId}:${s.studentId}`, s.tourNo])) as Map<string, string | undefined>,
+    [submissions],
   )
   const { transactions } = data
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -247,7 +254,7 @@ export function RecentPayments({
                           className="block truncate text-[10px] text-muted-foreground/75 mt-px"
                           title={`Payment linked to application: ${appTitleById.get(t.applicationId)}`}
                         >
-                          <span aria-hidden>↳ </span>{appTitleById.get(t.applicationId)}
+                          <span aria-hidden>↳ </span>{t.studentId && tourNoBySub.get(`${t.applicationId}:${t.studentId}`) ? `${tourNoBySub.get(`${t.applicationId}:${t.studentId}`)} · ` : ''}{appTitleById.get(t.applicationId)}
                         </span>
                       )}
                     </td>

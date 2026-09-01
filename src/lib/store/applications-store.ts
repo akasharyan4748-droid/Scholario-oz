@@ -49,6 +49,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { useFeeStore } from './fee-store'
 import type { FeeTransaction } from './fee-store'
+import { formatINR } from '@/lib/format'
 import { useStudentsStore } from '@/lib/store/students-store'
 import type { AdditionalChargeCategory } from './fee-store'
 import { CURRENT_ACADEMIC_YEAR } from './fee-store-data'
@@ -188,7 +189,8 @@ export const APPLICATION_TEMPLATES: Record<ApplicationTemplateKey, ApplicationTe
       { id: 't-meal', type: 'dropdown', label: 'Meal preference', required: true, options: ['Vegetarian', 'Non-Vegetarian', 'Jain'], section: 'Tour Preferences' },
       { id: 't-shirt', type: 'radio', label: 'Tour T-shirt size', required: true, options: ['S', 'M', 'L', 'XL'], section: 'Tour Preferences' },
       { id: 't-emergency', type: 'emergency-contact', label: 'Emergency contact on tour', helpText: 'An adult relative besides the guardians listed above.', required: true, section: 'Medical & Emergency Details' },
-      { id: 't-medical', type: 'longtext', label: 'Medical notes / allergies', helpText: 'Leave blank if none.', required: false, section: 'Medical & Emergency Details' },
+      { id: 't-medical', type: 'longtext', label: 'Relevant health / medical note', helpText: 'Allergies or conditions the escorting staff should know. Leave blank if none.', required: false, section: 'Medical & Emergency Details' },
+      { id: 't-motion', type: 'yesno', label: 'Does the student have motion sickness or any travel-related concern?', required: false, section: 'Medical & Emergency Details' },
       { id: 't-photo', type: 'yesno', label: 'May photographs taken on the tour be used for school communication?', required: false, section: 'Consent' },
     ],
     consentStatement: 'I give consent for my ward to participate in the tour and accept the school\u2019s conduct rules for the trip.',
@@ -212,6 +214,9 @@ export interface ApplicationPaymentConfig {
    * whole lifecycle so payments never lose their connection.
    */
   chargeId?: string
+  /** Which channels the office accepts for THIS tour (TOUR-CONSENT-1).
+   *  'Both' = online gateway + cash at the school counter. */
+  methods?: 'Online' | 'Cash' | 'Both'
 }
 
 export interface GuardianConsentConfig {
@@ -263,6 +268,20 @@ export interface SchoolApplication {
   physicalSignatureRequired: boolean
   inChargeTeacherId?: string
   inChargeName?: string
+  /** Staff members accompanying the tour (printed on the official form). */
+  accompanyingStaff?: string
+  /** Circular / reference number of the office order that authorises the
+   *  tour (printed top-left of the official document). */
+  circularNo?: string
+  /** Date of that circular (yyyy-mm-dd). */
+  circularDate?: string
+  /** Human duration of the tour, e.g. "2 Days / 1 Night". */
+  duration?: string
+  /** Last day of the tour when it spans multiple days (eventDate = start). */
+  endDate?: string
+  /** Gender eligibility — undefined/empty means every student of the
+   *  target classes may apply (TOUR-CONSENT-1). */
+  targetGenders?: Array<'Male' | 'Female' | 'Other'>
   payment: ApplicationPaymentConfig
   formFields: ApplicationFormField[]
   /** Definition version — bumped on structural edits after publish.
@@ -328,6 +347,11 @@ export interface ApplicationSubmission {
   resubmissionCount: number
   /** Version of the form definition this submission answered. */
   formVersion?: number
+  /** Permanent TOUR SERIAL / attendance number for this application
+   *  (TOUR-CONSENT-1 §13) — assigned once at submission, never reused.
+   *  Format TOUR-26-27-<class>-<section>-<M|F>-<001> so printed attendance
+   *  sheets can be organised class-wise and gender-wise at a glance. */
+  tourNo?: string
   updatedAt: string
 }
 
@@ -347,7 +371,8 @@ export interface ApplicationAuditEvent {
     | 'submission.recorded' | 'submission.submitted' | 'submission.resubmitted'
     | 'submission.approved' | 'submission.rejected' | 'submission.correction'
     | 'submission.withdrawn' | 'payment.initiated' | 'payment.completed'
-    | 'doc.received' | 'doc.verified'
+    | 'payment.refunded' | 'form.downloaded' | 'form.printed'
+    | 'doc.received' | 'doc.verified' | 'application.deleted'
   message: string
 }
 
@@ -506,11 +531,15 @@ export interface StudentLite {
   section: string
 }
 
-export function isEligibleForApplication(app: SchoolApplication, student: Pick<StudentLite, 'classId' | 'section' | 'id'>): boolean {
+export function isEligibleForApplication(app: SchoolApplication, student: Pick<StudentLite, 'classId' | 'section' | 'id'> & { gender?: string }): boolean {
   if (app.status !== 'Published') return false
   if (app.targetStudentIds?.length) return app.targetStudentIds.includes(student.id)
   if (!app.targetClassIds.includes(student.classId)) return false
   if (app.targetSectionNames?.length) return app.targetSectionNames.includes(student.section)
+  if (app.targetGenders?.length) {
+    if (!student.gender) return false
+    if (!app.targetGenders.includes(student.gender as 'Male' | 'Female' | 'Other')) return false
+  }
   return true
 }
 
@@ -541,6 +570,14 @@ export interface CreateApplicationInput {
   physicalSignatureRequired: boolean
   inChargeTeacherId?: string
   inChargeName?: string
+  /** TOUR-CONSENT-1 §2 — session-setup fields (fixed template, per-tour data). */
+  accompanyingStaff?: string
+  circularNo?: string
+  circularDate?: string
+  duration?: string
+  endDate?: string
+  targetGenders?: Array<'Male' | 'Female' | 'Other'>
+  paymentMethods?: 'Online' | 'Cash' | 'Both'
   paymentMode: PaymentModeConfig
   paymentAmount: number
   paymentFeeHeadLabel: string
@@ -568,6 +605,11 @@ interface ApplicationsState {
   reopenApplication: (id: string, actor: string) => { success: boolean; error?: string }
   archiveApplication: (id: string, actor: string) => void
   duplicateApplication: (id: string, actor: string) => { success: boolean; application?: SchoolApplication }
+  /** TOUR-CONSENT-1 §12 — CONTROLLED deletion. Blocked while any tour fee
+   *  is still unrefunded (paid records can never be silently destroyed);
+   *  cascades submissions + audit, cancels the linked Additional Charge
+   *  (its historical transactions always survive in Fee Management). */
+  deleteApplication: (id: string, actor: string) => { success: boolean; error?: string }
 
   submitApplication: (input: {
     applicationId: string
@@ -621,6 +663,50 @@ function pushAudit(state: Pick<ApplicationsState, 'audit'>, ev: Omit<Application
   return [{ ...ev, id: newId('AEV') }, ...state.audit]
 }
 
+// ─── Tour serial / attendance numbers (TOUR-CONSENT-1 §13) ─────────────
+
+/**
+ * Compact session tag for serials: academicYear "2026-2027" → "26-27".
+ * Tolerates en-dash session separators ("2026–2027").
+ */
+function sessionTag(academicYear: string): string {
+  const parts = academicYear.split(/[-–—]/).map((p) => p.trim())
+  if (parts.length >= 2 && parts.every((p) => /^\d{4}$/.test(p))) {
+    return `${parts[0].slice(2)}-${parts[1].slice(2)}`
+  }
+  return academicYear.replace(/\s+/g, '').slice(0, 8)
+}
+
+/** "Class 4" → "4" · "Pre-Nursery" → "PN" — short, printable class tag. */
+function classTag(className: string): string {
+  const digits = className.match(/\d+/)
+  if (digits) return digits[0]
+  return className.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'X'
+}
+
+/** Gender letter for the serial: M / F / O; unknown → "X". */
+function genderLetter(gender?: string): string {
+  if (!gender) return 'X'
+  const c = gender.trim()[0]?.toUpperCase()
+  return c === 'M' || c === 'F' || c === 'O' ? c : 'X'
+}
+
+/** Full serial builder — uses the SUBMISSION's own class/section/gender. */
+export function buildTourNo(
+  app: SchoolApplication,
+  student: Pick<StudentSubmissionIdentity, 'className' | 'section' | 'gender'>,
+  seq: number,
+): string {
+  return [
+    'TOUR',
+    sessionTag(app.academicYear),
+    classTag(student.className),
+    (student.section || 'X').replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase() || 'X',
+    genderLetter(student.gender),
+    String(seq).padStart(3, '0'),
+  ].join('-')
+}
+
 // ─── Coarse category mapping into Additional Charges vocabulary ────────
 
 function chargeCategoryOf(c: ApplicationCategory): AdditionalChargeCategory {
@@ -669,6 +755,40 @@ export async function notifyEligibleStudents(app: SchoolApplication): Promise<vo
     })))
   } catch {
     /* notification is best-effort — never block the publish */
+  }
+}
+
+/** §10 — human-readable history entries for form-level actions
+ *  (print/download of the official document). Fire-and-forget. */
+export function logApplicationAudit(ev: Omit<ApplicationAuditEvent, 'id'>): void {
+  try {
+    const st = useApplicationsStore.getState()
+    useApplicationsStore.setState({ audit: pushAudit(st, ev) })
+  } catch {
+    /* best-effort */
+  }
+}
+
+/**
+ * §19 — quiet heads-up to staff when a student submits and the tour now
+ * needs review/verification. Uses the SAME announcements pipeline as the
+ * publish fan-out. Fire-and-forget; deliberately NOT sent for every
+ * internal state change.
+ */
+export async function notifyStaffOfSubmission(app: SchoolApplication, submission: ApplicationSubmission): Promise<void> {
+  try {
+    await fetch('/api/announcements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `New tour application — ${submission.studentName}`,
+        message: `${submission.studentName} (${submission.className}-${submission.section}) submitted "${app.title}". Review it in Applications & Forms.`,
+        category: 'Event',
+        audience: 'All Teachers',
+      }),
+    })
+  } catch {
+    /* best-effort — never block the submission */
   }
 }
 
@@ -755,6 +875,12 @@ export const useApplicationsStore = create<ApplicationsState>()(
           startDate: input.startDate,
           deadline: input.deadline,
           eventDate: input.eventDate,
+          endDate: input.endDate,
+          duration: input.duration,
+          circularNo: input.circularNo,
+          circularDate: input.circularDate,
+          accompanyingStaff: input.accompanyingStaff,
+          targetGenders: input.targetGenders?.length ? [...input.targetGenders] : undefined,
           lockDate: input.lockDate,
           participation: input.participation,
           guardianConsent: {
@@ -770,6 +896,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
             mode: input.paymentMode,
             amount: Math.max(0, input.paymentAmount),
             feeHeadLabel: input.paymentFeeHeadLabel.trim() || trimmed,
+            methods: input.paymentMethods ?? 'Both',
           },
           formFields: input.formFields.map((f) => ({ ...f })),
           status: 'Draft',
@@ -828,6 +955,12 @@ export const useApplicationsStore = create<ApplicationsState>()(
             ...(patch.startDate !== undefined ? { startDate: patch.startDate } : {}),
             ...(patch.deadline !== undefined ? { deadline: patch.deadline } : {}),
             ...(patch.eventDate !== undefined ? { eventDate: patch.eventDate } : {}),
+            ...(patch.endDate !== undefined ? { endDate: patch.endDate || undefined } : {}),
+            ...(patch.duration !== undefined ? { duration: patch.duration.trim() || undefined } : {}),
+            ...(patch.circularNo !== undefined ? { circularNo: patch.circularNo.trim() || undefined } : {}),
+            ...(patch.circularDate !== undefined ? { circularDate: patch.circularDate || undefined } : {}),
+            ...(patch.accompanyingStaff !== undefined ? { accompanyingStaff: patch.accompanyingStaff.trim() || undefined } : {}),
+            ...(patch.targetGenders !== undefined ? { targetGenders: patch.targetGenders.length ? patch.targetGenders : undefined } : {}),
             ...(patch.lockDate !== undefined ? { lockDate: patch.lockDate } : {}),
             ...(patch.participation !== undefined ? { participation: patch.participation } : {}),
             ...(patch.guardianConsentRequired !== undefined || patch.guardianConsentMethod !== undefined || patch.consentStatement !== undefined ? {
@@ -1157,6 +1290,45 @@ export const useApplicationsStore = create<ApplicationsState>()(
         return { success: true, application: copy }
       },
 
+      // TOUR-CONSENT-1 §12 — controlled deletion with financial guard.
+      deleteApplication: (id, actor) => {
+        const state = get()
+        const app = state.applications.find((a) => a.id === id)
+        if (!app) return { success: false, error: 'Application not found.' }
+        const pays = applicationPayments(app)
+        const unresolved = pays.filter(
+          (t) => (t.status === 'Success' || t.status === 'Under Verification')
+            && (t.refundedAmount ?? 0) < t.amount,
+        )
+        if (unresolved.length > 0) {
+          const due = unresolved.reduce((s, t) => s + (t.amount - (t.refundedAmount ?? 0)), 0)
+          return {
+            success: false,
+            error: `${formatINR(due)} of tour fees is still unrefunded. Refund through Fee Management first — paid records can never be silently deleted.`,
+          }
+        }
+        const subCount = state.submissions.filter((s) => s.applicationId === id).length
+        const nowIso = new Date().toISOString()
+        set({
+          applications: state.applications.filter((a) => a.id !== id),
+          submissions: state.submissions.filter((s) => s.applicationId !== id),
+          audit: pushAudit(
+            { audit: state.audit.filter((e) => e.applicationId !== id) } as Pick<ApplicationsState, 'audit'>,
+            {
+              ts: nowIso, applicationId: id, actor, actorRole: 'Principal',
+              action: 'application.deleted',
+              message: `Tour "${app.title}" permanently removed (${subCount} submission${subCount === 1 ? '' : 's'} cleared). ${pays.length > 0 ? 'All fees were previously refunded — refund proof stays in Fee Management.' : 'No payments were ever collected.'}`,
+            },
+          ),
+        })
+        // Stop the linked collection (its historical transactions always
+        // survive in Fee Management — cancelling only closes the obligation).
+        if (app.payment.chargeId) {
+          void useFeeStore.getState().cancelAdditionalCharge(app.payment.chargeId, actor, `Tour "${app.title}" removed`)
+        }
+        return { success: true }
+      },
+
       submitApplication: (input) => {
         const state = get()
         const app = state.applications.find((a) => a.id === input.applicationId)
@@ -1202,6 +1374,8 @@ export const useApplicationsStore = create<ApplicationsState>()(
           reviewNotes: [],
           resubmissionCount: 0,
           formVersion: app.formVersion ?? 1,
+          // Permanent tour serial — sequential per tour, never reused.
+          tourNo: buildTourNo(app, input.student, state.submissions.filter((s) => s.applicationId === app.id).length + 1),
           updatedAt: nowIso,
         }
         set({
@@ -1213,6 +1387,8 @@ export const useApplicationsStore = create<ApplicationsState>()(
             message: `${input.student.name} (${input.student.className}-${input.student.section}) submitted the application.`,
           }),
         })
+        // §19 — staff heads-up (fire-and-forget).
+        void notifyStaffOfSubmission(app, sub)
         return { success: true, submission: sub }
       },
 
@@ -1374,6 +1550,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           submittedByRole: 'Office',
           mode: 'Physical',
           status: 'Submitted',
+          tourNo: buildTourNo(app, input.student, state.submissions.filter((s) => s.applicationId === app.id).length + 1),
           physicalDoc: {
             status: 'Received',
             ...(input.attachmentName ? { fileName: input.attachmentName } : {}),
@@ -1442,7 +1619,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
     }),
     {
       name: 'scholario-applications-v1',
-      version: 6,
+      version: 7,
       storage: createTenantScopedStorage(TENANT_SCOPED_BASES.applications),
       // v4→v5 — Educational Tour scope rebuild: older persisted namespaces
       // may hold workshop/event/board demo forms. Keep ONLY Educational Tour
@@ -1486,6 +1663,27 @@ export const useApplicationsStore = create<ApplicationsState>()(
           const ids = new Set(st.applications.map((a) => a.id))
           st.audit = st.audit.filter((e) => ids.has(e.applicationId))
         }
+        // v6→v7 — TOUR-CONSENT-1: assign permanent tour serials to
+        // submissions that predate serials (per tour, submission order —
+        // deterministic, so re-migration never reshuffles numbers), and
+        // default the payment channel config to 'Both'.
+        if (st?.submissions && st?.applications) {
+          const counts = new Map<string, number>()
+          const byApp = new Map(st.applications.map((a) => [a.id, a]))
+          const sorted = [...st.submissions].sort((a, b) => String(a.submittedAt).localeCompare(String(b.submittedAt)))
+          for (const s of sorted) {
+            if (s.tourNo) continue
+            const app = byApp.get(s.applicationId)
+            if (!app) continue
+            const seq = (counts.get(s.applicationId) ?? 0) + 1
+            counts.set(s.applicationId, seq)
+            s.tourNo = buildTourNo(app, s, seq)
+          }
+          st.applications = st.applications.map((a) => ({
+            ...a,
+            payment: { ...a.payment, methods: a.payment.methods ?? 'Both' },
+          }))
+        }
         return st
       },
     },
@@ -1515,11 +1713,16 @@ function seedApplications(): SchoolApplication[] {
         method: 'Physical Signature',
         statement: tour.consentStatement,
       },
+      circularNo: 'SCH/TOUR/2026-27/18',
+      circularDate: '2026-08-20',
+      duration: '3 Days / 2 Nights',
+      endDate: '2026-10-10',
+      accompanyingStaff: 'Ms. Meera Nair (Science) · Mr. Arjun Khan (Sports)',
       teacherApprovalRequired: true,
       physicalSignatureRequired: true,
       inChargeTeacherId: 'T-014',
       inChargeName: 'Rohan Mehta',
-      payment: { mode: 'Required', amount: 2500, feeHeadLabel: 'Educational Tour — Jaipur', chargeId: 'AC-01' },
+      payment: { mode: 'Required', amount: 2500, feeHeadLabel: 'Educational Tour — Jaipur', chargeId: 'AC-01', methods: 'Both' },
       formFields: tour.fields.map((f) => ({ ...f })),
       status: 'Published',
       createdBy: 'Dr. Ananya Iyer',
@@ -1601,6 +1804,7 @@ export function ensureApplicationSeedData(): void {
         }] : [],
         resubmissionCount: 0,
         formVersion: 1,
+        tourNo: buildTourNo(tour, stu, i + 1),
         updatedAt: submittedAt,
       }
     })

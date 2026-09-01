@@ -56,6 +56,7 @@ import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { addAuditEvent, type StudentIdentityPair } from './student'
+import { ApplicationPrintDocument } from '@/components/principal/modules/applications/application-print'
 
 type PayMode = 'UPI' | 'Cash'
 
@@ -70,6 +71,9 @@ interface ApplyDialogProps {
   /** 'payment' skips straight to the payment step (awaiting-payment rows). */
   initialStep?: 'form' | 'payment'
 }
+
+/** Step flow (TOUR-CONSENT-1 §6): preview the official form → fill/verify
+ *  → review → submit → payment OPTIONAL (pay now or later from My submissions). */
 
 type Answers = Record<string, string | string[] | boolean>
 type Attachments = Record<string, { name: string; size: number }>
@@ -86,7 +90,7 @@ function splitEmergencyContact(value: Answers[string]): { name: string; phone: s
 }
 
 export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmission = null, initialStep = 'form' }: ApplyDialogProps) {
-  const [step, setStep] = useState<'form' | 'review' | 'payment'>(initialStep === 'payment' ? 'payment' : 'form')
+  const [step, setStep] = useState<'preview' | 'form' | 'review' | 'payment'>(initialStep === 'payment' ? 'payment' : 'preview')
   const [answers, setAnswers] = useState<Answers>({})
   const [attachments, setAttachments] = useState<Attachments>({})
   const [emergency, setEmergency] = useState<Record<string, { name: string; phone: string }>>({})
@@ -103,7 +107,7 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
   // ── Reset / prefill whenever the dialog opens for an application ──
   useEffect(() => {
     if (!open || !app) return
-    setStep(initialStep === 'payment' ? 'payment' : 'form')
+    setStep(initialStep === 'payment' ? 'payment' : 'preview')
     setErrors({})
     setSubmitting(false)
     setPaying(null)
@@ -132,6 +136,9 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
 
   const amount = app?.payment.amount ?? 0
   const needsPayment = !!app && app.payment.mode !== 'None'
+  // §2 — channel availability configured by the office (Online / Cash / Both).
+  const methodsOnline = !!app && (app.payment.methods ?? 'Both') !== 'Cash'
+  const methodsCash = !!app && (app.payment.methods ?? 'Both') !== 'Online'
 
   const closeDialog = () => {
     onOpenChange(false)
@@ -250,7 +257,7 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
     } else {
       setSubmitting(false)
       toast.success('Application submitted.', {
-        description: 'Track its status under My submissions.',
+        description: res.submission.tourNo ? `Tour serial ${res.submission.tourNo} · track it under My submissions.` : 'Track its status under My submissions.',
       })
       closeDialog()
     }
@@ -328,6 +335,11 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                     Payment
                   </Badge>
                 )}
+                {step === 'preview' && (
+                  <Badge variant="outline" className="shrink-0 text-[9px] h-4 px-1.5 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400">
+                    Official form preview
+                  </Badge>
+                )}
                 {step === 'review' && (
                   <Badge variant="outline" className="shrink-0 text-[9px] h-4 px-1.5 border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-400">
                     Review
@@ -336,7 +348,47 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
               </div>
             </DialogHeader>
 
-            {step === 'form' ? (
+            {step === 'preview' && identity ? (
+              /* §6 — the official form FIRST, with the school record already
+                 filled in; the student only completes tour questions. */
+              <div className="min-h-0 flex-1 overflow-y-auto -mx-1 px-1">
+                <p className="mb-2 flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-2.5 py-1.5 text-[10.5px] font-medium text-emerald-700 dark:text-emerald-300">
+                  <Info className="h-3 w-3 shrink-0" />
+                  Your school record fills the form automatically — you only answer the tour questions.
+                </p>
+                <div className="rounded-lg border border-border bg-card p-2">
+                  <ApplicationPrintDocument
+                    app={app}
+                    sub={{
+                      id: 'PREVIEW',
+                      applicationId: app.id,
+                      studentId: identity.canonical.id,
+                      studentName: identity.canonical.name,
+                      admissionNo: identity.canonical.admissionNo,
+                      className: identity.canonical.className,
+                      classId: identity.canonical.classId,
+                      section: identity.canonical.section,
+                      ...(identity.canonical.rollNo ? { rollNo: identity.canonical.rollNo } : {}),
+                      ...(identity.canonical.dob ? { dob: identity.canonical.dob } : {}),
+                      ...(identity.canonical.gender ? { gender: identity.canonical.gender } : {}),
+                      ...(identity.canonical.bloodGroup ? { bloodGroup: identity.canonical.bloodGroup } : {}),
+                      ...(identity.canonical.address ? { address: identity.canonical.address } : {}),
+                      guardianName: identity.canonical.guardianName,
+                      guardianPhone: identity.canonical.guardianPhone,
+                      answers: {},
+                      submittedAt: new Date().toISOString(),
+                      submittedByRole: 'Student',
+                      mode: 'Digital',
+                      status: 'Submitted',
+                      physicalDoc: { status: 'Not Required' },
+                      reviewNotes: [],
+                      resubmissionCount: 0,
+                      updatedAt: new Date().toISOString(),
+                    }}
+                  />
+                </div>
+              </div>
+            ) : step === 'form' ? (
               <div className="min-h-0 flex-1 overflow-y-auto -mx-1 px-1 space-y-4">
                 {/* ── Official document header — the form reads as a real
                     school-issued document, not a SaaS card. ── */}
@@ -538,36 +590,45 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
 
                 {app.payment.chargeId ? (
                   <div className="grid gap-2">
-                    <button
-                      type="button"
-                      onClick={() => runPayment('UPI')}
-                      disabled={paying !== null}
-                      className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                        <CreditCard className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-semibold">Pay online — {formatINR(amount)}</span>
-                        <span className="block text-[10px] text-muted-foreground">UPI · confirms instantly with a receipt</span>
-                      </span>
-                      {paying === 'UPI' && <span className="text-[10px] font-medium text-primary animate-pulse">Processing…</span>}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => runPayment('Cash')}
-                      disabled={paying !== null}
-                      className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                        <Banknote className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-semibold">Cash / Pay at school — {formatINR(amount)}</span>
-                        <span className="block text-[10px] text-muted-foreground">Recorded now; the Principal verifies it in the payments queue</span>
-                      </span>
-                      {paying === 'Cash' && <span className="text-[10px] font-medium text-primary animate-pulse">Recording…</span>}
-                    </button>
+                    {methodsOnline && (
+                      <button
+                        type="button"
+                        onClick={() => runPayment('UPI')}
+                        disabled={paying !== null}
+                        className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          <CreditCard className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-semibold">Pay online — {formatINR(amount)}</span>
+                          <span className="block text-[10px] text-muted-foreground">UPI · confirms instantly with a receipt</span>
+                        </span>
+                        {paying === 'UPI' && <span className="text-[10px] font-medium text-primary animate-pulse">Processing…</span>}
+                      </button>
+                    )}
+                    {methodsCash && (
+                      <button
+                        type="button"
+                        onClick={() => runPayment('Cash')}
+                        disabled={paying !== null}
+                        className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                          <Banknote className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-semibold">Cash / Pay at school — {formatINR(amount)}</span>
+                          <span className="block text-[10px] text-muted-foreground">Recorded now; the Principal verifies it in the payments queue</span>
+                        </span>
+                        {paying === 'Cash' && <span className="text-[10px] font-medium text-primary animate-pulse">Recording…</span>}
+                      </button>
+                    )}
+                    {!methodsOnline && !methodsCash && (
+                      <p className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-[11px] text-muted-foreground">
+                        Online payment is not available for this tour — pay at the school office counter.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
@@ -578,7 +639,16 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
             )}
 
             <DialogFooter className="shrink-0 border-t border-border pt-3 mt-1">
-              {step === 'form' ? (
+              {step === 'preview' ? (
+                <>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={closeDialog}>
+                    Close
+                  </Button>
+                  <Button size="sm" className="h-8 text-xs" onClick={() => setStep('form')}>
+                    Accept &amp; Apply
+                  </Button>
+                </>
+              ) : step === 'form' ? (
                 <>
                   <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={closeDialog} disabled={submitting}>
                     Cancel
