@@ -233,6 +233,8 @@ export interface PhysicalDocState {
 export interface SchoolApplication {
   id: string
   title: string
+  /** Tour destination (e.g. "Jaipur, Rajasthan") — printed on the official form. */
+  destination?: string
   description?: string
   category: ApplicationCategory
   /** Originating module — exam-generated forms stay linked to their exam. */
@@ -515,6 +517,7 @@ export function isEligibleForApplication(app: SchoolApplication, student: Pick<S
 
 export interface CreateApplicationInput {
   title: string
+  destination?: string
   description?: string
   category: ApplicationCategory
   templateKey?: ApplicationTemplateKey
@@ -642,10 +645,13 @@ function chargeCategoryOf(c: ApplicationCategory): AdditionalChargeCategory {
 export async function notifyEligibleStudents(app: SchoolApplication): Promise<void> {
   try {
     const classNameOf = (id: string) => ACADEMIC_CLASSES.find((c) => c.id === id)?.name
+    // The announcements API maps any class-like audience to its canonical
+    // `CLASS:<name>` tag itself — send the PLAIN class name (sending a
+    // pre-prefixed value produces "CLASS:CLASS:…" and the notice never
+    // reaches the class roster).
     const audiences: string[] = app.targetStudentIds?.length
       ? ['All Students']
       : Array.from(new Set(app.targetClassIds.map(classNameOf).filter((n): n is string => !!n)))
-        .map((name) => `CLASS:${name}`)
     if (audiences.length === 0) return
     const fee = app.payment.mode !== 'None'
       ? ` Fee ₹${app.payment.amount.toLocaleString('en-IN')} per student — pay online or at the school office.`
@@ -733,6 +739,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
         const app: SchoolApplication = {
           id: newId('APP'),
           title: trimmed,
+          destination: input.destination?.trim() || undefined,
           description: input.description?.trim() || undefined,
           category: input.category,
           templateKey: input.templateKey,
@@ -812,6 +819,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           applications: state.applications.map((a) => a.id !== id ? a : {
             ...a,
             ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+            ...(patch.destination !== undefined ? { destination: patch.destination.trim() || undefined } : {}),
             ...(patch.description !== undefined ? { description: patch.description.trim() || undefined } : {}),
             ...(patch.targetClassIds !== undefined ? { targetClassIds: patch.targetClassIds } : {}),
             ...(patch.targetSectionNames !== undefined ? { targetSectionNames: patch.targetSectionNames.length ? patch.targetSectionNames : undefined } : {}),
@@ -1467,6 +1475,7 @@ function seedApplications(): SchoolApplication[] {
     {
       id: 'APP-JAIPUR-2026',
       title: 'Educational Tour — Jaipur',
+      destination: 'Jaipur, Rajasthan',
       description: 'Three-day educational tour to Jaipur covering Amber Fort, City Palace and Jantar Mantar. Fee covers transport, boarding/lodging, entry tickets and insurance.',
       category: 'Tour',
       templateKey: 'educational_tour',

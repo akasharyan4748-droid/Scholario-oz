@@ -66,7 +66,11 @@ export function ApplicationsModule() {
               />
             )}
             {view.name === 'detail' && (
-              <ApplicationDetail app={useApplicationsStore.getState().applications.find((a) => a.id === view.appId)!} onBack={() => setView({ name: 'dashboard' })} />
+              <ApplicationDetail
+                app={useApplicationsStore.getState().applications.find((a) => a.id === view.appId)!}
+                onBack={() => setView({ name: 'dashboard' })}
+                onEdit={() => setView({ name: 'builder', editingId: view.appId })}
+              />
             )}
           </motion.div>
         </AnimatePresence>

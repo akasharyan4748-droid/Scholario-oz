@@ -29,7 +29,7 @@
 
 import { useEffect, Fragment } from 'react'
 import type { ReactNode } from 'react'
-import { school } from '@/lib/mock/school'
+import { useSchoolSettingsStore } from '@/lib/store/school-settings-store/store'
 import type {
   SchoolApplication, ApplicationSubmission, ReviewNote,
 } from '@/lib/store/applications-store'
@@ -156,6 +156,11 @@ export function ApplicationPrintDocument({
   }, [])
 
   const formNo = sub ? `APPF-${sub.id.slice(-8).toUpperCase()}` : `APPF-${app.id.slice(-8).toUpperCase()}`
+  // Active school's own branding (tenant-scoped School Settings — never a
+  // hardcoded school). Falls back to the store's seeded defaults.
+  const g = useSchoolSettingsStore((s) => s.general)
+  const schoolName = g.schoolName?.trim() || 'School'
+  const logoText = (g.logoText || schoolName.split(/\s+/).slice(0, 2).map((w) => w[0]).join('')).toUpperCase()
 
   return (
     <div className="app-print-doc mx-auto w-full max-w-[720px] bg-white text-slate-700">
@@ -163,13 +168,13 @@ export function ApplicationPrintDocument({
       <div className="border-b-2 border-slate-800 pb-3 flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-[14px] font-black tracking-tight text-slate-600">
-            {school.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}
+            {logoText}
           </div>
           <div>
-            <p className="text-[16px] font-extrabold leading-tight tracking-tight text-slate-900">{school.name}</p>
-            <p className="text-[9px] text-slate-500 mt-0.5">{school.address}</p>
-            <p className="text-[9px] text-slate-500">Ph {school.phone} · {school.email}</p>
-            <p className="text-[9px] text-slate-500">{school.affiliation}</p>
+            <p className="text-[16px] font-extrabold leading-tight tracking-tight text-slate-900">{schoolName}</p>
+            {g.address && <p className="text-[9px] text-slate-500 mt-0.5">{g.address}</p>}
+            {(g.phone || g.email) && <p className="text-[9px] text-slate-500">{[g.phone && `Ph ${g.phone}`, g.email].filter(Boolean).join(' · ')}</p>}
+            {g.affiliation && <p className="text-[9px] text-slate-500">{g.affiliation}</p>}
           </div>
         </div>
         <div className="text-right shrink-0 space-y-1">
@@ -181,6 +186,12 @@ export function ApplicationPrintDocument({
             <p className="text-[8.5px] uppercase tracking-[0.2em] text-slate-400">Form No.</p>
             <p className="text-[11px] font-mono font-semibold text-slate-700">{formNo}</p>
           </div>
+          {app.publishDate && (
+            <div>
+              <p className="text-[8.5px] uppercase tracking-[0.2em] text-slate-400">Issued</p>
+              <p className="text-[11px] font-semibold text-slate-700">{formatDate(app.publishDate)}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -206,15 +217,19 @@ export function ApplicationPrintDocument({
         <SectionHeading>1 · Tour Details</SectionHeading>
         <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border border-slate-200 px-4 py-2.5">
           <DetailRow label="Tour" value={app.title} />
-          <DetailRow label="Teacher in-charge" value={app.inChargeName ?? <BlankRule />} />
+          <DetailRow label="Destination" value={app.destination ?? <BlankRule w="w-32" />} />
           <DetailRow label="Tour date" value={app.eventDate ? formatDate(app.eventDate) : <BlankRule />} />
+          <DetailRow label="Teacher in-charge" value={app.inChargeName ?? <BlankRule />} />
           <DetailRow label="Last date to apply" value={formatDate(app.deadline)} />
-          <DetailRow label="Eligible classes" value={
-            app.targetStudentIds?.length
-              ? `${app.targetStudentIds.length} nominated students`
-              : `${app.targetClassIds.length} class${app.targetClassIds.length === 1 ? '' : 'es'}${app.targetSectionNames?.length ? ` (Sec ${app.targetSectionNames.join(', ')})` : ''}`
-          } />
           <DetailRow label="Participation" value={app.participation} />
+          <div className="col-span-2 flex items-start justify-between gap-3 text-[11px]">
+            <span className="text-slate-400 shrink-0 pt-px">Eligible</span>
+            <span className="font-medium text-slate-700 text-right">
+              {app.targetStudentIds?.length
+                ? `${app.targetStudentIds.length} nominated students`
+                : `${app.targetClassIds.length} class${app.targetClassIds.length === 1 ? '' : 'es'}${app.targetSectionNames?.length ? ` (Sec ${app.targetSectionNames.join(', ')})` : ''}`}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -398,7 +413,7 @@ export function ApplicationPrintDocument({
       {/* ── Footer ── */}
       <div className="mt-4 border-t border-slate-200 pt-2 flex items-center justify-between gap-4">
         <p className="text-[8px] text-slate-400">
-          {formNo} · {school.name} · retain with the application record
+          {formNo} · {schoolName} · retain with the application record
         </p>
         <p className="text-[8px] text-slate-400">Page 1 of 1</p>
       </div>

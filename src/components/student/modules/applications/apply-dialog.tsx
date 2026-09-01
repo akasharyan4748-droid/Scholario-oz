@@ -7,12 +7,14 @@
  * Structure mirrors the printed official form so what the student fills is
  * exactly what the school office files:
  *   1. Official document header (school, form no., session)
- *   2. Tour details (read-only — dates, fee, in-charge)
+ *   2. Tour details (read-only — destination, dates, fee, in-charge)
  *   3. Student particulars (READ-ONLY, from the school record — applicants
  *      never edit their master record here; corrections go through the office)
  *   4. Guardian details (read-only)
- *   5. Tour-specific details (the template's editable questions)
+ *   5. Tour-specific details (the template's editable questions — saved to
+ *      the submission snapshot only, never the canonical student record)
  *   6. Declaration & guardian consent
+ *   → review step: compact REVIEW APPLICATION summary before final submit
  *   → payment step: Online (instant receipt) or Cash / Pay at School
  *     (recorded Under Verification until the Principal confirms).
  *
@@ -27,7 +29,7 @@
 
 import { useEffect, useState } from 'react'
 import {
-  Banknote, CalendarDays, CheckCircle2, CreditCard, FileUp, Info, Landmark,
+  Banknote, Bus, CalendarDays, CheckCircle2, CreditCard, FileUp, Info, Landmark,
   ShieldCheck, Trash2, User, Users,
 } from 'lucide-react'
 import {
@@ -49,7 +51,7 @@ import {
   type ApplicationFormField, type ApplicationSubmission, type SchoolApplication,
 } from '@/lib/store/applications-store'
 import { useFeeStore } from '@/lib/store/fee-store'
-import { school } from '@/lib/mock/school'
+import { useSchoolSettingsStore } from '@/lib/store/school-settings-store/store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -84,7 +86,7 @@ function splitEmergencyContact(value: Answers[string]): { name: string; phone: s
 }
 
 export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmission = null, initialStep = 'form' }: ApplyDialogProps) {
-  const [step, setStep] = useState<'form' | 'payment'>(initialStep)
+  const [step, setStep] = useState<'form' | 'review' | 'payment'>(initialStep === 'payment' ? 'payment' : 'form')
   const [answers, setAnswers] = useState<Answers>({})
   const [attachments, setAttachments] = useState<Attachments>({})
   const [emergency, setEmergency] = useState<Record<string, { name: string; phone: string }>>({})
@@ -95,11 +97,13 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null)
 
   const isFixMode = !!existingSubmission
+  // Active school's own branding (tenant-scoped School Settings).
+  const schGeneral = useSchoolSettingsStore((s) => s.general)
 
   // ── Reset / prefill whenever the dialog opens for an application ──
   useEffect(() => {
     if (!open || !app) return
-    setStep(initialStep)
+    setStep(initialStep === 'payment' ? 'payment' : 'form')
     setErrors({})
     setSubmitting(false)
     setPaying(null)
@@ -177,10 +181,13 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
     return true
   }
 
-  // ── Submit (or resubmit after corrections) ──
+  // ── Submit (or resubmit after corrections) — reached from the review step ──
   const handleSubmit = () => {
     if (!app || !identity || submitting) return
-    if (initialStep !== 'payment' && !validate()) return
+    if (initialStep !== 'payment' && !validate()) {
+      setStep('form')
+      return
+    }
 
     setSubmitting(true)
 
@@ -321,6 +328,11 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                     Payment
                   </Badge>
                 )}
+                {step === 'review' && (
+                  <Badge variant="outline" className="shrink-0 text-[9px] h-4 px-1.5 border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-400">
+                    Review
+                  </Badge>
+                )}
               </div>
             </DialogHeader>
 
@@ -331,8 +343,8 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                 <div className="rounded-lg border border-border bg-card px-3.5 py-3">
                   <div className="flex items-start justify-between gap-3 border-b border-dashed border-border pb-2.5">
                     <div className="min-w-0">
-                      <p className="text-[13px] font-extrabold tracking-tight text-foreground leading-tight">{school.name}</p>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">{school.affiliation}</p>
+                      <p className="text-[13px] font-extrabold tracking-tight text-foreground leading-tight">{schGeneral.schoolName}</p>
+                      {schGeneral.affiliation && <p className="text-[9px] text-muted-foreground mt-0.5">{schGeneral.affiliation}</p>}
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-[8px] uppercase tracking-[0.18em] text-muted-foreground">Form No.</p>
@@ -349,6 +361,7 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                 <section className="rounded-lg border border-border px-3.5 py-3">
                   <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">1. Tour details</p>
                   <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                    {app.destination && <Particular icon={<Bus className="h-3 w-3" />} label="Destination" value={app.destination} />}
                     <Particular icon={<CalendarDays className="h-3 w-3" />} label="Tour date" value={app.eventDate ? formatDate(app.eventDate) : 'To be announced'} />
                     <Particular icon={<CalendarDays className="h-3 w-3" />} label="Last date to apply" value={formatDate(app.deadline)} />
                     <Particular icon={<Landmark className="h-3 w-3" />} label="Fee per student" value={needsPayment ? `${formatINR(amount)}${app.payment.mode === 'Optional' ? ' (optional)' : ''}` : 'Free'} />
@@ -488,8 +501,31 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                   </p>
                 )}
               </div>
+            ) : step === 'review' ? (
+              /* ── Review step — compact REVIEW APPLICATION before submit ── */
+              <div className="min-h-0 flex-1 overflow-y-auto space-y-3 py-1">
+                <div className="rounded-lg border border-border bg-card px-4 py-3.5">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Review application</p>
+                  <div className="mt-2.5 space-y-1.5 text-xs">
+                    <ReviewRow label="Student" value={identity.canonical.name} />
+                    <ReviewRow label="Class" value={`${identity.canonical.className} — ${identity.canonical.section}`} />
+                    <ReviewRow label="Tour" value={app.title} />
+                    <ReviewRow label="Destination" value={app.destination ?? '—'} />
+                    <ReviewRow label="Tour date" value={app.eventDate ? formatDate(app.eventDate) : 'To be announced'} />
+                    <ReviewRow label="Fee" value={needsPayment ? formatINR(amount) : 'Free'} />
+                  </div>
+                </div>
+                <p className="px-1 text-[10.5px] leading-relaxed text-muted-foreground">
+                  Your school record particulars travel with this application as a permanent snapshot. Tour preferences you entered are saved with the submission — the master student record is not modified.
+                </p>
+                {app.physicalSignatureRequired && (
+                  <p className="mx-1 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                    <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
+                    After submitting, print the application from My submissions, have the guardian sign it and hand it to the school office.
+                  </p>
+                )}
+              </div>
             ) : (
-              /* ── Payment step — Online or Cash / Pay at School ── */
               <div className="min-h-0 flex-1 overflow-y-auto space-y-3 py-1">
                 <div className="rounded-lg border border-border bg-muted/25 px-4 py-3.5">
                   <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Tour fee payable</p>
@@ -547,9 +583,18 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                   <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={closeDialog} disabled={submitting}>
                     Cancel
                   </Button>
+                  <Button size="sm" className="h-8 text-xs" onClick={() => { if (validate()) setStep('review') }}>
+                    Review Application
+                  </Button>
+                </>
+              ) : step === 'review' ? (
+                <>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setStep('form')} disabled={submitting}>
+                    Back to form
+                  </Button>
                   <Button size="sm" className="h-8 text-xs" onClick={handleSubmit} disabled={submitting}>
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    {submitting ? 'Submitting…' : needsPayment ? `Submit & Pay ${formatINR(amount)}` : 'Submit Application'}
+                    {submitting ? 'Submitting…' : 'Submit Application'}
                   </Button>
                 </>
               ) : (
@@ -588,6 +633,15 @@ function Particular({ label, value, mono, icon }: { label: string; value: string
 function ErrorLine({ msg }: { msg?: string }) {
   if (!msg) return null
   return <p className="mt-1 text-[10px] font-medium text-rose-600">{msg}</p>
+}
+
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-dashed border-border/50 pb-1.5 last:border-b-0">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="font-medium text-right truncate">{value}</span>
+    </div>
+  )
 }
 
 interface FieldRendererProps {

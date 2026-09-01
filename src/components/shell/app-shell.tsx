@@ -235,6 +235,14 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
       prev.map((n) => (n.id === id ? { ...n, unread: false } : n))
     )
     setNotifOpen(false)
+    // Tour-application announcements deep-link students straight to the form
+    // (Applications & Forms) instead of the generic Communication module.
+    const isTourAnnouncement =
+      !!target?.title && /— applications open$/i.test(target.title.trim())
+    if (role === 'student' && isTourAnnouncement) {
+      onNavigate('applications')
+      return
+    }
     onNavigate('communication')
   }
 

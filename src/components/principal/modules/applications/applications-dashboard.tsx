@@ -79,23 +79,22 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
   const metrics = useMemo(() => {
     let active = 0
     let closing = 0
-    let pendingReview = 0
+    let awaitingReview = 0
     let awaitingMoney = 0
-    let awaitingApproval = 0
     for (const a of applications) {
       const st = effectiveAppStatus(a)
       if (st === 'Open') active++
       if (st === 'Closing Soon') { active++; closing++ }
-      if (st === 'Pending Approval') awaitingApproval++
+      if (st === 'Pending Approval') awaitingReview++
       if (st === 'Closed' || st === 'Locked') continue
       const subs = subsByApp.get(a.id) ?? []
       for (const s of subs) {
         const cs = combinedSubmissionStatus(a, s)
-        if (['Submitted', 'Under Review'].includes(cs)) pendingReview++
+        if (['Submitted', 'Under Review'].includes(cs)) awaitingReview++
         if (cs === 'Awaiting Payment' || cs === 'Awaiting Verification') awaitingMoney++
       }
     }
-    return { active, closing, pendingReview, awaitingMoney, awaitingApproval }
+    return { active, closing, awaitingReview, awaitingMoney }
   }, [applications, subsByApp])
 
   const sessionOptions = useMemo(
@@ -134,24 +133,23 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs text-muted-foreground min-w-0 truncate">
-          Educational Tour — create → publish → students apply &amp; pay → review → official record
+          Educational tours, consent, applications &amp; payment records
         </p>
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setRecordOpen(true)} aria-label="Open record file of past applications">
             <Archive className="h-3 w-3" /> Record File
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={onStartCreate}>
-            <Plus className="h-3 w-3" /> New Tour Application
+            <Plus className="h-3 w-3" /> New Educational Tour
           </Button>
         </div>
       </div>
 
-      {/* Metric strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      {/* Metric strip — all counts derived from live records. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricTile label="Active tours" value={metrics.active} hint={metrics.closing ? `${metrics.closing} closing soon` : undefined} />
-        <MetricTile label="Awaiting approval" value={metrics.awaitingApproval} tone="amber" hint="teacher-created drafts" />
-        <MetricTile label="Pending review" value={metrics.pendingReview} tone="amber" hint="student submissions" />
-        <MetricTile label="Awaiting money" value={metrics.awaitingMoney} tone="amber" hint="pay or cash verify" />
+        <MetricTile label="Awaiting review" value={metrics.awaitingReview} tone="amber" hint="approvals + submissions" />
+        <MetricTile label="Awaiting payment" value={metrics.awaitingMoney} tone="amber" hint="pay or cash verify" />
         <MetricTile label="Total applications" value={applications.length} />
       </div>
 

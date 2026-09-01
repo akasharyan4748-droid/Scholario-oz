@@ -19,7 +19,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, CalendarClock, CheckCircle2, ChevronDown, ClipboardList, Copy,
-  Download, FileText, Landmark, Lock, Printer, Search, Send, ThumbsUp, Undo2,
+  Download, FileText, Landmark, Lock, PencilLine, Printer, Search, Send, ThumbsUp, Undo2,
   UserCheck, Users, Wallet, XCircle, StickyNote, FileSignature, ExternalLink,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -54,6 +54,9 @@ type DetailTab = 'overview' | 'form' | 'submissions' | 'payments' | 'documents' 
 interface Props {
   app: SchoolApplication
   onBack: () => void
+  /** Opens the builder for this application (targets/dates stay editable
+   *  while the form is open; money config stays frozen at publish). */
+  onEdit?: () => void
 }
 
 // ─── Status badge recipes (spec chips: slate/emerald/amber/rose tints) ──
@@ -99,7 +102,7 @@ export function SubmissionStatusChip({ status }: { status: CombinedSubmissionSta
 
 // ─── Component ─────────────────────────────────────────────────────────
 
-export function ApplicationDetail({ app: liveAppRef, onBack }: Props) {
+export function ApplicationDetail({ app: liveAppRef, onBack, onEdit }: Props) {
   // Subscribe by id so status flips re-render instantly. NOTE (zustand v5):
   // selectors must return STABLE references — filter in useMemo, never in
   // the selector (a fresh array each getSnapshot() triggers the infinite
@@ -199,6 +202,11 @@ export function ApplicationDetail({ app: liveAppRef, onBack }: Props) {
           {(status === 'Locked' || status === 'Closed') && (
             <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={handleReopen}>
               <Undo2 className="h-3 w-3" /> Reopen
+            </Button>
+          )}
+          {editingAllowed && onEdit && (
+            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={onEdit}>
+              <PencilLine className="h-3 w-3" /> Edit
             </Button>
           )}
           <BlankFormMenu />

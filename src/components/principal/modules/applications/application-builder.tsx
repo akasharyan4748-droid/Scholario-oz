@@ -58,6 +58,7 @@ const UNIQUE_CLASSES = (() => {
 
 export interface BuilderResult {
   title: string
+  destination?: string
   description?: string
   category: SchoolApplication['category']
   templateKey: 'educational_tour'
@@ -87,6 +88,7 @@ const TEMPLATE = APPLICATION_TEMPLATES.educational_tour
 function freshDraft(fixedInCharge?: { id: string; name: string }): BuilderResult {
   return {
     title: '',
+    destination: '',
     description: '',
     category: TEMPLATE.category,
     templateKey: TEMPLATE.key,
@@ -112,6 +114,7 @@ function freshDraft(fixedInCharge?: { id: string; name: string }): BuilderResult
 function fromApp(app: SchoolApplication): BuilderResult {
   return {
     title: app.title,
+    destination: app.destination,
     description: app.description,
     category: app.category,
     templateKey: 'educational_tour',
@@ -217,7 +220,7 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
           </span>
           <div className="min-w-0">
             <h2 className="text-base font-bold tracking-tight text-foreground truncate">
-              {editing ? `Edit — ${editing.title}` : 'New Educational Tour Application'}
+              {editing ? `Edit — ${editing.title}` : 'New Educational Tour'}
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               {TEMPLATE.tagline}{publishedMoneyLocked ? ' · money configuration locked at publish' : ''}
@@ -235,9 +238,9 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
       {/* 1 — Tour identity */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Tour Identity</p>
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <Label className="text-xs">Title</Label>
+            <Label className="text-xs">Tour / programme title</Label>
             <Input
               className="h-9 text-xs"
               placeholder='e.g. "Educational Tour — Jaipur"'
@@ -246,6 +249,15 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
             />
           </div>
           <div className="space-y-1">
+            <Label className="text-xs">Destination</Label>
+            <Input
+              className="h-9 text-xs"
+              placeholder="e.g. Jaipur, Rajasthan"
+              value={form.destination ?? ''}
+              onChange={(e) => patch({ destination: e.target.value })}
+            />
+          </div>
+          <div className="md:col-span-2 space-y-1">
             <Label className="text-xs">Itinerary &amp; fee coverage</Label>
             <Textarea
               className="min-h-[60px] text-xs"
@@ -321,24 +333,24 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
           <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Dates</p>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Opens <span className="text-muted-foreground">(optional)</span></Label>
+              <Label className="text-xs">Opens <span className="text-muted-foreground">(applications open from)</span></Label>
               <DatePicker compact value={form.startDate ?? ''} onChange={(v) => patch({ startDate: v || undefined })} placeholder="Select date" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Submission deadline</Label>
-              <DatePicker compact value={form.deadline} onChange={(v) => patch({ deadline: v })} placeholder="Select date" />
+              <DatePicker compact value={form.deadline} onChange={(v) => patch({ deadline: v })} placeholder="Select date" minDate={form.startDate || undefined} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Tour date <span className="text-muted-foreground">(optional)</span></Label>
-              <DatePicker compact value={form.eventDate ?? ''} onChange={(v) => patch({ eventDate: v || undefined })} placeholder="Select date" />
+              <Label className="text-xs">Departure / tour date <span className="text-muted-foreground">(optional)</span></Label>
+              <DatePicker compact value={form.eventDate ?? ''} onChange={(v) => patch({ eventDate: v || undefined })} placeholder="Select date" minDate={form.startDate || undefined} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Lock date <span className="text-muted-foreground">(optional)</span></Label>
-              <DatePicker compact value={form.lockDate ?? ''} onChange={(v) => patch({ lockDate: v || undefined })} placeholder="Select date" />
+              <DatePicker compact value={form.lockDate ?? ''} onChange={(v) => patch({ lockDate: v || undefined })} placeholder="Select date" minDate={form.deadline || form.startDate || undefined} />
             </div>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            After the deadline passes the application locks automatically — no new submissions, no edits. Records stay.
+            Chronology is enforced — the deadline can never precede the opening date, and the lock date never precedes the deadline. After the deadline passes the application locks automatically; records stay.
           </p>
         </div>
       </div>
