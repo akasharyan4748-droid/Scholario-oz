@@ -1,0 +1,112 @@
+import type { AdmissionFormData } from '@/components/principal/modules/admission/types'
+import type { FeeDataState } from '@/components/principal/modules/FeeStructureStep'
+import type { Student } from '@/lib/mock/students'
+
+export type AdmissionStatus =
+  | 'Draft'
+  | 'Submitted'
+  | 'Under Review'
+  | 'Need Correction'
+  | 'Resubmitted'
+  | 'Approved'
+  | 'Rejected'
+  | 'Completed'
+  | 'Archived'
+
+export type SectionKey =
+  | 'personal'
+  | 'parents'
+  | 'address'
+  | 'previousSchool'
+  | 'medical'
+  | 'classAllocation'
+  | 'fees'
+  | 'documents'
+  | 'photo'
+
+export interface SectionReviewState {
+  status: 'Complete' | 'Incomplete' | 'Needs Review'
+  remarks: string
+  reviewedBy?: string
+  reviewedAt?: string
+}
+
+export interface AuditLogEntry {
+  id: string
+  timestamp: string
+  action: string
+  actor: string
+  notes: string
+}
+
+export interface AdmissionApplication {
+  id: string
+  admissionNo: string
+  studentId: string
+  rollNo: string
+  regNo: string
+  applicantName: string
+  className: string
+  section: string
+  academicSession: string
+  submittedDate: string
+  lastUpdatedDate: string
+  status: AdmissionStatus
+  formData: AdmissionFormData
+  feeData: FeeDataState
+  sectionReviews: Record<SectionKey, SectionReviewState>
+  generalRemarks?: string
+  decisionReason?: string
+  decisionBy?: string
+  decisionDate?: string
+  rejectionRetentionDays?: number
+  rejectedAt?: string
+  auditTrail: AuditLogEntry[]
+  generatedCredentials?: {
+    loginId: string
+    tempPassword: string
+    portalUrl: string
+  }
+  notificationsSent?: {
+    sms: boolean
+    email: boolean
+    whatsapp: boolean
+    dispatchedAt?: string
+  }
+}
+
+export interface AdmissionStoreState {
+  applications: AdmissionApplication[]
+  selectedApplicationId: string | null
+
+  selectApplication: (id: string | null) => void
+  createOrUpdateDraft: (
+    formData: Partial<AdmissionFormData>,
+    feeData?: Partial<FeeDataState>,
+    appId?: string
+  ) => string
+  submitApplication: (id: string) => void
+  updateSectionReview: (
+    appId: string,
+    sectionKey: SectionKey,
+    reviewState: Partial<SectionReviewState>
+  ) => void
+  approveApplication: (appId: string, remarks?: string) => void
+  requestCorrection: (appId: string, generalRemarks: string) => void
+  rejectApplication: (appId: string, reason: string, retentionDays?: number) => void
+  restoreRejectedApplication: (appId: string) => void
+  completeAdmission: (
+    appId: string,
+    issuanceDetails?: {
+      admissionNo?: string
+      studentId?: string
+      rollNo?: string
+      regNo?: string
+    }
+  ) => Student | null
+  deleteArchivedApplication: (appId: string) => void
+}
+
+// Re-export the imported types so existing type-only imports through this
+// module keep working if other files re-route through us.
+export type { AdmissionFormData, FeeDataState, Student }

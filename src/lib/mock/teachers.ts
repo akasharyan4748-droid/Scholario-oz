@@ -1,0 +1,51 @@
+// Teachers — realistic Indian faculty
+export interface Teacher {
+  id: string
+  employeeId: string
+  name: string
+  avatar: string
+  gender: 'Male' | 'Female'
+  designation: string
+  department: string
+  subjects: string[]
+  classes: string[]
+  qualification: string
+  experience: number
+  joiningDate: string
+  email: string
+  phone: string
+  salary: number
+  attendance: number
+  status: 'Active' | 'On Leave'
+  bloodGroup: string
+  address: string
+  /** When true, teacher is archived — hidden from active selectors, recoverable via Archived Teachers. */
+  archived?: boolean
+  /** ISO timestamp of when the teacher was archived. */
+  archivedAt?: string
+}
+
+export const teachers: Teacher[] = [
+  { id: 'T-001', employeeId: 'EMP-001', name: 'Dr. Ananya Iyer', avatar: 'AI', gender: 'Female', designation: 'Principal', department: 'Administration', subjects: ['Physics'], classes: [], qualification: 'Ph.D. Physics, M.Ed.', experience: 24, joiningDate: '2001-06-15', email: 'ananya.iyer@greenwood.edu.in', phone: '+91 98100 11223', salary: 185000, attendance: 98, status: 'Active', bloodGroup: 'O+', address: 'DLF Phase 3, Gurugram' },
+  { id: 'T-002', employeeId: 'EMP-002', name: 'Priya Nair', avatar: 'PN', gender: 'Female', designation: 'Senior Teacher', department: 'Languages', subjects: ['English'], classes: ['Nursery-A', 'Nursery-B'], qualification: 'M.A. English, B.Ed.', experience: 12, joiningDate: '2012-07-01', email: 'priya.nair@greenwood.edu.in', phone: '+91 98201 33445', salary: 62000, attendance: 96, status: 'Active', bloodGroup: 'A+', address: 'Sushant Lok, Gurugram' },
+  { id: 'T-005', employeeId: 'EMP-005', name: 'Meera Krishnan', avatar: 'MK', gender: 'Female', designation: 'Teacher', department: 'Languages', subjects: ['Hindi'], classes: ['LKG-A', 'LKG-B'], qualification: 'M.A. Hindi, B.Ed.', experience: 8, joiningDate: '2016-04-10', email: 'meera.k@greenwood.edu.in', phone: '+91 98300 55667', salary: 48000, attendance: 94, status: 'Active', bloodGroup: 'B+', address: 'Palam Vihar, Gurugram' },
+  { id: 'T-008', employeeId: 'EMP-008', name: 'Sunita Rao', avatar: 'SR', gender: 'Female', designation: 'Teacher', department: 'Mathematics', subjects: ['Mathematics'], classes: ['UKG-A', 'UKG-B'], qualification: 'M.Sc. Mathematics, B.Ed.', experience: 10, joiningDate: '2014-06-20', email: 'sunita.rao@greenwood.edu.in', phone: '+91 98400 77889', salary: 54000, attendance: 97, status: 'Active', bloodGroup: 'AB+', address: 'Sector 14, Gurugram' },
+  { id: 'T-011', employeeId: 'EMP-011', name: 'Kavita Joshi', avatar: 'KJ', gender: 'Female', designation: 'Senior Teacher', department: 'Science', subjects: ['Science', 'EVS'], classes: ['Class 1-A', 'Class 1-B', 'Class 1-C'], qualification: 'M.Sc. Botany, B.Ed.', experience: 15, joiningDate: '2009-07-15', email: 'kavita.j@greenwood.edu.in', phone: '+91 98500 22113', salary: 68000, attendance: 95, status: 'Active', bloodGroup: 'O-', address: 'Sector 56, Gurugram' },
+  { id: 'T-014', employeeId: 'EMP-014', name: 'Rohan Mehta', avatar: 'RM', gender: 'Male', designation: 'Senior Teacher', department: 'Mathematics', subjects: ['Mathematics', 'Computer Science'], classes: ['Class 2-A', 'Class 2-B', 'Class 2-C'], qualification: 'M.Sc. Mathematics, B.Ed.', experience: 9, joiningDate: '2015-06-01', email: 'rohan.mehta@greenwood.edu.in', phone: '+91 98600 44556', salary: 64000, attendance: 98, status: 'Active', bloodGroup: 'A+', address: 'Sector 40, Gurugram' },
+  { id: 'T-017', employeeId: 'EMP-017', name: 'Amit Verma', avatar: 'AV', gender: 'Male', designation: 'Teacher', department: 'Science', subjects: ['Physics', 'Mathematics'], classes: ['Class 3-A', 'Class 3-B'], qualification: 'M.Sc. Physics, B.Ed.', experience: 7, joiningDate: '2017-07-20', email: 'amit.verma@greenwood.edu.in', phone: '+91 98700 66778', salary: 56000, attendance: 92, status: 'Active', bloodGroup: 'B-', address: 'Sohna Road, Gurugram' },
+  { id: 'T-020', employeeId: 'EMP-020', name: 'Deepa Menon', avatar: 'DM', gender: 'Female', designation: 'Senior Teacher', department: 'Languages', subjects: ['English', 'Social Studies'], classes: ['Class 4-A', 'Class 4-B'], qualification: 'M.A. English, M.Ed.', experience: 18, joiningDate: '2006-06-10', email: 'deepa.m@greenwood.edu.in', phone: '+91 98800 88990', salary: 72000, attendance: 99, status: 'Active', bloodGroup: 'A-', address: 'DLF Phase 5, Gurugram' },
+  { id: 'T-023', employeeId: 'EMP-023', name: 'Vikram Singh', avatar: 'VS', gender: 'Male', designation: 'Teacher', department: 'Social Sciences', subjects: ['Social Studies', 'History'], classes: ['Class 5-A', 'Class 5-B'], qualification: 'M.A. History, B.Ed.', experience: 11, joiningDate: '2013-07-01', email: 'vikram.s@greenwood.edu.in', phone: '+91 98900 11224', salary: 60000, attendance: 94, status: 'Active', bloodGroup: 'O+', address: 'Sector 23, Gurugram' },
+  { id: 'T-026', employeeId: 'EMP-026', name: 'Neha Gupta', avatar: 'NG', gender: 'Female', designation: 'Teacher', department: 'Science', subjects: ['Chemistry', 'Biology'], classes: ['Class 6-A', 'Class 6-B'], qualification: 'M.Sc. Chemistry, B.Ed.', experience: 6, joiningDate: '2018-06-15', email: 'neha.g@greenwood.edu.in', phone: '+91 99000 33557', salary: 52000, attendance: 96, status: 'Active', bloodGroup: 'AB-', address: 'Sector 15, Gurugram' },
+  { id: 'T-029', employeeId: 'EMP-029', name: 'Suresh Pillai', avatar: 'SP', gender: 'Male', designation: 'Senior Teacher', department: 'Social Sciences', subjects: ['Geography', 'Economics'], classes: ['Class 7-A', 'Class 7-B'], qualification: 'M.A. Geography, B.Ed.', experience: 14, joiningDate: '2010-07-12', email: 'suresh.p@greenwood.edu.in', phone: '+91 99100 55889', salary: 66000, attendance: 93, status: 'On Leave', bloodGroup: 'B+', address: 'Sector 31, Gurugram' },
+  { id: 'T-032', employeeId: 'EMP-032', name: 'Anjali Desai', avatar: 'AD', gender: 'Female', designation: 'Teacher', department: 'Mathematics', subjects: ['Mathematics', 'Statistics'], classes: ['Class 8-A', 'Class 8-B'], qualification: 'M.Sc. Mathematics, B.Ed.', experience: 9, joiningDate: '2015-06-18', email: 'anjali.d@greenwood.edu.in', phone: '+91 99200 77112', salary: 58000, attendance: 97, status: 'Active', bloodGroup: 'O+', address: 'Sector 49, Gurugram' },
+  { id: 'T-035', employeeId: 'EMP-035', name: 'Rajesh Khanna', avatar: 'RK', gender: 'Male', designation: 'Head of Department', department: 'Mathematics', subjects: ['Mathematics'], classes: ['Class 9-A', 'Class 9-B'], qualification: 'M.Sc. Mathematics, M.Phil.', experience: 21, joiningDate: '2003-07-01', email: 'rajesh.k@greenwood.edu.in', phone: '+91 99300 88334', salary: 92000, attendance: 98, status: 'Active', bloodGroup: 'A+', address: 'Sector 42, Gurugram' },
+  { id: 'T-038', employeeId: 'EMP-038', name: 'Pooja Bhatt', avatar: 'PB', gender: 'Female', designation: 'Head of Department', department: 'Science', subjects: ['Physics'], classes: ['Class 10-A', 'Class 10-B'], qualification: 'M.Sc. Physics, Ph.D.', experience: 19, joiningDate: '2005-06-20', email: 'pooja.b@greenwood.edu.in', phone: '+91 99400 99556', salary: 98000, attendance: 96, status: 'Active', bloodGroup: 'AB+', address: 'DLF Phase 4, Gurugram' },
+  { id: 'T-041', employeeId: 'EMP-041', name: 'Arjun Kapoor', avatar: 'AK', gender: 'Male', designation: 'Head of Department', department: 'Computer Science', subjects: ['Computer Science', 'Informatics Practices'], classes: ['Class 11-Sci-A', 'Class 12-Sci-A'], qualification: 'M.Tech CSE, B.Ed.', experience: 16, joiningDate: '2008-07-10', email: 'arjun.k@greenwood.edu.in', phone: '+91 99500 11778', salary: 88000, attendance: 95, status: 'Active', bloodGroup: 'O-', address: 'Sector 38, Gurugram' },
+  { id: 'T-044', employeeId: 'EMP-044', name: 'Shalini Agarwal', avatar: 'SA', gender: 'Female', designation: 'Head of Department', department: 'Commerce', subjects: ['Accountancy', 'Business Studies'], classes: ['Class 11-Com-A', 'Class 12-Com-A'], qualification: 'M.Com, B.Ed.', experience: 17, joiningDate: '2007-06-15', email: 'shalini.a@greenwood.edu.in', phone: '+91 99600 22990', salary: 90000, attendance: 97, status: 'Active', bloodGroup: 'B+', address: 'Sector 28, Gurugram' },
+  { id: 'T-047', employeeId: 'EMP-047', name: 'Sanjay Reddy', avatar: 'SR', gender: 'Male', designation: 'Sports Director', department: 'Arts & Sports', subjects: ['Physical Education'], classes: ['All'], qualification: 'M.P.Ed.', experience: 13, joiningDate: '2011-07-05', email: 'sanjay.r@greenwood.edu.in', phone: '+91 99700 33112', salary: 70000, attendance: 94, status: 'Active', bloodGroup: 'A-', address: 'Sector 12, Gurugram' },
+  { id: 'T-050', employeeId: 'EMP-050', name: 'Lakshmi Venkat', avatar: 'LV', gender: 'Female', designation: 'Music Teacher', department: 'Arts & Sports', subjects: ['Music'], classes: ['Class 3-A', 'Class 4-A', 'Class 5-A'], qualification: 'M.A. Music', experience: 10, joiningDate: '2014-07-22', email: 'lakshmi.v@greenwood.edu.in', phone: '+91 99800 44334', salary: 50000, attendance: 96, status: 'Active', bloodGroup: 'O+', address: 'Sector 22, Gurugram' },
+  { id: 'T-053', employeeId: 'EMP-053', name: 'Faisal Ahmed', avatar: 'FA', gender: 'Male', designation: 'Art Teacher', department: 'Arts & Sports', subjects: ['Art & Craft'], classes: ['Class 1-A', 'Class 2-A', 'Class 3-A'], qualification: 'BFA, M.A. Fine Arts', experience: 8, joiningDate: '2016-06-12', email: 'faisal.a@greenwood.edu.in', phone: '+91 99900 55778', salary: 46000, attendance: 93, status: 'Active', bloodGroup: 'B-', address: 'Sector 9, Gurugram' },
+  { id: 'T-056', employeeId: 'EMP-056', name: 'Geeta Sharma', avatar: 'GS', gender: 'Female', designation: 'Librarian', department: 'Administration', subjects: [], classes: [], qualification: 'M.Lib.', experience: 12, joiningDate: '2012-08-01', email: 'geeta.s@greenwood.edu.in', phone: '+91 98112 66990', salary: 54000, attendance: 98, status: 'Active', bloodGroup: 'A+', address: 'Sector 17, Gurugram' },
+]
+
+export const getTeacherById = (id: string) => teachers.find((t) => t.id === id)

@@ -1,0 +1,74 @@
+'use client'
+
+/**
+ * WelcomeBanner — principal greeting + date + compact meta strip.
+ *
+ * Calm flat card (rounded-xl border border-border bg-card), no decorative
+ * orbs, no giant colored box. Includes:
+ *   - Date + greeting (uses real auth user name)
+ *   - Sub-meta line with the school name, today's attendance rate, birthdays
+ *   - A compact meta strip on the right with Students / Teachers counts
+ *     (relocated from the KPI row — these are passive status, not actionable
+ *     KPIs, so they live here as a quiet summary instead of as 2 of 8 cards)
+ */
+
+import { attendanceOverview } from '@/lib/mock/attendance'
+import { studentStats } from '@/lib/mock/students'
+import { school } from '@/lib/mock/school'
+import { useAuth } from '@/lib/store/auth-store'
+import { Users, GraduationCap } from 'lucide-react'
+
+export interface WelcomeBannerProps {
+  onNavigate?: (module: string) => void
+}
+
+export function WelcomeBanner({ onNavigate }: WelcomeBannerProps) {
+  const { user } = useAuth()
+  const firstName = user?.name?.split(' ').slice(0, 2).join(' ') ?? 'Principal'
+  const today = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  })
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{today}</p>
+        <h1 className="text-base sm:text-lg font-semibold tracking-tight text-foreground mt-0.5">
+          Good morning, {firstName}
+        </h1>
+        <p className="text-xs text-muted-foreground mt-1">
+          {school.shortName} · Attendance {attendanceOverview.today.rate}% · {studentStats.birthdaysToday} birthdays today
+        </p>
+      </div>
+      <div className="flex items-center gap-3 shrink-0 text-sm">
+        <button
+          onClick={() => onNavigate?.('students')}
+          className="group flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-muted/60 transition-colors text-left"
+          title="Open Students & Classes"
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <Users className="h-3.5 w-3.5" />
+          </span>
+          <span className="leading-tight">
+            <span className="block font-semibold text-foreground tabular-nums">{studentStats.total.toLocaleString('en-IN')}</span>
+            <span className="block text-[10px] text-muted-foreground uppercase tracking-wider">Students</span>
+          </span>
+        </button>
+        <div className="h-8 w-px bg-border" />
+        <button
+          onClick={() => onNavigate?.('teachers')}
+          className="group flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-muted/60 transition-colors text-left"
+          title="Open Teachers"
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <GraduationCap className="h-3.5 w-3.5" />
+          </span>
+          <span className="leading-tight">
+            <span className="block font-semibold text-foreground tabular-nums">{school.totalTeachers}</span>
+            <span className="block text-[10px] text-muted-foreground uppercase tracking-wider">Teachers</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  )
+}
