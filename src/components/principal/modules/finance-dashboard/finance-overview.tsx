@@ -77,20 +77,26 @@ export function FinanceOverviewSection({ data, onNavigate, onModuleNavigate }: P
 
   // ── REAL monthly series: fees in (collections) vs salary out (confirmed
   //    payments this session), month-aligned, trimmed at the current month.
+  //    Joined on FY month INDEX (Apr=0 … Mar=11), never on locale-formatted
+  //    labels — Chrome's ICU returns "Sept" while our display series uses
+  //    "Sep", which silently dropped September payroll from the chart and
+  //    broke the trim-to-current-month slice.
   const inVsOut = useMemo(() => {
-    const outByMonth = new Map<string, number>()
+    const fyIndexOf = (calendarMonth: number) => (calendarMonth - 3 + 12) % 12
+    const outByIdx = new Map<number, number>()
     for (const p of salaryData.payments) {
       if (p.status !== 'Confirmed') continue
       if (sessionOfPeriod(p.periodKey) !== CURRENT_SESSION.id) continue
-      const [y, m] = p.periodKey.split('-').map(Number)
-      const label = new Date(y, (m ?? 1) - 1, 1).toLocaleString('en-IN', { month: 'short' })
-      outByMonth.set(label, (outByMonth.get(label) ?? 0) + p.amount)
+      const m = Number(p.periodKey.split('-')[1])
+      if (!Number.isFinite(m)) continue
+      const idx = fyIndexOf(m - 1)
+      outByIdx.set(idx, (outByIdx.get(idx) ?? 0) + p.amount)
     }
-    const nowLabel = new Date().toLocaleString('en-IN', { month: 'short' })
-    const months = analytics.monthly
-    const curIdx = months.findIndex((m) => m.month === nowLabel)
-    const visible = curIdx >= 0 ? months.slice(0, curIdx + 1) : months
-    return visible.map((m) => ({ month: m.month, in: m.collected, out: outByMonth.get(m.month) ?? 0 }))
+    const months = analytics.monthly // display series Apr→Dec = FY indices 0–8
+    const nowIdx = fyIndexOf(new Date().getMonth())
+    const visible = nowIdx < months.length ? months.slice(0, nowIdx + 1) : months
+    // Slice always starts at FY index 0, so array position === FY index.
+    return visible.map((m, i) => ({ month: m.month, in: m.collected, out: outByIdx.get(i) ?? 0 }))
   }, [analytics.monthly, salaryData.payments])
   const chartHasData = inVsOut.some((m) => m.in > 0 || m.out > 0)
 

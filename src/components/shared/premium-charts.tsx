@@ -672,11 +672,15 @@ export function RadialProgress({
 // ─── AreaTrendChart ──────────────────────────────────────────────────
 
 // Format a Y-axis value compactly (₹1Cr, ₹2L, 50%, etc.)
+// Sign-aware: valMin can dip below zero (5% range padding), and negatives
+// previously fell through every ≥ branch and rendered as raw "-4320".
 function formatYAxisValue(n: number): string {
-  if (n >= 10000000) return `₹${(n / 10000000).toFixed(0)}Cr`
-  if (n >= 100000) return `₹${(n / 100000).toFixed(0)}L`
-  if (n >= 1000) return `₹${(n / 1000).toFixed(0)}K`
-  return `${Math.round(n)}`
+  const sign = n < 0 ? '-' : ''
+  const v = Math.abs(n)
+  if (v >= 10000000) return `${sign}₹${(v / 10000000).toFixed(0)}Cr`
+  if (v >= 100000) return `${sign}₹${(v / 100000).toFixed(0)}L`
+  if (v >= 1000) return `${sign}₹${(v / 1000).toFixed(0)}K`
+  return `${sign}${Math.round(v)}`
 }
 
 export function AreaTrendChart({
@@ -769,11 +773,13 @@ export function AreaTrendChart({
 
   const primaryPoints = data.map((d, i) => ({
     x: padX + (i / Math.max(1, data.length - 1)) * (w - 2 * padX),
-    y: padY + (h - 2 * padY) - ((d[primaryKey] ?? 0 - valMin) / valRange) * (h - 2 * padY),
+    // Parentheses matter: `d[k] ?? 0 - valMin` parses as `d[k] ?? (0 - valMin)`,
+    // so valMin was never subtracted from real values.
+    y: padY + (h - 2 * padY) - (((d[primaryKey] ?? 0) - valMin) / valRange) * (h - 2 * padY),
   }))
   const secondaryPoints = data.map((d, i) => ({
     x: padX + (i / Math.max(1, data.length - 1)) * (w - 2 * padX),
-    y: padY + (h - 2 * padY) - ((d[secondaryKey] ?? 0 - valMin) / valRange) * (h - 2 * padY),
+    y: padY + (h - 2 * padY) - (((d[secondaryKey] ?? 0) - valMin) / valRange) * (h - 2 * padY),
   }))
 
   const primaryPath = useMemo(() => monotonePath(primaryPoints), [primaryPoints])
@@ -809,10 +815,15 @@ export function AreaTrendChart({
               <motion.path d={secondaryArea} fill={`url(#${uid}-s)`}
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6, delay: 0.1 }} />
             )}
-            <motion.path d={secondaryPath} fill="none" stroke={secondaryColor} strokeWidth={secondaryStrokeWidth}
-              strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
-              initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
-              transition={{ duration: 1, ease: 'easeInOut' }} />
+            {/* Plain path inside an opacity-fading group — NEVER animate
+                pathLength here. A completed pathLength animation leaves
+                pathLength="1" + stroke-dasharray on the element, and with
+                vector-effect:non-scaling-stroke Chromium computes the dash
+                in screen pixels, rendering the line as fragments. */}
+            <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 0.1, ease: 'easeOut' }}>
+              <path d={secondaryPath} fill="none" stroke={secondaryColor} strokeWidth={secondaryStrokeWidth}
+                strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            </motion.g>
           </>
         )}
         {/* Primary area + line */}
@@ -820,10 +831,11 @@ export function AreaTrendChart({
           <motion.path d={primaryArea} fill={`url(#${uid}-p)`}
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6, delay: 0.2 }} />
         )}
-        <motion.path d={primaryPath} fill="none" stroke={primaryColor} strokeWidth={strokeWidth}
-          strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
-          initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
-          transition={{ duration: 1.15, ease: CHART_TOKENS.easeInOut }} />
+        {/* Primary line — same rule: opacity fade, no pathLength (see above). */}
+        <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.9, ease: CHART_TOKENS.easeInOut }}>
+          <path d={primaryPath} fill="none" stroke={primaryColor} strokeWidth={strokeWidth}
+            strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        </motion.g>
         {/* Hover interaction zones + dots */}
         {primaryPoints.map((p, i) => (
           <g key={i}>

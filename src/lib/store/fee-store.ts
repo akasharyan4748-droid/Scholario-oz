@@ -4214,20 +4214,23 @@ export function useFeeData(academicYear: string = CURRENT_ACADEMIC_YEAR) {
     const monthCollection = transactions.filter((t) => new Date(t.date) >= monthStart && t.status === 'Success').reduce((sum, t) => sum + t.amount, 0)
     const yearCollection = transactions.filter((t) => t.academicYear === academicYear && t.status === 'Success').reduce((sum, t) => sum + t.amount, 0)
 
-    // Monthly collection (computed from real transactions)
-    const monthlyMap = new Map<string, { collected: number; pending: number }>()
+    // Monthly collection (computed from real transactions).
+    // Bucketed by FY month index (Apr=0 … Dec=8), never by locale-formatted
+    // labels: Chrome's ICU returns "Sept" for en-IN short months while the
+    // display series uses "Sep", which silently dropped every September
+    // transaction from the analytics series.
     const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    months.forEach((m) => monthlyMap.set(m, { collected: 0, pending: 0 }))
+    const monthlyBuckets = months.map(() => ({ collected: 0, pending: 0 }))
     transactions.forEach((t) => {
       const d = new Date(t.date)
-      const m = d.toLocaleString('en-IN', { month: 'short' })
-      if (monthlyMap.has(m)) {
-        const entry = monthlyMap.get(m)!
-        if (t.status === 'Success') entry.collected += t.amount
-        else if (t.status === 'Pending' || t.status === 'Under Verification') entry.pending += t.amount
-      }
+      if (Number.isNaN(d.getTime())) return
+      const idx = ((d.getMonth() - 3) + 12) % 12 // Apr=0 … Dec=8; Jan–Mar fall outside the Apr–Dec display window
+      const bucket = monthlyBuckets[idx]
+      if (!bucket) return
+      if (t.status === 'Success') bucket.collected += t.amount
+      else if (t.status === 'Pending' || t.status === 'Under Verification') bucket.pending += t.amount
     })
-    const monthly = months.map((m) => ({ month: m, collected: monthlyMap.get(m)!.collected, pending: monthlyMap.get(m)!.pending }))
+    const monthly = months.map((m, i) => ({ month: m, collected: monthlyBuckets[i].collected, pending: monthlyBuckets[i].pending }))
 
     // Fee head distribution — Bug fix (Phase 4): compute from the actual
     // fee structures matched per student account. Previously this used
