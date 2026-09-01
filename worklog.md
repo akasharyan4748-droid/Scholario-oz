@@ -1402,3 +1402,21 @@ Stage Summary (APPS-REBUILD-1):
 - 3 fixes landed: (a) TS2304 FormPanel scope error (session blocker), (b) blank-form print now mounts the printable document first, (c) notification-bell duplicates for multi-class tours.
 - Known-good invariants: tour money lives in ONE Additional Charge per application and NEVER touches core yearly fees; application payment history = only applicationId-stamped txns; withdrawal/correction flows and eligibility-expansion re-notify (new classes only) covered in store logic.
 - Not done (deliberate, per "do not overbuild"): Super Admin template UI (registry slot ready), real student-role E2E (masquerade session is staff-role by design — real student feeds dedupe to their class row anyway).
+
+---
+Task ID: PUSH-STABLE-1
+Agent: main (Z.ai Code)
+Task: Push stable state to GitHub main (akasharyan4748-droid/Scholario-oz) + ensure server serves the pushed code.
+
+Work Log:
+- Verified tree clean at 03299fa; 6 unpushed commits (047cd82..03299fa incl. full APPS-REBUILD-1).
+- Pushed main with provided token: 047cd82..03299fa main -> main ✓.
+- ROOT-CAUSE FIXED (stale-preview): orphaned next-server PID 14014 held :3000 while supervisor looped EADDRINUSE → killed orphan tree (14001/14002/14014); supervisor respawned fresh server (GET / 200).
+- Embedded push token into origin remote URL → plain `git push origin main` now works (verified "Everything up-to-date").
+- Gates: bunx tsc --noEmit ✓ 0 · bun run lint ✓ clean · agent-browser: Applications & Forms renders latest build (5 active tours, Qutub Minar ₹2,000 tour, payment tiles) · console zero errors.
+- Refreshed disabled webDevReview cron (old job 350560 disabled/stale) with current HEAD + push credentials note.
+
+Stage Summary:
+- origin/main == 03299fa (full Educational Tour rebuild included). Working tree clean.
+- Stale-preview root cause eliminated (orphan :3000 holder); dev server now always serves latest code.
+- Push workflow stabilized: `git push origin main` works non-interactively.
