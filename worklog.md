@@ -1373,3 +1373,32 @@ Stage Summary (PREVIEW-RESTORE-1):
 - Preview now serves origin/main tip 047cd82 (the real latest work) with a clean process tree; root causes of "older version" were (a) zombie server on :3000 and (b) stale local checkout 10 commits behind remote — fixed via clean restart + ff-pull.
 - 4 real chart-data defects fixed at root (locale month keys ×2 sites, ?? precedence, pathLength regression, axis negative formatting); all verified live in browser with reconciling numbers (Sep payroll ₹86.4K plots and matches the KPI panel).
 - Risk note for future sessions: NEVER assume the local tree is current — check git rev-list --count HEAD..origin/main first; and never key data by toLocaleString month labels (ICU variance "Sep"/"Sept" is a real cross-browser hazard).
+
+---
+Task ID: APPS-REBUILD-1
+Agent: Z.ai Code (main thread)
+Task: Rebuild Applications & Forms module — Educational Tour only. Session resumed after a previous run died mid-task (uncommitted fixes + one TS error). Complete, verify E2E in browser, commit.
+
+Work Log:
+- RESUMED STUCK SESSION: working tree had uncommitted fixes (applications-store eligibility-expansion notify + application-detail BlankFormMenu print fix) and one blocking compile error TS2304 `Cannot find name 'setTab'` at application-detail.tsx:470. ROOT CAUSE: BlankFormMenu gained an `onNeedDocument` prop; the header call site was updated but FormPanel's inner call site referenced `setTab` out of scope. FIX: FormPanel now takes `onNeedDocument` prop wired from ApplicationDetail's tab state; BlankFormMenu in FormPanel receives it. tsc clean afterwards.
+- VERIFIED THE EXISTING REBUILD IS COMPLETE AND CORRECT (store 1697 lines + builder 635 + detail 1367 + print 422 + dashboard 442 + student module): single template registry APPLICATION_TEMPLATES.educational_tour (architecture generic for future Super Admin templates); publish creates/reuses ONE Additional Charge in canonical fee-store linked both ways (SchoolApplication.payment.chargeId ⇄ FeeTransaction.applicationId); payments ONLY via fee-store.recordPayment; submissions carry identity snapshot + answers snapshot + form-definition versioning (structural edits bump version); House field ABSENT everywhere.
+- BROWSER E2E (agent-browser, principal + student masquerade):
+  1) Principal dashboard: single form type, KPIs live, tour rows with collection progress.
+  2) BlankFormMenu fix verified: "Print blank form" switches to Documents tab, mounts .app-print-doc, print proceeds (previously would print whole page).
+  3) A4 official document: school letterhead (CBSE affiliation), FORM NO./SESSION/ISSUED, 6 numbered sections (Tour Details / Student Particulars / Parent-Guardian / Preferences-Medical-Emergency / Tour Fee & Payment with "collected separately from annual fees" note / Declaration & Consent), Guardian+Student+In-charge signature blocks, FOR OFFICE USE ONLY box, SCHOOL STAMP, footer with form number.
+  4) Created NEW tour via builder ("Qutub Minar Heritage Walk", Class 4+6, ₹2,000, in-charge Rohan Mehta, compact month-combobox date pickers — chronology enforced): Draft → Publish confirmed.
+  5) Publish fired EXISTING announcements pipeline (POST /api/announcements per target class) — student received "applications open" notice with deadline + fee + pay-online-or-at-office.
+  6) Student apply dialog: full prefill from canonical record (name/admission no./class-section/roll/DOB/gender/blood group/address + guardian) — master record never edited; questions (meal, T-shirt, emergency contact, medical, photo consent) → Review step (identity travels as permanent snapshot) → Submit.
+  7) Payment choice step: "Pay online — UPI · confirms instantly with a receipt" / "Cash / Pay at school — Principal verifies in payments queue" / pay later from My submissions.
+  8) Online payment → fee-store TXN ₹2,000 UPI Success receipt RCP-2026-1064 with applicationId + charge AC-mti7qpd2 (verified inside persisted store JSON). Status chip flipped to "Paid · Under Review" live.
+  9) Principal review: submission row → full filled official form dialog → Print/Download + Approve/Request correction/Reject → Approved.
+  10) Application Payments tab: EXPECTED/COLLECTED/CASH-VERIFYING tiles + "1 payment bound to this application" history (RCP-2026-1064 · UPI · ref) + note that identical rows appear in Fee Management. No other students'/tour payments leak in.
+- BUG FOUND + FIXED (notifications-feed route): a tour targeting N classes fans out N identical announcements; students see only their class row, but staff roles (and the demo student masquerade, whose API session keeps the staff role) matched EVERY class row → duplicates in the bell panel. FIX: dedupe by title+message in GET (first occurrence wins) — audience semantics, read-state, and per-class fan-out untouched; students unaffected. Verified: feed now shows each tour exactly once.
+- ENVIRONMENT: dev.log EADDRINUSE loop was the known sandbox watchdog duplicating spawns — real server (PID owned :3000, started 04:03) healthy; left alone per PREVIEW-RESTORE-1 guidance.
+- GATES: bunx tsc --noEmit ✓ 0 errors · bun run lint ✓ clean · console zero errors/warnings · 390px scrollWidth==390 (no overflow) + desktop fine · git commit 5300cf2 (4 files, +46/−9) — tree clean.
+
+Stage Summary (APPS-REBUILD-1):
+- Applications & Forms now runs EXACTLY ONE form type (Educational Tour) end-to-end and production-polished: Principal create → publish → existing-notifications fan-out → student prefill apply (no House, master record untouched, snapshot at submission) → Online/Cash payment choice → canonical fee-store integration (single ledger, receipt pipeline, cash verification queue) → Principal review + approve → official A4 print/download. Builder uses the compact Examination-style date pickers.
+- 3 fixes landed: (a) TS2304 FormPanel scope error (session blocker), (b) blank-form print now mounts the printable document first, (c) notification-bell duplicates for multi-class tours.
+- Known-good invariants: tour money lives in ONE Additional Charge per application and NEVER touches core yearly fees; application payment history = only applicationId-stamped txns; withdrawal/correction flows and eligibility-expansion re-notify (new classes only) covered in store logic.
+- Not done (deliberate, per "do not overbuild"): Super Admin template UI (registry slot ready), real student-role E2E (masquerade session is staff-role by design — real student feeds dedupe to their class row anyway).
