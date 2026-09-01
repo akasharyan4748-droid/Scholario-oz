@@ -45,7 +45,15 @@ async function audienceAllows(audience: string | null | undefined, user: {
   if (target === mine) return true
   // "Grade 10" (grade-wide) should reach students of "Grade 10 - A"
   const baseOf = (s: string) => s.replace(/[-–]\s*[A-Z]\s*$/, '').trim()
-  return baseOf(mine) === baseOf(target) || mine.startsWith(target) || target.startsWith(mine)
+  if (baseOf(mine) === baseOf(target) || mine.startsWith(target) || target.startsWith(mine)) return true
+  // Cross-vocabulary grade match: the ERP layer names cohorts "Class 9" while
+  // school rosters use "Grade 9 - A". Both denote the same numeric grade, so
+  // compare the leading grade number before giving up (a class-wide audience
+  // reaches every section of that grade).
+  const gradeOf = (s: string) => s.match(/\d+/)?.[0] ?? null
+  const targetGrade = gradeOf(target)
+  const mineGrade = gradeOf(mine)
+  return !!targetGrade && !!mineGrade && targetGrade === mineGrade
 }
 
 // GET aggregated notifications feed: unread messages + recent announcements.

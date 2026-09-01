@@ -3,7 +3,7 @@
   "version": "0.2.1",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "case \"$DATABASE_URL\" in *dev.db|\"\") export DATABASE_URL=\"$PWD/db/custom.db\";; esac; next dev -p 3000",
     "build": "next build",
     "start": "NODE_ENV=production next start -p 3000",
     "lint": "eslint .",
