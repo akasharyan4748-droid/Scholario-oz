@@ -1,14 +1,14 @@
 'use client'
 
 /**
- * Applications & Forms store — the SCHOOL APPLICATION + CONSENT + EVENT +
- * PAYMENT + APPROVAL + DOCUMENT + RECORD system.
+ * Applications & Forms store — the SCHOOL APPLICATION + CONSENT + PAYMENT +
+ * APPROVAL + DOCUMENT + RECORD system.
  *
- * A reusable foundation for every "form + student participation + optional/
- * mandatory fee + approval + printable document" workflow a school runs:
- *   tours · trips · workshops · competitions · camps · events · exam
- *   applications · board forms · transport requests · consent forms ·
- *   custom school applications.
+ * SCOPE (module rebuild): the Principal UI currently operates EXACTLY ONE
+ * form type — the Educational Tour — via the template registry below. The
+ * architecture stays fully generic (any "form + student participation +
+ * fee + approval + printable document" workflow) so future Super Admin-
+ * controlled templates slot in by registering here — no store surgery.
  *
  * ARCHITECTURE (financial integration — CRITICAL):
  *   Publishing an application with payment Required/Optional creates (or
@@ -16,22 +16,20 @@
  *   that charge is the ONLY financial obligation, and it is linked both ways:
  *
  *     SchoolApplication.payment.chargeId ──► AdditionalCharge.id
- *     (publish dedupe: reuses an existing Active charge with the same name,
- *      so seeded charges like 'Educational Tour — Jaipur' (AC-01) stay
- *      connected to their application instead of being duplicated)
+ *     FeeTransaction.applicationId      ──► SchoolApplication.id
  *
  *   Payments are ALWAYS recorded through fee-store.recordPayment() bound to
- *   that additionalChargeId — the SAME transaction then shows up in:
- *     • the Application record          (this store reads txns by chargeId)
+ *   that additionalChargeId (+ applicationId) — the SAME transaction then
+ *   shows up in:
+ *     • the Application record          (this store reads txns by app id)
  *     • the student's Fee Account       (charges appear automatically)
- *     • Fee Management → Payments       (cash verification queue unchanged)
+ *     • Fee Management → Payments       (Additional Collections, unchanged)
  *     • Transactions ledger             (category = 'ADDITIONAL')
  *     • the receipt                     (genReceiptNo pipeline)
- *     • session permanent records       (audit trail in this store too)
- *   No duplicate financial entries are ever created. Cash payments enter as
- *   'Under Verification' and must pass the EXISTING Principal-only cash
- *   verification workflow before they count as paid. Teachers can review
- *   participation but this store structurally cannot move money.
+ *   Tour money NEVER touches the student's core yearly fee record (the
+ *   charge lives outside the class fee structures). No duplicate financial
+ *   entries are ever created. Cash payments enter as 'Under Verification'
+ *   and must pass the EXISTING Principal-only cash verification workflow.
  *
  * LIFECYCLE (workflow-driven, not cosmetic):
  *   Draft → Published → [Deadline passes ⇒ auto-Locked] / Closed / Archived
@@ -43,15 +41,24 @@
  * PERMANENT RECORDS: submissions, audit history and printable documents are
  * never destroyed by closing/archiving/locking — archive only hides from the
  * main list; historical records remain readable forever within the academic
- * session they belong to.
+ * session they belong to. Every submission preserves an immutable snapshot
+ * of the student particulars (identity fields) as they were at submit time.
  */
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { useFeeStore } from './fee-store'
+import type { FeeTransaction } from './fee-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 import type { AdditionalChargeCategory } from './fee-store'
 import { CURRENT_ACADEMIC_YEAR } from './fee-store-data'
+import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
+// SaaS-STAGE-2A — TENANT-SCOPED persistence: every school gets its own
+// applications namespace (drafts, published tours, submissions, audit).
+// Switching tenants reloads the app and re-hydrates from the target
+// school's namespace — application data can never leak across schools.
+import { migrateLegacyScopedStore, createTenantScopedStorage, TENANT_SCOPED_BASES } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -66,9 +73,9 @@ export type AppStatus =
   | 'Published' | 'Closed' | 'Archived'
 
 /**
- * Where an application ORIGINATED (PART 6 — generic system). Every form is
- * the same reusable entity; the source just records the originating module
- * so lists can show "where each application came from".
+ * Where an application ORIGINATED. Every form is the same reusable entity;
+ * the source just records the originating module so lists can show where
+ * each application came from.
  */
 export type ApplicationSource = 'Examination' | 'Event' | 'Activity' | 'Custom'
 
@@ -91,7 +98,7 @@ export interface ApplicationApprovalNote {
 export type ParticipationMode = 'Optional' | 'Mandatory'
 export type PaymentModeConfig = 'None' | 'Required' | 'Optional'
 
-/** Form field types supported by the builder. */
+/** Form field types supported by the (reusable) form architecture. */
 export type FormFieldType =
   // ── Basic inputs ──
   | 'text' | 'longtext' | 'number' | 'date'
@@ -110,12 +117,6 @@ export type FormFieldType =
   // ── Layout (non-input) ──
   | 'heading' | 'description-block' | 'divider' | 'notice' | 'instruction'
 
-/** Canonical section presets (PART 13) — builder select + form/print grouping. */
-export const FORM_SECTIONS = [
-  'Student Details', 'Guardian Details', 'Application Details',
-  'Travel Details', 'Medical / Emergency Details', 'Consent', 'Payment', 'Declaration',
-] as const
-
 /**
  * One configurable field on a school form. The fill view ALWAYS renders the
  * student + guardian identity sections first (snapshotted from the school
@@ -131,44 +132,73 @@ export interface ApplicationFormField {
   options?: string[]
   /** Logical section this question belongs to (official form layout). */
   section?: string
-  // ── Builder v2 configuration (all optional — legacy forms stay valid) ──
-  /** Input placeholder text. */
-  placeholder?: string
-  /** Section id from formSections[] the field belongs to (new builder). */
-  sectionId?: string
-  /** Numeric/date bounds. */
+  /** Numeric bounds (architecture — used by future templates). */
   min?: number
   max?: number
-  /** Integer-only number input when true. */
-  integerOnly?: boolean
   /** Text character cap (0 = unlimited). */
   maxLength?: number
-  /** Dropdown: filter-as-type search. */
-  searchable?: boolean
-  /** Dropdown/radio: respondent may add a custom option. */
-  allowCustom?: boolean
-  /** Rating scale max (e.g. 5 → ★★★★★). */
-  ratingMax?: number
-  /** File inputs: accepted extensions (no dots), size cap (MB), file count. */
-  fileTypes?: string[]
-  maxFiles?: number
-  maxSizeMb?: number
   /** Signature: who signs ('Student' | 'Guardian' | 'Teacher' | 'Principal'). */
   signatureRole?: 'Student' | 'Guardian' | 'Teacher' | 'Principal'
-  /** Lightweight conditional visibility: show this field only when the
-   *  referenced field's answer equals any of `equals` (string compare of
-   *  primitives/first-of-array). Undefined = always visible. */
-  visibleWhen?: { fieldId: string; equals: string[] }
-  /** Layout blocks: preformatted body text (heading/notice/instruction/…). */
+  /** Layout blocks: preformatted body text. */
   blockText?: string
 }
 
-/** Ordered section metadata for the builder canvas + renderer grouping. */
-export interface FormSectionMeta {
-  id: string
-  title: string
-  description?: string
+/**
+ * APPLICATION TEMPLATE REGISTRY — the extension point for future Super
+ * Admin-controlled form templates. A template fixes the application-
+ * specific questions a form collects (student particulars are ALWAYS
+ * auto-filled from the school record and never part of a template).
+ * Registering a template + gating it in the Super Admin Control Center is
+ * all a future form type needs — the store, lifecycle, payments, review,
+ * printing and audit pipeline are entirely generic.
+ */
+export type ApplicationTemplateKey = 'educational_tour'
+
+export interface ApplicationTemplateDef {
+  key: ApplicationTemplateKey
+  /** Nav / button label ("Educational Tour"). */
+  label: string
+  category: ApplicationCategory
+  /** One-line purpose shown in the builder header. */
+  tagline: string
+  /** Placeholder guidance for the builder description field. */
+  descriptionPlaceholder: string
+  /** Ledger label prefix for the linked Additional Charge. */
+  defaultLedgerLabel: string
+  /** Suggested per-student amount (editable by the office). */
+  defaultAmount: number
+  /** Application-specific fields every form of this type collects. */
+  fields: ApplicationFormField[]
+  /** Default guardian consent statement (editable per application). */
+  consentStatement: string
 }
+
+/** The single active template. Future: Super Admin-controlled catalogue. */
+export const APPLICATION_TEMPLATES: Record<ApplicationTemplateKey, ApplicationTemplateDef> = {
+  educational_tour: {
+    key: 'educational_tour',
+    label: 'Educational Tour',
+    category: 'Tour',
+    tagline: 'Official tour application — consent, preferences and payment in one form.',
+    descriptionPlaceholder: 'Itinerary summary, what the fee covers, conduct rules…',
+    defaultLedgerLabel: 'Educational Tour',
+    defaultAmount: 2500,
+    fields: [
+      { id: 't-meal', type: 'dropdown', label: 'Meal preference', required: true, options: ['Vegetarian', 'Non-Vegetarian', 'Jain'], section: 'Tour Preferences' },
+      { id: 't-shirt', type: 'radio', label: 'Tour T-shirt size', required: true, options: ['S', 'M', 'L', 'XL'], section: 'Tour Preferences' },
+      { id: 't-emergency', type: 'emergency-contact', label: 'Emergency contact on tour', helpText: 'An adult relative besides the guardians listed above.', required: true, section: 'Medical & Emergency Details' },
+      { id: 't-medical', type: 'longtext', label: 'Medical notes / allergies', helpText: 'Leave blank if none.', required: false, section: 'Medical & Emergency Details' },
+      { id: 't-photo', type: 'yesno', label: 'May photographs taken on the tour be used for school communication?', required: false, section: 'Consent' },
+    ],
+    consentStatement: 'I give consent for my ward to participate in the tour and accept the school\u2019s conduct rules for the trip.',
+  },
+}
+
+/** Ordered section presets (kept for the generic architecture). */
+export const FORM_SECTIONS = [
+  'Student Details', 'Guardian Details', 'Application Details',
+  'Travel Details', 'Medical / Emergency Details', 'Consent', 'Payment', 'Declaration',
+] as const
 
 export interface ApplicationPaymentConfig {
   mode: PaymentModeConfig
@@ -190,7 +220,7 @@ export interface GuardianConsentConfig {
   statement?: string
 }
 
-/** Physical signed-document workflow state (§2I / §2J). */
+/** Physical signed-document workflow state. */
 export interface PhysicalDocState {
   status: 'Not Required' | 'Pending' | 'Received' | 'Verified'
   /** File name of the scanned/photo/PDF copy kept on record. */
@@ -208,11 +238,13 @@ export interface SchoolApplication {
   /** Originating module — exam-generated forms stay linked to their exam. */
   source: ApplicationSource
   sourceRef?: ApplicationSourceRef
+  /** Template this application was created from (tour forms: educational_tour). */
+  templateKey?: ApplicationTemplateKey
   academicYear: string
   /**
    * Who can apply. targetStudentIds overrides class scoping entirely when
-   * non-empty ("applicable students where needed"); otherwise the union of
-   * classes (+ optional section filter within those classes) applies.
+   * non-empty; otherwise the union of classes (+ optional section filter)
+   * applies.
    */
   targetClassIds: string[]
   targetSectionNames?: string[]
@@ -220,7 +252,7 @@ export interface SchoolApplication {
   publishDate?: string
   startDate?: string
   deadline: string          // final submission deadline (yyyy-mm-dd)
-  eventDate?: string        // optional actual event date
+  eventDate?: string        // the tour date
   lockDate?: string         // optional hard lock independent of deadline
   participation: ParticipationMode
   guardianConsent: GuardianConsentConfig
@@ -230,9 +262,6 @@ export interface SchoolApplication {
   inChargeName?: string
   payment: ApplicationPaymentConfig
   formFields: ApplicationFormField[]
-  /** Ordered section metadata (builder v2). Absent on legacy forms —
-   *  the renderer then falls back to grouping by `field.section` labels. */
-  formSections?: FormSectionMeta[]
   /** Definition version — bumped on structural edits after publish.
    *  Submissions record the version they answered (auditability). */
   formVersion?: number
@@ -263,15 +292,22 @@ export interface ApplicationSubmission {
   applicationId: string
   /** Canonical students-store id used for ALL financial linkage. */
   studentId: string
-  // Identity snapshot — permanent record stays truthful even if the roster
-  // changes later. Never re-derive display info from live records here.
+  // ── Identity snapshot — the permanent record stays truthful even if the
+  //    roster changes later. Never re-derive display info from live records.
+  //    NOTE: no House field — Scholario does not use a house system.
   studentName: string
   admissionNo: string
   className: string
   classId: string
   section: string
+  rollNo?: string
+  dob?: string
+  gender?: string
+  bloodGroup?: string
+  address?: string
   guardianName: string
   guardianPhone: string
+  /** Answers to the template's application-specific fields. */
   answers: Record<string, string | string[] | boolean>
   /** Uploaded file metadata (name/size snapshot). */
   attachments?: Record<string, { name: string; size: number }>
@@ -325,9 +361,25 @@ export interface SubmissionPaymentInfo {
 }
 
 /**
- * Derives a submission's payment picture from the canonical ledger. Reads
- * transactions bound to the application's charge — the exact same rows the
- * Fees module renders. NOTHING is duplicated or recomputed here.
+ * Payment history belonging to ONE application. Reads the canonical fee
+ * ledger — the exact same rows Fee Management renders. A transaction is
+ * bound to this application when it carries the applicationId stamp
+ * (recordPayment) or, for office-recorded legacy rows, when it is bound to
+ * the application's own Additional Charge. NOTHING is duplicated here.
+ */
+export function applicationPayments(app: SchoolApplication): FeeTransaction[] {
+  if (app.payment.mode === 'None' || !app.payment.chargeId) return []
+  const { transactions } = useFeeStore.getState()
+  return transactions.filter((t) =>
+    t.applicationId === app.id
+    || (!t.applicationId && t.additionalChargeId === app.payment.chargeId),
+  )
+}
+
+/**
+ * Derives a submission's payment picture from the canonical ledger. NOTHING
+ * is recomputed — the same rows the Fees module and the application's
+ * payment history render.
  */
 export function deriveSubmissionPayment(
   app: SchoolApplication,
@@ -337,10 +389,7 @@ export function deriveSubmissionPayment(
     status: 'Not Applicable', paidAmount: 0, expectedAmount: 0, receiptNos: [], pendingReceiptNo: null,
   }
   if (!app.payment.chargeId || app.payment.mode === 'None') return noPay
-  const { transactions } = useFeeStore.getState()
-  const mine = transactions.filter(
-    (t) => t.additionalChargeId === app.payment.chargeId && t.studentId === sub.studentId,
-  )
+  const mine = applicationPayments(app).filter((t) => t.studentId === sub.studentId)
   const success = mine.filter((t) => t.status === 'Success')
   const pending = mine.find((t) => t.status === 'Under Verification')
   return {
@@ -394,20 +443,15 @@ export function isApplicationEditable(app: SchoolApplication, now: Date = new Da
     || st === 'Open' || st === 'Closing Soon' || st === 'Scheduled'
 }
 
-/** Spec #20 — classify a schema edit. Structural edits change WHAT a
- *  respondent answers (add/remove/reorder/type/options/required/logic);
- *  cosmetic edits only change presentation (labels, help, placeholder,
- *  bounds metadata that doesn't invalidate existing answers). On published
- *  forms structural edits create a new definition version. */
+/** Classify a schema edit. Structural edits change WHAT a respondent
+ *  answers; cosmetic edits only change presentation. On published forms
+ *  structural edits create a new definition version. */
 export function isStructuralSchemaChange(
   prev: ApplicationFormField[],
   next: ApplicationFormField[],
 ): boolean {
   if (prev.length !== next.length) return true
-  const sig = (f: ApplicationFormField) => JSON.stringify([
-    f.id, f.type, f.required, f.sectionId ?? f.section ?? '',
-    f.options ?? [], f.visibleWhen ?? null, f.maxFiles ?? null,
-  ])
+  const sig = (f: ApplicationFormField) => JSON.stringify([f.id, f.type, f.required, f.section ?? ''])
   for (let i = 0; i < prev.length; i++) {
     if (sig(prev[i]) !== sig(next[i])) return true
   }
@@ -473,6 +517,7 @@ export interface CreateApplicationInput {
   title: string
   description?: string
   category: ApplicationCategory
+  templateKey?: ApplicationTemplateKey
   source?: ApplicationSource
   sourceRef?: ApplicationSourceRef
   academicYear?: string
@@ -496,25 +541,20 @@ export interface CreateApplicationInput {
   paymentAmount: number
   paymentFeeHeadLabel: string
   formFields: ApplicationFormField[]
-  formSections?: FormSectionMeta[]
 }
 
 interface ApplicationsState {
   applications: SchoolApplication[]
   submissions: ApplicationSubmission[]
   audit: ApplicationAuditEvent[]
-  /** Home view preference — remembered across sessions (spec #2). */
-  homeView: 'cards' | 'table'
-  setHomeView: (v: 'cards' | 'table') => void
 
   createApplication: (input: CreateApplicationInput, actor: string, opts?: { actorRole?: 'Principal' | 'Teacher'; teacherId?: string }) => { success: boolean; application?: SchoolApplication; error?: string }
   updateApplication: (id: string, patch: Partial<CreateApplicationInput>, actor: string, opts?: { actorRole?: 'Principal' | 'Teacher'; teacherId?: string }) => { success: boolean; error?: string }
-  /** Builder autosave path — patches schema fields/sections on a DRAFT and
-   *  bumps `formVersion` on PUBLISHED forms when edits are structural.
-   *  Returns `versionBumped` so the builder can inform the Principal. */
-  updateFormSchema: (id: string, fields: ApplicationFormField[], sections: FormSectionMeta[], actor: string) => { success: boolean; error?: string; versionBumped?: boolean }
+  /** Patches schema fields on a DRAFT and bumps `formVersion` on PUBLISHED
+   *  forms when edits are structural. Returns `versionBumped`. */
+  updateFormSchema: (id: string, fields: ApplicationFormField[], actor: string) => { success: boolean; error?: string; versionBumped?: boolean }
   publishApplication: (id: string, actor: string, opts?: { actorRole?: 'Principal' | 'Teacher'; teacherId?: string }) => { success: boolean; error?: string; chargeCreated?: boolean }
-  /** TEACHER → PRINCIPAL workflow (PART 4/7). */
+  /** TEACHER → PRINCIPAL workflow. */
   submitForApproval: (id: string, actor: string, actorRole: 'Principal' | 'Teacher', note?: string, opts?: { teacherId?: string }) => { success: boolean; error?: string }
   requestApprovalChanges: (id: string, note: string, actor: string) => { success: boolean; error?: string }
   approveApplication: (id: string, note: string, actor: string) => { success: boolean; error?: string }
@@ -556,8 +596,15 @@ interface ApplicationsState {
   verifyPhysicalDocument: (submissionId: string, actor: string) => { success: boolean; error?: string }
 }
 
-/** Identity snapshot bundle used for submissions (offline + online). */
+/** Identity snapshot bundle used for every submission. Carries the school
+ *  record particulars the official document prints — House is deliberately
+ *  absent (Scholario has no house system). */
 export interface StudentSubmissionIdentity extends StudentLite {
+  rollNo?: string
+  dob?: string
+  gender?: string
+  bloodGroup?: string
+  address?: string
   guardianName: string
   guardianPhone: string
 }
@@ -583,7 +630,45 @@ function chargeCategoryOf(c: ApplicationCategory): AdditionalChargeCategory {
   }
 }
 
+// ─── Student eligibility notification (existing announcements system) ──
+
+/**
+ * Fires the EXISTING school announcement pipeline (`POST /api/announcements`
+ * → DB Notification → live notification feed) so every student of the
+ * target classes is told the moment they become eligible to apply.
+ * Class-scoped audiences keep the notice out of unrelated students' feeds.
+ * Fire-and-forget: a notification failure must never block publishing.
+ */
+export async function notifyEligibleStudents(app: SchoolApplication): Promise<void> {
+  try {
+    const classNameOf = (id: string) => ACADEMIC_CLASSES.find((c) => c.id === id)?.name
+    const audiences: string[] = app.targetStudentIds?.length
+      ? ['All Students']
+      : Array.from(new Set(app.targetClassIds.map(classNameOf).filter((n): n is string => !!n)))
+        .map((name) => `CLASS:${name}`)
+    if (audiences.length === 0) return
+    const fee = app.payment.mode !== 'None'
+      ? ` Fee ₹${app.payment.amount.toLocaleString('en-IN')} per student — pay online or at the school office.`
+      : ' There is no fee for this form.'
+    await Promise.all(audiences.map((audience) => fetch('/api/announcements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `${app.title} — applications open`,
+        message: `The school has published "${app.title}". Submit your application by ${app.deadline}.${fee}`,
+        category: 'Event',
+        audience,
+      }),
+    })))
+  } catch {
+    /* notification is best-effort — never block the publish */
+  }
+}
+
 // ─── Store ─────────────────────────────────────────────────────────────
+
+/** Legacy (un-scoped) data migrates once into the demo school's namespace. */
+migrateLegacyScopedStore(TENANT_SCOPED_BASES.applications, DEFAULT_TENANT_ID)
 
 /** Session year used by the seed data — declared BEFORE the store so the
  *  initializer's seedApplications() call can never hit a TDZ error. */
@@ -596,13 +681,9 @@ export const useApplicationsStore = create<ApplicationsState>()(
       submissions: [],
       audit: [],
 
-      homeView: 'cards',
-      setHomeView: (v) => set({ homeView: v }),
-
       /** Builder autosave — structural edits on a PUBLISHED form bump the
-       *  definition version; drafts mutate freely. Cosmetic edits (labels,
-       *  help text, placeholders, layout blocks) never bump the version. */
-      updateFormSchema: (id, fields, sections, actor) => {
+       *  definition version; drafts mutate freely. */
+      updateFormSchema: (id, fields, actor) => {
         const state = get()
         const app = state.applications.find((a) => a.id === id)
         if (!app) return { success: false, error: 'Application not found.' }
@@ -610,7 +691,6 @@ export const useApplicationsStore = create<ApplicationsState>()(
           return { success: false, error: `"${app.title}" is ${effectiveAppStatus(app)} — the form definition is locked.` }
         }
         const published = app.status === 'Published'
-        // Structural = anything that changes WHAT respondents answer.
         const structural = published && isStructuralSchemaChange(app.formFields, fields)
         const nextVersion = structural ? (app.formVersion ?? 1) + 1 : (app.formVersion ?? 1)
         const nowIso = new Date().toISOString()
@@ -618,7 +698,6 @@ export const useApplicationsStore = create<ApplicationsState>()(
           applications: state.applications.map((a) => a.id !== id ? a : {
             ...a,
             formFields: fields,
-            formSections: sections.length ? sections : undefined,
             ...(structural ? { formVersion: nextVersion } : {}),
             updatedAt: nowIso,
           }),
@@ -645,10 +724,9 @@ export const useApplicationsStore = create<ApplicationsState>()(
         }
         const nowIso = new Date().toISOString()
         const actorRole = opts?.actorRole ?? 'Principal'
-        // TEACHER PERMISSION (PART 4): a teacher creating a form is its
-        // in-charge by construction — the store FORCES the in-charge to the
-        // creating teacher so nobody can create a form assigned to someone
-        // else, and the Principal always sees the true owner.
+        // TEACHER PERMISSION: a teacher creating a form is its in-charge by
+        // construction — the store FORCES the in-charge to the creating
+        // teacher so nobody can create a form assigned to someone else.
         const inChargeId = actorRole === 'Teacher' && opts?.teacherId
           ? opts.teacherId
           : (input.inChargeTeacherId || undefined)
@@ -657,6 +735,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           title: trimmed,
           description: input.description?.trim() || undefined,
           category: input.category,
+          templateKey: input.templateKey,
           source: input.source ?? 'Custom',
           sourceRef: input.sourceRef,
           academicYear: year,
@@ -685,7 +764,6 @@ export const useApplicationsStore = create<ApplicationsState>()(
             feeHeadLabel: input.paymentFeeHeadLabel.trim() || trimmed,
           },
           formFields: input.formFields.map((f) => ({ ...f })),
-          formSections: input.formSections?.map((s) => ({ ...s })),
           status: 'Draft',
           createdBy: actor,
           createdByRole: actorRole,
@@ -707,9 +785,9 @@ export const useApplicationsStore = create<ApplicationsState>()(
         const state = get()
         const app = state.applications.find((a) => a.id === id)
         if (!app) return { success: false, error: 'Application not found.' }
-        // TEACHER BOUNDARY (PART 4/15): only the assigned in-charge may edit
-        // their own draft-level forms, only before approval/publish, and
-        // NEVER the protected financial configuration.
+        // TEACHER BOUNDARY: only the assigned in-charge may edit their own
+        // draft-level forms, only before approval/publish, and NEVER the
+        // protected financial configuration.
         if (opts?.actorRole === 'Teacher') {
           if (app.createdByRole !== 'Teacher' || app.inChargeTeacherId !== opts.teacherId) {
             return { success: false, error: 'You can only edit forms assigned to you.' }
@@ -717,9 +795,6 @@ export const useApplicationsStore = create<ApplicationsState>()(
           if (!['Draft', 'Changes Requested', 'Rejected'].includes(app.status)) {
             return { success: false, error: `This form is ${app.status.toLowerCase()} — editing is locked. Request changes via the Principal.` }
           }
-          // Financial configuration is PROTECTED (PART 4/29): reject only
-          // when the patch would actually CHANGE it — the builder legitimately
-          // sends the whole form (unchanged values included) on every save.
           const moneyChanged =
             (patch.paymentMode !== undefined && patch.paymentMode !== app.payment.mode)
             || (patch.paymentAmount !== undefined && Math.max(0, patch.paymentAmount) !== app.payment.amount)
@@ -738,8 +813,6 @@ export const useApplicationsStore = create<ApplicationsState>()(
             ...a,
             ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
             ...(patch.description !== undefined ? { description: patch.description.trim() || undefined } : {}),
-            ...(patch.category !== undefined ? { category: patch.category } : {}),
-            ...(patch.academicYear !== undefined ? { academicYear: patch.academicYear } : {}),
             ...(patch.targetClassIds !== undefined ? { targetClassIds: patch.targetClassIds } : {}),
             ...(patch.targetSectionNames !== undefined ? { targetSectionNames: patch.targetSectionNames.length ? patch.targetSectionNames : undefined } : {}),
             ...(patch.targetStudentIds !== undefined ? { targetStudentIds: patch.targetStudentIds.length ? patch.targetStudentIds : undefined } : {}),
@@ -763,7 +836,6 @@ export const useApplicationsStore = create<ApplicationsState>()(
             updatedAt: nowIso,
             // NOTE: money config (mode/amount/label) intentionally NOT mutable
             // through update once published — the linked charge owns it.
-            // Edit → duplicate the draft or close+recreate the application.
           }),
           audit: pushAudit(state, {
             ts: nowIso, applicationId: id, actor, actorRole: 'Principal',
@@ -778,10 +850,8 @@ export const useApplicationsStore = create<ApplicationsState>()(
         const app = state.applications.find((a) => a.id === id)
         const actorRole = opts?.actorRole ?? 'Principal'
         if (!app) return { success: false, error: 'Application not found.' }
-        // PRINCIPAL APPROVAL ENFORCEMENT (PART 4/28): teacher-created forms
-        // publish ONLY after the Principal approved them. A teacher trying
-        // to publish a Draft/Pending/Changes-Requested/Rejected form is
-        // refused at the store level — not merely by a hidden button.
+        // PRINCIPAL APPROVAL ENFORCEMENT: teacher-created forms publish ONLY
+        // after the Principal approved them — enforced at the store level.
         if (actorRole === 'Teacher') {
           if (app.createdByRole !== 'Teacher' || app.inChargeTeacherId !== opts?.teacherId) {
             return { success: false, error: 'You can only operate forms assigned to you.' }
@@ -790,9 +860,6 @@ export const useApplicationsStore = create<ApplicationsState>()(
             return { success: false, error: 'Principal approval is required before this form can be published.' }
           }
         }
-        // The Principal IS the approval authority — they may publish from
-        // any pre-publish state (incl. sending a requested-changes form
-        // live themselves). Teachers cannot.
         if (!['Draft', 'Approved', 'Changes Requested', 'Rejected'].includes(app.status)) {
           return { success: false, error: `Cannot publish from "${app.status}".` }
         }
@@ -809,10 +876,8 @@ export const useApplicationsStore = create<ApplicationsState>()(
         const nowIso = new Date().toISOString()
 
         // FINANCIAL LINKAGE — reuse OR create exactly ONE Additional Charge.
-        // Reuse rule: an Active charge with the same name + year exists (e.g.
-        // seeded 'Educational Tour — Jaipur' AC-01) → link to IT so any
-        // existing collection history stays attached. Never duplicates
-        // obligations; never touches core fee structures.
+        // Reuse rule: an Active charge with the same name + year exists →
+        // link to IT so any existing collection history stays attached.
         let chargeId = app.payment.chargeId
         let chargeCreated = false
         if (app.payment.mode !== 'None' && !chargeId) {
@@ -859,10 +924,13 @@ export const useApplicationsStore = create<ApplicationsState>()(
             message: `Application "${app.title}" published by ${actor} (${actorRole})${chargeCreated ? ' — linked Additional Charge created' : chargeId ? ' — linked to existing Additional Charge' : ''}. Deadline ${app.deadline}.`,
           }),
         })
+        // Students of the target classes become eligible NOW — notify them
+        // through the existing announcements pipeline (fire-and-forget).
+        void notifyEligibleStudents({ ...app, status: 'Published', payment: { ...app.payment, chargeId } })
         return { success: true, chargeCreated }
       },
 
-      // ── TEACHER → PRINCIPAL approval workflow (PART 4/7/14) ─────────
+      // ── TEACHER → PRINCIPAL approval workflow ───────────────────────
       submitForApproval: (id, actor, actorRole, note, opts) => {
         const state = get()
         const app = state.applications.find((a) => a.id === id)
@@ -1090,6 +1158,11 @@ export const useApplicationsStore = create<ApplicationsState>()(
           className: input.student.className,
           classId: input.student.classId,
           section: input.student.section,
+          ...(input.student.rollNo ? { rollNo: input.student.rollNo } : {}),
+          ...(input.student.dob ? { dob: input.student.dob } : {}),
+          ...(input.student.gender ? { gender: input.student.gender } : {}),
+          ...(input.student.bloodGroup ? { bloodGroup: input.student.bloodGroup } : {}),
+          ...(input.student.address ? { address: input.student.address } : {}),
           guardianName: input.student.guardianName,
           guardianPhone: input.student.guardianPhone,
           answers: input.answers,
@@ -1178,7 +1251,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
         if (effectiveAppStatus(app) === 'Archived') {
           return { success: false, error: 'Application archived — records are read-only.' }
         }
-        // TEACHER PERMISSION BOUNDARY (§2E): reviewing participation is fine;
+        // TEACHER PERMISSION BOUNDARY: reviewing participation is fine;
         // moving money is impossible through this API by design. Approval
         // additionally REQUIRES payment completion when the form charges.
         const pay = deriveSubmissionPayment(app, sub)
@@ -1266,6 +1339,11 @@ export const useApplicationsStore = create<ApplicationsState>()(
           className: input.student.className,
           classId: input.student.classId,
           section: input.student.section,
+          ...(input.student.rollNo ? { rollNo: input.student.rollNo } : {}),
+          ...(input.student.dob ? { dob: input.student.dob } : {}),
+          ...(input.student.gender ? { gender: input.student.gender } : {}),
+          ...(input.student.bloodGroup ? { bloodGroup: input.student.bloodGroup } : {}),
+          ...(input.student.address ? { address: input.student.address } : {}),
           guardianName: input.student.guardianName,
           guardianPhone: input.student.guardianPhone,
           answers: {}, // paper form — answers live on the signed physical document
@@ -1341,36 +1419,39 @@ export const useApplicationsStore = create<ApplicationsState>()(
     }),
     {
       name: 'scholario-applications-v1',
-      version: 4,
-      // v3→v4: the approval workflow + source system (PART 4/6). Existing
-      // apps gain source 'Custom', createdByRole 'Principal' and an empty
-      // approval trail; every field gains an 'Application Details' section
-      // when unset so official-form grouping works everywhere.
+      version: 5,
+      storage: createTenantScopedStorage(TENANT_SCOPED_BASES.applications),
+      // v4→v5 — Educational Tour scope rebuild: older persisted namespaces
+      // may hold workshop/event/board demo forms. Keep ONLY Educational Tour
+      // applications (category 'Tour'); drop submissions and audit entries
+      // that no longer reference a kept application. Snapshot fields added
+      // in v5 (rollNo/dob/gender/bloodGroup/address) are optional and simply
+      // absent on pre-migration records — the print document renders only
+      // what exists.
       migrate: (persisted) => {
-        const st = persisted as { applications?: SchoolApplication[]; submissions?: ApplicationSubmission[] } | undefined
+        const st = persisted as {
+          applications?: SchoolApplication[]
+          submissions?: ApplicationSubmission[]
+          audit?: ApplicationAuditEvent[]
+        } | undefined
         if (st?.applications) {
-          const retarget: Record<string, string[]> = {
-            'APP-SPORTSDAY-2026': ['C05', 'C07'],
-            'APP-EYECAMP-2025': ['C01'],
-          }
-          st.applications = st.applications.map((a) => ({
-            ...a,
-            source: a.source ?? 'Custom',
-            sourceRef: a.sourceRef,
-            createdByRole: a.createdByRole ?? 'Principal',
-            approvalNotes: a.approvalNotes ?? [],
-            formFields: (a.formFields ?? []).map((f) => ({ ...f, section: f.section ?? 'Application Details' })),
-            targetClassIds: retarget[a.id] ? retarget[a.id] : a.targetClassIds,
-          }))
+          st.applications = st.applications
+            .filter((a) => a.category === 'Tour')
+            .map((a) => ({
+              ...a,
+              source: a.source ?? 'Custom',
+              createdByRole: a.createdByRole ?? 'Principal',
+              approvalNotes: a.approvalNotes ?? [],
+              formFields: (a.formFields ?? []).map((f) => ({ ...f, section: f.section ?? 'Tour Preferences' })),
+            }))
         }
         if (st?.submissions && st.applications) {
-          st.submissions = st.submissions.map((s) => {
-            const a = st.applications!.find((x) => x.id === s.applicationId)
-            if (a?.physicalSignatureRequired && a.guardianConsent.method === 'Physical Signature' && s.physicalDoc.status === 'Not Required' && s.mode === 'Digital') {
-              return { ...s, physicalDoc: { status: 'Pending' as const } }
-            }
-            return s
-          })
+          const ids = new Set(st.applications.map((a) => a.id))
+          st.submissions = st.submissions.filter((s) => ids.has(s.applicationId))
+        }
+        if (st?.audit && st.applications) {
+          const ids = new Set(st.applications.map((a) => a.id))
+          st.audit = st.audit.filter((e) => ids.has(e.applicationId))
         }
         return st
       },
@@ -1378,15 +1459,17 @@ export const useApplicationsStore = create<ApplicationsState>()(
   ),
 )
 
-// ─── Seed data (realistic demo scenarios, stable IDs) ─────────────────
+// ─── Seed data (single Educational Tour, stable IDs) ───────────────────
 
 function seedApplications(): SchoolApplication[] {
+  const tour = APPLICATION_TEMPLATES.educational_tour
   return [
     {
       id: 'APP-JAIPUR-2026',
       title: 'Educational Tour — Jaipur',
       description: 'Three-day educational tour to Jaipur covering Amber Fort, City Palace and Jantar Mantar. Fee covers transport, boarding/lodging, entry tickets and insurance.',
       category: 'Tour',
+      templateKey: 'educational_tour',
       source: 'Event',
       academicYear: YEAR,
       targetClassIds: ['C11'],
@@ -1396,21 +1479,14 @@ function seedApplications(): SchoolApplication[] {
       guardianConsent: {
         required: true,
         method: 'Physical Signature',
-        statement: 'I give consent for my ward to participate in the Educational Tour to Jaipur and accept the school\u2019s conduct rules for the trip.',
+        statement: tour.consentStatement,
       },
       teacherApprovalRequired: true,
       physicalSignatureRequired: true,
       inChargeTeacherId: 'T-014',
       inChargeName: 'Rohan Mehta',
       payment: { mode: 'Required', amount: 2500, feeHeadLabel: 'Educational Tour — Jaipur', chargeId: 'AC-01' },
-      formFields: [
-        { id: 'f-jp-emg', type: 'emergency-contact', label: 'Emergency Contact (relative)', helpText: 'Name and phone number of a contact besides parents.', required: true, section: 'Medical / Emergency Details' },
-        { id: 'f-jp-medical', type: 'longtext', label: 'Medical Notes / Allergies', helpText: 'Leave blank if none.', required: false, section: 'Medical / Emergency Details' },
-        { id: 'f-jp-meal', type: 'dropdown', label: 'Meal Preference', required: true, options: ['Vegetarian', 'Non-Vegetarian', 'Jain'], section: 'Travel Details' },
-        { id: 'f-jp-shirt', type: 'radio', label: 'Tour T-Shirt Size', required: true, options: ['S', 'M', 'L', 'XL'], section: 'Travel Details' },
-        { id: 'f-jp-photo', type: 'yesno', label: 'Photos allowed for school social media?', required: false, section: 'Consent' },
-        { id: 'f-jp-sign', type: 'signature', label: 'Guardian Undertaking', helpText: 'Sign the printed form physically before the tour.', required: true, section: 'Declaration' },
-      ],
+      formFields: tour.fields.map((f) => ({ ...f })),
       status: 'Published',
       createdBy: 'Dr. Ananya Iyer',
       createdByRole: 'Principal',
@@ -1418,166 +1494,14 @@ function seedApplications(): SchoolApplication[] {
       createdAt: '2026-08-20T09:35:00Z',
       updatedAt: '2026-08-22T10:00:00Z',
     },
-    {
-      id: 'APP-ROBOTICS-2026',
-      title: 'Robotics Workshop',
-      description: 'Two-day hands-on robotics workshop with an external partner. Kit included. Mandatory for Class 12.',
-      category: 'Workshop',
-      source: 'Custom',
-      academicYear: YEAR,
-      targetClassIds: ['C12'],
-      deadline: '2026-10-30',
-      eventDate: '2026-11-14',
-      participation: 'Mandatory',
-      guardianConsent: { required: false, method: 'Digital' },
-      teacherApprovalRequired: false,
-      physicalSignatureRequired: false,
-      payment: { mode: 'Required', amount: 1000, feeHeadLabel: 'Robotics Workshop', chargeId: 'AC-02' },
-      formFields: [
-        { id: 'f-rb-team', type: 'yesno', label: 'Interested in the competitive track?', required: true, section: 'Application Details' },
-        { id: 'f-rb-exp', type: 'dropdown', label: 'Prior robotics experience', required: true, options: ['None', 'Beginner', 'Intermediate', 'Advanced'], section: 'Application Details' },
-        { id: 'f-rb-contact', type: 'emergency-contact', label: 'Emergency Contact (relative)', required: true, section: 'Medical / Emergency Details' },
-      ],
-      status: 'Draft',
-      createdBy: 'Dr. Ananya Iyer',
-      createdByRole: 'Principal',
-      approvalNotes: [],
-      createdAt: '2026-08-21T11:05:00Z',
-      updatedAt: '2026-08-21T11:05:00Z',
-    },
-    {
-      id: 'APP-SPORTSDAY-2026',
-      title: 'Annual Sports Day Consent',
-      description: 'Participation confirmation for the Annual Sports Day races. Consent needed for practice drills on Wednesday mornings.',
-      category: 'Event',
-      source: 'Event',
-      academicYear: YEAR,
-      // Canonical (zero-padded) class ids: C05 = Class 2, C07 = Class 4.
-      targetClassIds: ['C05', 'C07'],
-      deadline: '2026-09-30',
-      eventDate: '2026-11-20',
-      participation: 'Optional',
-      guardianConsent: {
-        required: true,
-        method: 'Digital',
-        statement: 'I permit my ward to participate in Annual Sports Day practice sessions.',
-      },
-      teacherApprovalRequired: false,
-      physicalSignatureRequired: false,
-      payment: { mode: 'None', amount: 0, feeHeadLabel: '' },
-      formFields: [
-        { id: 'f-sd-track', type: 'checkbox', label: 'Events my ward wants to take part in', required: true, options: ['100m Run', 'Long Jump', 'Relay'], section: 'Application Details' },
-        { id: 'f-sd-medical', type: 'longtext', label: 'Medical notes', required: false, section: 'Medical / Emergency Details' },
-      ],
-      status: 'Published',
-      createdBy: 'Dr. Ananya Iyer',
-      createdByRole: 'Principal',
-      approvalNotes: [],
-      createdAt: '2026-08-24T08:15:00Z',
-      updatedAt: '2026-08-24T08:15:00Z',
-    },
-    // Closed-but-accessible history example — proves records survive closure.
-    {
-      id: 'APP-EYECAMP-2025',
-      title: 'Vision Screening Camp 2025',
-      description: 'Free eye screening conducted last term. Kept permanently as part of the session\u2019s record files.',
-      category: 'Activity',
-      source: 'Activity',
-      academicYear: '2025-2026',
-      targetClassIds: ['C01'],
-      deadline: '2025-12-01',
-      eventDate: '2025-12-10',
-      participation: 'Optional',
-      guardianConsent: { required: true, method: 'Digital', statement: 'I permit free vision screening for my ward.' },
-      teacherApprovalRequired: false,
-      physicalSignatureRequired: false,
-      payment: { mode: 'None', amount: 0, feeHeadLabel: '' },
-      formFields: [
-        { id: 'f-es-glasses', type: 'yesno', label: 'Does your ward currently wear glasses?', required: false, section: 'Application Details' },
-      ],
-      status: 'Closed',
-      createdBy: 'Dr. Ananya Iyer',
-      createdByRole: 'Principal',
-      approvalNotes: [],
-      createdAt: '2025-11-10T08:00:00Z',
-      updatedAt: '2025-12-02T09:00:00Z',
-    },
-    // TEACHER-CREATED form awaiting Principal approval — PART 4 workflow,
-    // gives the Principal's approval queue realistic live content.
-    {
-      id: 'APP-SCIENCEEXPO-2026',
-      title: 'Science Exhibition — Participation Form',
-      description: 'Inter-house Science Exhibition open to Classes 6 and 7. Exhibits judged by an external panel; winning house retains the rolling trophy.',
-      category: 'Competition',
-      source: 'Event',
-      sourceRef: { module: 'Events', label: 'Annual Science Exhibition 2026' },
-      academicYear: YEAR,
-      targetClassIds: ['C09', 'C10'],
-      deadline: '2026-10-05',
-      eventDate: '2026-10-24',
-      participation: 'Optional',
-      guardianConsent: {
-        required: true,
-        method: 'Digital',
-        statement: 'I permit my ward to take part in the Science Exhibition and stay back for the judging round if selected.',
-      },
-      teacherApprovalRequired: true,
-      physicalSignatureRequired: false,
-      inChargeTeacherId: 'T-014',
-      inChargeName: 'Rohan Mehta',
-      payment: { mode: 'None', amount: 0, feeHeadLabel: '' },
-      formFields: [
-        { id: 'f-se-project', type: 'text', label: 'Project Title', required: true, section: 'Application Details' },
-        { id: 'f-se-team', type: 'yesno', label: 'Participating as a team?', required: true, section: 'Application Details' },
-        { id: 'f-se-members', type: 'text', label: 'Team members (name & class)', helpText: 'Leave blank for a solo entry.', required: false, section: 'Application Details' },
-      ],
-      status: 'Pending Approval',
-      createdBy: 'Rohan Mehta',
-      createdByRole: 'Teacher',
-      approvalNotes: [{
-        id: 'AN-SEED-1', at: '2026-08-26T08:30:00Z', by: 'Rohan Mehta', role: 'Teacher', kind: 'submitted',
-        note: 'Exhibit space and the judging panel are confirmed — form is ready for your review.',
-      }],
-      createdAt: '2026-08-25T15:10:00Z',
-      updatedAt: '2026-08-26T08:30:00Z',
-    },
-    // EXAMINATION-GENERATED form (PART 5) — created automatically when an
-    // exam requiring an application form is set up; stays linked to its exam.
-    {
-      id: 'APP-BOARDFORM-2026',
-      title: 'Final Examination — Application Form',
-      description: 'Auto-generated from the Examinations module for "Final Examination". Confirmation of entry, answer-sheet medium and examination-day contact details.',
-      category: 'Exam Application',
-      source: 'Examination',
-      sourceRef: { module: 'Examinations', id: 'exam-seed-2', label: 'Final Examination' },
-      academicYear: YEAR,
-      targetClassIds: ['C13', 'C14', 'C15'],
-      deadline: '2026-09-25',
-      participation: 'Mandatory',
-      guardianConsent: { required: false, method: 'Digital' },
-      teacherApprovalRequired: true,
-      physicalSignatureRequired: false,
-      payment: { mode: 'None', amount: 0, feeHeadLabel: '' },
-      formFields: [
-        { id: 'f-be-board', type: 'text', label: 'Board Registration Number', helpText: 'Leave blank if not yet allotted.', required: false, section: 'Application Details' },
-        { id: 'f-be-medium', type: 'dropdown', label: 'Medium of answer sheet', required: true, options: ['English', 'Hindi'], section: 'Application Details' },
-        { id: 'f-be-emg', type: 'emergency-contact', label: 'Emergency Contact (examination days)', required: true, section: 'Medical / Emergency Details' },
-      ],
-      status: 'Draft',
-      createdBy: 'Dr. Ananya Iyer',
-      createdByRole: 'Principal',
-      approvalNotes: [],
-      createdAt: '2026-08-23T10:40:00Z',
-      updatedAt: '2026-08-23T10:40:00Z',
-    },
   ]
 }
 
 /**
  * Seeds realistic submissions resolved from the canonical roster so student
- * identity snapshots match real Class 11 / Class 2 students — which makes
- * their payments resolve correctly inside Fee Management accounts. Safe to
- * call repeatedly; only seeds while both collections are empty.
+ * identity snapshots match real Class 11 students — which makes their
+ * payments resolve correctly inside Fee Management accounts. Safe to call
+ * repeatedly; only seeds while both collections are empty.
  */
 export function ensureApplicationSeedData(): void {
   try {
@@ -1585,92 +1509,71 @@ export function ensureApplicationSeedData(): void {
     if (state.submissions.length > 0 || state.audit.length > 0) return
     const apps = state.applications.length > 0 ? state.applications : seedApplications()
     const students = useStudentsStore.getState().students.filter((s) => s.status === 'Active')
-    const jaipur = apps.find((a) => a.id === 'APP-JAIPUR-2026')
-    const sports = apps.find((a) => a.id === 'APP-SPORTSDAY-2026')
-    const eyecamp = apps.find((a) => a.id === 'APP-EYECAMP-2025')
+    const tour = apps.find((a) => a.id === 'APP-JAIPUR-2026')
+    if (!tour) return
 
-    const mkSub = (
-      base: { id: string; app?: SchoolApplication; stu?: typeof students[number] },
-      extra: Partial<ApplicationSubmission>,
-    ): ApplicationSubmission | null => {
-      if (!base.app || !base.stu) return null
+    const c11 = students.filter((s) => s.classId === 'C11').slice(0, 4)
+    const mkIdentity = (stu: typeof students[number]): StudentSubmissionIdentity => ({
+      id: stu.id,
+      name: stu.name,
+      admissionNo: stu.admissionNo,
+      className: stu.className,
+      classId: stu.classId,
+      section: stu.section,
+      rollNo: stu.rollNo,
+      dob: stu.dob,
+      gender: stu.gender,
+      bloodGroup: stu.bloodGroup,
+      address: stu.address,
+      guardianName: stu.guardianName,
+      guardianPhone: stu.guardianPhone,
+    })
+
+    const answerSets: Array<Record<string, string | string[] | boolean>> = [
+      { 't-meal': 'Vegetarian', 't-shirt': 'M', 't-emergency': 'Vikram Rao — 98110 22334', 't-medical': '', 't-photo': true },
+      { 't-meal': 'Non-Vegetarian', 't-shirt': 'L', 't-emergency': 'Sunita Kaur — 98730 44556', 't-medical': 'Mild pollen allergy — carries antihistamine.', 't-photo': true },
+      { 't-meal': 'Jain', 't-shirt': 'S', 't-emergency': '96432', 't-medical': '', 't-photo': false },
+      { 't-meal': 'Vegetarian', 't-shirt': 'XL', 't-emergency': 'Mahesh Verma — 99100 55667', 't-medical': 'Lactose intolerant.', 't-photo': true },
+    ]
+
+    const out: ApplicationSubmission[] = c11.map((stu, i) => {
+      const submittedAt = '2026-08-24T09:00:00Z'
+      const isCorrection = i === 2
       return {
-        id: base.id,
-        applicationId: base.app.id,
-        studentId: base.stu.id,
-        studentName: base.stu.name,
-        admissionNo: base.stu.admissionNo,
-        className: base.stu.className,
-        classId: base.stu.classId,
-        section: base.stu.section,
-        guardianName: base.stu.guardianName,
-        guardianPhone: base.stu.guardianPhone,
-        answers: {},
-        submittedAt: '2026-08-24T09:00:00Z',
-        submittedByRole: 'Student',
-        mode: 'Digital',
-        status: 'Submitted',
-        physicalDoc: { status: 'Not Required' },
-        reviewNotes: [],
+        id: `SUB-SEED-JP-${i + 1}`,
+        applicationId: tour.id,
+        studentId: stu.id,
+        studentName: stu.name,
+        admissionNo: stu.admissionNo,
+        className: stu.className,
+        classId: stu.classId,
+        section: stu.section,
+        rollNo: stu.rollNo,
+        dob: stu.dob,
+        gender: stu.gender,
+        bloodGroup: stu.bloodGroup,
+        address: stu.address,
+        guardianName: stu.guardianName,
+        guardianPhone: stu.guardianPhone,
+        answers: answerSets[i % answerSets.length],
+        submittedAt,
+        submittedByRole: 'Student' as const,
+        mode: 'Digital' as const,
+        status: (isCorrection ? 'Correction Required' : 'Submitted') as SubmissionWorkflowStatus,
+        physicalDoc: { status: tour.physicalSignatureRequired && tour.guardianConsent.method === 'Physical Signature' ? 'Pending' as const : 'Not Required' as const },
+        reviewNotes: isCorrection ? [{
+          id: 'RN-SEED-1', at: '2026-08-25T10:30:00Z', by: 'Rohan Mehta', role: 'Teacher' as const,
+          note: 'Emergency contact number looks incomplete — please re-enter the full 10-digit mobile number.', kind: 'correction' as const,
+        }] : [],
         resubmissionCount: 0,
         formVersion: 1,
-        updatedAt: '2026-08-24T09:00:00Z',
-        ...extra,
+        updatedAt: submittedAt,
       }
-    }
+    })
 
-    const out: ApplicationSubmission[] = []
-    // Post-pass: honor each app's physical-signature config on its seeds.
-    const applyPhysical = (s: ApplicationSubmission | null) => {
-      if (!s) return null
-      const a = apps.find((x) => x.id === s.applicationId)
-      if (a?.physicalSignatureRequired && a.guardianConsent.method === 'Physical Signature' && s.physicalDoc.status === 'Not Required') {
-        return { ...s, physicalDoc: { status: 'Pending' as const } }
-      }
-      return s
-    }
-    if (jaipur) {
-      const c11 = students.filter((s) => s.classId === 'C11').slice(0, 4)
-      c11.forEach((stu, i) => {
-        const s = applyPhysical(mkSub({ id: `SUB-SEED-JP-${i + 1}`, app: jaipur, stu }, i === 2 ? {
-          status: 'Correction Required' as const,
-          reviewNotes: [{
-            id: 'RN-SEED-1', at: '2026-08-25T10:30:00Z', by: 'Rohan Mehta', role: 'Teacher' as const,
-            note: 'Emergency contact number looks incomplete — please re-enter the full 10-digit mobile number.', kind: 'correction' as const,
-          }],
-        } : {}))
-        if (s) out.push(s)
-      })
-    }
-    if (sports) {
-      // Class 4 (C07) roster — deliberately EXCLUDES the demo twin so a live
-      // application can be submitted end-to-end during testing.
-      const c07 = students.filter((s) => s.classId === 'C07').slice(0, 2)
-      c07.slice(0, 2).forEach((stu, i) => {
-        const s = applyPhysical(mkSub({ id: `SUB-SEED-SD-${i + 1}`, app: sports, stu }, {
-          answers: { 'f-sd-track': i === 0 ? ['100m Run', 'Relay'] : ['Long Jump'], 'f-sd-medical': '' },
-          consentGivenAt: '2026-08-24T09:05:00Z',
-        }))
-        if (s) out.push(s)
-      })
-      // Historical record from last session — approved participant retained.
-      if (eyecamp && c07[0]) {
-        const s = applyPhysical(mkSub({ id: 'SUB-SEED-ES-1', app: eyecamp, stu: c07[0] }, {
-          answers: { 'f-es-glasses': false },
-          consentGivenAt: '2025-11-15T09:00:00Z',
-          status: 'Approved' as const,
-          reviewedBy: 'Dr. Ananya Iyer',
-          reviewedAt: '2025-11-16T09:00:00Z',
-          submittedAt: '2025-11-15T09:00:00Z',
-          updatedAt: '2025-11-16T09:00:00Z',
-        }))
-        if (s) out.push(s)
-      }
-    }
-    const valid = out.filter(Boolean) as ApplicationSubmission[]
     useApplicationsStore.setState({
-      submissions: valid,
-      audit: valid.length ? SEED_APP_AUDIT() : [],
+      submissions: out,
+      audit: out.length ? SEED_APP_AUDIT() : [],
     })
   } catch {
     /* roster unavailable — skip seeding silently */
@@ -1679,21 +1582,6 @@ export function ensureApplicationSeedData(): void {
 
 function SEED_APP_AUDIT(): ApplicationAuditEvent[] {
   return [
-    {
-      id: 'AEV-SEED-4', ts: '2026-08-25T15:10:00Z', applicationId: 'APP-SCIENCEEXPO-2026',
-      actor: 'Rohan Mehta', actorRole: 'Teacher', action: 'application.created',
-      message: 'Application "Science Exhibition — Participation Form" created as draft by Rohan Mehta (Teacher).',
-    },
-    {
-      id: 'AEV-SEED-5', ts: '2026-08-26T08:30:00Z', applicationId: 'APP-SCIENCEEXPO-2026',
-      actor: 'Rohan Mehta', actorRole: 'Teacher', action: 'application.submitted_approval',
-      message: '"Science Exhibition — Participation Form" submitted for Principal approval by Rohan Mehta (Teacher).',
-    },
-    {
-      id: 'AEV-SEED-6', ts: '2026-08-23T10:40:00Z', applicationId: 'APP-BOARDFORM-2026',
-      actor: 'Examinations module', actorRole: 'System', action: 'application.created',
-      message: 'Application form auto-generated from Examination "Final Examination" (linked source record exam-seed-2).',
-    },
     {
       id: 'AEV-SEED-1', ts: '2026-08-22T09:00:00Z', applicationId: 'APP-JAIPUR-2026',
       actor: 'Dr. Ananya Iyer', actorRole: 'Principal', action: 'application.published',
@@ -1704,24 +1592,16 @@ function SEED_APP_AUDIT(): ApplicationAuditEvent[] {
       actor: 'Rohan Mehta', actorRole: 'Teacher', action: 'submission.correction',
       message: 'Corrections requested from a Class 11 applicant — emergency contact incomplete.',
     },
-    {
-      id: 'AEV-SEED-3', ts: '2025-12-02T09:00:00Z', applicationId: 'APP-EYECAMP-2025',
-      actor: 'Dr. Ananya Iyer', actorRole: 'Principal', action: 'application.closed',
-      message: 'Screening completed — application closed. Records retained for the 2025-26 session file.',
-    },
   ]
 }
 
-// ─── Examinations module integration (PART 5) ──────────────────────────
+// ─── Examinations module integration (architecture, retained) ──────────
 //
 // Called automatically by the Examinations module when a created exam
 // REQUIRES an application form. The generated record is the SAME generic
 // SchoolApplication entity (never a special-cased implementation) with
-// source 'Examination' and a permanent sourceRef back to the exam, so:
-//   Examination → Application/Form → Submission → Approval → Payment →
-//   Documents → Permanent Record
-// Idempotent: re-creating the same exam (or a duplicate call) re-links the
-// existing generated form instead of duplicating it.
+// source 'Examination' and a permanent sourceRef back to the exam, so the
+// future Super Admin template catalogue can govern it. Idempotent.
 
 export interface ExaminationFormRequest {
   examId: string
@@ -1774,7 +1654,6 @@ export function createExaminationFormApplication(
         inChargeName: input.inChargeName,
         // Exam fees are governed by the Fee Structure (examFeeSchedule) —
         // the generated form starts free so no double-charge can occur.
-        // The office may configure a charge BEFORE publishing if needed.
         paymentMode: 'None',
         paymentAmount: 0,
         paymentFeeHeadLabel: '',

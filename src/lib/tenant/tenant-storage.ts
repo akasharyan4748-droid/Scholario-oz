@@ -37,6 +37,7 @@ export const TENANT_SCOPED_BASES = {
   salary: 'scholario-salary-v3',
   teachers: 'gws-teachers-lifecycle-store',
   admission: 'scholario_admission_store',
+  applications: 'scholario-applications-v1',
 } as const
 
 export function tenantScopedKey(baseName: string, tenantId?: string): string {

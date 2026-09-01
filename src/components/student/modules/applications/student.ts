@@ -54,7 +54,11 @@ export function resolveCanonicalStudent(students: StudentRecord[]): StudentRecor
   return students.find((s) => s.status === 'Active' && s.className.startsWith('Class 2'))
 }
 
-/** Snapshot bundle the store expects on every submission. */
+/**
+ * Snapshot bundle the store expects on every submission. Carries the school
+ * record particulars the official tour application prints — there is
+ * deliberately NO house field (Scholario does not use a house system).
+ */
 export function buildSubmissionIdentity(canonical: StudentRecord): StudentSubmissionIdentity {
   return {
     id: canonical.id,
@@ -63,6 +67,11 @@ export function buildSubmissionIdentity(canonical: StudentRecord): StudentSubmis
     className: canonical.className,
     classId: canonical.classId,
     section: canonical.section,
+    rollNo: canonical.rollNo,
+    dob: canonical.dob,
+    gender: canonical.gender,
+    bloodGroup: canonical.bloodGroup,
+    address: canonical.address,
     guardianName: canonical.guardianName,
     guardianPhone: canonical.guardianPhone,
   }

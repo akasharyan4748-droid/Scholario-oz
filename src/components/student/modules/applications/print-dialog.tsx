@@ -21,9 +21,10 @@ import {
   downloadApplicationDocument, applicationDocFileName,
 } from '@/components/principal/modules/applications/application-print'
 import {
-  deriveSubmissionPayment,
+  applicationPayments, deriveSubmissionPayment,
   type ApplicationSubmission, type SchoolApplication,
 } from '@/lib/store/applications-store'
+import { formatINR, formatDate } from '@/lib/format'
 
 interface SubmissionDocumentDialogProps {
   open: boolean
@@ -36,13 +37,20 @@ export function SubmissionDocumentDialog({ open, onOpenChange, app, sub }: Submi
   if (!app || !sub) return null
 
   const pay = deriveSubmissionPayment(app, sub)
+  // Payment history belonging to THIS application only — every receipt the
+  // student (or the office) recorded against it, read from the canonical
+  // fee ledger. Nothing else from the student's account is mixed in.
+  const history = applicationPayments(app).filter((t) => t.studentId === sub.studentId)
   const paymentLines = app.payment.mode === 'None'
     ? undefined
     : [
         { label: 'Payment status', value: pay.status },
-        ...(pay.receiptNos.length ? [{ label: 'Receipts', value: pay.receiptNos.join(', ') }] : []),
-        ...(pay.pendingReceiptNo
-          ? [{ label: 'Pending receipt', value: `${pay.pendingReceiptNo} (under verification)` }]
+        ...history.map((t) => ({
+          label: `Receipt ${t.receiptNo}`,
+          value: `${formatINR(t.amount)} · ${t.mode} · ${formatDate(t.date)} · ${t.status === 'Success' ? 'Paid' : t.status}`,
+        })),
+        ...(pay.status === 'Not Paid'
+          ? [{ label: 'Balance', value: `${formatINR(Math.max(0, pay.expectedAmount - pay.paidAmount))} payable — pay online or at the school office` }]
           : []),
       ]
 

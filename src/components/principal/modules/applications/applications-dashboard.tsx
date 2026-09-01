@@ -3,20 +3,21 @@
 /**
  * ApplicationsDashboard — compact command centre for Applications & Forms.
  *
- * Follows Salary & Payroll proportions: one toolbar (title + primary white-
- * outline action), a small metric strip, one filter row, then a full-bleed
- * divide-y table where EVERY row expands into contextual actions. No giant
- * cards, no marketing energy — enterprise calm.
+ * SCOPE: one form type today — the Educational Tour. No category palette,
+ * no source zoo; the pipeline reads left-to-right: create → publish →
+ * students apply & pay → review → official record.
+ *
+ * Follows Salary & Payroll proportions: one toolbar (context + action), a
+ * small metric strip, one filter row, then a full-bleed divide-y table
+ * where every row expands into contextual actions. Enterprise calm.
  */
 
 import { Fragment, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Bus, CalendarDays, CheckCircle2, ChevronDown, ClipboardList, Copy, FlaskConical, FileText,
-  Landmark, Lock, Archive, PencilLine, Plus, Search, Send, Sparkles,
-  Tag, Trophy, Tent, XCircle, Undo2, Award, HandHeart,
+  Archive, Bus, CheckCircle2, ChevronDown, ClipboardList, Copy, Lock, PencilLine,
+  Plus, Search, Send, XCircle, Undo2,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -32,36 +33,12 @@ import {
 import {
   useApplicationsStore, effectiveAppStatus, combinedSubmissionStatus,
   deriveSubmissionPayment,
-  type SchoolApplication, type ApplicationCategory,
+  type SchoolApplication,
 } from '@/lib/store/applications-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { AppStatusBadge } from './application-detail'
-
-export const CATEGORY_ICON: Record<ApplicationCategory, LucideIcon> = {
-  Tour: Bus,
-  Trip: Bus,
-  Workshop: FlaskConical,
-  Competition: Trophy,
-  Camp: Tent,
-  Event: CalendarDays,
-  'Exam Application': FileText,
-  'Board Form': Landmark,
-  Transport: Sparkles,
-  Activity: CalendarDays,
-  Certificate: Award,
-  Donation: HandHeart,
-  Custom: Tag,
-}
-
-/** Source chip tone — where the form came from (PART 17). */
-export const SOURCE_TONE: Record<string, string> = {
-  Examination: 'bg-violet-500/10 text-violet-600 dark:text-violet-300',
-  Event: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
-  Activity: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
-  Custom: 'bg-muted text-muted-foreground',
-}
 
 interface Props {
   onOpenApplication: (id: string) => void
@@ -77,9 +54,6 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [categoryFilter, setCategoryFilter] = useState<string>('all')
-  const [sourceFilter, setSourceFilter] = useState<string>('all')
-  const [inChargeFilter, setInChargeFilter] = useState<string>('all')
   const [sessionFilter, setSessionFilter] = useState<string>('all')
   const [recordOpen, setRecordOpen] = useState(false)
 
@@ -93,7 +67,7 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
     return m
   }, [submissions])
 
-  // PART 24 — Record File pool: closed/locked/archived = permanent record.
+  // Permanent-record pool: closed/locked/archived.
   const recordApps = useMemo(
     () => applications.filter((a) => {
       const st = effectiveAppStatus(a)
@@ -118,21 +92,12 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
       for (const s of subs) {
         const cs = combinedSubmissionStatus(a, s)
         if (['Submitted', 'Under Review'].includes(cs)) pendingReview++
-      }
-      // money-in-flight only meaningful when the form charges applicants
-      for (const s of subs) {
-        const cs = combinedSubmissionStatus(a, s)
         if (cs === 'Awaiting Payment' || cs === 'Awaiting Verification') awaitingMoney++
       }
     }
     return { active, closing, pendingReview, awaitingMoney, awaitingApproval }
   }, [applications, subsByApp])
 
-  // Filter option pools — derived from real data, never hardcoded.
-  const inChargeOptions = useMemo(
-    () => Array.from(new Set(applications.map((a) => a.inChargeName).filter(Boolean) as string[])).sort(),
-    [applications],
-  )
   const sessionOptions = useMemo(
     () => Array.from(new Set(applications.map((a) => a.academicYear))).sort().reverse(),
     [applications],
@@ -146,9 +111,6 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
         if (statusFilter === 'active' && !(['Open', 'Closing Soon'] as string[]).includes(eff as string)) return false
         if (['Draft', 'Archived', 'Pending Approval', 'Approved'].includes(statusFilter) && a.status !== statusFilter) return false
         if ((statusFilter === 'Locked' || statusFilter === 'Closed') && eff !== statusFilter) return false
-        if (categoryFilter !== 'all' && a.category !== categoryFilter) return false
-        if (sourceFilter !== 'all' && a.source !== sourceFilter) return false
-        if (inChargeFilter !== 'all' && a.inChargeName !== inChargeFilter) return false
         if (sessionFilter !== 'all' && a.academicYear !== sessionFilter) return false
         if (q && !(a.title.toLowerCase().includes(q))) return false
         return true
@@ -165,41 +127,39 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
         }
         return rank(a) - rank(b) || b.createdAt.localeCompare(a.createdAt)
       })
-  }, [applications, search, statusFilter, categoryFilter, sourceFilter, inChargeFilter, sessionFilter])
+  }, [applications, search, statusFilter, sessionFilter])
 
   return (
     <div className="space-y-4">
-      {/* Toolbar — ONE page title lives in the app shell header; this row
-          is context + action only (PART 3: no duplicate giant heading). */}
+      {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs text-muted-foreground min-w-0 truncate">
-          Examination · Event · Activity · Custom — application → approval → payment → official record
+          Educational Tour — create → publish → students apply &amp; pay → review → official record
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          {/* PART 24 — subtle permanent-record entry point */}
           <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setRecordOpen(true)} aria-label="Open record file of past applications">
             <Archive className="h-3 w-3" /> Record File
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={onStartCreate}>
-            <Plus className="h-3 w-3" /> New Application
+            <Plus className="h-3 w-3" /> New Tour Application
           </Button>
         </div>
       </div>
 
       {/* Metric strip */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <MetricTile label="Active forms" value={metrics.active} hint={metrics.closing ? `${metrics.closing} closing soon` : undefined} />
+        <MetricTile label="Active tours" value={metrics.active} hint={metrics.closing ? `${metrics.closing} closing soon` : undefined} />
         <MetricTile label="Awaiting approval" value={metrics.awaitingApproval} tone="amber" hint="teacher-created drafts" />
         <MetricTile label="Pending review" value={metrics.pendingReview} tone="amber" hint="student submissions" />
         <MetricTile label="Awaiting money" value={metrics.awaitingMoney} tone="amber" hint="pay or cash verify" />
-        <MetricTile label="Total forms" value={applications.length} />
+        <MetricTile label="Total applications" value={applications.length} />
       </div>
 
       {/* Filter row */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input className="pl-8 h-8 text-xs" placeholder="Search applications…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search applications" />
+          <Input className="pl-8 h-8 text-xs" placeholder="Search tour applications…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search applications" />
         </div>
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
           <SelectTrigger className="h-8 w-[140px] text-xs" aria-label="Status filter"><SelectValue /></SelectTrigger>
@@ -214,33 +174,6 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
             <SelectItem value="Archived" className="text-xs">Archived</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Category filter"><SelectValue /></SelectTrigger>
-          <SelectContent className="z-[70]">
-            <SelectItem value="all" className="text-xs">All categories</SelectItem>
-            {(Object.keys(CATEGORY_ICON)).map((c) => (
-              <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="h-8 w-[120px] text-xs" aria-label="Source filter"><SelectValue /></SelectTrigger>
-          <SelectContent className="z-[70]">
-            <SelectItem value="all" className="text-xs">All sources</SelectItem>
-            {['Examination', 'Event', 'Activity', 'Custom'].map((s) => (
-              <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={inChargeFilter} onValueChange={setInChargeFilter}>
-          <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="In-charge filter"><SelectValue /></SelectTrigger>
-          <SelectContent className="z-[70]">
-            <SelectItem value="all" className="text-xs">All in-charge</SelectItem>
-            {inChargeOptions.map((n) => (
-              <SelectItem key={n} value={n} className="text-xs">{n}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Select value={sessionFilter} onValueChange={setSessionFilter}>
           <SelectTrigger className="h-8 w-[140px] text-xs" aria-label="Session filter"><SelectValue /></SelectTrigger>
           <SelectContent className="z-[70]">
@@ -251,16 +184,15 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
           </SelectContent>
         </Select>
       </div>
-      {/* overflow-x-auto + min-width wrapper: narrow viewports (iPad portrait,
-          ~1195px QA screens etc.) scroll horizontally INSIDE the card instead
-          of clipping the Status + Actions columns at the screen edge. */}
+
+      {/* overflow-x-auto + min-width wrapper: narrow viewports scroll
+          horizontally INSIDE the card instead of clipping columns. */}
       <div className="rounded-xl border border-border bg-card overflow-hidden overflow-x-auto">
-        <div className="min-w-[860px]">
+        <div className="min-w-[760px]">
           <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-b border-border/60 bg-muted/30 text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">
-            <span className="flex-1">Application</span>
-            <span className="w-20 shrink-0">Source</span>
+            <span className="flex-1">Tour application</span>
             <span className="w-32 shrink-0 hidden lg:block">In-charge</span>
-            <span className="w-24 shrink-0">Deadline</span>
+            <span className="w-28 shrink-0">Deadline</span>
             <span className="w-20 shrink-0 text-right">Responses</span>
             <span className="w-36 shrink-0 text-right">Money</span>
             <span className="w-24 shrink-0 text-right">Status</span>
@@ -284,7 +216,7 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
         {filtered.length === 0 && (
           <div className="py-12 text-center">
             <ClipboardList className="h-6 w-6 mx-auto text-muted-foreground/40" />
-            <p className="mt-2 text-xs text-muted-foreground">No applications match this view.</p>
+            <p className="mt-2 text-xs text-muted-foreground">No tour applications match this view.</p>
             <Button variant="outline" size="sm" className="h-7 mt-3 text-[11px]" onClick={onStartCreate}>
               Create the first one
             </Button>
@@ -292,7 +224,7 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
         )}
       </div>
 
-      {/* PART 24 — Record File: permanent institutional record of finished forms */}
+      {/* Record File: permanent institutional record of finished forms */}
       <Dialog open={recordOpen} onOpenChange={setRecordOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -305,29 +237,26 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
             {recordApps.length === 0 ? (
               <p className="py-8 text-center text-xs text-muted-foreground">Nothing archived yet.</p>
             ) : (
-              recordApps.map((a) => {
-                const RecordIcon = CATEGORY_ICON[a.category]
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => { setRecordOpen(false); onOpenApplication(a.id) }}
-                    className="flex w-full items-center gap-3 py-2.5 text-left transition-colors hover:bg-muted/40"
-                    aria-label={`Open ${a.title}`}
-                  >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 ring-1 ring-violet-500/20 dark:text-violet-400">
-                      <RecordIcon className="h-3.5 w-3.5" />
+              recordApps.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => { setRecordOpen(false); onOpenApplication(a.id) }}
+                  className="flex w-full items-center gap-3 py-2.5 text-left transition-colors hover:bg-muted/40"
+                  aria-label={`Open ${a.title}`}
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 ring-1 ring-violet-500/20 dark:text-violet-400">
+                    <Bus className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-semibold">{a.title}</span>
+                    <span className="block truncate text-[10px] text-muted-foreground">
+                      {(subsByApp.get(a.id) ?? []).length} responses · deadline {a.deadline ? formatDate(a.deadline) : '—'}
                     </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-semibold">{a.title}</span>
-                      <span className="block truncate text-[10px] text-muted-foreground">
-                        {a.category} · {(subsByApp.get(a.id) ?? []).length} responses · deadline {a.deadline ? formatDate(a.deadline) : '—'}
-                      </span>
-                    </span>
-                    <AppStatusBadge status={effectiveAppStatus(a)} />
-                  </button>
-                )
-              })
+                  </span>
+                  <AppStatusBadge status={effectiveAppStatus(a)} />
+                </button>
+              ))
             )}
           </div>
         </DialogContent>
@@ -365,29 +294,26 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
   const archiveApplication = useApplicationsStore((s) => s.archiveApplication)
 
   const status = effectiveAppStatus(app)
-  const Icon = CATEGORY_ICON[app.category]
   const approved = submissions.filter((s) => s.status === 'Approved').length
 
   // Money roll-up straight off the canonical ledger via derived payments.
   const collected = submissions.reduce((sum, s) => sum + deriveSubmissionPayment(app, s).paidAmount, 0)
-  const anyPendingCash = submissions.some((s) => deriveSubmissionPayment(app, s).status === 'Awaiting Verification')
+  const anyPendingCash = submissions.some((s) => combinedSubmissionStatus(app, s) === 'Awaiting Verification')
 
-  const actionItems: Array<{ label: string; icon: React.ReactNode; onSelect?: () => void; danger?: boolean }> = []
+  const actionItems: Array<{ label: string; icon: React.ReactNode; onSelect?: () => void }> = []
   if (app.status === 'Pending Approval') {
     actionItems.push({ label: 'Review & approve', icon: <CheckCircle2 className="h-3.5 w-3.5" />, onSelect: onOpen })
   }
   if (app.status === 'Approved') {
     actionItems.push({ label: 'Publish now', icon: <Send className="h-3.5 w-3.5" />, onSelect: () => {
       const r = publishApplication(app.id, 'Dr. Ananya Iyer')
-      toast[r.success ? 'success' : 'error'](r.success ? 'Published' : 'Publish failed', r.success ? { description: 'Live for eligible students.' } : { description: r.error })
+      toast[r.success ? 'success' : 'error'](r.success ? 'Published' : 'Publish failed', r.success ? { description: 'Eligible students have been notified.' } : { description: r.error })
     } })
   }
   if (app.status === 'Changes Requested' || app.status === 'Rejected') {
     actionItems.push({ label: 'Edit & review note', icon: <PencilLine className="h-3.5 w-3.5" />, onSelect: onEdit })
   }
   if (app.status === 'Published' && (status === 'Open' || status === 'Closing Soon')) {
-    // Editable while open (pre-deadline): targets, dates, in-charge, form
-    // fields. Money config stays frozen — the linked charge owns it.
     actionItems.push({ label: 'Edit details', icon: <PencilLine className="h-3.5 w-3.5" />, onSelect: onEdit })
     actionItems.push({ label: 'Close now', icon: <XCircle className="h-3.5 w-3.5" />, onSelect: () => { closeApplication(app.id, 'Dr. Ananya Iyer'); toast.success('Closed — records preserved.') } })
     actionItems.push({ label: 'Lock immediately', icon: <Lock className="h-3.5 w-3.5" />, onSelect: () => { lockApplication(app.id, 'Dr. Ananya Iyer'); toast.info('Locked.') } })
@@ -398,8 +324,6 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
       toast[r.success ? 'success' : 'error'](r.success ? 'Reopened' : 'Cannot reopen', r.success ? undefined : { description: r.error })
     } })
   }
-  // Render detail only: the menu draws a separator above the always-available
-  // core operations below — no actions added or removed.
   const coreActionsStart = actionItems.length
   actionItems.push({ label: app.status === 'Draft' ? 'Edit draft' : 'View details', icon: app.status === 'Draft' ? <PencilLine className="h-3.5 w-3.5" /> : <ClipboardList className="h-3.5 w-3.5" />, onSelect: app.status === 'Draft' ? onEdit : onOpen })
   actionItems.push({ label: 'Duplicate as new draft', icon: <Copy className="h-3.5 w-3.5" />, onSelect: () => {
@@ -414,9 +338,8 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * 0.03, 0.2) }}>
       <div className="relative flex items-center gap-3 px-4 py-2.5 hover:bg-muted/25 transition-colors">
         <button type="button" onClick={onOpen} className="absolute inset-0 z-0 cursor-pointer" aria-label={`Open ${app.title}`} />
-        {/* Identity */}
-        <span className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-1 ring-violet-500/20">
-          <Icon className="h-4 w-4" />
+        <span className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+          <Bus className="h-4 w-4" />
         </span>
         <button type="button" onClick={onOpen} className="relative z-10 min-w-0 flex-1 text-left">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -429,19 +352,12 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
             )}
           </div>
           <p className="text-[10px] text-muted-foreground truncate">
-            {app.category} · {formatINR(app.payment.amount)}{app.payment.mode === 'None' ? ' · free' : ''}
+            {app.payment.mode === 'None' ? 'Free' : `${formatINR(app.payment.amount)} / student`}
             {' · '}{approved}/{submissions.length || 0} approved
           </p>
         </button>
 
-        {/* Source — where this form came from (PART 17) */}
-        <div className="w-20 shrink-0 hidden sm:block relative z-10">
-          <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold', SOURCE_TONE[app.source])}>
-            {app.source}
-          </span>
-        </div>
-
-        {/* In-charge — operational owner (PART 17) */}
+        {/* In-charge */}
         <div className="w-32 shrink-0 hidden lg:block relative z-10">
           <p className="text-[11px] font-medium truncate">{app.inChargeName ?? '—'}</p>
           <p className="text-[9px] text-muted-foreground">{app.createdByRole === 'Teacher' ? 'teacher-created' : 'principal'}</p>
@@ -463,7 +379,7 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
           <p className="text-[9px] text-muted-foreground">{approved} approved</p>
         </div>
 
-        {/* Money — labelled roll-up (PART 28) */}
+        {/* Money */}
         <div className="w-36 shrink-0 text-right hidden lg:block relative z-10">
           {app.payment.mode === 'None' ? (
             <p className="text-[10px] text-muted-foreground">no fee</p>
@@ -488,9 +404,7 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
           <AppStatusBadge status={status} />
         </div>
 
-        {/* Actions — Radix dropdown portals to <body>, so collision detection
-            keeps the menu on-screen even for right-most/last rows inside the
-            overflow card (replaces the clipped absolute-positioned menu). */}
+        {/* Actions — Radix dropdown portals to <body> so the menu stays on-screen. */}
         <div className="relative z-10 shrink-0 w-[72px] flex justify-end">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -506,10 +420,7 @@ function Row({ app, index, submissions, onOpen, onEdit }: {
               {actionItems.map((item, i) => (
                 <Fragment key={item.label}>
                   {i === coreActionsStart && i > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuItem
-                    onSelect={() => item.onSelect?.()}
-                    className={cn('text-[11px]', item.danger && 'text-rose-600 focus:text-rose-700')}
-                  >
+                  <DropdownMenuItem onSelect={() => item.onSelect?.()} className="text-[11px]">
                     {item.icon} {item.label}
                   </DropdownMenuItem>
                 </Fragment>

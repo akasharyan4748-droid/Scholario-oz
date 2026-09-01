@@ -1,21 +1,30 @@
 'use client'
 
 /**
- * ApplicationPrintDocument — the official school application document.
+ * ApplicationPrintDocument — the OFFICIAL Educational Tour application form.
  *
- * Rendered for TWO purposes (§2H / §2I):
- *   • Filled copy — after a student submits: all answers + payment + status
- *     printed, ready for physical signature collection and permanent filing.
- *   • Blank copy   — downloadable by staff for OFFLINE paper distribution.
+ * A genuine A4-portrait school-office document (not a web page print):
+ *   1. School header        — name, address, contacts, affiliation
+ *   2. Title band           — APPLICATION FOR EDUCATIONAL TOUR + Form No.
+ *   3. Tour details         — destination, tour date, deadline, fee, in-charge
+ *   4. Student particulars  — snapshotted from the school record at submit
+ *   5. Guardian details     — snapshotted from the school record at submit
+ *   6. Preferences & medical— the applicant's answers (or blank rules)
+ *   7. Payment              — charge, amount, paid state, receipt numbers
+ *   8. Declaration & consent— declaration paragraph + consent statement
+ *   9. Signatures           — Guardian · Student · Teacher in-charge
+ *  10. OFFICE USE ONLY      — received/verified/receipt rows, approval,
+ *                             Principal signature, school stamp
  *
- * Visual direction matches the salary PayslipDocument language: quiet
- * label-left/value-right rhythm, hairline dividers, restrained color,
- * an unmistakable official-document header/footer. It must look like a
- * document you would stamp and file, not like a browser print of a web page.
+ * Data rules: EVERY value comes from the application record + the
+ * submission's immutable identity snapshot. Nothing is invented; fields
+ * with no value render as dotted fill-in rules (blank copies) or are
+ * omitted (filled copies). There is deliberately NO House field —
+ * Scholario does not use a house system.
  *
- * Print mechanics: identical recipe to payslip-document.tsx — clone into
+ * Print mechanics: identical recipe to the fee receipt — clone into
  * #print-root at body level, hide everything else via body.application-
- * printing, restore on afterprint. A4 portrait default.
+ * printing, restore on afterprint. @page A4 portrait.
  */
 
 import { useEffect, Fragment } from 'react'
@@ -44,7 +53,7 @@ export interface AppPrintOptionsLike {
   sub?: ApplicationSubmission
 }
 
-// ─── Print plumbing (same recipe as payslip print) ─────────────────────
+// ─── Print plumbing (same recipe as payslip/receipt print) ─────────────
 
 /** Prints ONLY this document; everything else is hidden while printing. */
 export function printApplicationDocument(): void {
@@ -109,6 +118,11 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** Dotted fill-in rule for blank copies / missing snapshot values. */
+function BlankRule({ w = 'w-32' }: { w?: string }) {
+  return <span className={`inline-block ${w} border-b border-dotted border-slate-300`} />
+}
+
 /**
  * The full document. Always render on screen inside a scroll container — it
  * doubles as the on-screen preview — while the print CSS gives it true A4 form.
@@ -141,222 +155,253 @@ export function ApplicationPrintDocument({
     }
   }, [])
 
+  const formNo = sub ? `APPF-${sub.id.slice(-8).toUpperCase()}` : `APPF-${app.id.slice(-8).toUpperCase()}`
+
   return (
     <div className="app-print-doc mx-auto w-full max-w-[720px] bg-white text-slate-700">
-      {/* ── Official header ── */}
+      {/* ── 1. School header ── */}
       <div className="border-b-2 border-slate-800 pb-3 flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-[13px] font-black tracking-tight text-slate-600">
-            DS
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-[14px] font-black tracking-tight text-slate-600">
+            {school.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}
           </div>
           <div>
-            <p className="text-[15px] font-extrabold leading-tight tracking-tight text-slate-900">{school.name}</p>
+            <p className="text-[16px] font-extrabold leading-tight tracking-tight text-slate-900">{school.name}</p>
             <p className="text-[9px] text-slate-500 mt-0.5">{school.address}</p>
-            <p className="text-[9px] text-slate-500">Ph {school.phone} · {school.email} · {school.affiliation}</p>
+            <p className="text-[9px] text-slate-500">Ph {school.phone} · {school.email}</p>
+            <p className="text-[9px] text-slate-500">{school.affiliation}</p>
           </div>
         </div>
-        <div className="text-right shrink-0">
-          <p className="text-[8.5px] uppercase tracking-[0.2em] text-slate-400">Academic Session</p>
-          <p className="text-[11px] font-semibold text-slate-700">{app.academicYear}</p>
-          <p className="mt-1 text-[8.5px] uppercase tracking-[0.2em] text-slate-400">Form No.</p>
-          <p className="text-[11px] font-mono font-semibold text-slate-700">{sub ? `APPF-${sub.id.slice(-8).toUpperCase()}` : `APPF-BLANK-${app.id.slice(-6).toUpperCase()}`}</p>
+        <div className="text-right shrink-0 space-y-1">
+          <div>
+            <p className="text-[8.5px] uppercase tracking-[0.2em] text-slate-400">Academic Session</p>
+            <p className="text-[11px] font-semibold text-slate-700">{app.academicYear}</p>
+          </div>
+          <div>
+            <p className="text-[8.5px] uppercase tracking-[0.2em] text-slate-400">Form No.</p>
+            <p className="text-[11px] font-mono font-semibold text-slate-700">{formNo}</p>
+          </div>
         </div>
       </div>
 
-      {/* ── Title band ── */}
-      <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-2.5 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[8.5px] uppercase tracking-[0.18em] text-slate-500">
-            {app.category} · Application Form{app.sourceRef?.label ? ` · ${app.sourceRef.label}` : ''}
+      {/* ── 2. Title band ── */}
+      <div className="mt-4 text-center">
+        <h1 className="text-[15px] font-extrabold uppercase tracking-[0.08em] text-slate-900">Application for Educational Tour</h1>
+        <p className="mt-0.5 text-[11px] font-semibold text-slate-600">{app.title}</p>
+        {sub && (
+          <p className="mt-1 inline-flex items-center gap-1.5 text-[9px] uppercase tracking-[0.14em] text-slate-500">
+            <span className="inline-block h-1 w-1 rounded-full bg-slate-400" />
+            Submitted {formatDate(sub.submittedAt)} · {sub.mode === 'Digital' ? 'Online form' : 'Recorded in office'}
+            <span className="inline-block h-1 w-1 rounded-full bg-slate-400" />
           </p>
-          <h1 className="text-[15px] font-bold leading-tight text-slate-900 mt-0.5">{app.title}</h1>
-        </div>
-        <div className="text-right shrink-0 space-y-0.5">
-          <DetailRow label="Deadline" value={formatDate(app.deadline)} />
-          {app.eventDate && <DetailRow label="Event date" value={formatDate(app.eventDate)} />}
-        </div>
+        )}
       </div>
 
       {app.description && (
-        <p className="mt-3 text-[10.5px] leading-relaxed text-slate-600 border-l-2 border-slate-200 pl-3">{app.description}</p>
+        <p className="mt-3 text-[10.5px] leading-relaxed text-slate-600 border-l-2 border-slate-300 pl-3">{app.description}</p>
       )}
 
-      {/* ── Student particulars ── */}
+      {/* ── 3. Tour details ── */}
       <div className="mt-4">
-        <SectionHeading>Student Particulars</SectionHeading>
+        <SectionHeading>1 · Tour Details</SectionHeading>
+        <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border border-slate-200 px-4 py-2.5">
+          <DetailRow label="Tour" value={app.title} />
+          <DetailRow label="Teacher in-charge" value={app.inChargeName ?? <BlankRule />} />
+          <DetailRow label="Tour date" value={app.eventDate ? formatDate(app.eventDate) : <BlankRule />} />
+          <DetailRow label="Last date to apply" value={formatDate(app.deadline)} />
+          <DetailRow label="Eligible classes" value={
+            app.targetStudentIds?.length
+              ? `${app.targetStudentIds.length} nominated students`
+              : `${app.targetClassIds.length} class${app.targetClassIds.length === 1 ? '' : 'es'}${app.targetSectionNames?.length ? ` (Sec ${app.targetSectionNames.join(', ')})` : ''}`
+          } />
+          <DetailRow label="Participation" value={app.participation} />
+        </div>
+      </div>
+
+      {/* ── 4. Student particulars (snapshot) ── */}
+      <div className="mt-4">
+        <SectionHeading>2 · Student Particulars</SectionHeading>
         <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border border-slate-200 px-4 py-2.5">
           {sub ? (
             <>
               <DetailRow label="Student name" value={sub.studentName} />
               <DetailRow label="Admission no." value={<span className="font-mono">{sub.admissionNo}</span>} />
               <DetailRow label="Class / Section" value={`${sub.className} — ${sub.section}`} />
-              <DetailRow label="Class ID" value={sub.classId} />
-              <DetailRow label="Guardian" value={sub.guardianName} />
-              <DetailRow label="Guardian phone" value={sub.guardianPhone} />
-              <DetailRow label="Submitted on" value={`${formatDate(sub.submittedAt)} · ${new Date(sub.submittedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`} />
-              <DetailRow label="Submission mode" value={sub.mode === 'Digital' ? 'Online form' : 'Paper (recorded in office)'} />
+              <DetailRow label="Roll no." value={sub.rollNo ?? '—'} />
+              <DetailRow label="Date of birth" value={sub.dob ? formatDate(sub.dob) : '—'} />
+              <DetailRow label="Gender" value={sub.gender ?? '—'} />
+              <DetailRow label="Blood group" value={sub.bloodGroup ?? '—'} />
+              {sub.address && <div className="col-span-2 flex items-start justify-between gap-3 text-[11px]">
+                <span className="text-slate-400 shrink-0 pt-px">Residence address</span>
+                <span className="font-medium text-slate-700 text-right">{sub.address}</span>
+              </div>}
             </>
           ) : (
             <>
-              <BlankField label="Student name" />
-              <BlankField label="Admission no." />
-              <BlankField label="Class / Section" />
-              <BlankField label="Roll no." />
-              <BlankField label="Guardian name" />
-              <BlankField label="Guardian phone" />
+              <DetailRow label="Student name" value={<BlankRule w="w-44" />} />
+              <DetailRow label="Admission no." value={<BlankRule w="w-32" />} />
+              <DetailRow label="Class / Section" value={<BlankRule w="w-24" />} />
+              <DetailRow label="Roll no." value={<BlankRule w="w-16" />} />
+              <DetailRow label="Date of birth" value={<BlankRule w="w-28" />} />
+              <DetailRow label="Gender" value={<BlankRule w="w-16" />} />
+              <DetailRow label="Blood group" value={<BlankRule w="w-16" />} />
+              <div className="col-span-2 flex items-start justify-between gap-3 text-[11px]">
+                <span className="text-slate-400 shrink-0 pt-px">Residence address</span>
+                <span className="w-2/3 border-b border-dotted border-slate-300" />
+              </div>
             </>
           )}
         </div>
       </div>
 
-      {/* ── Answers (grouped into the form's logical sections) ── */}
-      {app.formFields.length > 0 && (
-        <div className="mt-4">
-          <SectionHeading>{sub ? 'Responses to Questions' : 'Questions (to be completed)'}</SectionHeading>
-          {(() => {
-            const groups = new Map<string, typeof app.formFields>()
-            for (const f of app.formFields) {
-              const key = f.section ?? 'Application Details'
-              const arr = groups.get(key) ?? []
-              arr.push(f)
-              groups.set(key, arr)
-            }
-            return Array.from(groups.entries()).map(([section, fields]) => (
-              <div key={section}>
-                <p className="mt-2.5 mb-1 text-[9px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-0.5">{section}</p>
-                <table className="w-full border-collapse overflow-hidden">
-                  <tbody>
-                    {fields.map((f, idx) => (
-                      <tr key={f.id} className={`align-top ${idx % 2 === 1 ? 'bg-slate-50/70' : ''}`}>
-                        <td className="w-[46%] border-t border-slate-100 py-2 pl-3 pr-4 text-[10.5px] text-slate-600">
-                          {f.label}
-                          {f.required && <span className="text-rose-500 ml-0.5">*</span>}
-                          {f.helpText && <p className="mt-0.5 text-[9px] text-slate-400">{f.helpText}</p>}
-                        </td>
-                        <td className="border-t border-l border-dashed border-slate-100 py-2 pl-3 pr-3 text-[10.5px] font-medium" style={{ minHeight: '28px' }}>
-                          {sub
-                            ? (answerToText(sub.answers[f.id]) || attachmentNameFor(sub, f.id) || (sub.mode === 'Physical' ? '— (see attached paper form)' : '—'))
-                            : <span className="block h-4 border-b border-dotted border-slate-300 w-full" />}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))
-          })()}
-        </div>
-      )}
-
-      {/* ── Payment ── */}
-      {app.payment.mode !== 'None' && (
-        <div className="mt-4">
-          <SectionHeading>Payment</SectionHeading>
-          <div className="mt-1.5 rounded-md border border-slate-200 px-4 py-2.5 grid grid-cols-2 gap-x-6 gap-y-1">
-            <DetailRow label="Charge" value={app.payment.feeHeadLabel || app.title} />
-            <DetailRow label="Amount payable" value={<span className="font-bold tabular-nums">{formatINR(app.payment.amount)}</span>} />
-            {(paymentLines ?? []).map((l) => (
-              <Fragment key={l.label}>
-                <span className="hidden" aria-hidden="true">{l.label}</span>
-                <span className="col-span-2 block border-t border-dashed border-slate-100 pt-1 text-[10.5px] text-slate-600">{l.label}: <span className="font-medium">{l.value}</span></span>
-              </Fragment>
-            ))}
-            {!paymentLines && !sub && (
-              <>
-                <BlankField label="Paid amount" />
-                <BlankField label="Receipt no(s)." />
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Status summary (filled copies only) ── */}
-      {sub && (
-        <div className="mt-4">
-          <SectionHeading>Status &amp; Remarks</SectionHeading>
-          <div className="mt-1.5 rounded-md border border-slate-200 px-4 py-2.5 grid grid-cols-2 gap-x-6 gap-y-1">
-            <DetailRow
-              label="Guardian consent"
-              value={sub.consentGivenAt
-                ? `Given digitally · ${formatDate(sub.consentGivenAt)}`
-                : sub.physicalDoc.status === 'Verified'
-                  ? `By physical signature · verified ${formatDate(sub.physicalDoc.verifiedAt ?? '')}`
-                  : app.guardianConsent.method === 'Physical Signature'
-                    ? 'By signature below'
-                    : 'Pending'}
-            />
-            <DetailRow label="In-charge teacher" value={app.inChargeName ?? 'As assigned'} />
-            {(sub.physicalDoc.status === 'Received' || sub.physicalDoc.status === 'Verified') && (
-              <DetailRow label="Signed document" value={sub.physicalDoc.status === 'Verified'
-                ? `Verified${sub.physicalDoc.verifiedAt ? ` · ${formatDate(sub.physicalDoc.verifiedAt)}` : ''}`
-                : `${sub.physicalDoc.fileName ?? 'received'} · verification pending`} />
-            )}
-            <DetailRow label="Approval" value={sub.status === 'Approved'
-              ? `APPROVED${sub.reviewedBy ? ` — ${sub.reviewedBy}` : ''}`
-              : sub.status === 'Rejected' ? 'REJECTED' : sub.status} />
-            {notes.filter((n) => n.note).slice(-2).map((n) => (
-              <div key={n.id} className="col-span-2 border-t border-dashed border-slate-100 pt-1 -mb-0.5">
-                <p className="text-[9.5px] text-slate-500"><span className="font-semibold">{n.role} ({n.by}):</span> {n.note}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Declaration ── */}
+      {/* ── 5. Guardian details (snapshot) ── */}
       <div className="mt-4">
-        <SectionHeading>Declaration &amp; Consent</SectionHeading>
-        <p className="mt-1.5 text-[10px] leading-relaxed text-slate-600">
-          We have read the details of this application. All information furnished above is true to the best of our knowledge.
-          {' '}<span className="font-medium text-slate-700">{app.guardianConsent.statement ?? ''}</span>
-          {app.guardianConsent.required && app.guardianConsent.method === 'Physical Signature' && (
-            <span className="ml-1 inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[8.5px] font-semibold text-amber-700">PHYSICAL SIGNATURE REQUIRED</span>
+        <SectionHeading>3 · Parent / Guardian Details</SectionHeading>
+        <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border border-slate-200 px-4 py-2.5">
+          {sub ? (
+            <>
+              <DetailRow label="Guardian name" value={sub.guardianName} />
+              <DetailRow label="Guardian phone" value={sub.guardianPhone} />
+            </>
+          ) : (
+            <>
+              <DetailRow label="Guardian name" value={<BlankRule w="w-44" />} />
+              <DetailRow label="Guardian phone" value={<BlankRule w="w-32" />} />
+            </>
           )}
-        </p>
+        </div>
       </div>
 
-      {/* ── Signature blocks ── */}
+      {/* ── 6. Preferences & medical (answers) ── */}
+      {app.formFields.length > 0 && (
+        <div className="mt-4">
+          <SectionHeading>4 · Preferences, Medical &amp; Emergency Details</SectionHeading>
+          <table className="mt-1.5 w-full border-collapse overflow-hidden rounded-md border border-slate-200">
+            <tbody>
+              {app.formFields.map((f, idx) => (
+                <tr key={f.id} className={`align-top ${idx % 2 === 1 ? 'bg-slate-50/70' : ''}`}>
+                  <td className="w-[46%] border-t border-slate-100 py-2 pl-3 pr-4 text-[10.5px] text-slate-600">
+                    {f.label}
+                    {f.required && <span className="text-rose-500 ml-0.5">*</span>}
+                    {f.helpText && <p className="mt-0.5 text-[9px] text-slate-400">{f.helpText}</p>}
+                  </td>
+                  <td className="border-t border-l border-dashed border-slate-100 py-2 pl-3 pr-3 text-[10.5px] font-medium" style={{ minHeight: '28px' }}>
+                    {sub
+                      ? (answerToText(sub.answers[f.id]) || attachmentNameFor(sub, f.id) || (sub.mode === 'Physical' ? '— (see paper form on file)' : '—'))
+                      : <span className="block h-4 border-b border-dotted border-slate-300 w-full" />}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── 7. Payment ── */}
+      {app.payment.mode !== 'None' && (
+        <div className="mt-4">
+          <SectionHeading>5 · Tour Fee &amp; Payment</SectionHeading>
+          <div className="mt-1.5 rounded-md border border-slate-200 px-4 py-2.5 grid grid-cols-2 gap-x-6 gap-y-1">
+            <DetailRow label="Fee head" value={app.payment.feeHeadLabel || app.title} />
+            <DetailRow label="Amount payable" value={<span className="font-bold tabular-nums">{formatINR(app.payment.amount)}</span>} />
+            <DetailRow label="Mode" value={app.payment.mode === 'Required' ? 'Paid with this application' : 'Optional'} />
+            {paymentLines?.length ? (
+              paymentLines.map((l) => (
+                <Fragment key={l.label}>
+                  <span className="hidden" aria-hidden="true">{l.label}</span>
+                  <span className="col-span-2 block border-t border-dashed border-slate-100 pt-1 text-[10.5px] text-slate-600">{l.label}: <span className="font-medium">{l.value}</span></span>
+                </Fragment>
+              ))
+            ) : !sub ? (
+              <>
+                <DetailRow label="Paid amount" value={<BlankRule w="w-24" />} />
+                <DetailRow label="Receipt no(s)." value={<BlankRule w="w-28" />} />
+              </>
+            ) : null}
+            <div className="col-span-2 border-t border-dashed border-slate-100 pt-1 text-[9px] text-slate-400">
+              Tour fees are collected separately from the student&apos;s regular annual fees (via Fee Management · Additional Collections).
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 8. Declaration & consent ── */}
+      <div className="mt-4">
+        <SectionHeading>6 · Declaration &amp; Consent</SectionHeading>
+        <p className="mt-1.5 text-[10px] leading-relaxed text-slate-600">
+          We have read the tour details and rules given above. The particulars furnished are correct to the best of our
+          knowledge, and we understand that the school takes reasonable care but students participate at their own risk
+          for the activities described. {' '}
+          <span className="font-medium text-slate-700">{app.guardianConsent.statement ?? ''}</span>
+        </p>
+        {app.guardianConsent.required && (
+          <div className="mt-1.5 flex items-center gap-2 text-[9.5px] text-slate-500">
+            <span className="inline-flex items-center gap-1">
+              <span className={`inline-block h-2.5 w-2.5 rounded-[2px] border ${sub?.consentGivenAt ? 'border-slate-600 bg-slate-600' : 'border-slate-300'}`} />
+              Digital consent recorded{sub?.consentGivenAt ? ` · ${formatDate(sub.consentGivenAt)}` : ''}
+            </span>
+            {app.guardianConsent.method === 'Physical Signature' && (
+              <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[8.5px] font-semibold text-amber-700">
+                GUARDIAN SIGNATURE REQUIRED BELOW
+              </span>
+            )}
+          </div>
+        )}
+        {sub && notes.filter((n) => n.note).slice(-2).map((n) => (
+          <p key={n.id} className="mt-1 text-[9.5px] text-slate-500">
+            <span className="font-semibold">{n.role} ({n.by}):</span> {n.note}
+          </p>
+        ))}
+      </div>
+
+      {/* ── 9. Signature blocks ── */}
       <div className="mt-5 grid grid-cols-3 gap-6">
         {[`Guardian\u2019s Signature`, `Student\u2019s Signature`, app.inChargeName ? `In-charge — ${app.inChargeName}` : `Teacher In-charge`].map((label) => (
           <div key={label}>
             <div className="h-10 border-b border-dotted border-slate-400" />
             <p className="mt-1 text-[9px] font-medium text-slate-500 text-center">{label}</p>
+            <p className="text-[8px] text-slate-400 text-center">Date: {sub ? formatDate(sub.submittedAt) : '____ / ____ / ______'}</p>
           </div>
         ))}
       </div>
 
-      {/* ── Authority + stamp ── */}
-      <div className="mt-5 flex items-end justify-between gap-6">
-        <div className="flex-1">
-          <div className="h-12 border-b border-dotted border-slate-400 max-w-[240px]" />
-          <p className="mt-1 text-[9px] font-medium text-slate-500">Principal / School Authority</p>
+      {/* ── 10. Office use ── */}
+      <div className="mt-5 rounded-md border border-slate-300">
+        <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+          <p className="text-[8.5px] font-bold uppercase tracking-[0.18em] text-slate-500">For Office Use Only</p>
         </div>
-        <div className="flex h-[76px] w-[130px] shrink-0 flex-col items-center justify-end pb-1">
-          <div className="h-[70px] w-[128px] rounded-sm border-2 border-dashed border-slate-300" />
-          <p className="mt-1 text-[8px] uppercase tracking-widest text-slate-400">School Stamp</p>
+        <div className="px-3 py-2.5 grid grid-cols-2 gap-x-6 gap-y-1">
+          <DetailRow label="Received by / date" value={<BlankRule w="w-36" />} />
+          <DetailRow label="Receipt no(s). verified" value={<BlankRule w="w-36" />} />
+          <DetailRow
+            label="Guardian signature"
+            value={sub?.physicalDoc.status === 'Verified'
+              ? `Verified${sub.physicalDoc.verifiedAt ? ` · ${formatDate(sub.physicalDoc.verifiedAt)}` : ''}`
+              : sub?.physicalDoc.status === 'Received'
+                ? `${sub.physicalDoc.fileName ?? 'received'} · verify`
+                : <BlankRule w="w-28" />}
+          />
+          <DetailRow label="Application status" value={sub ? sub.status : <BlankRule w="w-24" />} />
+        </div>
+        <div className="flex items-end justify-between gap-6 border-t border-dashed border-slate-200 px-3 pb-2.5 pt-2">
+          <div className="flex-1">
+            <div className="h-10 border-b border-dotted border-slate-400 max-w-[220px]" />
+            <p className="mt-1 text-[9px] font-medium text-slate-500">Principal — approval / remarks</p>
+          </div>
+          <div className="flex h-[70px] w-[124px] shrink-0 flex-col items-center justify-end pb-0.5">
+            <div className="h-[64px] w-[122px] rounded-sm border-2 border-dashed border-slate-300" />
+            <p className="mt-1 text-[8px] uppercase tracking-widest text-slate-400">School Stamp</p>
+          </div>
         </div>
       </div>
 
       {/* ── Footer ── */}
       <div className="mt-4 border-t border-slate-200 pt-2 flex items-center justify-between gap-4">
         <p className="text-[8px] text-slate-400">
-          System-generated · SCHOLARIO-OS · retain this form with the school office{sub ? ` · record ${sub.id}` : ''}
+          {formNo} · {school.name} · retain with the application record
         </p>
         <p className="text-[8px] text-slate-400">Page 1 of 1</p>
       </div>
-    </div>
-  )
-}
-
-/** Optional resolved payment read-out type used by ApplicationPrintDocument. */
-type PaymentLine = { label: string; value: ReactNode }
-
-function BlankField({ label }: { label: string }) {
-  return (
-    <div className="flex items-start justify-between gap-3 text-[11px]">
-      <span className="text-slate-400 shrink-0 pt-px">{label}</span>
-      <span className="inline-block w-32 border-b border-dotted border-slate-300" />
     </div>
   )
 }

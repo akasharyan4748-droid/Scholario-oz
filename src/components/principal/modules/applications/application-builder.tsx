@@ -1,29 +1,30 @@
 'use client'
 
 /**
- * ApplicationBuilder — the Principal's school-form composer.
+ * ApplicationBuilder — the Principal's Educational Tour composer.
  *
- * NOT a developer tool, NOT a wizard — one compact professional page with
- * quiet sections (Salary & Payroll benchmark):
- *   1. Basic info    — title / category / description / session
- *   2. Who           — target classes (+ optional section filter)
- *   3. Dates         — start · deadline · event date · lock date
- *   4. Participation — optional/mandatory · consent · approvals · signature
- *   5. Payment       — none | required | optional → links to Fee Management
- *   6. Questions     — click-to-add palette + reorderable field list with
- *                      inline editors
+ * SCOPE: the module currently operates ONE form type — the Educational
+ * Tour — driven by APPLICATION_TEMPLATES.educational_tour. The builder is
+ * therefore a focused, official tour form composer, not a generic field
+ * editor: identity sections are always auto-filled from the school record,
+ * and the template's application-specific questions ship as-is. Adding a
+ * future form type = registering a template + giving it a composer.
  *
- * Field rows follow chip recipes; inputs h-9/text-xs like fees pages.
- * Money config is deliberately frozen after publication (the linked
- * Additional Charge owns the amount) and the UI says so once.
+ * Sections (compact, Salary & Payroll benchmark):
+ *   1. Tour identity  — title / description / session
+ *   2. Who            — target classes (+ specific students override) + in-charge
+ *   3. Dates          — start · deadline · tour date · lock (compact DatePicker,
+ *                       the Examination-module pattern — no oversized native pickers)
+ *   4. Participation  — optional/mandatory · consent · approvals · signature
+ *   5. Payment        — none | required | optional → links to Fee Management
+ *   6. Form contents  — the fixed template questions (read-only summary)
+ *
+ * Money config is frozen after publication (the linked Additional Charge
+ * owns the amount) and the UI says so once.
  */
 
 import { useMemo, useState } from 'react'
-import {
-  ChevronDown, ChevronUp, Copy, GripVertical, Plus, Trash2, Type,
-  AlignLeft, Hash, CalendarDays, ChevronsUpDown, ListChecks, CheckSquare,
-  CircleDot, FileUp, PhoneCall, PenLine, ShieldCheck,
-} from 'lucide-react'
+import { useApplicationsStore, APPLICATION_TEMPLATES, type SchoolApplication, type ApplicationFormField, type PaymentModeConfig } from '@/lib/store/applications-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -33,7 +34,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { useApplicationsStore, FORM_SECTIONS, type SchoolApplication, type ApplicationFormField, type FormFieldType, type ApplicationCategory, type PaymentModeConfig } from '@/lib/store/applications-store'
+import { DatePicker } from '@/components/ui/date-picker'
 import { useTeachersStore } from '@/lib/store/teachers-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
@@ -41,22 +42,7 @@ import { MoneyInput } from '../fees/money-input'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-
-// ─── Category meta ─────────────────────────────────────────────────────
-
-const CATEGORIES: Array<{ value: ApplicationCategory; label: string }> = [
-  { value: 'Tour', label: 'Educational Tour' },
-  { value: 'Trip', label: 'School Trip' },
-  { value: 'Workshop', label: 'Workshop' },
-  { value: 'Competition', label: 'Competition' },
-  { value: 'Camp', label: 'Camp' },
-  { value: 'Event', label: 'Special Event' },
-  { value: 'Exam Application', label: 'Exam Application' },
-  { value: 'Board Form', label: 'Board-related Form' },
-  { value: 'Transport', label: 'Transport Request' },
-  { value: 'Activity', label: 'Special Activity' },
-  { value: 'Custom', label: 'Custom Application' },
-]
+import { Bus, Lock, ShieldCheck, Users } from 'lucide-react'
 
 /** Stream variants (11 PCM/PCB…) collapse into single chips. */
 const UNIQUE_CLASSES = (() => {
@@ -68,41 +54,13 @@ const UNIQUE_CLASSES = (() => {
   })
 })()
 
-// ─── Field palette ─────────────────────────────────────────────────────
-
-interface PaletteDef {
-  type: FormFieldType
-  label: string
-  icon: typeof Type
-  defaults: Partial<ApplicationFormField>
-}
-
-const PALETTE: PaletteDef[] = [
-  { type: 'text', label: 'Text', icon: Type, defaults: { label: 'Short answer' } },
-  { type: 'longtext', label: 'Long text', icon: AlignLeft, defaults: { label: 'Detailed answer' } },
-  { type: 'number', label: 'Number', icon: Hash, defaults: { label: 'Number' } },
-  { type: 'date', label: 'Date', icon: CalendarDays, defaults: { label: 'Date' } },
-  { type: 'dropdown', label: 'Dropdown', icon: ChevronsUpDown, defaults: { label: 'Choose an option', options: ['Option A', 'Option B'] } },
-  { type: 'radio', label: 'Radio', icon: CircleDot, defaults: { label: 'Pick one', options: ['Option A', 'Option B'] } },
-  { type: 'checkbox', label: 'Multi-tick', icon: ListChecks, defaults: { label: 'Select all that apply', options: ['Option A', 'Option B'] } },
-  { type: 'multiselect', label: 'Multiple select', icon: ListChecks, defaults: { label: 'Multiple choice', options: ['Option A', 'Option B'] } },
-  { type: 'yesno', label: 'Yes / No', icon: CheckSquare, defaults: { label: 'Yes or no question' } },
-  { type: 'file', label: 'File upload', icon: FileUp, defaults: { label: 'Document upload', helpText: 'Scan/photo kept on record.' } },
-  { type: 'emergency-contact', label: 'Emergency contact', icon: PhoneCall, defaults: { label: 'Emergency contact (name + phone)', section: 'Medical / Emergency Details' } },
-  { type: 'signature', label: 'Signature slot', icon: PenLine, defaults: { label: 'Signature undertaking', helpText: 'Signed on the printed form.', section: 'Declaration' } },
-  { type: 'declaration', label: 'Declaration tick', icon: ShieldCheck, defaults: { label: 'I confirm the information above is true', helpText: 'Tick to accept the declaration.', section: 'Declaration' } },
-]
-
-function fieldTypeMeta(t: FormFieldType): PaletteDef {
-  return PALETTE.find((p) => p.type === t) ?? PALETTE[0]
-}
-
-// ─── Builder ───────────────────────────────────────────────────────────
+// ─── Builder state ─────────────────────────────────────────────────────
 
 export interface BuilderResult {
   title: string
   description?: string
-  category: ApplicationCategory
+  category: SchoolApplication['category']
+  templateKey: 'educational_tour'
   targetClassIds: string[]
   targetSectionNames: string[]
   targetStudentIds: string[]
@@ -124,11 +82,39 @@ export interface BuilderResult {
   formFields: ApplicationFormField[]
 }
 
+const TEMPLATE = APPLICATION_TEMPLATES.educational_tour
+
+function freshDraft(fixedInCharge?: { id: string; name: string }): BuilderResult {
+  return {
+    title: '',
+    description: '',
+    category: TEMPLATE.category,
+    templateKey: TEMPLATE.key,
+    targetClassIds: [],
+    targetSectionNames: [],
+    targetStudentIds: [],
+    deadline: '',
+    participation: 'Optional',
+    guardianConsentRequired: true,
+    guardianConsentMethod: 'Digital',
+    consentStatement: TEMPLATE.consentStatement,
+    teacherApprovalRequired: true,
+    physicalSignatureRequired: false,
+    inChargeTeacherId: fixedInCharge?.id,
+    inChargeName: fixedInCharge?.name,
+    paymentMode: 'Required',
+    paymentAmount: TEMPLATE.defaultAmount,
+    paymentFeeHeadLabel: TEMPLATE.defaultLedgerLabel,
+    formFields: TEMPLATE.fields.map((f) => ({ ...f })),
+  }
+}
+
 function fromApp(app: SchoolApplication): BuilderResult {
   return {
     title: app.title,
     description: app.description,
     category: app.category,
+    templateKey: 'educational_tour',
     targetClassIds: app.targetClassIds,
     targetSectionNames: app.targetSectionNames ?? [],
     targetStudentIds: app.targetStudentIds ?? [],
@@ -156,8 +142,8 @@ interface Props {
   editing?: SchoolApplication
   onClose: () => void
   onSaved: () => void
-  /** TEACHER mode (PART 4/15): the creator is the in-charge — the ownership
-   *  select is locked and saving goes through the teacher permission path. */
+  /** TEACHER mode: the creator is the in-charge — the ownership select is
+   *  locked and saving goes through the teacher permission path. */
   teacherMode?: boolean
   fixedInCharge?: { id: string; name: string }
 }
@@ -165,34 +151,10 @@ interface Props {
 export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fixedInCharge }: Props) {
   const createApplication = useApplicationsStore((s) => s.createApplication)
   const updateApplication = useApplicationsStore((s) => s.updateApplication)
-  // In-charge options — canonical teachers registry (stable within session).
   const teachers = useTeachersOptions()
   const publishedMoneyLocked = editing?.status === 'Published'
 
-  const [form, setForm] = useState<BuilderResult>(
-    () => editing ? fromApp(editing) : ({
-      title: '',
-      description: '',
-      category: 'Custom',
-      targetClassIds: [],
-      targetSectionNames: [],
-      targetStudentIds: [],
-      deadline: '',
-      participation: 'Optional',
-      guardianConsentRequired: false,
-      guardianConsentMethod: 'Digital',
-      consentStatement: '',
-      teacherApprovalRequired: true,
-      physicalSignatureRequired: false,
-      inChargeTeacherId: fixedInCharge?.id,
-      inChargeName: fixedInCharge?.name,
-      paymentMode: 'None',
-      paymentAmount: 0,
-      paymentFeeHeadLabel: '',
-      formFields: [],
-    }),
-  )
-  const [expandedFieldId, setExpandedFieldId] = useState<string | null>(null)
+  const [form, setForm] = useState<BuilderResult>(() => editing ? fromApp(editing) : freshDraft(fixedInCharge))
 
   const patch = (p: Partial<BuilderResult>) => setForm((f) => ({ ...f, ...p }))
 
@@ -201,42 +163,6 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
       ? form.targetClassIds.filter((c) => c !== id)
       : [...form.targetClassIds, id]
     patch({ targetClassIds: next })
-  }
-
-  const addField = (def: PaletteDef) => {
-    const f = {
-      ...def.defaults,
-      id: `fld-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-      type: def.type,
-      required: false,
-    } as ApplicationFormField
-    patch({ formFields: [...form.formFields, f] })
-    setExpandedFieldId(f.id)
-  }
-
-  const editField = (idx: number, p: Partial<ApplicationFormField>) => {
-    const fields = form.formFields.map((f, i) => i === idx ? { ...f, ...p } : f)
-    patch({ formFields: fields })
-  }
-
-  const moveField = (idx: number, dir: -1 | 1) => {
-    const target = idx + dir
-    if (target < 0 || target >= form.formFields.length) return
-    const fields = [...form.formFields]
-    ;[fields[idx], fields[target]] = [fields[target], fields[idx]]
-    patch({ formFields: fields })
-  }
-
-  const duplicateField = (idx: number) => {
-    const src = form.formFields[idx]
-    const copy = { ...src, id: `fld-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, label: `${src.label} (copy)` }
-    const fields = [...form.formFields]
-    fields.splice(idx + 1, 0, copy)
-    patch({ formFields: fields })
-  }
-
-  const removeField = (idx: number) => {
-    patch({ formFields: form.formFields.filter((_, i) => i !== idx) })
   }
 
   const handleSave = () => {
@@ -256,9 +182,10 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
       toast.error('Enter the charge amount per student.')
       return
     }
+    const actor = teacherMode ? (fixedInCharge?.name ?? '') : 'Dr. Ananya Iyer'
+    const opts = teacherMode ? { actorRole: 'Teacher' as const, teacherId: fixedInCharge?.id } : undefined
     if (editing) {
-      const res = updateApplication(editing.id, form, teacherMode ? (fixedInCharge?.name ?? '') : 'Dr. Ananya Iyer',
-        teacherMode ? { actorRole: 'Teacher', teacherId: fixedInCharge?.id } : undefined)
+      const res = updateApplication(editing.id, form, actor, opts)
       if (!res.success) {
         toast.error('Could not save changes', { description: res.error })
         return
@@ -267,8 +194,7 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
       onSaved()
       return
     }
-    const res = createApplication(form, teacherMode ? (fixedInCharge?.name ?? '') : 'Dr. Ananya Iyer',
-      teacherMode ? { actorRole: 'Teacher', teacherId: fixedInCharge?.id } : undefined)
+    const res = createApplication(form, actor, opts)
     if (!res.success || !res.application) {
       toast.error('Could not create application', { description: res.error })
       return
@@ -285,13 +211,18 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
     <div className="space-y-4">
       {/* Toolbar row */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <h2 className="text-base font-bold tracking-tight text-foreground truncate">
-            {editing ? `Edit — ${editing.title}` : 'New Application / Form'}
-          </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {editing ? editing.status : 'Draft'}{publishedMoneyLocked ? ' · money configuration locked at publish' : ''}
-          </p>
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+            <Bus className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-base font-bold tracking-tight text-foreground truncate">
+              {editing ? `Edit — ${editing.title}` : 'New Educational Tour Application'}
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {TEMPLATE.tagline}{publishedMoneyLocked ? ' · money configuration locked at publish' : ''}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={onClose}>Cancel</Button>
@@ -301,11 +232,11 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
         </div>
       </div>
 
-      {/* 1 — Basic info */}
+      {/* 1 — Tour identity */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-        <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Basic Information</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="md:col-span-2 space-y-1">
+        <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Tour Identity</p>
+        <div className="grid grid-cols-1 gap-3">
+          <div className="space-y-1">
             <Label className="text-xs">Title</Label>
             <Input
               className="h-9 text-xs"
@@ -315,27 +246,14 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Category</Label>
-            <Select
-              value={form.category}
-              onValueChange={(v) => patch({ category: v as ApplicationCategory })}
-            >
-              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent className="z-[70]">
-                {CATEGORIES.map((c) => (
-                  <SelectItem key={c.value} value={c.value} className="text-xs">{c.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="md:col-span-3 space-y-1">
-            <Label className="text-xs">Description shown to students &amp; guardians</Label>
+            <Label className="text-xs">Itinerary &amp; fee coverage</Label>
             <Textarea
-              className="min-h-[64px] text-xs"
-              placeholder="What is it? What does the fee cover? Any rules?"
+              className="min-h-[60px] text-xs"
+              placeholder={TEMPLATE.descriptionPlaceholder}
               value={form.description ?? ''}
               onChange={(e) => patch({ description: e.target.value })}
             />
+            <p className="text-[10px] text-muted-foreground">Shown to students and guardians at the top of the application and on the printed form.</p>
           </div>
         </div>
       </div>
@@ -365,17 +283,13 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
           {form.targetClassIds.length > 0 && (
             <p className="text-[10px] text-muted-foreground">{form.targetClassIds.length} class{form.targetClassIds.length === 1 ? '' : 'es'} selected</p>
           )}
-          {/* Specific students (§2B "applicable students where needed") —
-              overrides class scoping when non-empty. */}
           <SpecificStudentsPicker
             selectedIds={form.targetStudentIds ?? []}
             onChange={(ids) => patch({ targetStudentIds: ids })}
           />
-          {/* In-charge — in TEACHER mode this is locked to the signed-in
-              teacher (store enforces ownership too). */}
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div className="space-y-1">
-              <Label className="text-xs">In-charge teacher</Label>
+              <Label className="text-xs">Teacher in-charge</Label>
               {teacherMode ? (
                 <Input className="h-9 text-xs" value={fixedInCharge?.name ?? ''} readOnly aria-label="In-charge (you)" />
               ) : (
@@ -407,20 +321,20 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
           <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Dates</p>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Start date <span className="text-muted-foreground">(optional)</span></Label>
-              <Input type="date" className="h-9 text-xs" value={form.startDate ?? ''} onChange={(e) => patch({ startDate: e.target.value || undefined })} />
+              <Label className="text-xs">Opens <span className="text-muted-foreground">(optional)</span></Label>
+              <DatePicker compact value={form.startDate ?? ''} onChange={(v) => patch({ startDate: v || undefined })} placeholder="Select date" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Submission deadline</Label>
-              <Input type="date" className="h-9 text-xs" value={form.deadline} onChange={(e) => patch({ deadline: e.target.value })} />
+              <DatePicker compact value={form.deadline} onChange={(v) => patch({ deadline: v })} placeholder="Select date" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Event date <span className="text-muted-foreground">(optional)</span></Label>
-              <Input type="date" className="h-9 text-xs" value={form.eventDate ?? ''} onChange={(e) => patch({ eventDate: e.target.value || undefined })} />
+              <Label className="text-xs">Tour date <span className="text-muted-foreground">(optional)</span></Label>
+              <DatePicker compact value={form.eventDate ?? ''} onChange={(v) => patch({ eventDate: v || undefined })} placeholder="Select date" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Lock date <span className="text-muted-foreground">(optional)</span></Label>
-              <Input type="date" className="h-9 text-xs" value={form.lockDate ?? ''} onChange={(e) => patch({ lockDate: e.target.value || undefined })} />
+              <DatePicker compact value={form.lockDate ?? ''} onChange={(v) => patch({ lockDate: v || undefined })} placeholder="Select date" />
             </div>
           </div>
           <p className="text-[10px] text-muted-foreground">
@@ -461,7 +375,7 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
                   })}
                 />
               </ToggleRow>
-              <div className="space-y-1 pl-0">
+              <div className="space-y-1">
                 <Label className="text-xs">Consent statement</Label>
                 <Textarea
                   className="min-h-[52px] text-xs"
@@ -487,7 +401,7 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-          <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Payment</p>
+          <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Tour Fee</p>
           <ToggleRow
             label="Charge for this application?"
             hint={
@@ -513,7 +427,7 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
                 <Label className="text-xs">Ledger label</Label>
                 <Input
                   className="h-9 text-xs"
-                  placeholder={form.title || 'Fee head label'}
+                  placeholder={form.title || 'Educational Tour'}
                   value={form.paymentFeeHeadLabel}
                   onChange={(e) => patch({ paymentFeeHeadLabel: e.target.value })}
                 />
@@ -521,149 +435,50 @@ export function ApplicationBuilder({ editing, onClose, onSaved, teacherMode, fix
             </div>
           )}
           {publishedMoneyLocked && (
-            <div className="rounded-lg bg-muted/50 px-3 py-2 text-[10px] text-muted-foreground">
-              Amount {formatINR(editing!.payment.amount)} · linked Additional Charge owns these numbers now — edit via a fresh draft only.
+            <div className="flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2 text-[10px] text-muted-foreground">
+              <Lock className="h-3 w-3 mt-0.5 shrink-0" />
+              <span>Amount {formatINR(editing!.payment.amount)} — the linked Additional Charge owns these numbers now. Duplicate this draft to change them.</span>
             </div>
           )}
           <p className="text-[10px] text-muted-foreground">
-            On publish this creates ONE additional charge in Fee Management bound to this application — payments land in the normal ledger, cash goes through verification. Nothing duplicates.
+            On publish this creates ONE additional charge in Fee Management bound to this application — payments land in the normal ledger, cash goes through verification. Tour money never touches the students&apos; annual fees.
           </p>
         </div>
       </div>
 
-      {/* 6 — Form questions */}
+      {/* 6 — Fixed template questions */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Form Questions</p>
-          {!publishedMoneyLocked && (
-            <Badge variant="outline" className="text-[9px] h-4 px-1.5">{form.formFields.length} fields</Badge>
-          )}
+          <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Application Form Contents</p>
+          <Badge variant="outline" className="text-[9px] h-4 px-1.5">{form.formFields.length} questions</Badge>
         </div>
-        {!publishedMoneyLocked && (
-          <div className="flex flex-wrap gap-1.5">
-            {PALETTE.map((p) => (
-              <button
-                key={p.type}
-                type="button"
-                onClick={() => addField(p)}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-dashed border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors"
-              >
-                <Plus className="h-3 w-3" /> {p.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* System-provided identity note */}
-        <div className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] text-muted-foreground">
-          Student particulars (name · admission no. · class/section · guardian details) are captured automatically at submission — no need to ask for them.
+        <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 text-[10px] text-muted-foreground">
+          <Users className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>
+            Student particulars (name, admission no., class/section, roll no., date of birth, guardian details) are captured
+            automatically from the school record at submission — applicants never re-type them, and they cannot edit the master record here.
+          </span>
         </div>
-
-        {form.formFields.length === 0 ? (
-          <p className="py-4 text-center text-xs text-muted-foreground">Add questions using the chips above.</p>
-        ) : (
-          <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
-            {form.formFields.map((f, idx) => {
-              const expanded = expandedFieldId === f.id
-              const Icon = fieldTypeMeta(f.type).icon
-              const needsOptions = ['dropdown', 'radio', 'checkbox', 'multiselect'].includes(f.type)
-              return (
-                <div key={f.id}>
-                  <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors">
-                    <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-500/10 ring-1 ring-slate-500/15 text-slate-600 dark:text-slate-300">
-                      <Icon className="h-3.5 w-3.5" />
-                    </span>
-                    <button
-                      type="button"
-                      className="min-w-0 flex-1 text-left"
-                      onClick={() => setExpandedFieldId(expanded ? null : f.id)}
-                      aria-expanded={expanded}
-                      disabled={publishedMoneyLocked}
-                    >
-                      <p className="text-xs font-medium truncate">{f.label || '(untitled question)'}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {fieldTypeMeta(f.type).label}{needsOptions && f.options?.length ? ` · ${f.options.length} options` : ''}
-                        {f.required ? ' · required' : ''}
-                        {' · '}{f.section ?? 'Application Details'}
-                      </p>
-                    </button>
-                    {!publishedMoneyLocked && (
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        <IconBtn disabled={idx === 0} onClick={() => moveField(idx, -1)} label="Move up"><ChevronUp className="h-3 w-3" /></IconBtn>
-                        <IconBtn disabled={idx === form.formFields.length - 1} onClick={() => moveField(idx, 1)} label="Move down"><ChevronDown className="h-3 w-3" /></IconBtn>
-                        <IconBtn onClick={() => duplicateField(idx)} label="Duplicate"><Copy className="h-3 w-3" /></IconBtn>
-                        <IconBtn danger onClick={() => removeField(idx)} label="Remove"><Trash2 className="h-3 w-3" /></IconBtn>
-                      </div>
-                    )}
-                  </div>
-                  {expanded && !publishedMoneyLocked && (
-                    <div className="border-t border-border/60 bg-muted/20 px-3 py-3 space-y-2.5">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                        <div className="sm:col-span-2 space-y-1">
-                          <Label className="text-[11px]">Question / label</Label>
-                          <Input className="h-8 text-xs" value={f.label} onChange={(e) => editField(idx, { label: e.target.value })} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[11px]">Required</Label>
-                          <div className="flex items-center gap-2 h-8">
-                            <Switch checked={f.required} onCheckedChange={(v) => editField(idx, { required: v })} />
-                            <span className="text-[11px] text-muted-foreground">{f.required ? 'Must be answered' : 'Optional'}</span>
-                          </div>
-                        </div>
-                        <div className="sm:col-span-3 space-y-1">
-                          <Label className="text-[11px]">Help text</Label>
-                          <Input className="h-8 text-xs" placeholder="Shown under the question" value={f.helpText ?? ''} onChange={(e) => editField(idx, { helpText: e.target.value || undefined })} />
-                        </div>
-                        {/* Section (PART 13) — logical grouping used by the
-                            official online form + printed document. */}
-                        <div className="sm:col-span-3 space-y-1.5">
-                          <Label className="text-[11px]">Form section</Label>
-                          <div className="flex flex-wrap gap-1">
-                            {Array.from(new Set([...FORM_SECTIONS, f.section ?? 'Application Details'].filter(Boolean) as string[])).map((s) => (
-                              <button
-                                key={s}
-                                type="button"
-                                onClick={() => editField(idx, { section: s })}
-                                className={cn(
-                                  'px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors',
-                                  (f.section ?? 'Application Details') === s
-                                    ? 'bg-foreground text-primary-foreground border-foreground'
-                                    : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40',
-                                )}
-                              >
-                                {s}
-                              </button>
-                            ))}
-                          </div>
-                          <Input
-                            className="h-8 text-xs max-w-xs"
-                            placeholder="…or type a custom section name"
-                            value={f.section ?? ''}
-                            onChange={(e) => editField(idx, { section: e.target.value || undefined })}
-                          />
-                        </div>
-                        {needsOptions && (
-                          <div className="sm:col-span-3 space-y-1.5">
-                            <Label className="text-[11px]">Options (one per line)</Label>
-                            <Textarea
-                              className="min-h-[56px] text-xs"
-                              value={(f.options ?? []).join('\n')}
-                              onChange={(e) => editField(idx, { options: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean) })}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+        <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+          {form.formFields.map((f) => {
+            const options = f.options?.length ? ` · ${f.options.join(' / ')}` : ''
+            return (
+              <div key={f.id} className="flex items-start gap-2.5 px-3 py-2">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  {f.section === 'Consent' ? <ShieldCheck className="h-3 w-3" /> : <Bus className="h-3 w-3" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium">{f.label}{f.required && <span className="text-rose-500"> *</span>}</p>
+                  <p className="text-[10px] text-muted-foreground">{f.section}{options}{f.helpText ? ` · ${f.helpText}` : ''}</p>
                 </div>
-              )
-            })}
-          </div>
-        )}
-        {publishedMoneyLocked && (
-          <p className="text-[10px] text-muted-foreground">Questions are read-only while submissions are open. Duplicate this draft to adjust the structure.</p>
-        )}
+                <Badge variant="outline" className="text-[8px] h-4 px-1.5 shrink-0 uppercase">{f.type === 'emergency-contact' ? 'name + phone' : f.type}</Badge>
+              </div>
+            )
+          })}
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          These questions are part of the Educational Tour template — every tour application collects the same set, so office review and the printed form stay consistent.
+        </p>
       </div>
     </div>
   )
@@ -687,7 +502,6 @@ function Segmented<T extends string>({ value, options, onChange, labelFor }: {
   value: T
   options: readonly T[]
   onChange: (v: T) => void
-  /** Optional display-label override (money rows use friendlier text). */
   labelFor?: (o: T) => string
 }) {
   return (
@@ -709,46 +523,15 @@ function Segmented<T extends string>({ value, options, onChange, labelFor }: {
   )
 }
 
-function IconBtn({ children, onClick, disabled, label, danger }: {
-  children: React.ReactNode
-  onClick: () => void
-  disabled?: boolean
-  label: string
-  danger?: boolean
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className={cn(
-        'h-6 w-6 text-muted-foreground hover:text-foreground',
-        danger && 'hover:text-rose-600',
-      )}
-      disabled={disabled}
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-    >
-      {children}
-    </Button>
-  )
-}
-
-/** Live in-charge options come straight from the canonical teachers store.
- *  (zustand v5: select the raw array — derive via useMemo, never map in the
- *  selector or getSnapshot() returns a fresh ref every time and loops.) */
 function useTeachersOptions(): Array<{ teacherId: string; name: string }> {
   const raw = useTeachersStore((s) => s.teachers)
   return useMemo(
-    () => (raw ?? EMPTY_TEACHERS).slice(0, 60).map((t) => ({ teacherId: t.teacherId, name: t.name })),
+    () => (raw ?? []).slice(0, 60).map((t) => ({ teacherId: t.teacherId, name: t.name })),
     [raw],
   )
 }
 
-const EMPTY_TEACHERS: Array<{ teacherId: string; name: string }> = []
-
-// ─── Specific-students picker (§2B) ────────────────────────────────────
+// ─── Specific-students picker ──────────────────────────────────────────
 
 type RosterRow = { id: string; name: string; className: string; section: string; admissionNo: string }
 
@@ -820,26 +603,19 @@ function SpecificStudentsPicker({ selectedIds, onChange }: {
                   key={s.id}
                   type="button"
                   onClick={() => toggle(s.id)}
+                  aria-pressed={on}
                   className={cn(
-                    'w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-left text-[11px] hover:bg-muted/40 transition-colors',
+                    'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted/40 transition-colors',
                     on && 'bg-primary/5',
                   )}
-                  aria-pressed={on}
                 >
-                  <span className="truncate font-medium">{s.name}</span>
-                  <span className="text-muted-foreground shrink-0 tabular-nums">{s.className}-{s.section} · {s.admissionNo}</span>
+                  <span className="min-w-0 truncate">{s.name} <span className="text-muted-foreground">· {s.className}-{s.section} · {s.admissionNo}</span></span>
+                  <span className={cn('shrink-0 text-[10px] font-semibold', on ? 'text-primary' : 'text-muted-foreground/50')}>{on ? 'Selected' : 'Add'}</span>
                 </button>
               )
             })}
-            {filtered.length === 0 && <p className="px-2.5 py-2 text-[11px] text-muted-foreground">No students match.</p>}
+            {filtered.length === 0 && <p className="px-3 py-3 text-[11px] text-muted-foreground text-center">No students match.</p>}
           </div>
-          {selectedIds.length > 0 && (
-            <div className="p-2 border-t border-border/60">
-              <button type="button" onClick={() => onChange([])} className="text-[10px] text-muted-foreground hover:text-foreground underline">
-                Clear selection ({selectedIds.length})
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>

@@ -19,8 +19,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Bus, CalendarDays, Eye, FileText, FlaskConical, Landmark, Paperclip,
-  ClipboardList, Sparkles, Tag, Tent, Trophy, Undo2,
+  Bus, Eye, FileText, Paperclip, ClipboardList, Undo2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SectionHeading } from '@/components/shared/ui'
@@ -43,21 +42,14 @@ import { useDemoStudent, submissionStatusChipClass, daysUntil } from './student'
 import { ApplyDialog } from './apply-dialog'
 import { SubmissionDocumentDialog } from './print-dialog'
 
-// ─── Category icons (local, mirrors the builder palette) ───────────────
+// ─── Category icons (single active type today: Educational Tour) ───────
 
 const CATEGORY_ICON: Record<string, LucideIcon> = {
   Tour: Bus,
   Trip: Bus,
-  Workshop: FlaskConical,
-  Competition: Trophy,
-  Camp: Tent,
-  Event: CalendarDays,
-  'Exam Application': FileText,
-  'Board Form': Landmark,
-  Transport: Sparkles,
-  Activity: CalendarDays,
-  Custom: Tag,
 }
+
+const FALLBACK_ICON = ClipboardList
 
 interface ApplyDialogState {
   app: SchoolApplication
@@ -132,7 +124,7 @@ export function StudentApplicationsModule() {
     <div className="space-y-6">
       <SectionHeading
         title="Applications & Forms"
-        subtitle="Forms, consents and event payments open to you — apply online, pay, and keep the printed record."
+        subtitle="Educational tours, consents and tour payments open to you — apply online, pay online or at school, and keep the printed record."
         icon={<ClipboardList className="h-5 w-5" />}
       />
 
@@ -151,7 +143,7 @@ export function StudentApplicationsModule() {
 
             <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
               {openForYou.length === 0 ? (
-                <EmptyLine icon={<ClipboardList className="h-5 w-5" />} text="No forms are open for your class right now — anything the school publishes for you will appear here." />
+                <EmptyLine icon={<ClipboardList className="h-5 w-5" />} text="No tour applications are open for your class right now — anything the school publishes for you will appear here and in your notifications." />
               ) : (
                 openForYou.map((app) => {
                   const sub = activeSubByApp.get(app.id) ?? null
@@ -186,7 +178,7 @@ export function StudentApplicationsModule() {
 
             <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
               {mySubmissions.length === 0 ? (
-                <EmptyLine icon={<Paperclip className="h-5 w-5" />} text="You haven't submitted any applications yet — open forms appear in the section above." />
+                <EmptyLine icon={<Paperclip className="h-5 w-5" />} text="You haven't submitted any applications yet — open tours appear in the section above." />
               ) : (
                 mySubmissions.map((sub) => {
                   const app = appById.get(sub.applicationId)
@@ -274,7 +266,7 @@ function OpenRow({ app, sub, combined, open, effStatus, onApply, onFix, onPay, o
   onPay: () => void
   onView: () => void
 }) {
-  const Icon = CATEGORY_ICON[app.category] ?? ClipboardList
+  const Icon = (app.category === 'Tour' || app.category === 'Trip') ? CATEGORY_ICON[app.category] : FALLBACK_ICON
   const days = daysUntil(app.deadline)
   const needsPayment = app.payment.mode !== 'None'
   const awaitingPayment = combined === 'Awaiting Payment'
@@ -293,8 +285,8 @@ function OpenRow({ app, sub, combined, open, effStatus, onApply, onFix, onPay, o
           )}
         </div>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[10px] text-muted-foreground">
-          <Badge variant="outline" className="text-[8px] h-3.5 px-1">{app.category}</Badge>
-          <span>Deadline {formatDate(app.deadline)}</span>
+          <span>{app.eventDate ? `Tour ${formatDate(app.eventDate)}` : 'Tour date TBA'}</span>
+          <span>· Apply by {formatDate(app.deadline)}</span>
           {open && Number.isFinite(days) && (
             <span className={cn(days <= 2 ? 'text-rose-500 font-medium' : days <= 7 ? 'text-amber-600 font-medium' : '')}>
               · {days === 0 ? 'closes today' : `${days} day${days === 1 ? '' : 's'} left`}
@@ -360,7 +352,7 @@ function SubmissionRow({ app, sub, onPay, onPrint, onWithdraw }: {
 }) {
   const combined = combinedSubmissionStatus(app, sub)
   const pay = deriveSubmissionPayment(app, sub)
-  const Icon = CATEGORY_ICON[app.category] ?? ClipboardList
+  const Icon = (app.category === 'Tour' || app.category === 'Trip') ? CATEGORY_ICON[app.category] : FALLBACK_ICON
   const canWithdraw = sub.status === 'Submitted' || sub.status === 'Under Review'
   const canPay = pay.status === 'Not Paid' && app.payment.mode !== 'None' && sub.status !== 'Withdrawn'
   const paymentLabel =

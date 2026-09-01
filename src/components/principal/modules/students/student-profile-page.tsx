@@ -9,13 +9,13 @@ import { cn } from '@/lib/utils'
 import type { StudentRecord } from '@/lib/store/students-store'
 import { Metric } from './shared'
 import {
-  OverviewTab, AcademicsTab, AttendanceTab, FeesTab,
+  OverviewTab, AcademicsTab, AttendanceTab, FeesTab, ApplicationsTab,
   DocumentsTab, MedicalTab, ParentsTab, TransportTab,
   DisciplineTab, TimelineTab,
 } from './profile-tabs'
 import { StudentIdentityCodes } from './profile/identity-codes'
 
-const TABS = ['overview', 'academics', 'attendance', 'fees', 'documents', 'medical', 'parents', 'transport', 'discipline', 'timeline'] as const
+const TABS = ['overview', 'academics', 'attendance', 'fees', 'applications', 'documents', 'medical', 'parents', 'transport', 'discipline', 'timeline'] as const
 type TabName = typeof TABS[number]
 
 interface Props {
@@ -109,6 +109,7 @@ export function StudentProfilePage({ student, onBack, onArchive, onRestore, onTr
         {activeTab === 'academics' && <AcademicsTab student={student} />}
         {activeTab === 'attendance' && <AttendanceTab student={student} />}
         {activeTab === 'fees' && <FeesTab student={student} />}
+        {activeTab === 'applications' && <ApplicationsTab student={student} />}
         {activeTab === 'documents' && <DocumentsTab student={student} />}
         {activeTab === 'medical' && <MedicalTab student={student} />}
         {activeTab === 'parents' && <ParentsTab student={student} />}

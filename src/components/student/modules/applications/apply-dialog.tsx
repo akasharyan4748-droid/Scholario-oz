@@ -1,18 +1,24 @@
 'use client'
 
 /**
- * ApplyDialog — the student's fill → submit → pay flow for one application.
+ * ApplyDialog — the student's Educational Tour application: fill → submit →
+ * pay, inside ONE dialog.
  *
- * Steps (inside ONE dialog):
- *   1. form     — read-only student particulars (canonical record snapshot) +
- *                 every configured form field rendered by type + guardian
- *                 consent (digital checkbox / physical-signature notice).
- *   2. payment  — shown after a successful submit (or resubmit with money
- *                 outstanding, or opened directly for an awaiting-payment
- *                 submission). Money moves ONLY through fee-store
- *                 recordPayment() bound to the application's Additional
- *                 Charge; cash lands as "Under Verification" for the
- *                 Principal to verify — never marked paid locally.
+ * Structure mirrors the printed official form so what the student fills is
+ * exactly what the school office files:
+ *   1. Official document header (school, form no., session)
+ *   2. Tour details (read-only — dates, fee, in-charge)
+ *   3. Student particulars (READ-ONLY, from the school record — applicants
+ *      never edit their master record here; corrections go through the office)
+ *   4. Guardian details (read-only)
+ *   5. Tour-specific details (the template's editable questions)
+ *   6. Declaration & guardian consent
+ *   → payment step: Online (instant receipt) or Cash / Pay at School
+ *     (recorded Under Verification until the Principal confirms).
+ *
+ * MONEY RULE: payments go through fee-store recordPayment() only, bound to
+ * the application's Additional Charge + applicationId — tour money is
+ * separate from the student's annual fees and lands in the normal ledger.
  *
  * Idempotency: re-submitting an already-submitted form returns
  * existingSubmissionId from the store — we surface "You already applied"
@@ -21,7 +27,8 @@
 
 import { useEffect, useState } from 'react'
 import {
-  Banknote, CheckCircle2, CreditCard, FileUp, Info, ShieldCheck, Trash2,
+  Banknote, CalendarDays, CheckCircle2, CreditCard, FileUp, Info, Landmark,
+  ShieldCheck, Trash2, User, Users,
 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -36,6 +43,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   useApplicationsStore, deriveSubmissionPayment,
   type ApplicationFormField, type ApplicationSubmission, type SchoolApplication,
@@ -125,7 +133,7 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
     onOpenChange(false)
   }
 
-  // ── Validation (required fields + digital guardian consent) ──
+  // ── Validation (application-specific fields + digital guardian consent) ──
   const validate = (): boolean => {
     if (!app) return false
     const errs: Errors = {}
@@ -303,7 +311,7 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                 <div className="min-w-0">
                   <DialogTitle className="text-base leading-snug">{app.title}</DialogTitle>
                   <DialogDescription className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-                    <Badge variant="outline" className="text-[9px] h-4 px-1.5">{app.category}</Badge>
+                    <Badge variant="outline" className="text-[9px] h-4 px-1.5">Educational Tour</Badge>
                     <span>Deadline {formatDate(app.deadline)}</span>
                     {needsPayment && <span>· {formatINR(amount)}{app.payment.mode === 'Optional' ? ' (optional)' : ''}</span>}
                   </DialogDescription>
@@ -318,8 +326,8 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
 
             {step === 'form' ? (
               <div className="min-h-0 flex-1 overflow-y-auto -mx-1 px-1 space-y-4">
-                {/* ── Official document header (PART 9) — the form reads as a
-                    real school-issued document, not a SaaS card. ── */}
+                {/* ── Official document header — the form reads as a real
+                    school-issued document, not a SaaS card. ── */}
                 <div className="rounded-lg border border-border bg-card px-3.5 py-3">
                   <div className="flex items-start justify-between gap-3 border-b border-dashed border-border pb-2.5">
                     <div className="min-w-0">
@@ -333,86 +341,114 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                       <p className="text-[10px] font-semibold">{app.academicYear}</p>
                     </div>
                   </div>
-                  <p className="mt-2 text-[8.5px] uppercase tracking-[0.2em] text-muted-foreground">Official Application Form · {app.category}</p>
+                  <p className="mt-2 text-[8.5px] uppercase tracking-[0.2em] text-muted-foreground">Official Application · Educational Tour</p>
                   <p className="text-sm font-bold leading-tight mt-0.5">{app.title}</p>
-                  {app.sourceRef?.label && <p className="text-[10px] text-muted-foreground mt-0.5">for {app.sourceRef.label}</p>}
                 </div>
 
-                {app.description && (
-                  <p className="text-xs leading-relaxed text-muted-foreground border-l-2 border-border pl-3"><span className="font-semibold text-foreground">Instructions: </span>{app.description}</p>
-                )}
+                {/* ── Tour details (read-only) ── */}
+                <section className="rounded-lg border border-border px-3.5 py-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">1. Tour details</p>
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                    <Particular icon={<CalendarDays className="h-3 w-3" />} label="Tour date" value={app.eventDate ? formatDate(app.eventDate) : 'To be announced'} />
+                    <Particular icon={<CalendarDays className="h-3 w-3" />} label="Last date to apply" value={formatDate(app.deadline)} />
+                    <Particular icon={<Landmark className="h-3 w-3" />} label="Fee per student" value={needsPayment ? `${formatINR(amount)}${app.payment.mode === 'Optional' ? ' (optional)' : ''}` : 'Free'} />
+                    <Particular icon={<Users className="h-3 w-3" />} label="Teacher in-charge" value={app.inChargeName ?? 'To be assigned'} />
+                  </div>
+                  {app.description && (
+                    <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground border-l-2 border-border pl-2.5">{app.description}</p>
+                  )}
+                </section>
 
                 {/* ── Student particulars (read-only, canonical record) ── */}
                 <section className="rounded-lg border border-border bg-muted/25 px-3.5 py-3">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">1. Student particulars</p>
+                  <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                    <User className="h-3 w-3" /> 2. Student particulars
+                  </p>
                   <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
                     <Particular label="Name" value={identity.canonical.name} />
                     <Particular label="Admission no." value={identity.canonical.admissionNo} mono />
                     <Particular label="Class / Section" value={`${identity.canonical.className} — ${identity.canonical.section}`} />
-                    <Particular label="Guardian" value={identity.canonical.guardianName} />
-                    <Particular label="Guardian phone" value={identity.canonical.guardianPhone} />
+                    <Particular label="Roll no." value={identity.canonical.rollNo} />
+                    <Particular label="Date of birth" value={identity.canonical.dob ? formatDate(identity.canonical.dob) : '—'} />
+                    <Particular label="Blood group" value={identity.canonical.bloodGroup} />
+                    {identity.canonical.address && (
+                      <div className="col-span-2">
+                        <Particular label="Residence address" value={identity.canonical.address} />
+                      </div>
+                    )}
                   </div>
                   <p className="mt-2 text-[9.5px] text-muted-foreground">Taken from the school record — corrections go through the office.</p>
                 </section>
 
-                {/* ── Dynamic form fields, grouped into their logical
-                    sections (PART 13) with continuing numbering ── */}
-                {app.formFields.length > 0 && (
-                  <>{(() => {
-                    const groups = new Map<string, typeof app.formFields>()
-                    for (const f of app.formFields) {
-                      const key = f.section ?? 'Application Details'
-                      const arr = groups.get(key) ?? []
-                      arr.push(f)
-                      groups.set(key, arr)
-                    }
-                    let sectionNo = 1
-                    return Array.from(groups.entries()).map(([section, fields]) => {
-                      sectionNo += 1
-                      return (
-                        <section key={section} className="space-y-3.5">
-                          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{sectionNo}. {section}</p>
-                          {fields.map((f) => (
-                            <FieldRenderer
-                              key={f.id}
-                              field={f}
-                              value={answers[f.id]}
-                              attachment={attachments[f.id]}
-                              emergency={emergency[f.id] ?? { name: '', phone: '' }}
-                              error={errors[f.id]}
-                              onAnswer={(v) => {
-                                setAnswers((prev) => ({ ...prev, [f.id]: v }))
-                                setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
-                              }}
-                              onEmergency={(v) => {
-                                setEmergency((prev) => ({ ...prev, [f.id]: v }))
-                                setAnswers((prev) => ({ ...prev, [f.id]: [v.name.trim(), v.phone.trim()].filter(Boolean).join(EM_DASH) }))
-                                setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
-                              }}
-                              onAttachment={(file) => {
-                                setAttachments((prev) => {
-                                  const next = { ...prev }
-                                  if (file) next[f.id] = { name: file.name, size: file.size }
-                                  else delete next[f.id]
-                                  return next
-                                })
-                                setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
-                              }}
-                            />
-                          ))}
-                        </section>
-                      )
-                    })
-                  })()}</>
-                )}
+                {/* ── Guardian details (read-only) ── */}
+                <section className="rounded-lg border border-border bg-muted/25 px-3.5 py-3">
+                  <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                    <Users className="h-3 w-3" /> 3. Parent / guardian details
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                    <Particular label="Guardian name" value={identity.canonical.guardianName} />
+                    <Particular label="Guardian phone" value={identity.canonical.guardianPhone} />
+                  </div>
+                </section>
 
-                {/* ── Guardian consent ── */}
-                {app.guardianConsent.required && (
-                  <section className="rounded-lg border border-border px-3.5 py-3">
-                    <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-                      <ShieldCheck className="h-3 w-3" /> Guardian consent
-                    </p>
-                    {app.guardianConsent.method === 'Digital' ? (
+                {/* ── Tour-specific details (editable), grouped by section ── */}
+                {(() => {
+                  const groups = new Map<string, typeof app.formFields>()
+                  for (const f of app.formFields) {
+                    const key = f.section ?? 'Tour Preferences'
+                    const arr = groups.get(key) ?? []
+                    arr.push(f)
+                    groups.set(key, arr)
+                  }
+                  let sectionNo = 3
+                  return Array.from(groups.entries()).map(([section, fields]) => {
+                    sectionNo += 1
+                    return (
+                      <section key={section} className="space-y-3.5">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{sectionNo}. {section}</p>
+                        {fields.map((f) => (
+                          <FieldRenderer
+                            key={f.id}
+                            field={f}
+                            value={answers[f.id]}
+                            attachment={attachments[f.id]}
+                            emergency={emergency[f.id] ?? { name: '', phone: '' }}
+                            error={errors[f.id]}
+                            onAnswer={(v) => {
+                              setAnswers((prev) => ({ ...prev, [f.id]: v }))
+                              setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
+                            }}
+                            onEmergency={(v) => {
+                              setEmergency((prev) => ({ ...prev, [f.id]: v }))
+                              setAnswers((prev) => ({ ...prev, [f.id]: [v.name.trim(), v.phone.trim()].filter(Boolean).join(EM_DASH) }))
+                              setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
+                            }}
+                            onAttachment={(file) => {
+                              setAttachments((prev) => {
+                                const next = { ...prev }
+                                if (file) next[f.id] = { name: file.name, size: file.size }
+                                else delete next[f.id]
+                                return next
+                              })
+                              setErrors((prev) => { if (!prev[f.id]) return prev; const next = { ...prev }; delete next[f.id]; return next })
+                            }}
+                          />
+                        ))}
+                      </section>
+                    )
+                  })
+                })()}
+
+                {/* ── Declaration & consent ── */}
+                <section className="rounded-lg border border-border px-3.5 py-3">
+                  <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                    <ShieldCheck className="h-3 w-3" /> Declaration &amp; guardian consent
+                  </p>
+                  <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
+                    The particulars above are taken from the school record. All tour-specific information furnished is true to the best of my knowledge.
+                  </p>
+                  {app.guardianConsent.required && (
+                    app.guardianConsent.method === 'Digital' ? (
                       <label
                         className={cn(
                           'mt-2 flex items-start gap-2.5 rounded-md p-2 -m-2 cursor-pointer',
@@ -438,57 +474,69 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                     ) : (
                       <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
                         <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
-                        Consent captured by guardian signature on the printed form.
+                        Consent is captured by the guardian&apos;s signature on the printed form handed to the school office.
                       </p>
-                    )}
-                    {errors.consent && <p className="mt-1 text-[10px] font-medium text-rose-600">{errors.consent}</p>}
-                  </section>
-                )}
+                    )
+                  )}
+                  {errors.consent && <p className="mt-1 text-[10px] font-medium text-rose-600">{errors.consent}</p>}
+                </section>
 
                 {app.physicalSignatureRequired && (
                   <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                     <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
-                    A physical signature is required — print the submitted form, sign it and hand it to the school office.
+                    After submitting, print the application from <span className="font-medium text-foreground">My submissions</span>, have the guardian sign it and hand it to the school office.
                   </p>
                 )}
               </div>
             ) : (
-              /* ── Payment step ── */
-              <div className="min-h-0 flex-1 overflow-y-auto space-y-4 py-1">
+              /* ── Payment step — Online or Cash / Pay at School ── */
+              <div className="min-h-0 flex-1 overflow-y-auto space-y-3 py-1">
                 <div className="rounded-lg border border-border bg-muted/25 px-4 py-3.5">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Amount payable</p>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Tour fee payable</p>
                   <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight">{formatINR(amount)}</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">{app.payment.feeHeadLabel || app.title}</p>
+                  <p className="mt-1.5 text-[10px] text-muted-foreground">
+                    Collected separately from your annual fees via Fee Management — this payment is linked to this application only.
+                  </p>
                 </div>
 
                 {app.payment.chargeId ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <Button onClick={() => runPayment('UPI')} disabled={paying !== null} className="h-9">
-                      <CreditCard className="h-3.5 w-3.5" /> Pay Online {formatINR(amount)}
-                    </Button>
-                    <Button onClick={() => runPayment('Cash')} disabled={paying !== null} variant="outline" className="h-9">
-                      <Banknote className="h-3.5 w-3.5" /> Pay by Cash {formatINR(amount)}
-                    </Button>
+                  <div className="grid gap-2">
+                    <button
+                      type="button"
+                      onClick={() => runPayment('UPI')}
+                      disabled={paying !== null}
+                      className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                        <CreditCard className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs font-semibold">Pay online — {formatINR(amount)}</span>
+                        <span className="block text-[10px] text-muted-foreground">UPI · confirms instantly with a receipt</span>
+                      </span>
+                      {paying === 'UPI' && <span className="text-[10px] font-medium text-primary animate-pulse">Processing…</span>}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => runPayment('Cash')}
+                      disabled={paying !== null}
+                      className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <Banknote className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs font-semibold">Cash / Pay at school — {formatINR(amount)}</span>
+                        <span className="block text-[10px] text-muted-foreground">Recorded now; the Principal verifies it in the payments queue</span>
+                      </span>
+                      {paying === 'Cash' && <span className="text-[10px] font-medium text-primary animate-pulse">Recording…</span>}
+                    </button>
                   </div>
                 ) : (
                   <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
                     This form is not linked to a fee-ledger charge yet, so self-service payment is unavailable. Please pay at the school office.
                   </p>
-                )}
-
-                <div className="space-y-1.5 text-[10.5px] leading-relaxed text-muted-foreground">
-                  <p>· Online payments confirm instantly with a receipt.</p>
-                  <p>· Cash is recorded as <span className="font-medium text-foreground">Under Verification</span> — the Principal verifies it in the payments queue.</p>
-                </div>
-
-                {app.payment.mode === 'Optional' && (
-                  <button
-                    type="button"
-                    onClick={skipPayment}
-                    className="mx-auto block text-[11px] font-medium text-muted-foreground underline-offset-2 hover:underline"
-                  >
-                    Skip for now
-                  </button>
                 )}
               </div>
             )}
@@ -505,9 +553,18 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                   </Button>
                 </>
               ) : (
-                <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={closeDialog}>
-                  Close
-                </Button>
+                <div className="flex w-full items-center justify-between gap-2">
+                  {app.payment.mode === 'Optional' ? (
+                    <button type="button" onClick={skipPayment} className="text-[11px] font-medium text-muted-foreground underline-offset-2 hover:underline">
+                      Skip for now
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">You can also pay later from My submissions.</span>
+                  )}
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={closeDialog}>
+                    Close
+                  </Button>
+                </div>
               )}
             </DialogFooter>
           </>
@@ -519,11 +576,11 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
 
 // ── Small pieces ───────────────────────────────────────────────────────
 
-function Particular({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Particular({ label, value, mono, icon }: { label: string; value: string; mono?: boolean; icon?: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-[9px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={cn('truncate font-medium text-foreground', mono && 'font-mono text-[10.5px]')}>{value}</p>
+      <p className="text-[9px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">{icon}{label}</p>
+      <p className={cn('truncate font-medium text-foreground', mono && 'font-mono text-[10.5px]')}>{value || '—'}</p>
     </div>
   )
 }
@@ -559,13 +616,34 @@ function FieldRenderer({ field, value, attachment, emergency, error, onAnswer, o
       {field.helpText && <p className="mt-0.5 text-[10px] text-muted-foreground">{field.helpText}</p>}
 
       <div className="mt-1.5">
-        {(field.type === 'text' || field.type === 'number' || field.type === 'date') && (
+        {field.type === 'text' && (
           <Input
-            type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+            type="text"
             value={typeof value === 'string' ? value : ''}
             onChange={(e) => onAnswer(e.target.value)}
             className="h-8 text-xs"
             aria-label={field.label}
+          />
+        )}
+
+        {field.type === 'number' && (
+          <Input
+            type="number"
+            value={typeof value === 'string' ? value : ''}
+            onChange={(e) => onAnswer(e.target.value)}
+            className="h-8 text-xs"
+            aria-label={field.label}
+          />
+        )}
+
+        {/* Compact pop-over date picker (Examination-module pattern) — never
+            the oversized native date input. */}
+        {field.type === 'date' && (
+          <DatePicker
+            compact
+            value={typeof value === 'string' ? value : ''}
+            onChange={(v) => onAnswer(v)}
+            placeholder="Select date"
           />
         )}
 

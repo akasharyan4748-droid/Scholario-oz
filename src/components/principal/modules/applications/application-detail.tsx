@@ -39,6 +39,7 @@ import { Panel } from '../shared/panel'
 import {
   useApplicationsStore,
   effectiveAppStatus, combinedSubmissionStatus, deriveSubmissionPayment,
+  applicationPayments,
   isConsentSatisfied, type SchoolApplication, type ApplicationSubmission, type CombinedSubmissionStatus,
 } from '@/lib/store/applications-store'
 import { useFeeStore } from '@/lib/store/fee-store'
@@ -128,12 +129,14 @@ export function ApplicationDetail({ app: liveAppRef, onBack }: Props) {
   const awaitingMoney = submissions.filter((s) => ['Awaiting Payment', 'Awaiting Verification'].includes(combinedSubmissionStatus(app, s))).length
   const charge = useFeeStore((st) => st.additionalCharges.find((c) => c.id === app.payment.chargeId))
   const transactions = useFeeStore((st) => st.transactions)
+  // Payments belonging to THIS application only (applicationId-bound rows;
+  // office-recorded rows fall back to the application's own charge).
   const colForApp = useMemo(
-    () => transactions.filter(
-      (t) => t.additionalChargeId === app.payment.chargeId
-        && submissions.some((s) => s.studentId === t.studentId),
+    () => transactions.filter((t) =>
+      t.applicationId === app.id
+      || (!t.applicationId && !!app.payment.chargeId && t.additionalChargeId === app.payment.chargeId),
     ),
-    [transactions, app.payment.chargeId, submissions],
+    [transactions, app.id, app.payment.chargeId],
   )
   const collectedApp = colForApp.filter((t) => t.status === 'Success').reduce((sum, t) => sum + t.amount, 0)
   const pendingVerifyApp = colForApp.filter((t) => t.status === 'Under Verification').reduce((sum, t) => sum + t.amount, 0)
@@ -858,6 +861,9 @@ function PaymentsPanel({ app, submissions, charge }: {
   const paid = roll.paid
   const pendingCash = roll.pendingCash
   const rows = submissions.map((s) => ({ sub: s, pay: deriveSubmissionPayment(app, s) }))
+  // The application's own payment history — ONLY transactions bound to this
+  // application (applicationId stamp, or its charge for office-recorded rows).
+  const history = applicationPayments(app).sort((a, b) => (b.recordedAt ?? b.date).localeCompare(a.recordedAt ?? a.date))
 
   return (
     <div className="space-y-4">
@@ -866,6 +872,33 @@ function PaymentsPanel({ app, submissions, charge }: {
         <StatTile label="Collected" value={formatINR(paid, true)} tone="emerald" />
         <StatTile label="Cash verifying" value={formatINR(pendingCash, true)} tone="amber" hint="approve in Fee Management → Payments" />
       </div>
+      <Panel
+        title="Payment history — this application"
+        subtitle={`${history.length} payment${history.length === 1 ? '' : 's'} bound to this application${charge ? ` · charge ${charge.id}` : ''}`}
+        bodyClassName="p-0"
+      >
+        {history.length === 0 ? (
+          <div className="py-8 text-center"><p className="text-xs text-muted-foreground">No payments recorded yet — payments appear here the moment students pay.</p></div>
+        ) : (
+          <div className="divide-y divide-border max-h-[360px] overflow-y-auto custom-scrollbar">
+            {history.map((t) => (
+              <div key={t.id} className="flex items-center gap-3 px-4 py-2 hover:bg-muted/25 transition-colors">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold truncate">{t.studentName} <span className="font-normal text-muted-foreground">· {t.admissionNo}</span></p>
+                  <p className="text-[10px] text-muted-foreground font-mono">{t.receiptNo} · {formatDate(t.date)} · {t.mode}{t.referenceNo ? ` · ref ${t.referenceNo}` : ''}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-bold tabular-nums">{formatINR(t.amount, true)}</p>
+                  <p className={cn(
+                    'text-[9px] font-semibold',
+                    t.status === 'Success' ? 'text-emerald-600 dark:text-emerald-400' : t.status === 'Under Verification' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400',
+                  )}>{t.status === 'Success' ? 'Paid' : t.status}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
       <Panel
         title="Per-student money trail"
         subtitle={`Transactions carry ${charge ? `charge id ${charge.id}` : 'the application charge'} — identical rows appear in Fee Management`}
@@ -1094,9 +1127,15 @@ function SubmissionDialog({ open, app, sub, onClose }: {
             <ApplicationPrintDocument
               app={app}
               sub={sub}
+              notes={sub.reviewNotes}
               paymentLines={app.payment.mode !== 'None' ? [
                 { label: 'Payment status', value: pay.status },
-                ...(pay.receiptNos.length ? [{ label: 'Receipts', value: pay.receiptNos.join(', ') }] : []),
+                ...applicationPayments(app)
+                  .filter((t) => t.studentId === sub.studentId)
+                  .map((t) => ({
+                    label: `Receipt ${t.receiptNo}`,
+                    value: `${formatINR(t.amount)} · ${t.mode} · ${formatDate(t.date)} · ${t.status === 'Success' ? 'Paid' : t.status}`,
+                  })),
               ] : []}
             />
           </div>
