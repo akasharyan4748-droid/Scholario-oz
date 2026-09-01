@@ -45,6 +45,7 @@ import {
   useFeeData, useFeeStore, txnCategory, collectorSourceLabel,
   type FeeTransaction, type PaymentMode, type PaymentStatus, type TransactionCategory,
 } from '@/lib/store/fee-store'
+import { useApplicationsStore } from '@/lib/store/applications-store'
 import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
@@ -99,6 +100,14 @@ const SOURCE_OPTIONS = [
 export function FeesTransactionsSection({ data }: Props) {
   const { transactions, accounts } = data
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
+  const applications = useApplicationsStore((s) => s.applications)
+  // APPS-FIN-LINK-1 — application-bound payments resolve to their form title
+  // so the ledger (and the detail drawer) show WHICH application a payment
+  // belongs to. Rows whose application no longer resolves render unchanged.
+  const appTitleById = useMemo(
+    () => new Map(applications.map((a) => [a.id, a.title])) as Map<string, string>,
+    [applications],
+  )
 
   const [search, setSearch] = useState('')
   const [modeFilter, setModeFilter] = useState<'all' | PaymentMode>('all')
@@ -301,6 +310,14 @@ export function FeesTransactionsSection({ data }: Props) {
                         <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', dotMeta.dot)} aria-hidden />
                         <span className="truncate text-muted-foreground">{t.feeHead}</span>
                       </span>
+                      {t.applicationId && appTitleById.get(t.applicationId) && (
+                        <span
+                          className="block truncate text-[10px] text-muted-foreground/75 mt-px pl-3"
+                          title={`Payment linked to application: ${appTitleById.get(t.applicationId)}`}
+                        >
+                          <span aria-hidden>↳ </span>{appTitleById.get(t.applicationId)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums font-medium whitespace-nowrap">{formatINR(t.amount)}</td>
                     <td className="px-3 py-2.5 text-center hidden sm:table-cell">
@@ -378,6 +395,7 @@ export function FeesTransactionsSection({ data }: Props) {
         txn={detailTxn}
         accounts={accounts}
         receiptSettings={receiptSettings}
+        applicationTitle={detailTxn?.applicationId ? appTitleById.get(detailTxn.applicationId) : undefined}
         onClose={() => setDetailTxn(null)}
         onViewReceipt={(t) => setViewReceipt(t)}
         onPrint={doPrint}
@@ -393,13 +411,16 @@ interface DrawerProps {
   txn: FeeTransaction | null
   accounts: ReturnType<typeof useFeeData>['accounts']
   receiptSettings: ReturnType<typeof useFeeStore.getState>['receiptSettings']
+  /** Resolved application title when this payment is bound to an
+   *  Applications & Forms submission (undefined otherwise). */
+  applicationTitle?: string
   onClose: () => void
   onViewReceipt: (t: FeeTransaction) => void
   onPrint: (t: FeeTransaction) => void
   onDownload: (t: FeeTransaction) => void
 }
 
-function TransactionDetailDrawer({ txn, accounts, onClose, onViewReceipt, onPrint, onDownload }: DrawerProps) {
+function TransactionDetailDrawer({ txn, accounts, receiptSettings, applicationTitle, onClose, onViewReceipt, onPrint, onDownload }: DrawerProps) {
   if (!txn) return null
 
   // Look up the student account + ledger to compute balance before/after.
@@ -474,6 +495,7 @@ function TransactionDetailDrawer({ txn, accounts, onClose, onViewReceipt, onPrin
               value={<TransactionTypeBadge category={txnCategory(txn)} />}
             />
             <DetailRow label="Fee Head / Charge" value={txn.feeHead} />
+            {applicationTitle && <DetailRow label="Linked Application" value={applicationTitle} />}
             <DetailRow label="Purpose" value={txn.purpose} />
             <DetailRow label="Academic Year" value={txn.academicYear} />
             {account && (

@@ -34,6 +34,7 @@ import { ArrowRight, Printer, Download, X, CheckCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useFeeStore, useFeeData, type FeeTransaction } from '@/lib/store/fee-store'
+import { useApplicationsStore } from '@/lib/store/applications-store'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Panel } from '../../shared/panel'
@@ -51,6 +52,14 @@ export function RecentPayments({
   onOpenTransactions?: () => void
 }) {
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
+  const applications = useApplicationsStore((s) => s.applications)
+  // APPS-FIN-LINK-1 — application-bound payments (tour submissions) show
+  // WHICH form they belong to. Content-addressed lookup: rows whose
+  // application no longer resolves simply render without the sub-line.
+  const appTitleById = useMemo(
+    () => new Map(applications.map((a) => [a.id, a.title])) as Map<string, string>,
+    [applications],
+  )
   const { transactions } = data
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [viewing, setViewing] = useState<FeeTransaction | null>(null)
@@ -231,8 +240,16 @@ export function RecentPayments({
                       <p className="text-[10px] text-muted-foreground font-mono">{t.admissionNo}</p>
                     </td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell">{t.className}</td>
-                    <td className="px-3 py-2.5 text-xs hidden md:table-cell max-w-[200px]">
+                    <td className="px-3 py-2.5 text-xs hidden md:table-cell max-w-[220px]">
                       <span className="block truncate text-muted-foreground" title={t.feeHead}>{t.feeHead}</span>
+                      {t.applicationId && appTitleById.get(t.applicationId) && (
+                        <span
+                          className="block truncate text-[10px] text-muted-foreground/75 mt-px"
+                          title={`Payment linked to application: ${appTitleById.get(t.applicationId)}`}
+                        >
+                          <span aria-hidden>↳ </span>{appTitleById.get(t.applicationId)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums font-medium whitespace-nowrap">{formatINR(t.amount)}</td>
                     <td className="px-3 py-2.5 text-center hidden sm:table-cell">

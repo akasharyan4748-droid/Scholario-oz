@@ -28,6 +28,7 @@ import { getActiveTenantPermissionsSync, getActiveTenantConfigSync } from '@/lib
 import type { CapabilityKey } from '@/lib/tenant/types'
 import { useStudentsStore } from '@/lib/store/students-store'
 import type { StudentRecord } from '@/lib/store/students-store'
+import { STALE_APPLICATION_PURGE } from './applications-purge'
 import { useCommunicationStore } from '@/lib/store/communication-store'
 // PHASE 6 — read-only access to the master fee-head catalogue from
 // school-settings-store (used by bulkLinkHeadsByName to derive the
@@ -3500,8 +3501,38 @@ export const useFeeStore = create<FeeState>()(
   // `additionalCharges` array (event-based charges like the Class 8
   // Educational Tour) when the persisted state predates the key. Never
   // overwrites user-created charges; never touches transactions.
-  version: 11,
+  version: 12,
   migrate: (persistedState: any, fromVersion: number) => {
+    // v12 — APPS-FIN-LINK-1 demo hygiene: purge the three throwaway
+    // dev-session tour applications (see applications-purge.ts) together
+    // with their linked Additional Charges and application-bound
+    // transactions, so namespaces rehydrated from older builds never show
+    // tour payments for forms that no longer exist in the live module.
+    // Content-addressed ids → no-op for every other tenant/namespace.
+    // Runs BEFORE the version chain (and only for namespaces at v5+) because
+    // the per-version blocks below return early; a wholesale v5 reseed
+    // already yields clean seeds, so older namespaces need no purge.
+    if (fromVersion >= 5 && persistedState && typeof persistedState === 'object') {
+      const st = persistedState as Record<string, any>
+      const appPurge = new Set<string>(STALE_APPLICATION_PURGE.applicationIds)
+      const chargePurge = new Set<string>(STALE_APPLICATION_PURGE.chargeIds)
+      // Ids of the transactions being dropped — collected BEFORE the filter
+      // so the audit entries pointing at them can be removed as well.
+      const droppedTxnIds = new Set<string>(
+        (Array.isArray(st.transactions) ? (st.transactions as any[]) : [])
+          .filter((t: any) => t && appPurge.has(t.applicationId))
+          .map((t: any) => String(t.id)),
+      )
+      if (Array.isArray(st.transactions)) {
+        st.transactions = st.transactions.filter((t: any) => !t || !appPurge.has(t.applicationId))
+      }
+      if (Array.isArray(st.additionalCharges)) {
+        st.additionalCharges = st.additionalCharges.filter((c: any) => !c || !chargePurge.has(c.id))
+      }
+      if (droppedTxnIds.size > 0 && Array.isArray(st.audit)) {
+        st.audit = st.audit.filter((e: any) => !e || !droppedTxnIds.has(e.entityId))
+      }
+    }
     // v5 — session rollover reset: the whole demo dataset moved from the
     // archived 2025-26 session into the live 2026-27 session (CURRENT_ACADEMIC_YEAR).
     // Persisted state below v5 carries stale 2025-26 dates, receipt numbers and

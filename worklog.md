@@ -1420,3 +1420,23 @@ Stage Summary:
 - origin/main == 03299fa (full Educational Tour rebuild included). Working tree clean.
 - Stale-preview root cause eliminated (orphan :3000 holder); dev server now always serves latest code.
 - Push workflow stabilized: `git push origin main` works non-interactively.
+
+---
+Task ID: APPS-FIN-LINK-1
+Agent: main (Z.ai Code)
+Task: Fee Management → Payments tab showed 3 "Educational Tour" payments while only 1 tour form is live — diagnose, connect visibly, clean the stale artifacts, push to main + stable.
+
+Work Log:
+- DIAGNOSIS (browser + raw store JSON): the linkage was never broken — RCP-2026-1062/1063/1064 each carry applicationId+additionalChargeId. The extra rows came from THREE throwaway dev-session tours (Agra Fort ₹2,500, Science Museum ₹1,500, Nehru Planetarium ₹2,500) that persisted into demo namespaces during the APPS-REBUILD development. Each browser has its OWN localStorage → a hand-cleanup could never fix the user's view; a versioned migration was required.
+- NEW src/lib/store/applications-purge.ts — shared import-free purge constants (content-addressed ids; avoids fee⇄applications cycle; no-op for any other tenant/namespace).
+- applications-store v5→v6: migrate now additionally drops the 3 stale tours; existing submission/audit filters drop their orphans.
+- fee-store v11→v12: purge block placed BEFORE the per-version chain (gated fromVersion≥5) so it applies to any namespace at v5–v11 — drops the 3 charges, the 3 application-bound transactions, and audit entries pointing at them. Seed-path (<v5) unaffected (reseeded cleanly).
+- VISIBLE CONNECTION ("connect it" made tangible): Recent Payments (Payments tab) + Transactions ledger rows with t.applicationId now render a muted "↳ <application title>" sub-line under the fee head; TransactionDetailDrawer gains a "Linked Application" row. Rows whose application no longer resolves render unchanged.
+- HMR TRANSIENT found + recovered: during the first post-edit Fast Refresh the applications namespace was momentarily persisted as seed-only state (Qutub record fields lost in THIS browser only). Proved the v6 migration correct via a synthetic v5→v6 experiment ([Jaipur, Qutub] kept, stale 3 dropped, submissions filtered). Restored this sandbox faithfully: full Jaipur seed replica + Qutub replica (charge/txn-derived fields, chargeId linkage intact), then let ensureApplicationSeedData rebuild the 4 Jaipur submissions. USER BROWSERS ARE UNAFFECTED — they hold real v5 records and migrate cleanly on next load.
+- VERIFIED in browser: Payments tab = exactly 1 tour payment (RCP-2026-1064 ₹2,000) with "↳ Educational Tour — Qutub Minar Heritage Walk" sub-line; Transactions row + drawer "Linked Application" row ✓; Applications dashboard = 2 tours (Qutub live + Jaipur seed); stale charges/txns gone from store JSON; console zero errors; screenshot reviewed (row + sub-line + legit non-tour rows intact).
+- GATES: bunx tsc --noEmit ✓ 0 · bun run lint ✓ clean. Note: "Payments 3" tab badge = pendingCashRequests (cash verification queue) — unrelated to tour payments, unchanged by design.
+
+Stage Summary:
+- Demo dataset now honest: 1 live builder-created tour (Qutub, paid & linked) + 1 canonical seed tour (Jaipur). Fee Management ↔ Applications linkage is both REAL (single ledger, ids intact) and VISIBLE (sub-line + drawer row).
+- Files: applications-purge.ts (new), applications-store.ts (v6), fee-store.ts (v12), payments/recent-payments.tsx, fees/fees-transactions.tsx.
+- Pushed to origin main AND origin stable (same verified commit).

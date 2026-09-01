@@ -59,6 +59,7 @@ import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
 // school's namespace — application data can never leak across schools.
 import { migrateLegacyScopedStore, createTenantScopedStorage, TENANT_SCOPED_BASES } from '@/lib/tenant/tenant-storage'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+import { STALE_APPLICATION_PURGE } from './applications-purge'
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -1441,7 +1442,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
     }),
     {
       name: 'scholario-applications-v1',
-      version: 5,
+      version: 6,
       storage: createTenantScopedStorage(TENANT_SCOPED_BASES.applications),
       // v4→v5 — Educational Tour scope rebuild: older persisted namespaces
       // may hold workshop/event/board demo forms. Keep ONLY Educational Tour
@@ -1450,6 +1451,15 @@ export const useApplicationsStore = create<ApplicationsState>()(
       // in v5 (rollNo/dob/gender/bloodGroup/address) are optional and simply
       // absent on pre-migration records — the print document renders only
       // what exists.
+      //
+      // v5→v6 — APPS-FIN-LINK-1 demo hygiene: additionally drop the three
+      // throwaway dev-session tour applications (see applications-purge.ts)
+      // so namespaces rehydrated from older builds hold exactly the canonical
+      // dataset — the seeded Jaipur tour plus builder-created tours. The
+      // submission/audit filters below then drop every orphan of a dropped
+      // application, and the companion fee-store v12 migration purges the
+      // matching Additional Charges + application-bound payments in the same
+      // release so both sides of the linkage stay consistent.
       migrate: (persisted) => {
         const st = persisted as {
           applications?: SchoolApplication[]
@@ -1457,8 +1467,9 @@ export const useApplicationsStore = create<ApplicationsState>()(
           audit?: ApplicationAuditEvent[]
         } | undefined
         if (st?.applications) {
+          const purge = new Set<string>(STALE_APPLICATION_PURGE.applicationIds)
           st.applications = st.applications
-            .filter((a) => a.category === 'Tour')
+            .filter((a) => a.category === 'Tour' && !purge.has(a.id))
             .map((a) => ({
               ...a,
               source: a.source ?? 'Custom',
