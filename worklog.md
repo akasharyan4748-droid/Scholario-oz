@@ -149,3 +149,24 @@ Work Log:
 Stage Summary:
 - Fixed 2 real bugs (search broadcast duplication, a11y labels), upgraded notifications dropdown with filter tabs + full keyboard accessibility, added palette result freshness timestamps. All 4 roles re-verified end-to-end; superadmin/multi-tenant risk from prior session now closed.
 - Remaining risks: (a) 4GB memory cgroup — dev server reached 2.8GB RSS; keep browser sessions short, warm via curl; (b) notifications-filter tab state is local (resets on open — by design); (c) no socket.io mini-service running (stream indicator off; DB-backed 60s polling still delivers feed) — optional to start :3003 service.
+
+---
+Task ID: QA-R6
+Agent: Z.ai Code (main orchestrator)
+Task: Activate the dormant realtime event stream (mini-service :3003) + extend it to message events; E2E verification through the real gateway path.
+
+Work Log:
+- STATUS: prior round (QA-R5) left all gates green; this round targeted risk (c) from FINAL-QA-1 — the event-stream mini-service was never started, leaving the app's built-in live-stream UI dormant.
+- STARTED mini-services/event-stream (bun install socket.io → bun run dev, bun --hot). Memory footprint ~42MB — safe within the 4GB cgroup. Service attaches SQLite read-only, polls every 4s for new Payment (status=SUCCESS) + Notification rows, emits `school-event` frames with per-event dedupe and an epoch watermark.
+- KEY DISCOVERY (testing methodology): the app page loaded at localhost:3000 CANNOT reach the socket (Next.js is not a WS proxy) — repeated "websocket error" retries, live dot never shows. The REAL user path (external preview URL → Caddy :81 → XTransformPort routing) works perfectly. Verified 3 ways: (1) direct client → :3003 receives events; (2) client → Caddy :81 with XTransformPort=3003 receives events; (3) full app E2E through :81 — bell aria-label becomes "Notifications — live event stream connected", emerald pulsing dot renders, injected DB announcement arrives as live toast with LIVE pill within ~5s.
+- Dev server OOM-killed twice during this round (browser + compile coinciding); recovered both times via (bun run dev > /dev/null 2>&1 &) + curl warm (12ms cache restart). Browser sessions kept short per workflow.
+- FEATURE — message event streaming: extended event-stream/index.ts poller with a third query over the Message table (LEFT JOIN sender name) emitting kind:'message' frames that carry recipientId; watermark now unions Payment+Notification+Message max timestamps. bun --hot picked up the change live.
+- CLIENT (app-shell.tsx): StreamEvent type extended with 'message' kind + recipientId; socket setup now captures the DB user id from /api/auth/me (streamUserIdRef) in addition to schoolId; school-event handler filters direct messages to their addressee only (privacy — other school users never see them); message events map to NotificationItem type 'MESSAGE' (renders with Mail icon in the dropdown thanks to the R5 icon work); live toast gains a sky-blue variant with Mail icon (payments stay emerald ₹, announcements violet megaphone).
+- E2E VERIFIED: sent a real Message row (Rohan Mehta → principal) while a gateway-connected principal browser watched — toast "Live Message Toast Test · From Rohan Mehta" arrived live; bell feed showed both the DB-poll message and the streamed one; Messages filter tab (R5 feature) correctly showed count 2 and both rows; Mail icons render; 390px no overflow; console 0 errors.
+- GATES: tsc --noEmit 0 errors ✓ · lint clean ✓. Test rows/messages cleaned up from DB afterwards.
+- CRON: 15-min webDevReview job registered (id 351440) in the prior round — this round was its first productive trigger.
+
+Stage Summary:
+- The realtime event stream is now LIVE in the deployment: payments, announcements AND direct messages stream to connected dashboards with role/school/addressee scoping. All three event kinds verified end-to-end through the actual gateway path.
+- Remaining risks: (a) 4GB cgroup — server OOM-killed 2× this round during browser+compile; the warm-first workflow remains essential; (b) event-stream service must be manually started after any sandbox/machine restart ((cd mini-services/event-stream && bun run dev &)) — no supervisor; (c) QA through agent-browser at localhost:3000 cannot exercise the live stream (bypasses Caddy) — use http://localhost:81 for live-feature QA.
+- Next-phase recommendations: (1) persist event-stream startup (e.g. document in worklog + a start script); (2) consider a principal-facing "activity ticker" that surfaces the live stream on the dashboard itself; (3) optionally extend the poller to Fee status changes (OVERDUE transitions) for finance alerts.

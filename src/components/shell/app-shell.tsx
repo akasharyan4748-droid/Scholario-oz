@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { io } from 'socket.io-client'
 import { toast } from 'sonner'
-import { Bell, Menu, Plus, Globe, Radio, Megaphone } from 'lucide-react'
+import { Bell, Menu, Plus, Globe, Radio, Megaphone, Mail } from 'lucide-react'
 import { useAuth } from '@/lib/store/auth-store'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { school } from '@/lib/mock/school'
@@ -46,12 +46,15 @@ const STREAM_METHOD_LABELS: Record<string, string> = {
 
 // Shape of a `school-event` frame emitted by mini-services/event-stream
 interface StreamEvent {
-  kind: 'payment' | 'announcement'
+  kind: 'payment' | 'announcement' | 'message'
   schoolId: string
   title: string
   detail: string
   amount?: number
   method?: string
+  /** message events: User.id of the addressee — used to mark the
+   *  recipient's own inbox; others in the school see it as a broadcast. */
+  recipientId?: string | null
   at: string
 }
 
@@ -102,11 +105,13 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
   }, [])
 
   // ─── Real-time event stream (socket.io mini-service :3003 via gateway) ───
-  // Resolves the viewer's school scope from /api/auth/me first (the client
-  // session profile doesn't carry schoolId), then subscribes. Super admins
-  // (schoolId = null) receive the platform-wide stream; school-scoped roles
-  // only see events for their own school.
+  // Resolves the viewer's school scope + DB user id from /api/auth/me first
+  // (the client session profile doesn't carry them), then subscribes. Super
+  // admins (schoolId = null) receive the platform-wide stream; school-scoped
+  // roles only see events for their own school. Direct messages are only
+  // surfaced to their addressee (recipientId filter).
   const streamScopeRef = useRef<string | null | undefined>(undefined) // undefined = resolving
+  const streamUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -116,7 +121,8 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
     fetch('/api/auth/me', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        const me = j && typeof j === 'object' && 'data' in j ? (j as { data?: { user?: { schoolId?: string | null } } }).data?.user : null
+        const me = j && typeof j === 'object' && 'data' in j ? (j as { data?: { user?: { schoolId?: string | null; id?: string | null } } }).data?.user : null
+        if (me?.id) streamUserIdRef.current = me.id
         return me?.schoolId ?? null
       })
       .catch(() => null)
@@ -139,9 +145,14 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
           if (scope && evt.schoolId && evt.schoolId !== scope) return
 
           const isPayment = evt.kind === 'payment'
+          const isMessage = evt.kind === 'message'
+          // Direct messages are addressed to one user — only the addressee's
+          // bell/toast shows them (others in the school skip the frame).
+          if (isMessage && evt.recipientId && evt.recipientId !== streamUserIdRef.current) return
+
           const item: NotificationItem = {
             id: `stream-${evt.kind}-${evt.at}-${Math.random().toString(36).slice(2, 7)}`,
-            type: isPayment ? 'PAYMENT' : 'ANNOUNCEMENT',
+            type: isPayment ? 'PAYMENT' : isMessage ? 'MESSAGE' : 'ANNOUNCEMENT',
             title: isPayment ? 'Fee payment received' : evt.title,
             description: isPayment && evt.amount
               ? `${evt.detail} · ${formatINR(evt.amount)} via ${STREAM_METHOD_LABELS[(evt.method || '').toUpperCase()] ?? evt.method ?? '—'}`
@@ -158,16 +169,20 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
               <div
                 className={cn(
                   'relative overflow-hidden w-[min(21rem,calc(100vw-2rem))] flex items-start gap-3 rounded-xl border bg-card/95 backdrop-blur p-3 pl-4 shadow-premium-lg transition-opacity',
-                  isPayment ? 'border-emerald-500/30' : 'border-violet-500/30',
+                  isPayment ? 'border-emerald-500/30' : isMessage ? 'border-sky-500/30' : 'border-violet-500/30',
                   t ? 'opacity-100' : 'opacity-0'
                 )}
               >
-                <span className={cn('absolute left-0 top-0 bottom-0 w-1', isPayment ? 'bg-emerald-500' : 'bg-violet-500')} />
+                <span className={cn('absolute left-0 top-0 bottom-0 w-1', isPayment ? 'bg-emerald-500' : isMessage ? 'bg-sky-500' : 'bg-violet-500')} />
                 <span className={cn(
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                  isPayment ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-violet-500/15 text-violet-600 dark:text-violet-400'
+                  isPayment
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : isMessage
+                      ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
+                      : 'bg-violet-500/15 text-violet-600 dark:text-violet-400'
                 )}>
-                  {isPayment ? <span className="font-bold text-xs">₹</span> : <Megaphone className="h-4 w-4" />}
+                  {isPayment ? <span className="font-bold text-xs">₹</span> : isMessage ? <Mail className="h-4 w-4" /> : <Megaphone className="h-4 w-4" />}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

@@ -65,12 +65,15 @@ const msToIso = (n: number | null | undefined) =>
   typeof n === 'number' && Number.isFinite(n) ? new Date(n).toISOString() : new Date().toISOString()
 
 interface StreamEvent {
-  kind: 'payment' | 'announcement' | 'admission'
+  kind: 'payment' | 'announcement' | 'admission' | 'message'
   schoolId: string
   title: string
   detail: string
   amount?: number
   method?: string
+  /** For message events: the User.id of the recipient so clients can
+  // badge only their own inbox (service stays auth-agnostic). */
+  recipientId?: string | null
   at: string
 }
 
@@ -133,15 +136,43 @@ async function poll() {
       console.log(`[event-stream] announcement → ${n.title}`)
     }
 
-    // 3) Admissions: no Admission table exists (admissions module is client-mock)
-    // — payments + announcements cover the live stream for now.
+    // 3) New direct messages — subject + sender; recipientId carried on the
+    // frame so the client can mark "new message" only for the addressee.
+    const messages = sqlite
+      .query(
+        `SELECT m.id, m.subject, m.body, m.schoolId, m.recipientId, m.createdAt AS ts,
+                su.name AS sender
+         FROM Message m
+         LEFT JOIN User su ON su.id = m.senderId
+         WHERE m.createdAt > ?
+         ORDER BY m.createdAt ASC LIMIT 10`
+      )
+      .all(lastMs) as Array<{ id: string; subject: string; body: string; schoolId: string; recipientId: string | null; ts: number; sender: string | null }>
+
+    for (const m of messages) {
+      if (!markAndCheck(`message:${m.id}`)) continue
+      const evt: StreamEvent & { recipientId?: string | null } = {
+        kind: 'message',
+        schoolId: m.schoolId,
+        title: m.subject,
+        detail: m.sender ? `From ${m.sender} · ${m.body.slice(0, 100)}` : m.body.slice(0, 120),
+        recipientId: m.recipientId,
+        at: msToIso(m.ts),
+      }
+      io.emit('school-event', evt)
+      console.log(`[event-stream] message → ${m.subject} (to ${m.recipientId ?? 'unknown'})`)
+    }
+
+    // 4) Admissions: no Admission table exists (admissions module is client-mock)
+    // — payments + announcements + messages cover the live stream for now.
 
     // advance the watermark so the next poll only sees strictly newer rows
-    if (payments.length || notices.length) {
+    if (payments.length || notices.length || messages.length) {
       const newest = sqlite.query(
         `SELECT MAX(x) AS m FROM (
            SELECT MAX(p.createdAt) AS x FROM Payment p WHERE p.status='SUCCESS'
            UNION ALL SELECT MAX(n.createdAt) FROM Notification n
+           UNION ALL SELECT MAX(m.createdAt) FROM Message m
          )`
       ).get() as { m: number | null }
       if (typeof newest?.m === 'number') lastMs = newest.m
