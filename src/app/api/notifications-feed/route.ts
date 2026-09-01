@@ -86,9 +86,19 @@ export async function GET() {
       include: { reads: { where: { userId: user.id }, select: { id: true } } },
     })
     const announcements: typeof announcementRows = []
+    const seenBroadcasts = new Set<string>() // title+message of class-fanned announcements
     for (const row of announcementRows) {
       if (announcements.length >= 8) break
-      if (await audienceAllows(row.audience, user)) announcements.push(row)
+      if (await audienceAllows(row.audience, user)) {
+        // One announcement per target class is fanned out at publish time.
+        // Students match only their own class row, but staff (and role
+        // masquerade) match EVERY class row — identical title+message rows
+        // would repeat N times in the panel. Show the broadcast once.
+        const key = `${row.title}\u0000${row.message}`
+        if (seenBroadcasts.has(key)) continue
+        seenBroadcasts.add(key)
+        announcements.push(row)
+      }
     }
 
     // Combine into a unified feed

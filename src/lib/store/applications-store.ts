@@ -850,6 +850,20 @@ export const useApplicationsStore = create<ApplicationsState>()(
             action: 'application.updated', message: `Application "${app.title}" updated.`,
           }),
         })
+        // ELIGIBILITY EXPANSION on a LIVE form: students of newly added
+        // classes become eligible NOW — notify just those classes (the
+        // already-targeted ones were notified at publish and must not be
+        // re-notified). Fire-and-forget, same pipeline as publish.
+        if (app.status === 'Published' && Array.isArray(patch.targetClassIds)) {
+          const added = patch.targetClassIds.filter((cid) => !app.targetClassIds.includes(cid))
+          if (added.length > 0) {
+            void notifyEligibleStudents({
+              ...app,
+              targetClassIds: added,
+              targetStudentIds: undefined,
+            })
+          }
+        }
         return { success: true }
       },
 

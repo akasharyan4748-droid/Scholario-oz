@@ -208,7 +208,7 @@ export function ApplicationDetail({ app: liveAppRef, onBack, onEdit }: Props) {
               <PencilLine className="h-3 w-3" /> Edit
             </Button>
           )}
-          <BlankFormMenu />
+          <BlankFormMenu onNeedDocument={() => setTab('documents')} />
           <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={handleDuplicate}>
             <Copy className="h-3 w-3" /> Duplicate
           </Button>
@@ -251,7 +251,7 @@ export function ApplicationDetail({ app: liveAppRef, onBack, onEdit }: Props) {
       {tab === 'overview' && (
         <OverviewPanel app={app} submissions={submissions} charge={charge} collectedApp={collectedApp} />
       )}
-      {tab === 'form' && <FormPanel appId={app.id} />}
+      {tab === 'form' && <FormPanel appId={app.id} onNeedDocument={() => setTab('documents')} />}
       {tab === 'submissions' && (
         <SubmissionsPanel
           app={app}
@@ -428,7 +428,7 @@ function ApprovalDecision({ appId }: { appId: string }) {
 
 // ─── Form tab (PART 16) — the official form definition ─────────────────
 
-function FormPanel({ appId }: { appId: string }) {
+function FormPanel({ appId, onNeedDocument }: { appId: string; onNeedDocument?: () => void }) {
   const app = useApplicationsStore((s) => s.applications.find((a) => a.id === appId))
   if (!app) return null
   const sections = new Map<string, typeof app.formFields>()
@@ -467,7 +467,7 @@ function FormPanel({ appId }: { appId: string }) {
       </Panel>
       <div className="space-y-4">
         <Panel title="Blank official form" subtitle="for offline distribution" bodyClassName="pt-2">
-          <BlankFormMenu />
+          <BlankFormMenu onNeedDocument={onNeedDocument} />
         </Panel>
         <Panel title="Student identity sections" subtitle="auto-filled at submission" bodyClassName="pt-2 pb-3">
           <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -481,9 +481,22 @@ function FormPanel({ appId }: { appId: string }) {
   )
 }
 
-/** Blank-form quick menu (print / download) used in header. */
-function BlankFormMenu() {
+/**
+ * Blank-form quick menu (print / download).
+ *
+ * The printable document (.app-print-doc) is mounted by the Documents tab,
+ * so the menu first asks the host to activate that tab (onNeedDocument) and
+ * waits for the mount before printing/downloading — otherwise the print
+ * helper would fall back to printing the whole application page.
+ */
+function BlankFormMenu({ onNeedDocument }: { onNeedDocument?: () => void }) {
   const [open, setOpen] = useState(false)
+  const withDocument = (fn: () => void) => {
+    setOpen(false)
+    if (document.querySelector('.app-print-doc')) { fn(); return }
+    onNeedDocument?.()
+    setTimeout(fn, 180)
+  }
   return (
     <div className="relative">
       <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setOpen(!open)} aria-expanded={open}>
@@ -494,9 +507,9 @@ function BlankFormMenu() {
           <button type="button" aria-hidden className="fixed inset-0 z-[60] cursor-default" onClick={() => setOpen(false)} tabIndex={-1} />
           <div className="absolute right-0 top-8 z-[61] w-44 rounded-lg border border-border bg-popover p-1 shadow-md">
             <MenuItem icon={<Printer className="h-3.5 w-3.5" />} label="Print blank form"
-              onClick={() => { setTimeout(printApplicationDocument, 80); setOpen(false) }} />
+              onClick={() => withDocument(printApplicationDocument)} />
             <MenuItem icon={<Download className="h-3.5 w-3.5" />} label="Download (.html)"
-              onClick={() => { downloadApplicationDocument(`BLANK-${Date.now()}`); setOpen(false) }} />
+              onClick={() => withDocument(() => downloadApplicationDocument(`BLANK-${Date.now()}`))} />
           </div>
         </>
       )}
