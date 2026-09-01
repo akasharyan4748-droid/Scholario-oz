@@ -168,6 +168,10 @@ export function MyCertificatesModule() {
         <DialogContent className="max-w-lg p-0 overflow-hidden bg-white dark:bg-paper max-h-[85vh] overflow-y-auto">
           {previewDoc && (
             <div className="relative">
+              <DialogHeader className="sr-only">
+                <DialogTitle>{previewDoc.docType} — {previewDoc.docNumber}</DialogTitle>
+                <DialogDescription>Certificate preview</DialogDescription>
+              </DialogHeader>
               <button
                 onClick={() => setPreviewDoc(null)}
                 className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/5 text-slate-500 hover:bg-black/10 transition-colors"
