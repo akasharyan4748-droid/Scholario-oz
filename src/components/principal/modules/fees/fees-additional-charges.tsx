@@ -70,6 +70,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { FeeEmptyState, FeeStatusBadge } from './fees-shared'
 import { MoneyInput } from './money-input'
+import { CollectionExportMenu } from './collection-export'
 import { Panel } from '../shared/panel'
 import { CURRENT_ACADEMIC_YEAR } from '@/lib/store/fee-store-data'
 
@@ -1163,7 +1164,7 @@ function CollectionStatusSheet({
           </div>
         )}
 
-        {/* Compact segmented tab row */}
+        {/* Compact segmented tab row + export (§37 — take the answer outside the app) */}
         <div className="flex items-center gap-1 border-b border-border/60 px-4 py-2" role="tablist" aria-label="Collection detail tabs">
           {DETAIL_TABS.map((t) => (
             <button
@@ -1180,6 +1181,22 @@ function CollectionStatusSheet({
               {t.label}
             </button>
           ))}
+          {charge.status !== 'Draft' && (
+            <div className="ml-auto">
+              <CollectionExportMenu
+                compact
+                data={{
+                  charge,
+                  scoped,
+                  studentStates,
+                  payments,
+                  app,
+                  paidCount,
+                  actor: ACTOR,
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Body */}

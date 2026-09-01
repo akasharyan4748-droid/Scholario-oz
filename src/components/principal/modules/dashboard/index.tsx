@@ -23,6 +23,7 @@ import { WelcomeBanner } from './shared'
 import { KpiRow } from './kpi-row'
 import { LiveAlerts } from './live-alerts'
 import { ChartsRow1 } from './charts-row'
+import { LiveActivityTicker } from './live-activity-ticker'
 import { QuickActionsRow } from './quick-actions'
 import { RecentAdmissions } from './recent-admissions'
 import { EventsRow } from './events-row'
@@ -41,6 +42,7 @@ export function PrincipalDashboard({ onNavigate }: PrincipalDashboardProps) {
       <KpiRow onNavigate={handleNavigate} />
       <LiveAlerts onNavigate={handleNavigate} />
       <ChartsRow1 onNavigate={handleNavigate} />
+      <LiveActivityTicker />
       <QuickActionsRow onNavigate={handleNavigate} />
       <RecentAdmissions onNavigate={handleNavigate} />
       <EventsRow onNavigate={handleNavigate} />

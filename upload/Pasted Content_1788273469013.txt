@@ -1,0 +1,1568 @@
+We need to fix and complete the Applications & Forms system in SCHOLARIO-OS.
+
+IMPORTANT:
+The current implementation is NOT complete.
+
+The Applications & Forms listing/table exists, but the actual application/consent form experience is still not properly implemented.
+
+The current "View details" / form experience is showing an unsuitable multi-page/web-style form instead of the professional A4 single-page official school document that I explicitly asked for.
+
+You must now implement the complete workflow properly.
+
+Work as a SENIOR PRODUCT DESIGNER + SENIOR FULL-STACK ENGINEER.
+
+Do not just modify labels.
+Do not create another placeholder.
+Do not leave the existing incomplete two-page form in place.
+
+First inspect the existing implementation, routes, components, database/schema, form state, collection relationships, session logic, permissions and current Applications & Forms screens.
+
+Then make the following changes.
+
+============================================================
+1. CORE WORKFLOW — DRAFT FIRST, THEN PUBLISH
+============================================================
+
+Every newly created Application/Form MUST start as:
+
+DRAFT
+
+The Principal should NEVER accidentally publish a newly created form immediately.
+
+Correct lifecycle:
+
+CREATE
+   ↓
+DRAFT
+   ↓
+EDIT / PREVIEW
+   ↓
+PUBLISH
+   ↓
+OPEN / ACTIVE
+   ↓
+CLOSE
+   ↓
+ARCHIVE
+
+The initial state must always be DRAFT.
+
+============================================================
+2. DRAFT MUST HAVE DELETE
+============================================================
+
+This is mandatory.
+
+If the Principal creates something incorrectly, they MUST be able to delete it while it is still a draft.
+
+Example:
+
+Principal clicks:
+
++ New Form
+
+Creates:
+
+"Educational Tour Consent"
+
+but realizes the details are wrong.
+
+Before publishing, the Actions menu must provide:
+
+- Edit
+- Preview
+- Duplicate
+- Delete
+
+The Delete action must be clearly available for DRAFT forms.
+
+Do NOT hide Delete somewhere obscure.
+
+============================================================
+3. DRAFT ACTIONS
+============================================================
+
+For a DRAFT form, the action menu should contain:
+
+Edit
+Preview
+Publish
+Duplicate
+Delete
+
+Order them logically.
+
+Recommended:
+
+Edit
+Preview
+Publish
+Duplicate as new draft
+Delete draft
+
+The primary action on the draft detail screen should also be:
+
+Publish
+
+There should be a secondary:
+
+Delete Draft
+
+button/action.
+
+Do not force the Principal to publish something just to be able to use it.
+
+============================================================
+4. DELETE DRAFT CONFIRMATION
+============================================================
+
+Deleting a draft must use a proper confirmation dialog.
+
+Example:
+
+Delete draft?
+
+"This form has not been published. Deleting it will permanently remove this draft."
+
+Buttons:
+
+Cancel
+Delete Draft
+
+Use the existing SCHOLARIO confirmation/dialog design system.
+
+Do not use browser alert() unless absolutely necessary.
+
+============================================================
+5. AFTER PUBLISH — NO DESTRUCTIVE DELETE
+============================================================
+
+Once a form has been published, destructive Delete must disappear.
+
+The Principal should instead see:
+
+View
+Edit
+Close
+Duplicate as new draft
+
+After it is closed:
+
+View
+Duplicate as new draft
+Archive
+
+This is important because published forms may have:
+
+- responses
+- signatures
+- student information
+- consent records
+- payment relationships
+- school records
+
+Never allow accidental deletion of a published form that contains historical data.
+
+============================================================
+6. FORM STATUS MUST BE REAL
+============================================================
+
+Do not fake status through UI only.
+
+The actual form record must maintain its lifecycle state.
+
+At minimum:
+
+draft
+published/open
+closed
+archived
+
+Use the existing database architecture if possible.
+
+Do not create duplicate state systems.
+
+The list/table must reflect the real status.
+
+For example:
+
+Educational Tour Consent
+Consent
+Draft
+
+or:
+
+Educational Tour Consent
+Consent
+Open
+
+etc.
+
+============================================================
+7. PUBLISH ACTION
+============================================================
+
+A Draft form must have a clear Publish action.
+
+When Principal clicks:
+
+Publish
+
+show a concise confirmation if appropriate:
+
+Publish form?
+
+"Once published, this form can be shared with students/parents and will no longer be deletable."
+
+Buttons:
+
+Cancel
+Publish Form
+
+After successful publishing:
+
+- status changes to Open/Published
+- Delete disappears
+- form becomes available according to the existing sharing/access system
+- responses can be received
+- linked collection/payment behaviour becomes active where applicable
+
+Do not create fake publication behaviour.
+
+Actually persist the status.
+
+============================================================
+8. EDITING RULES
+============================================================
+
+Draft:
+
+Fully editable.
+
+Published:
+
+Allow safe edits only.
+
+If the form has already received responses, do NOT allow edits that would corrupt existing responses.
+
+For example, changing the meaning/type of an existing field after responses exist can make historical responses inconsistent.
+
+If necessary, disable destructive structural edits after submissions and explain why.
+
+Example:
+
+"This field cannot be changed because responses have already been received."
+
+Do not silently modify historical response data.
+
+============================================================
+9. THE ACTUAL APPLICATION FORM MUST BE IMPLEMENTED
+============================================================
+
+This is the most important visual/product requirement.
+
+The existing implementation still does not contain the proper application/consent document that I provided as reference.
+
+I provided a complete React example showing the intended concept.
+
+That code was a REFERENCE, not something to blindly copy.
+
+You must actually implement the concept into SCHOLARIO-OS.
+
+The form must have TWO distinct experiences:
+
+A. Online Form / Submission Experience
+B. Official A4 Document / Printable Application
+
+Both must be functional.
+
+============================================================
+10. ONLINE FORM EXPERIENCE
+============================================================
+
+When the user/parent/student opens an active form:
+
+show a clean, simple form for entering/submitting information.
+
+It should NOT look like the Principal dashboard.
+
+It should NOT look like a SaaS analytics page.
+
+It should be a focused school form.
+
+For an Educational Tour Consent example, it can contain:
+
+School information
+Activity information
+Student information
+Parent/Guardian information
+Relevant health/care information
+Consent declaration
+Signature
+Submit
+
+But fields must be dynamic based on the form configuration.
+
+Do NOT hardcode Educational Tour fields into the entire Applications & Forms system.
+
+============================================================
+11. USE EXISTING STUDENT DATA INTELLIGENTLY
+============================================================
+
+If the form is being completed for a known student, automatically use existing student information where available.
+
+For example:
+
+Student Name
+Admission Number
+Class
+Section
+
+should preferably be prefilled from the student's profile.
+
+Do not make parents type information the school already knows.
+
+Where appropriate, display existing information as read-only.
+
+Only ask for additional information that is actually required by this particular form.
+
+============================================================
+12. DO NOT OVER-COLLECT INFORMATION
+============================================================
+
+The form must not contain unnecessary fields just because they exist in the student profile.
+
+For example, do NOT automatically ask for:
+
+- House
+- Roll number
+- Blood group
+- Student photo
+- Date of birth
+- Full residential address
+- Mother's phone
+- Father's phone
+
+unless the particular form actually requires them.
+
+The Principal should decide which fields are required.
+
+The goal is:
+
+MINIMUM REQUIRED INFORMATION
++
+CLEAR CONSENT
++
+EASY SUBMISSION
+
+============================================================
+13. THE A4 OFFICIAL DOCUMENT IS A SEPARATE EXPERIENCE
+============================================================
+
+After submitting / previewing a form, the system should be able to generate an official application/consent document.
+
+This document must be:
+
+A4 PORTRAIT
+SINGLE PAGE
+PRINT READY
+
+This is mandatory.
+
+Do NOT create a two-page document for a normal consent/application form.
+
+Do NOT make it look like the current web dashboard.
+
+Do NOT put the application's dashboard UI inside the document.
+
+============================================================
+14. A4 SINGLE-PAGE DESIGN DIRECTION
+============================================================
+
+The document should look like a professionally typed official school document.
+
+Think:
+
+Microsoft Word / official school office proforma.
+
+NOT:
+
+modern SaaS landing page
+NOT:
+colorful dashboard
+NOT:
+large cards
+NOT:
+web application UI
+
+Visual characteristics:
+
+- white A4 page
+- professional typography
+- clean black/dark text
+- restrained school branding
+- school logo if available
+- clean spacing
+- clear document title
+- simple tables where useful
+- subtle borders
+- no unnecessary gradients
+- no oversized icons
+- no decorative cards
+- no excessive rounded containers
+- no dashboard-like shadows
+- no unnecessary lines
+- no giant coloured header
+- no unnecessary badges
+
+It should look credible when printed and placed in a school file.
+
+============================================================
+15. A4 PAGE STRUCTURE
+============================================================
+
+The official document should approximately follow this structure:
+
+------------------------------------------------
+
+SCHOOL LOGO                         SCHOOL NAME
+
+                           School address / affiliation
+                           Contact details if configured
+
+              PARENTAL CONSENT FORM
+
+              Educational Tour / Activity Name
+
+------------------------------------------------
+
+ACTIVITY DETAILS
+
+Destination / Activity:
+Date:
+Duration:
+Fee:
+Other important information:
+
+------------------------------------------------
+
+STUDENT DETAILS
+
+Student Name:
+Admission No:
+Class / Section:
+
+------------------------------------------------
+
+PARENT / GUARDIAN DETAILS
+
+Parent / Guardian Name:
+Mobile:
+Emergency Contact:
+
+------------------------------------------------
+
+RELEVANT INFORMATION
+
+Only fields configured for this particular form.
+
+------------------------------------------------
+
+CONSENT DECLARATION
+
+A concise professionally written declaration appropriate to
+the form type.
+
+------------------------------------------------
+
+[ ] I agree to the above declaration.
+
+Parent / Guardian Name:
+Signature:
+Date:
+
+------------------------------------------------
+
+That is sufficient.
+
+Do NOT add unnecessary content merely to fill the page.
+
+============================================================
+16. REMOVE UNNECESSARY CONTENT FROM THE REFERENCE
+============================================================
+
+The supplied reference code contains several things that should NOT automatically be copied.
+
+Do NOT include these unless the Principal explicitly configures them:
+
+- Student Photo box
+- tear-off slip
+- RECEIVED stamp
+- circular reference
+- excessive metadata
+- House
+- Roll Number
+- Blood Group
+- Mother's information
+- multiple decorative sections
+- unnecessary icons
+- excessive legal text
+- unnecessary signature columns
+- unnecessary school-office fields
+
+The reference was provided to demonstrate the desired QUALITY and DOCUMENT STYLE.
+
+It is NOT a requirement to reproduce every field.
+
+Use product judgement.
+
+============================================================
+17. THE FORM MUST BE DYNAMIC
+============================================================
+
+The A4 document renderer must use the actual form schema/data.
+
+Example:
+
+If form is:
+
+Educational Tour Consent
+
+show:
+
+Destination
+Travel dates
+Tour fee
+Student
+Parent
+Consent
+Signature
+
+If form is:
+
+Sports Competition Registration
+
+show:
+
+Competition
+Date
+Venue
+Student
+Parent
+Consent
+Signature
+
+If form is:
+
+Workshop Registration
+
+show:
+
+Workshop
+Date
+Fee if applicable
+Student
+Parent
+etc.
+
+If form is:
+
+General Application
+
+do not show tour-specific fields.
+
+This must be data-driven.
+
+============================================================
+18. DOCUMENT TITLE MUST BE DYNAMIC
+============================================================
+
+Do not always display:
+
+"Educational Tour Consent Slip"
+
+Instead use the actual form title.
+
+Examples:
+
+PARENTAL CONSENT FORM
+
+EDUCATIONAL TOUR — JAIPUR
+
+or:
+
+SPORTS COMPETITION REGISTRATION FORM
+
+or:
+
+WORKSHOP PARTICIPATION FORM
+
+or:
+
+PARENT CONSENT FORM
+
+The system should intelligently generate the title based on the form configuration.
+
+============================================================
+19. DOCUMENT MUST FIT ON ONE A4 PAGE
+============================================================
+
+This is a hard requirement.
+
+Implement proper print CSS.
+
+Use:
+
+@page {
+  size: A4 portrait;
+}
+
+The document should fit within one physical A4 page for normal form configurations.
+
+Do not rely on browser scaling to fix it.
+
+Do not create excessive vertical padding.
+
+Do not create large web-style cards.
+
+Use compact professional typography.
+
+Tables should be compact and clean.
+
+Long text should wrap naturally.
+
+If a form has an unusually large number of fields, the builder should warn the Principal that the form may exceed one page rather than silently producing a broken document.
+
+============================================================
+20. PRINT VIEW MUST BE PURE DOCUMENT
+============================================================
+
+When printing:
+
+REMOVE:
+
+- SCHOLARIO sidebar
+- application dashboard header
+- navigation
+- buttons
+- tabs
+- search
+- filters
+- browser-style UI
+- page background
+- web controls
+
+Only the official A4 document should print.
+
+============================================================
+21. DOWNLOAD / PRINT
+============================================================
+
+Provide:
+
+Print
+Download PDF
+
+where supported by the existing project architecture.
+
+Do not add unnecessary export formats unless there is a real use case.
+
+The PDF/print output must match the A4 preview.
+
+============================================================
+22. A4 PREVIEW
+============================================================
+
+When Principal clicks:
+
+Preview
+
+show the actual A4 document preview.
+
+It should visually resemble a physical sheet of paper.
+
+Do not show the old two-page application UI.
+
+The preview should have:
+
+- A4 proportions
+- white paper
+- subtle outer shadow ONLY in screen preview
+- proper margins
+- document content
+
+When printed, the shadow/background disappears.
+
+============================================================
+23. FORM DETAIL SCREEN
+============================================================
+
+When Principal opens a form, show a professional detail view.
+
+For example:
+
+Educational Tour Consent
+Consent · Draft
+
+[Edit] [Preview] [Publish] [Delete Draft]
+
+Then:
+
+Form information
+Deadline
+Responses
+Payment
+Linked Collection
+Status
+
+For an active form:
+
+[View Form]
+[Preview]
+[Edit]
+[Close]
+[Duplicate]
+
+For archived form:
+
+[View]
+[Duplicate as New Draft]
+
+Keep the interface simple.
+
+============================================================
+24. FORM RESPONSE VIEW
+============================================================
+
+When responses exist, Principal must be able to view them.
+
+Show:
+
+Student
+Class
+Parent/Guardian
+Submitted date
+Status
+Payment status if applicable
+
+Opening a response should show the submitted information in a clean readable format.
+
+The Principal should also be able to open/print/download the submitted official application/consent document.
+
+The generated document must represent the actual submitted values.
+
+============================================================
+25. SIGNATURE
+============================================================
+
+The form should support the existing signature capability where appropriate.
+
+Keep it simple:
+
+Option 1:
+Draw signature
+
+Option 2:
+Type name
+
+The final A4 document should display the actual submitted signature/name.
+
+Do NOT display a fake signature.
+
+Do NOT generate a signature automatically unless the user explicitly selected typed-name signing.
+
+============================================================
+26. COLLECTION + FORM
+============================================================
+
+If a form is linked to an Additional Collection:
+
+show this relationship clearly.
+
+Example:
+
+FORM
+
+Educational Tour Consent
+
+Payment:
+₹2,500 / student
+
+Linked Collection:
+Educational Tour — Jaipur
+
+The Principal should be able to navigate:
+
+Form → Collection
+
+and:
+
+Collection → Form
+
+Do not create duplicate payment records.
+
+============================================================
+27. FORM WITHOUT PAYMENT
+============================================================
+
+A form must work perfectly without a payment.
+
+Example:
+
+Sports Participation Consent
+
+Payment:
+Not required
+
+Do not force creation of a collection.
+
+============================================================
+28. COLLECTION WITHOUT FORM
+============================================================
+
+Do not change the previously established Additional Collection architecture.
+
+A collection can exist independently.
+
+Examples:
+
+Robotics Workshop
+School Development Fund
+Annual Day Costume
+Special Activity Fee
+
+These do not require an application.
+
+============================================================
+29. APPLICATIONS & FORMS LIST — FIX THE CURRENT TABLE
+============================================================
+
+The current Applications & Forms table should remain useful, but improve it so it clearly represents FORMS rather than tours.
+
+Columns:
+
+FORM
+TYPE
+IN-CHARGE
+DEADLINE
+RESPONSES
+PAYMENT
+STATUS
+ACTIONS
+
+The first column should show the actual form title.
+
+For example:
+
+Educational Tour — Jaipur
+Consent
+
+NOT just:
+
+Educational Tour
+
+or generic truncated text without context.
+
+If the name is long, truncate gracefully with a tooltip/full title on interaction.
+
+============================================================
+30. ACTIONS IN THE CURRENT LIST
+============================================================
+
+The current screenshots show an Actions menu that only contains:
+
+View details
+Duplicate as new draft
+
+This is insufficient.
+
+Fix it.
+
+For DRAFT:
+
+Edit
+Preview
+Publish
+Duplicate as new draft
+Delete draft
+
+For OPEN/PUBLISHED:
+
+View details
+Preview
+Edit
+Close
+Duplicate as new draft
+
+For CLOSED:
+
+View details
+Preview
+Duplicate as new draft
+Archive
+
+For ARCHIVED:
+
+View details
+Duplicate as new draft
+
+Actions must be state-aware.
+
+Never show actions that are invalid for the current state.
+
+============================================================
+31. MAKE THE PRIMARY ACTION OBVIOUS
+============================================================
+
+A Draft row should make it visually obvious that the next step is:
+
+Publish
+
+Do not make the Principal search through a menu just to publish.
+
+Where appropriate, show a compact:
+
+Publish
+
+button/action directly on the draft detail page.
+
+The list can retain an Actions menu to avoid visual clutter.
+
+============================================================
+32. RECORD FILE
+============================================================
+
+The existing:
+
+"Record File"
+
+button can remain if it is part of the application's document-record workflow.
+
+But make sure it actually has a useful purpose.
+
+It can provide access to:
+
+- submitted forms
+- generated documents
+- archived application records
+
+Do not leave it as a decorative/non-functional button.
+
+If it is currently a placeholder, implement it properly or remove it until functional.
+
+============================================================
+33. METRICS — FIX IF NECESSARY
+============================================================
+
+Current metrics:
+
+Active Forms
+Awaiting Review
+Awaiting Payment
+Total Responses
+
+are acceptable only if they represent real data.
+
+Ensure the numbers are calculated from actual records.
+
+Do not show:
+
+"Awaiting Payment"
+
+as 3 if the actual system has no three pending form payments.
+
+Likewise:
+
+Total Responses
+
+must represent actual submissions.
+
+No fake dashboard numbers.
+
+============================================================
+34. DO NOT USE TOUR-SPECIFIC LANGUAGE GLOBALLY
+============================================================
+
+Applications & Forms must remain generic.
+
+Do not use:
+
+Active Tours
+
+as a global metric.
+
+Do not use:
+
+New Educational Tour
+
+as the global creation button.
+
+Use:
+
+New Form
+
+or:
+
+New Application
+
+based on the product terminology.
+
+Educational Tour is one possible form type/template.
+
+============================================================
+35. NEW FORM CREATION FLOW
+============================================================
+
+Clicking:
+
++ New Form
+
+should create a DRAFT.
+
+The Principal can then configure:
+
+Form title
+Form type
+Description
+Deadline
+Fields
+Required fields
+Payment requirement
+Linked collection
+Session
+Submission rules
+
+At the end:
+
+Save Draft
+Preview
+Publish
+
+Do not automatically publish.
+
+============================================================
+36. FORM TEMPLATES
+============================================================
+
+Provide sensible templates if useful.
+
+For example:
+
+Educational Tour Consent
+Sports Participation Consent
+Workshop Registration
+Competition Registration
+Parent Consent
+General Application
+
+But templates should only preconfigure fields.
+
+They must create a normal editable DRAFT.
+
+Do not create separate hardcoded modules for every template.
+
+============================================================
+37. FORM BUILDER MUST BE SIMPLE
+============================================================
+
+The Principal is not a developer.
+
+Do not make the builder look like a programming environment.
+
+Avoid:
+
+schema editor
+JSON editor
+technical field IDs
+database terms
+developer controls
+
+Use plain language:
+
+Add Question
+Field Name
+Required
+Optional
+Choice
+Short Answer
+Long Answer
+Date
+Phone
+Signature
+
+etc.
+
+============================================================
+38. DELETE / PUBLISH / CLOSE MUST BE DATA-SAFE
+============================================================
+
+This must be implemented at the backend/data level, not only hidden visually.
+
+For example:
+
+A draft can be deleted.
+
+A published form cannot be deleted.
+
+A form with responses cannot be destructively deleted.
+
+A form with payment records cannot be destructively deleted.
+
+Closing a form must preserve all responses.
+
+Archiving must preserve all records.
+
+Historical records must remain accessible.
+
+============================================================
+39. DO NOT BREAK EXISTING RECORDS
+============================================================
+
+There are already records such as:
+
+Educational Tour — Jaipur
+Sonebhadra Tour
+
+Do not delete them during implementation.
+
+Preserve existing relationships.
+
+If current records are missing proper status information, safely migrate them into the new lifecycle.
+
+Do not duplicate them.
+
+============================================================
+40. DATABASE / BACKEND
+============================================================
+
+Inspect the current database first.
+
+Reuse the existing form/application/payment/collection/session architecture where possible.
+
+If schema changes are required:
+
+- make them minimal
+- maintain relationships
+- maintain RLS
+- maintain authorization
+- preserve existing records
+- avoid duplicate tables
+- avoid duplicate payment entities
+
+The status lifecycle must be persisted properly.
+
+============================================================
+41. SECURITY
+============================================================
+
+Only authorized Principal/Admin users should be able to:
+
+- create forms
+- edit forms
+- publish forms
+- close forms
+- archive forms
+- delete drafts
+- view responses
+- download submitted documents
+- access linked payment information
+
+Students/parents should only access forms intended for them.
+
+Do not weaken existing security policies.
+
+============================================================
+42. THE PROVIDED REACT CODE
+============================================================
+
+The React code provided in the previous request is a REFERENCE IMPLEMENTATION.
+
+It demonstrates:
+
+- official school document structure
+- consent wording
+- signature interaction
+- print handling
+- A4 layout
+- school letterhead
+- student/parent information
+- dynamic document data
+
+Use it as a design and functional reference.
+
+DO NOT simply paste that code into SCHOLARIO.
+
+DO NOT retain its hardcoded:
+
+Delhi Public Heritage Senior Secondary School
+Jaipur–Jodhpur–Jaisalmer
+AARAV SHARMA
+phone numbers
+dates
+charges
+etc.
+
+Everything must come from SCHOLARIO's actual data.
+
+============================================================
+43. MOST IMPORTANT FORM DESIGN RULE
+============================================================
+
+The final application/consent document must NOT look like the current screenshots.
+
+The current implementation looks like a web application spread across multiple pages.
+
+That is NOT what I want.
+
+I want:
+
+ONE CLEAN A4 SHEET.
+
+A professional official school application/proforma.
+
+Something a school could genuinely:
+
+- print
+- sign
+- scan
+- file
+- email
+- download as PDF
+
+It should look like it was professionally prepared in Microsoft Word, not generated as a web dashboard.
+
+============================================================
+44. NO UNNECESSARY UI
+============================================================
+
+Remove unnecessary:
+
+- decorative sections
+- oversized icons
+- excessive borders
+- colorful cards
+- badges
+- repeated headings
+- repeated student information
+- unnecessary legal paragraphs
+- unnecessary fields
+- unnecessary metadata
+- unnecessary buttons
+
+For the online form:
+
+keep it simple and usable.
+
+For the official document:
+
+keep it formal and print-focused.
+
+These are two different UX contexts.
+
+============================================================
+45. FINAL TEST — DELETE
+============================================================
+
+TEST:
+
+Create New Form.
+
+Fill:
+
+Educational Tour Consent.
+
+Save.
+
+Expected:
+
+Status = Draft
+
+Actions:
+
+Edit
+Preview
+Publish
+Delete
+
+Click Delete.
+
+Expected:
+
+Confirmation dialog.
+
+Confirm.
+
+Expected:
+
+Form is actually removed from the database/list.
+
+No orphan collection/payment/form data is created.
+
+============================================================
+46. FINAL TEST — PUBLISH
+============================================================
+
+Create New Form.
+
+Save Draft.
+
+Open it.
+
+Click Preview.
+
+Expected:
+
+Actual A4 single-page document appears.
+
+Then click Publish.
+
+Expected:
+
+Status = Open/Published.
+
+Delete is no longer available.
+
+Close is available.
+
+============================================================
+47. FINAL TEST — A4 DOCUMENT
+============================================================
+
+Open:
+
+Educational Tour Consent
+
+Preview.
+
+Expected:
+
+ONE A4 PORTRAIT PAGE.
+
+Professional school letterhead.
+
+Actual school name.
+
+Actual tour information.
+
+Actual student information.
+
+Actual parent information.
+
+Actual consent text.
+
+Actual signature.
+
+Print.
+
+Expected:
+
+Only the A4 document prints.
+
+No sidebar.
+No dashboard.
+No navigation.
+No buttons.
+No web background.
+
+============================================================
+48. FINAL TEST — FORM WITHOUT PAYMENT
+============================================================
+
+Create:
+
+Sports Participation Consent.
+
+Payment = No.
+
+Publish.
+
+Expected:
+
+Form works normally.
+
+No collection is created.
+
+No payment is required.
+
+============================================================
+49. FINAL TEST — FORM WITH COLLECTION
+============================================================
+
+Create:
+
+Educational Tour Consent.
+
+Payment = Yes.
+
+Link:
+
+Educational Tour — Jaipur.
+
+Publish.
+
+Expected:
+
+The form and collection are linked.
+
+Responses are visible from the form.
+
+Collection can show linked form.
+
+Payments are recorded only once.
+
+No duplicate transaction.
+
+============================================================
+50. FINAL TEST — PUBLISHED RECORD
+============================================================
+
+Submit a response.
+
+Then try deleting the form.
+
+Expected:
+
+Delete is unavailable.
+
+All submitted responses remain intact.
+
+Generated A4 document remains accessible.
+
+============================================================
+51. FINAL PRODUCT PRINCIPLE
+============================================================
+
+The system must clearly communicate:
+
+FORM
+= collects information, consent or registration.
+
+COLLECTION
+= defines money that needs to be collected.
+
+PAYMENT
+= records actual money received.
+
+FORM + COLLECTION
+= optional relationship.
+
+DRAFT
+= editable + deletable.
+
+PUBLISHED
+= active + protected from destructive deletion.
+
+CLOSED
+= no new submissions, history preserved.
+
+ARCHIVED
+= historical, read-only.
+
+============================================================
+52. DO NOT STOP AFTER UI
+============================================================
+
+Do not consider this task complete merely because:
+
+- Delete button appears
+- Publish button appears
+- table looks better
+- preview opens
+
+Verify that the underlying actions actually work.
+
+Verify:
+
+CREATE
+SAVE DRAFT
+EDIT
+PREVIEW
+PUBLISH
+OPEN
+SUBMIT
+VIEW RESPONSE
+PRINT
+DOWNLOAD
+CLOSE
+ARCHIVE
+DELETE DRAFT
+
+all work correctly.
+
+============================================================
+53. FINAL SENIOR DESIGN REVIEW
+============================================================
+
+Before finishing, review the entire experience as a School Principal.
+
+Ask:
+
+"If I accidentally create a wrong form, can I delete it?"
+
+"If I am happy with it, can I publish it?"
+
+"Can I clearly tell whether something is Draft, Open, Closed or Archived?"
+
+"Can I preview the actual final school document before publishing?"
+
+"Does the final document fit on ONE A4 PAGE?"
+
+"Does it look like an official school form?"
+
+"Can I print it without any application/dashboard UI?"
+
+"Can I create a form that has no payment?"
+
+"Can I link a form to an existing collection?"
+
+"Can I see submitted responses?"
+
+"Can I preserve old submissions?"
+
+"Can I safely close an old form?"
+
+"Can I create another form without it becoming an Educational Tour?"
+
+If any answer is NO, fix it.
+
+============================================================
+FINAL REQUIREMENT
+============================================================
+
+The most important improvements are:
+
+1. EVERY NEW FORM STARTS AS DRAFT.
+
+2. DRAFT HAS:
+   Edit
+   Preview
+   Publish
+   Duplicate
+   DELETE
+
+3. PUBLISHED FORM CANNOT BE DELETED.
+   It can be edited safely, closed, duplicated or archived.
+
+4. THE ACTUAL APPLICATION/CONSENT FORM MUST BE IMPLEMENTED.
+   Do not leave the current placeholder/two-page experience.
+
+5. THE OFFICIAL APPLICATION/CONSENT DOCUMENT MUST BE:
+   A4 PORTRAIT
+   SINGLE PAGE
+   PROFESSIONAL
+   WORD-LIKE
+   PRINT READY
+   DYNAMIC
+   DATA-DRIVEN
+
+6. Remove unnecessary fields and visual decoration.
+
+7. Applications & Forms remains a GENERIC form system, not an Educational Tour module.
+
+8. Forms and Additional Collections remain separate concepts but can be optionally linked.
+
+9. All lifecycle actions must work at the actual data/backend level.
+
+10. Existing data and functionality must remain safe.
+
+Implement this as a complete production-quality feature, not as a visual approximation.

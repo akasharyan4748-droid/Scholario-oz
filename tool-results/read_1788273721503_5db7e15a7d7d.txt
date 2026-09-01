@@ -1,0 +1,1315 @@
+     1→'use client'
+     2→
+     3→/**
+     4→ * fees-additional-charges — Additional Collections (Payments page).
+     5→ *
+     6→ * APPS-IA-1 — THE COLLECTION IS A FIRST-CLASS OBJECT. This surface answers
+     7→ * "where does a special collection come from?" directly:
+     8→ *
+     9→ *   • A Principal can CREATE a collection right here (+ New Collection):
+    10→ *     tours, workshops, events, competitions, donations, materials,
+    11→ *     activities, anything. NO form is required — a collection exists on
+    12→ *     its own and money can be collected against it immediately.
+    13→ *   • A collection MAY optionally be linked to a form from Applications &
+    14→ *     Forms (reverse-lookup by payment.chargeId → "Linked form · title").
+    15→ *     The form collects the responses; the collection collects the money.
+    16→ *     One payment is recorded once (fee-store recordPayment with
+    17→ *     additionalChargeId) and appears here, in Transactions, on the
+    18→ *     student account and in the linked form — never duplicated.
+    19→ *
+    20→ * LIFECYCLE (§5): Draft → Active (published) → Closed → Archived.
+    21→ *   Draft    — editable in full, deletable (nothing financial exists yet).
+    22→ *   Active   — an obligation for its scoped students; safe-field edits only;
+    23→ *              destructive delete is IMPOSSIBLE (accounting integrity).
+    24→ *   Closed   — window finished; payment history stays readable.
+    25→ *   Archived — permanent read-only historical record.
+    26→ *
+    27→ * Money flow: recording payments happens through the ONE canonical flow
+    28→ * (the Payments page's Collect Fee wizard bound to the charge) — this
+    29→ * surface reads those transactions and never invents new ones.
+    30→ */
+    31→
+    32→import { Fragment, useMemo, useState } from 'react'
+    33→import type { ReactNode } from 'react'
+    34→import { motion } from 'framer-motion'
+    35→import {
+    36→  Archive, Bus, CalendarDays, CheckCircle2, CircleDollarSign,
+    37→  Edit3, FileText, FlaskConical, HandHeart, IndianRupee, Lock, MoreHorizontal,
+    38→  Package, PencilLine, Plus, Send, Tag, Tent, Trash2, Trophy, Wallet, XCircle,
+    39→  type LucideIcon,
+    40→} from 'lucide-react'
+    41→import { Badge } from '@/components/ui/badge'
+    42→import { Button } from '@/components/ui/button'
+    43→import { Input } from '@/components/ui/input'
+    44→import { Label } from '@/components/ui/label'
+    45→import { Textarea } from '@/components/ui/textarea'
+    46→import { Switch } from '@/components/ui/switch'
+    47→import {
+    48→  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+    49→} from '@/components/ui/dialog'
+    50→import {
+    51→  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    52→  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+    53→} from '@/components/ui/alert-dialog'
+    54→import {
+    55→  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+    56→} from '@/components/ui/dropdown-menu'
+    57→import {
+    58→  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
+    59→} from '@/components/ui/sheet'
+    60→import { DatePicker } from '@/components/ui/date-picker'
+    61→import {
+    62→  useFeeStore, useFeeData,
+    63→  type AdditionalCharge, type AdditionalChargeCategory, type FeeTransaction,
+    64→} from '@/lib/store/fee-store'
+    65→import { useApplicationsStore, type SchoolApplication } from '@/lib/store/applications-store'
+    66→import { useStudentsStore, type StudentRecord } from '@/lib/store/students-store'
+    67→import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
+    68→import { formatINR, formatDate } from '@/lib/format'
+    69→import { cn } from '@/lib/utils'
+    70→import { toast } from 'sonner'
+    71→import { FeeEmptyState, FeeStatusBadge } from './fees-shared'
+    72→import { MoneyInput } from './money-input'
+    73→import { Panel } from '../shared/panel'
+    74→import { CURRENT_ACADEMIC_YEAR } from '@/lib/store/fee-store-data'
+    75→
+    76→const ACTOR = 'Dr. Ananya Iyer'
+    77→const CURRENT_YEAR = CURRENT_ACADEMIC_YEAR
+    78→
+    79→// ─── Category meta ─────────────────────────────────────────────────────
+    80→
+    81→const CHARGE_CATEGORIES: Array<{ value: AdditionalChargeCategory; icon: LucideIcon; hint: string }> = [
+    82→  { value: 'Tour', icon: Bus, hint: 'Trips & excursions' },
+    83→  { value: 'Workshop', icon: FlaskConical, hint: 'Skill sessions' },
+    84→  { value: 'Event', icon: CalendarDays, hint: 'Annual day, fairs' },
+    85→  { value: 'Competition', icon: Trophy, hint: 'Olympiads, sports' },
+    86→  { value: 'Camp', icon: Tent, hint: 'Camps & retreats' },
+    87→  { value: 'Donation', icon: HandHeart, hint: 'Funds & drives' },
+    88→  { value: 'Material', icon: Package, hint: 'Kits, uniforms, IDs' },
+    89→  { value: 'Other', icon: Tag, hint: 'Anything else' },
+    90→]
+    91→
+    92→/** Module-level icon lookup — keeps dynamic icon resolution OUT of render
+    93→ *  scopes (react-hooks/static-components). */
+    94→const CATEGORY_ICON_MAP: Record<string, LucideIcon> = Object.fromEntries(
+    95→  CHARGE_CATEGORIES.map((c) => [c.value, c.icon]),
+    96→)
+    97→
+    98→function CategoryIcon({ category, className }: { category: string; className?: string }) {
+    99→  const Icon = CATEGORY_ICON_MAP[category] ?? Tag
+   100→  return <Icon className={className} />
+   101→}
+   102→
+   103→/** Icon chip tone — violet module accent; emerald for Donation drives. */
+   104→function categoryTone(category: string): string {
+   105→  return category === 'Donation'
+   106→    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/20'
+   107→    : 'bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-1 ring-violet-500/20'
+   108→}
+   109→
+   110→// ─── Status chips (full lifecycle) ─────────────────────────────────────
+   111→
+   112→const STATUS_CHIP: Record<AdditionalCharge['status'], string> = {
+   113→  Draft: 'bg-slate-500/10 text-slate-600 dark:text-slate-300 ring-1 ring-inset ring-slate-400/30',
+   114→  Active: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+   115→  Closed: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
+   116→  Archived: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+   117→  Cancelled: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+   118→}
+   119→
+   120→const STATUS_LABEL: Record<AdditionalCharge['status'], string> = {
+   121→  Draft: 'Draft',
+   122→  Active: 'Open',
+   123→  Closed: 'Closed',
+   124→  Archived: 'Archived',
+   125→  Cancelled: 'Cancelled',
+   126→}
+   127→
+   128→function StatusChip({ status }: { status: AdditionalCharge['status'] }) {
+   129→  return (
+   130→    <span
+   131→      className={cn(
+   132→        'inline-flex shrink-0 items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap',
+   133→        STATUS_CHIP[status],
+   134→      )}
+   135→    >
+   136→      {STATUS_LABEL[status]}
+   137→    </span>
+   138→  )
+   139→}
+   140→
+   141→// ─── Small helpers ──────────────────────────────────────────────────────
+   142→
+   143→function MiniChip({ className, children }: { className?: string; children: ReactNode }) {
+   144→  return (
+   145→    <span
+   146→      className={cn(
+   147→        'inline-flex shrink-0 items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap',
+   148→        className,
+   149→      )}
+   150→    >
+   151→      {children}
+   152→    </span>
+   153→  )
+   154→}
+   155→
+   156→function initialsOf(name: string): string {
+   157→  return name
+   158→    .split(' ')
+   159→    .map((p) => p[0] ?? '')
+   160→    .slice(0, 2)
+   161→    .join('')
+   162→    .toUpperCase()
+   163→}
+   164→
+   165→function classLabels(classIds: string[]): string {
+   166→  const names = classIds.map((id) => ACADEMIC_CLASSES.find((c) => c.id === id)?.name ?? id)
+   167→  if (names.length === 0) return 'No classes'
+   168→  if (names.length <= 3) return names.join(', ')
+   169→  return `${names.slice(0, 3).join(', ')} +${names.length - 3}`
+   170→}
+   171→
+   172→/** Students scoped by a charge — explicit studentIds win, else the roster of
+   173→ *  the applicable classes (Active students only). */
+   174→function scopedStudentsFor(charge: AdditionalCharge, activeStudents: StudentRecord[]): StudentRecord[] {
+   175→  const ids = charge.studentIds
+   176→  if (ids && ids.length > 0) return activeStudents.filter((s) => ids.includes(s.id))
+   177→  return activeStudents.filter((s) => charge.applicableClassIds.includes(s.classId))
+   178→}
+   179→
+   180→/** Per-charge roll-up used by rows and the detail drawer. */
+   181→interface ChargeFacts {
+   182→  /** Scoped (eligible) student count. */
+   183→  students: number
+   184→  /** Success + Under Verification money bound to the charge. */
+   185→  collected: number
+   186→  /** students × amount — or targetAmount for custom-amount drives (0 = open). */
+   187→  expected: number
+   188→  /** null when there is no denominator (open-amount drive). */
+   189→  pct: number | null
+   190→  /** ALL bound transactions (Payments tab). */
+   191→  txns: FeeTransaction[]
+   192→}
+   193→
+   194→const EMPTY_FACTS: ChargeFacts = { students: 0, collected: 0, expected: 0, pct: null, txns: [] }
+   195→
+   196→// ─── Wizard state (create + edit share one dialog) ─────────────────────
+   197→
+   198→interface WizardState {
+   199→  name: string
+   200→  category: AdditionalChargeCategory
+   201→  description: string
+   202→  amount: number
+   203→  customAmount: boolean
+   204→  targetAmount: number
+   205→  applicableClassIds: string[]
+   206→  studentIds: string[]
+   207→  startDate: string
+   208→  dueDate: string
+   209→  mandatory: boolean
+   210→  instructions: string
+   211→}
+   212→
+   213→function freshWizard(): WizardState {
+   214→  return {
+   215→    name: '',
+   216→    category: 'Tour',
+   217→    description: '',
+   218→    amount: 0,
+   219→    customAmount: false,
+   220→    targetAmount: 0,
+   221→    applicableClassIds: [],
+   222→    studentIds: [],
+   223→    startDate: '',
+   224→    dueDate: '',
+   225→    mandatory: true,
+   226→    instructions: '',
+   227→  }
+   228→}
+   229→
+   230→function wizardFromCharge(c: AdditionalCharge): WizardState {
+   231→  return {
+   232→    name: c.name,
+   233→    category: c.category,
+   234→    description: c.description ?? '',
+   235→    amount: c.amount,
+   236→    customAmount: c.allowCustomAmount === true,
+   237→    targetAmount: c.targetAmount ?? 0,
+   238→    applicableClassIds: [...c.applicableClassIds],
+   239→    studentIds: [...(c.studentIds ?? [])],
+   240→    startDate: c.startDate ?? '',
+   241→    dueDate: c.dueDate,
+   242→    mandatory: c.mandatory,
+   243→    instructions: c.instructions ?? '',
+   244→  }
+   245→}
+   246→
+   247→function wizardCandidateStudents(w: Pick<WizardState, 'applicableClassIds'>, activeStudents: StudentRecord[]): StudentRecord[] {
+   248→  const base = w.applicableClassIds.length
+   249→    ? activeStudents.filter((s) => w.applicableClassIds.includes(s.classId))
+   250→    : activeStudents
+   251→  return base.slice(0, 60)
+   252→}
+   253→
+   254→// ─── Section ───────────────────────────────────────────────────────────
+   255→
+   256→export function FeesAdditionalCharges({ data, onCollect }: {
+   257→  data: ReturnType<typeof useFeeData>
+   258→  /** Opens the Payments page's Collect Fee wizard (records a payment
+   259→   *  against a charge through the canonical flow). */
+   260→  onCollect?: () => void
+   261→}) {
+   262→  const { additionalCharges, transactions } = data
+   263→  const students = useStudentsStore((s) => s.students)
+   264→  const applications = useApplicationsStore((s) => s.applications)
+   265→
+   266→  const [detailId, setDetailId] = useState<string | null>(null)
+   267→  const [wizard, setWizard] = useState<{ open: boolean; editing?: AdditionalCharge } | null>(null)
+   268→  const [deleteTarget, setDeleteTarget] = useState<AdditionalCharge | null>(null)
+   269→
+   270→  const activeStudents = useMemo(() => students.filter((s) => s.status === 'Active'), [students])
+   271→
+   272→  // Reverse lookup — the form linked to a charge (no drift-prone field):
+   273→  // the SchoolApplication whose payment.chargeId === charge.id.
+   274→  const appByChargeId = useMemo(() => {
+   275→    const map = new Map<string, SchoolApplication>()
+   276→    for (const app of applications) {
+   277→      const cid = app.payment.chargeId
+   278→      if (cid && !map.has(cid)) map.set(cid, app)
+   279→    }
+   280→    return map
+   281→  }, [applications])
+   282→
+   283→  // Live roll-up per charge from bound transactions.
+   284→  const facts = useMemo(() => {
+   285→    const map = new Map<string, ChargeFacts>()
+   286→    for (const c of additionalCharges) {
+   287→      const scoped = scopedStudentsFor(c, activeStudents)
+   288→      const txns = transactions.filter((t) => t.additionalChargeId === c.id)
+   289→      const collected = txns
+   290→        .filter((t) => t.status === 'Success' || t.status === 'Under Verification')
+   291→        .reduce((sum, t) => sum + t.amount, 0)
+   292→      const custom = c.allowCustomAmount === true
+   293→      const expected = custom ? (c.targetAmount ?? 0) : scoped.length * c.amount
+   294→      const pct = expected > 0 ? Math.min(100, Math.round((collected / expected) * 100)) : null
+   295→      map.set(c.id, { students: scoped.length, collected, expected, pct, txns })
+   296→    }
+   297→    return map
+   298→  }, [additionalCharges, transactions, activeStudents])
+   299→
+   300→  // Actionable surface first: drafts + open collections, then closed, then
+   301→  // archived/cancelled (permanent record tail).
+   302→  // "Application payments" filter (spec §4): only collections linked to an
+   303→  // Applications & Forms form — never standalone collections.
+   304→  const [scopeFilter, setScopeFilter] = useState<'all' | 'application'>('all')
+   305→  const orderedCharges = useMemo(() => {
+   306→    const rank = (c: AdditionalCharge) =>
+   307→      c.status === 'Draft' ? 0 : c.status === 'Active' ? 1 : c.status === 'Closed' ? 2 : 3
+   308→    return [...additionalCharges]
+   309→      .filter((c) => (scopeFilter === 'application' ? appByChargeId.has(c.id) : true))
+   310→      .sort((a, b) => rank(a) - rank(b) || a.dueDate.localeCompare(b.dueDate))
+   311→  }, [additionalCharges, scopeFilter, appByChargeId])
+   312→
+   313→  const detailCharge = detailId ? additionalCharges.find((c) => c.id === detailId) ?? null : null
+   314→
+   315→  // ── Store actions (row + drawer + wizard all funnel through these) ──
+   316→  const publishCharge = (c: AdditionalCharge) => {
+   317→    const r = useFeeStore.getState().publishAdditionalCharge(c.id, ACTOR)
+   318→    if (r.success) {
+   319→      toast.success('Collection published', {
+   320→        description: `"${c.name}" is now an obligation for its ${scopedStudentsFor(c, activeStudents).length} scoped student(s).`,
+   321→      })
+   322→    } else {
+   323→      toast.error('Could not publish', { description: r.error })
+   324→    }
+   325→  }
+   326→  const closeCharge = (c: AdditionalCharge) => {
+   327→    const r = useFeeStore.getState().closeAdditionalCharge(c.id, ACTOR)
+   328→    if (r.success) toast.success('Collection closed', { description: 'Payment history stays on record.' })
+   329→    else toast.error('Could not close', { description: r.error })
+   330→  }
+   331→  const archiveCharge = (c: AdditionalCharge) => {
+   332→    const r = useFeeStore.getState().archiveAdditionalCharge(c.id, ACTOR)
+   333→    if (r.success) toast.info('Archived', { description: 'Historical record — payments remain readable.' })
+   334→    else toast.error('Could not archive', { description: r.error })
+   335→  }
+   336→  const deleteCharge = (c: AdditionalCharge) => {
+   337→    // UI-level guard: a form (any state) explicitly links to this draft →
+   338→    // deleting would orphan the form's payment path.
+   339→    const linkedApp = appByChargeId.get(c.id)
+   340→    if (linkedApp) {
+   341→      toast.error('Cannot delete this draft', {
+   342→        description: `The form "${linkedApp.title}" is linked to it. Delete that form draft first (Applications & Forms).`,
+   343→      })
+   344→      return
+   345→    }
+   346→    const r = useFeeStore.getState().deleteAdditionalCharge(c.id, ACTOR)
+   347→    if (r.success) {
+   348→      toast.success('Draft deleted', { description: `"${c.name}" was removed permanently.` })
+   349→      if (detailId === c.id) setDetailId(null)
+   350→    } else {
+   351→      toast.error('Could not delete', { description: r.error })
+   352→    }
+   353→  }
+   354→
+   355→  return (
+   356→    <>
+   357→      <Panel
+   358→        title={
+   359→          <span className="inline-flex items-center gap-2">
+   360→            Additional Collections
+   361→            <Badge variant="outline" className="text-[9px] h-4 px-1.5">
+   362→              {orderedCharges.filter((c) => c.status === 'Active' || c.status === 'Draft').length}
+   363→            </Badge>
+   364→          </span>
+   365→        }
+   366→        subtitle="Money collections outside the regular fee structure — tours, events, workshops and special charges."
+   367→        action={
+   368→          <div className="inline-flex items-center gap-1.5">
+   369→            <div className="inline-flex h-7 items-center rounded-full bg-muted/70 p-0.5" role="group" aria-label="Collection scope">
+   370→              {([['all', 'All collections'], ['application', 'Application payments']] as const).map(([v, label]) => (
+   371→                <button
+   372→                  key={v}
+   373→                  type="button"
+   374→                  onClick={() => setScopeFilter(v)}
+   375→                  aria-pressed={scopeFilter === v}
+   376→                  className={cn(
+   377→                    'px-2.5 h-6 rounded-full text-[10.5px] font-medium whitespace-nowrap transition-all',
+   378→                    scopeFilter === v ? 'bg-white dark:bg-white/10 shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground',
+   379→                  )}
+   380→                >
+   381→                  {label}
+   382→                </button>
+   383→              ))}
+   384→            </div>
+   385→            <Button
+   386→              variant="outline"
+   387→              size="sm"
+   388→              className="h-7 text-[11px] gap-1 shrink-0"
+   389→              onClick={() => setWizard({ open: true })}
+   390→              aria-label="Create a new collection"
+   391→            >
+   392→              <Plus className="h-3 w-3" /> New Collection
+   393→            </Button>
+   394→          </div>
+   395→        }
+   396→        bodyClassName="p-0"
+   397→      >
+   398→        {orderedCharges.length > 0 ? (
+   399→          <div className="divide-y divide-border">
+   400→            {orderedCharges.map((c) => {
+   401→              const f = facts.get(c.id) ?? EMPTY_FACTS
+   402→              const app = appByChargeId.get(c.id)
+   403→              return (
+   404→                <motion.div key={c.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>
+   405→                  <CollectionRow
+   406→                    charge={c}
+   407→                    facts={f}
+   408→                    app={app}
+   409→                    hasLinkedForm={appByChargeId.has(c.id)}
+   410→                    onOpen={() => setDetailId(c.id)}
+   411→                    onEdit={() => setWizard({ open: true, editing: c })}
+   412→                    onPublish={() => publishCharge(c)}
+   413→                    onClose={() => closeCharge(c)}
+   414→                    onArchive={() => archiveCharge(c)}
+   415→                    onDelete={() => setDeleteTarget(c)}
+   416→                    onCollect={onCollect}
+   417→                  />
+   418→                </motion.div>
+   419→              )
+   420→            })}
+   421→          </div>
+   422→        ) : (
+   423→          <FeeEmptyState
+   424→            icon={<CircleDollarSign className="h-6 w-6" />}
+   425→            title={scopeFilter === 'application' ? 'No application payments yet' : 'No additional collections yet'}
+   426→            description={scopeFilter === 'application'
+   427→              ? 'Collections linked to a published form appear here once a paid form goes live.'
+   428→              : 'Create a collection for a tour, event, workshop, activity or any special school charge.'}
+   429→            action={scopeFilter === 'all' ? (
+   430→              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setWizard({ open: true })}>
+   431→                <Plus className="h-3 w-3" /> New Collection
+   432→              </Button>
+   433→            ) : undefined}
+   434→          />
+   435→        )}
+   436→      </Panel>
+   437→
+   438→      {/* Creation / edit wizard */}
+   439→      {wizard?.open && (
+   440→        <CollectionWizardDialog
+   441→          editing={wizard.editing}
+   442→          activeStudents={activeStudents}
+   443→          onClose={() => setWizard(null)}
+   444→        />
+   445→      )}
+   446→
+   447→      {/* Delete-draft confirmation (§17 — honest, non-technical language) */}
+   448→      {deleteTarget && (
+   449→        <AlertDialog open onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
+   450→          <AlertDialogContent className="max-w-sm">
+   451→            <AlertDialogHeader>
+   452→              <AlertDialogTitle>Delete draft collection?</AlertDialogTitle>
+   453→              <AlertDialogDescription>
+   454→                {appByChargeId.has(deleteTarget.id)
+   455→                  ? `The form "${appByChargeId.get(deleteTarget.id)!.title}" is linked to this collection — delete that form draft first.`
+   456→                  : `"${deleteTarget.name}" has not been published and has no payments on record. It will be permanently removed.`}
+   457→              </AlertDialogDescription>
+   458→            </AlertDialogHeader>
+   459→            <AlertDialogFooter>
+   460→              <AlertDialogCancel>Cancel</AlertDialogCancel>
+   461→              <AlertDialogAction
+   462→                className="bg-rose-600 hover:bg-rose-700 text-white"
+   463→                disabled={appByChargeId.has(deleteTarget.id)}
+   464→                onClick={() => { deleteCharge(deleteTarget); setDeleteTarget(null) }}
+   465→              >
+   466→                Delete Draft
+   467→              </AlertDialogAction>
+   468→            </AlertDialogFooter>
+   469→          </AlertDialogContent>
+   470→        </AlertDialog>
+   471→      )}
+   472→
+   473→      {/* Collection status drawer */}
+   474→      {detailCharge && (
+   475→        <CollectionStatusSheet
+   476→          charge={detailCharge}
+   477→          facts={facts.get(detailCharge.id) ?? EMPTY_FACTS}
+   478→          app={appByChargeId.get(detailCharge.id)}
+   479→          activeStudents={activeStudents}
+   480→          onClose={() => setDetailId(null)}
+   481→          onEdit={() => { setDetailId(null); setWizard({ open: true, editing: detailCharge }) }}
+   482→          onPublish={() => publishCharge(detailCharge)}
+   483→          onCloseCollection={() => closeCharge(detailCharge)}
+   484→          onArchive={() => archiveCharge(detailCharge)}
+   485→          onDelete={() => setDeleteTarget(detailCharge)}
+   486→          onCollect={onCollect}
+   487→        />
+   488→      )}
+   489→    </>
+   490→  )
+   491→}
+   492→
+   493→// ─── One collection row + state-aware action menu ──────────────────────
+   494→
+   495→function CollectionRow({
+   496→  charge, facts, app, hasLinkedForm, onOpen, onEdit, onPublish, onClose, onArchive, onDelete, onCollect,
+   497→}: {
+   498→  charge: AdditionalCharge
+   499→  facts: ChargeFacts
+   500→  app?: SchoolApplication
+   501→  hasLinkedForm: boolean
+   502→  onOpen: () => void
+   503→  onEdit: () => void
+   504→  onPublish: () => void
+   505→  onClose: () => void
+   506→  onArchive: () => void
+   507→  onDelete: () => void
+   508→  onCollect?: () => void
+   509→}) {
+   510→  // ── State-aware action menu (§16): only meaningful actions per state ──
+   511→  const actions: Array<{ label: string; icon: ReactNode; onSelect: () => void; danger?: boolean }> = []
+   512→  if (charge.status === 'Draft') {
+   513→    actions.push(
+   514→      { label: 'Edit draft', icon: <PencilLine className="h-3.5 w-3.5" />, onSelect: onEdit },
+   515→      { label: 'Publish now', icon: <Send className="h-3.5 w-3.5" />, onSelect: onPublish },
+   516→      { label: 'Delete draft', icon: <Trash2 className="h-3.5 w-3.5" />, onSelect: onDelete, danger: true },
+   517→    )
+   518→  } else if (charge.status === 'Active') {
+   519→    if (onCollect) {
+   520→      actions.push({ label: 'Record payment', icon: <Wallet className="h-3.5 w-3.5" />, onSelect: onCollect })
+   521→    }
+   522→    actions.push(
+   523→      { label: 'Edit safe details', icon: <PencilLine className="h-3.5 w-3.5" />, onSelect: onEdit },
+   524→      { label: 'Close collection', icon: <XCircle className="h-3.5 w-3.5" />, onSelect: onClose },
+   525→    )
+   526→  } else if (charge.status === 'Closed') {
+   527→    actions.push({ label: 'Archive', icon: <Archive className="h-3.5 w-3.5" />, onSelect: onArchive })
+   528→  }
+   529→  // Every state: view status (open drawer).
+   530→
+   531→  return (
+   532→    <div className="relative flex items-start justify-between gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors">
+   533→      <button
+   534→        type="button"
+   535→        onClick={onOpen}
+   536→        className="flex items-start gap-3 min-w-0 flex-1 text-left"
+   537→        aria-label={`Open ${charge.name} payment status`}
+   538→      >
+   539→        {/* Left — category icon chip + name + chips + meta line */}
+   540→        <div className="flex items-start gap-3 min-w-0 flex-1">
+   541→          <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', categoryTone(charge.category))}>
+   542→            <CategoryIcon category={charge.category} className="h-4 w-4" />
+   543→          </span>
+   544→          <div className="min-w-0">
+   545→            <div className="flex items-center gap-1.5 min-w-0">
+   546→              <p className={cn('text-xs font-semibold truncate', charge.status !== 'Active' && charge.status !== 'Draft' && 'text-muted-foreground')}>{charge.name}</p>
+   547→              {charge.status === 'Draft' && (
+   548→                <MiniChip className="bg-slate-500/10 text-slate-600 dark:text-slate-300 ring-1 ring-inset ring-slate-400/30">Draft</MiniChip>
+   549→              )}
+   550→              <MiniChip className={charge.mandatory ? 'bg-slate-500/10 text-slate-600 dark:text-slate-300' : 'bg-muted text-muted-foreground'}>
+   551→                {charge.mandatory ? 'Mandatory' : 'Optional'}
+   552→              </MiniChip>
+   553→              {charge.allowCustomAmount && (
+   554→                <MiniChip className="bg-violet-500/10 text-violet-700 dark:text-violet-300">Custom amount</MiniChip>
+   555→              )}
+   556→            </div>
+   557→            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+   558→              <span className="font-medium">{charge.category}</span>
+   559→              {' · '}{app ? `Linked form · ${app.title}` : charge.status === 'Draft' ? 'Draft — not published yet' : 'Standalone'}
+   560→              {' · '}{classLabels(charge.applicableClassIds)}
+   561→              {charge.studentIds?.length ? ` · ${charge.studentIds.length} students` : charge.status !== 'Draft' ? ` · ${facts.students} student${facts.students === 1 ? '' : 's'}` : ''}
+   562→              {charge.dueDate ? ` · due ${formatDate(charge.dueDate)}` : ' · no due date'}
+   563→            </p>
+   564→            {/* Mobile-only figures — the right rail is hidden below sm */}
+   565→            <p className="sm:hidden mt-1 text-[10px] text-muted-foreground tabular-nums">
+   566→              {charge.status === 'Draft'
+   567→                ? 'No payments while in draft'
+   568→                : `${formatINR(facts.collected)} collected · ${facts.txns.length} payment${facts.txns.length === 1 ? '' : 's'}`}
+   569→            </p>
+   570→          </div>
+   571→        </div>
+   572→
+   573→        {/* Right — labelled figures, progress, status */}
+   574→        <div className="hidden sm:block shrink-0 w-36 lg:w-40 text-right">
+   575→          {charge.status === 'Draft' ? (
+   576→            <p className="text-[10px] text-muted-foreground leading-tight pt-1.5">
+   577→              {charge.allowCustomAmount
+   578→                ? <>open amount{charge.targetAmount ? ` · target ${formatINR(charge.targetAmount)}` : ''}</>
+   579→                : <>{formatINR(charge.amount)} per student</>}
+   580→              <span className="block mt-0.5">publish to start collecting</span>
+   581→            </p>
+   582→          ) : (
+   583→            <>
+   584→              <p className={cn('text-sm font-bold tabular-nums leading-tight truncate', facts.collected > 0 && 'text-emerald-600 dark:text-emerald-400')}>
+   585→                {formatINR(facts.collected)}{' '}
+   586→                <span className="text-[9px] font-semibold text-muted-foreground">collected</span>
+   587→              </p>
+   588→              <p className="text-[9px] text-muted-foreground truncate">
+   589→                {charge.allowCustomAmount
+   590→                  ? charge.targetAmount
+   591→                    ? <>of {formatINR(charge.targetAmount)} target</>
+   592→                    : 'open amount'
+   593→                  : <>of {formatINR(facts.expected)} expected</>}
+   594→              </p>
+   595→              {facts.pct != null && (
+   596→                <div className="mt-1.5 flex items-center gap-1.5">
+   597→                  <div aria-hidden className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+   598→                    <motion.div
+   599→                      initial={{ width: 0 }}
+   600→                      animate={{ width: `${facts.pct}%` }}
+   601→                      transition={{ duration: 0.5, ease: 'easeOut' }}
+   602→                      className="h-full rounded-full bg-emerald-500"
+   603→                    />
+   604→                  </div>
+   605→                  <span className="w-7 text-right text-[9px] font-semibold text-muted-foreground tabular-nums">{facts.pct}%</span>
+   606→                </div>
+   607→              )}
+   608→            </>
+   609→          )}
+   610→          <div className="mt-1.5 flex items-center justify-end gap-1.5">
+   611→            <StatusChip status={charge.status} />
+   612→            <span className="text-[10px] text-muted-foreground tabular-nums">
+   613→              {charge.status === 'Draft' ? '—' : `${facts.txns.length} payment${facts.txns.length === 1 ? '' : 's'}`}
+   614→            </span>
+   615→          </div>
+   616→        </div>
+   617→      </button>
+   618→
+   619→      {/* Kebab — lifecycle actions */}
+   620→      <div className="shrink-0 relative z-10">
+   621→        <DropdownMenu>
+   622→          <DropdownMenuTrigger asChild>
+   623→            <button
+   624→              type="button"
+   625→              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+   626→              aria-label={`Actions for ${charge.name}`}
+   627→            >
+   628→              <MoreHorizontal className="h-3.5 w-3.5" />
+   629→            </button>
+   630→          </DropdownMenuTrigger>
+   631→          <DropdownMenuContent align="end" className="w-52 z-[70]">
+   632→            <DropdownMenuItem onSelect={onOpen} className="text-[11px]">
+   633→              <FileText className="h-3.5 w-3.5" /> View status
+   634→            </DropdownMenuItem>
+   635→            {actions.length > 0 && <DropdownMenuSeparator />}
+   636→            {actions.map((a) => (
+   637→              <Fragment key={a.label}>
+   638→                <DropdownMenuItem
+   639→                  onSelect={a.onSelect}
+   640→                  className={cn('text-[11px]', a.danger && 'text-rose-600 focus:text-rose-600 dark:text-rose-400 dark:focus:text-rose-400')}
+   641→                >
+   642→                  {a.icon} {a.label}
+   643→                </DropdownMenuItem>
+   644→              </Fragment>
+   645→            ))}
+   646→            {charge.status === 'Archived' && actions.length === 0 && (
+   647→              <p className="px-2 py-1.5 text-[10px] text-muted-foreground">Permanent historical record</p>
+   648→            )}
+   649→          </DropdownMenuContent>
+   650→        </DropdownMenu>
+   651→      </div>
+   652→    </div>
+   653→  )
+   654→}
+   655→
+   656→// ─── Collection wizard (create + edit) ─────────────────────────────────
+   657→
+   658→function CollectionWizardDialog({
+   659→  editing, activeStudents, onClose,
+   660→}: {
+   661→  editing?: AdditionalCharge
+   662→  activeStudents: StudentRecord[]
+   663→  onClose: () => void
+   664→}) {
+   665→  const createAdditionalCharge = useFeeStore((s) => s.createAdditionalCharge)
+   666→  const updateAdditionalCharge = useFeeStore((s) => s.updateAdditionalCharge)
+   667→
+   668→  const [w, setW] = useState<WizardState>(() => editing ? wizardFromCharge(editing) : freshWizard())
+   669→  const patch = (p: Partial<WizardState>) => setW((f) => ({ ...f, ...p }))
+   670→
+   671→  const isDraft = editing?.status === 'Draft' || !editing
+   672→  const isEditActive = editing?.status === 'Active'
+   673→  // Money lock: amount frozen once payments exist (the store enforces too).
+   674→  const boundPayments = useFeeStore((s) => (editing ? s.transactions.filter((t) => t.additionalChargeId === editing.id).length : 0))
+   675→  const amountLocked = isEditActive && boundPayments > 0
+   676→
+   677→  const toggleClass = (id: string) => {
+   678→    const next = w.applicableClassIds.includes(id)
+   679→      ? w.applicableClassIds.filter((c) => c !== id)
+   680→      : [...w.applicableClassIds, id]
+   681→    patch({ applicableClassIds: next })
+   682→  }
+   683→  const toggleStudent = (id: string) => {
+   684→    const next = w.studentIds.includes(id)
+   685→      ? w.studentIds.filter((s) => s !== id)
+   686→      : [...w.studentIds, id]
+   687→    patch({ studentIds: next })
+   688→  }
+   689→
+   690→  const candidates = useMemo(
+   691→    () => wizardCandidateStudents({ applicableClassIds: w.applicableClassIds }, activeStudents),
+   692→    [w.applicableClassIds, activeStudents],
+   693→  )
+   694→  const scopedCount = w.studentIds.length
+   695→    ? w.studentIds.length
+   696→    : activeStudents.filter((s) => w.applicableClassIds.includes(s.classId)).length
+   697→
+   698→  const handleSave = (publish: boolean) => {
+   699→    if (!w.name.trim()) { toast.error('Give this collection a name.'); return }
+   700→    if (!w.customAmount && !(w.amount > 0)) { toast.error('Enter the per-student amount.'); return }
+   701→    if (w.customAmount && w.targetAmount > 0 && !(w.amount >= 0)) { toast.error('The suggested amount cannot be negative.'); return }
+   702→    if (!publish && !w.applicableClassIds.length && !w.studentIds.length) {
+   703→      // Draft without scope is allowed (Principal still picking targets).
+   704→    } else if (publish && !w.applicableClassIds.length && !w.studentIds.length) {
+   705→      toast.error('Select at least one class (or specific students) before publishing.')
+   706→      return
+   707→    }
+   708→    if (!w.dueDate) { toast.error('Set a payment due date.'); return }
+   709→
+   710→    if (editing) {
+   711→      const r = updateAdditionalCharge(editing.id, {
+   712→        name: w.name,
+   713→        category: w.category,
+   714→        description: w.description,
+   715→        amount: w.amount,
+   716→        applicableClassIds: w.applicableClassIds,
+   717→        studentIds: w.studentIds,
+   718→        dueDate: w.dueDate,
+   719→        startDate: w.startDate,
+   720→        mandatory: w.mandatory,
+   721→        allowCustomAmount: w.customAmount,
+   722→        targetAmount: w.targetAmount,
+   723→        instructions: w.instructions,
+   724→      }, ACTOR)
+   725→      if (!r.success) { toast.error('Could not save changes', { description: r.error }); return }
+   726→      if (publish && editing.status === 'Draft') {
+   727→        const p = useFeeStore.getState().publishAdditionalCharge(editing.id, ACTOR)
+   728→        if (!p.success) { toast.error('Saved — but publishing failed', { description: p.error }); onClose(); return }
+   729→        toast.success('Collection published', { description: `"${w.name}" is now collecting.` })
+   730→      } else {
+   731→        toast.success('Changes saved')
+   732→      }
+   733→      onClose()
+   734→      return
+   735→    }
+   736→    const r = createAdditionalCharge({
+   737→      name: w.name,
+   738→      category: w.category,
+   739→      amount: w.amount,
+   740→      academicYear: CURRENT_YEAR,
+   741→      applicableClassIds: w.applicableClassIds,
+   742→      studentIds: w.studentIds.length ? w.studentIds : undefined,
+   743→      dueDate: w.dueDate,
+   744→      startDate: w.startDate || undefined,
+   745→      mandatory: w.mandatory,
+   746→      description: w.description || undefined,
+   747→      instructions: w.instructions || undefined,
+   748→      allowCustomAmount: w.customAmount || undefined,
+   749→      targetAmount: w.customAmount && w.targetAmount > 0 ? w.targetAmount : undefined,
+   750→      status: publish ? 'Active' : 'Draft',
+   751→      actor: ACTOR,
+   752→    })
+   753→    if (!r.success || !r.charge) { toast.error('Could not create the collection', { description: r.error }); return }
+   754→    toast.success(publish ? 'Collection published' : 'Draft collection created', {
+   755→      description: publish
+   756→        ? `"${w.name}" is now an obligation for its scoped students.`
+   757→        : `"${w.name}" is saved as a draft — publish it when you are ready.`,
+   758→    })
+   759→    onClose()
+   760→  }
+   761→
+   762→  return (
+   763→    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
+   764→      <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto">
+   765→        <DialogHeader>
+   766→          <DialogTitle>{editing ? `Edit — ${editing.name}` : 'New Collection'}</DialogTitle>
+   767→          <DialogDescription>
+   768→            {editing
+   769→              ? isEditActive
+   770→                ? 'Safe details only — name, amount and terms are locked while the collection is live.'
+   771→                : 'Draft collections are fully editable and can be deleted until published.'
+   772→              : 'A special school charge — tour, event, workshop, fund or material. No form is required.'}
+   773→          </DialogDescription>
+   774→        </DialogHeader>
+   775→
+   776→        <div className="space-y-4">
+   777→          {/* Identity */}
+   778→          <div className="grid gap-3">
+   779→            <div className="grid gap-1.5">
+   780→              <Label htmlFor="coll-name" className="text-xs">Collection name</Label>
+   781→              <Input
+   782→                id="coll-name"
+   783→                className="h-8 text-xs"
+   784→                placeholder="e.g. Educational Tour — Jaipur"
+   785→                value={w.name}
+   786→                disabled={isEditActive}
+   787→                onChange={(e) => patch({ name: e.target.value })}
+   788→              />
+   789→            </div>
+   790→            <div>
+   791→              <Label className="text-xs">Type</Label>
+   792→              <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+   793→                {CHARGE_CATEGORIES.map((c) => {
+   794→                  const selected = w.category === c.value
+   795→                  return (
+   796→                    <button
+   797→                      key={c.value}
+   798→                      type="button"
+   799→                      onClick={() => patch({ category: c.value })}
+   800→                      aria-pressed={selected}
+   801→                      className={cn(
+   802→                        'flex flex-col items-center gap-1 rounded-lg border px-1.5 py-2 transition-all',
+   803→                        selected
+   804→                          ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+   805→                          : 'border-border hover:border-primary/40',
+   806→                      )}
+   807→                      aria-label={`${c.value} — ${c.hint}`}
+   808→                    >
+   809→                      <c.icon className={cn('h-4 w-4', selected ? 'text-primary' : 'text-muted-foreground')} />
+   810→                      <span className="text-[9.5px] font-medium leading-tight text-center">{c.value}</span>
+   811→                    </button>
+   812→                  )
+   813→                })}
+   814→              </div>
+   815→            </div>
+   816→            <div className="grid gap-1.5">
+   817→              <Label htmlFor="coll-desc" className="text-xs">Description <span className="text-muted-foreground font-normal">(shown to parents)</span></Label>
+   818→              <Textarea
+   819→                id="coll-desc"
+   820→                className="min-h-[56px] text-xs"
+   821→                placeholder="What this charge covers, opt-out rules…"
+   822→                value={w.description}
+   823→                onChange={(e) => patch({ description: e.target.value })}
+   824→              />
+   825→            </div>
+   826→          </div>
+   827→
+   828→          {/* Money */}
+   829→          <div className="rounded-lg border border-border p-3 space-y-3">
+   830→            <div className="flex items-center justify-between gap-3">
+   831→              <div>
+   832→                <p className="text-xs font-semibold">Fixed amount per student</p>
+   833→                <p className="text-[10px] text-muted-foreground">Turn off for donation-style drives with custom contributions.</p>
+   834→              </div>
+   835→              <Switch
+   836→                checked={!w.customAmount}
+   837→                onCheckedChange={(fixed) => patch({ customAmount: !fixed })}
+   838→                disabled={isEditActive}
+   839→                aria-label="Fixed amount per student"
+   840→              />
+   841→            </div>
+   842→            {w.customAmount ? (
+   843→              <div className="grid grid-cols-2 gap-3">
+   844→                <div className="grid gap-1.5">
+   845→                  <Label className="text-xs">Suggested amount</Label>
+   846→                  <MoneyInput value={w.amount} onChange={(v) => patch({ amount: v ?? 0 })} className="h-8 text-xs" disabled={amountLocked} />
+   847→                </div>
+   848→                <div className="grid gap-1.5">
+   849→                  <Label className="text-xs">Overall target <span className="text-muted-foreground font-normal">(optional)</span></Label>
+   850→                  <MoneyInput value={w.targetAmount} onChange={(v) => patch({ targetAmount: v ?? 0 })} className="h-8 text-xs" />
+   851→                </div>
+   852→              </div>
+   853→            ) : (
+   854→              <div className="grid grid-cols-2 gap-3">
+   855→                <div className="grid gap-1.5">
+   856→                  <Label className="text-xs">Amount per student</Label>
+   857→                  <MoneyInput value={w.amount} onChange={(v) => patch({ amount: v ?? 0 })} className="h-8 text-xs" disabled={amountLocked} />
+   858→                  {amountLocked && <p className="text-[10px] text-amber-600 dark:text-amber-400">Locked — payments exist against this collection.</p>}
+   859→                </div>
+   860→                <div className="grid gap-1.5">
+   861→                  <Label className="text-xs">Expected total</Label>
+   862→                  <p className="h-8 flex items-center text-xs font-semibold tabular-nums text-muted-foreground border border-dashed border-border rounded-md px-2.5">
+   863→                    {w.applicableClassIds.length || w.studentIds.length
+   864→                      ? formatINR(w.customAmount ? w.targetAmount : w.amount * scopedCount)
+   865→                      : 'select scope'}
+   866→                  </p>
+   867→                </div>
+   868→              </div>
+   869→            )}
+   870→            <div className="flex items-center justify-between gap-3">
+   871→              <div>
+   872→                <p className="text-xs font-semibold">Mandatory for scoped students</p>
+   873→                <p className="text-[10px] text-muted-foreground">Optional charges can be declined by the payer.</p>
+   874→              </div>
+   875→              <Switch
+   876→                checked={w.mandatory}
+   877→                onCheckedChange={(v) => patch({ mandatory: v })}
+   878→                disabled={isEditActive}
+   879→                aria-label="Mandatory for scoped students"
+   880→              />
+   881→            </div>
+   882→          </div>
+   883→
+   884→          {/* Scope */}
+   885→          <div className="rounded-lg border border-border p-3 space-y-3">
+   886→            <div>
+   887→              <Label className="text-xs">Applicable classes</Label>
+   888→              <div className="mt-1.5 flex flex-wrap gap-1.5">
+   889→                {UNIQUE_CLASSES.map((c) => {
+   890→                  const selected = w.applicableClassIds.includes(c.id)
+   891→                  // Classes share ids across sections — toggling one toggles all sections of the class name.
+   892→                  const idsOfName = ACADEMIC_CLASSES.filter((ac) => ac.name === c.name).map((ac) => ac.id)
+   893→                  const isOn = idsOfName.every((id) => w.applicableClassIds.includes(id))
+   894→                  return (
+   895→                    <button
+   896→                      key={c.id}
+   897→                      type="button"
+   898→                      onClick={() => {
+   899→                        const next = isOn
+   900→                          ? w.applicableClassIds.filter((id) => !idsOfName.includes(id))
+   901→                          : Array.from(new Set([...w.applicableClassIds, ...idsOfName]))
+   902→                        patch({ applicableClassIds: next })
+   903→                      }}
+   904→                      aria-pressed={isOn}
+   905→                      className={cn(
+   906→                        'h-7 px-2.5 rounded-full text-[11px] font-medium border transition-all',
+   907→                        isOn ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary/20' : 'border-border text-muted-foreground hover:border-primary/40',
+   908→                      )}
+   909→                    >
+   910→                      {c.name}
+   911→                    </button>
+   912→                  )
+   913→                })}
+   914→              </div>
+   915→            </div>
+   916→            <div>
+   917→              <div className="flex items-center justify-between">
+   918→                <Label className="text-xs">Specific students <span className="text-muted-foreground font-normal">(optional override)</span></Label>
+   919→                <span className="text-[10px] text-muted-foreground tabular-nums">
+   920→                  {w.studentIds.length ? `${w.studentIds.length} selected` : `${scopedCount} in scope`}
+   921→                </span>
+   922→              </div>
+   923→              {candidates.length > 0 && (
+   924→                <div className="mt-1.5 max-h-28 overflow-y-auto rounded-md border border-border divide-y divide-border/60">
+   925→                  {candidates.map((s) => (
+   926→                    <label key={s.id} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted/30 cursor-pointer">
+   927→                      <input
+   928→                        type="checkbox"
+   929→                        className="h-3.5 w-3.5 accent-primary"
+   930→                        checked={w.studentIds.includes(s.id)}
+   931→                        onChange={() => toggleStudent(s.id)}
+   932→                        aria-label={`Include ${s.name}`}
+   933→                      />
+   934→                      <span className="text-[11px] font-medium truncate">{s.name}</span>
+   935→                      <span className="ml-auto text-[9px] text-muted-foreground shrink-0">{s.className} — {s.section}</span>
+   936→                    </label>
+   937→                  ))}
+   938→                </div>
+   939→              )}
+   940→            </div>
+   941→          </div>
+   942→
+   943→          {/* Schedule */}
+   944→          <div className="grid grid-cols-2 gap-3">
+   945→            <div className="grid gap-1.5">
+   946→              <Label className="text-xs">Start date <span className="text-muted-foreground font-normal">(optional)</span></Label>
+   947→              <DatePicker value={w.startDate || undefined} onChange={(d) => patch({ startDate: d ?? '' })} className="h-8 text-xs" />
+   948→            </div>
+   949→            <div className="grid gap-1.5">
+   950→              <Label className="text-xs">Due date</Label>
+   951→              <DatePicker value={w.dueDate || undefined} onChange={(d) => patch({ dueDate: d ?? '' })} className="h-8 text-xs" />
+   952→            </div>
+   953→          </div>
+   954→
+   955→          {/* Instructions */}
+   956→          <div className="grid gap-1.5">
+   957→            <Label htmlFor="coll-instructions" className="text-xs">Instructions for payers <span className="text-muted-foreground font-normal">(optional)</span></Label>
+   958→            <Textarea
+   959→              id="coll-instructions"
+   960→              className="min-h-[48px] text-xs"
+   961→              placeholder="Where/how to pay, office timings, contact for queries…"
+   962→              value={w.instructions}
+   963→              onChange={(e) => patch({ instructions: e.target.value })}
+   964→            />
+   965→          </div>
+   966→        </div>
+   967→
+   968→        <DialogFooter className="gap-2">
+   969→          <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={onClose}>Cancel</Button>
+   970→          {(!editing || editing.status === 'Draft') ? (
+   971→            <>
+   972→              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => handleSave(false)}>
+   973→                <Edit3 className="h-3.5 w-3.5" /> Save as draft
+   974→              </Button>
+   975→              <Button size="sm" className="h-8 text-xs" onClick={() => handleSave(true)}>
+   976→                <CheckCircle2 className="h-3.5 w-3.5" /> Save &amp; publish
+   977→              </Button>
+   978→            </>
+   979→          ) : (
+   980→            <Button size="sm" className="h-8 text-xs" onClick={() => handleSave(false)}>
+   981→              <CheckCircle2 className="h-3.5 w-3.5" /> Save changes
+   982→            </Button>
+   983→          )}
+   984→        </DialogFooter>
+   985→      </DialogContent>
+   986→    </Dialog>
+   987→  )
+   988→}
+   989→
+   990→const UNIQUE_CLASSES = (() => {
+   991→  const seen = new Set<string>()
+   992→  return ACADEMIC_CLASSES.filter((c) => {
+   993→    if (seen.has(c.name)) return false
+   994→    seen.add(c.name)
+   995→    return true
+   996→  })
+   997→})()
+   998→
+   999→// ─── Collection status drawer ──────────────────────────────────────────
+  1000→
+  1001→type DetailTab = 'students' | 'payments'
+  1002→
+  1003→const DETAIL_TABS: Array<{ value: DetailTab; label: string }> = [
+  1004→  { value: 'students', label: 'Students' },
+  1005→  { value: 'payments', label: 'Payments' },
+  1006→]
+  1007→
+  1008→function MiniTile({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  1009→  return (
+  1010→    <div className="min-w-0 rounded-lg bg-muted/30 px-2 py-1.5">
+  1011→      <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground truncate">{label}</p>
+  1012→      <p className={cn('mt-0.5 truncate text-xs font-bold tabular-nums', accent && 'text-emerald-600 dark:text-emerald-400')}>{value}</p>
+  1013→    </div>
+  1014→  )
+  1015→}
+  1016→
+  1017→function CollectionStatusSheet({
+  1018→  charge, facts, app, activeStudents, onClose, onEdit, onPublish, onCloseCollection, onArchive, onDelete, onCollect,
+  1019→}: {
+  1020→  charge: AdditionalCharge
+  1021→  facts: ChargeFacts
+  1022→  app?: SchoolApplication
+  1023→  activeStudents: StudentRecord[]
+  1024→  onClose: () => void
+  1025→  onEdit: () => void
+  1026→  onPublish: () => void
+  1027→  onCloseCollection: () => void
+  1028→  onArchive: () => void
+  1029→  onDelete: () => void
+  1030→  onCollect?: () => void
+  1031→}) {
+  1032→  const [tab, setTab] = useState<DetailTab>('students')
+  1033→  const submissions = useApplicationsStore((s) => s.submissions)
+  1034→  const linkedSubs = useMemo(
+  1035→    () => app ? submissions.filter((sub) => sub.applicationId === app.id) : [],
+  1036→    [app, submissions],
+  1037→  )
+  1038→
+  1039→  const isCustom = charge.allowCustomAmount === true
+  1040→  const scoped = useMemo(() => scopedStudentsFor(charge, activeStudents), [charge, activeStudents])
+  1041→
+  1042→  // Per-student payment state derived from the bound transactions.
+  1043→  const studentStates = useMemo(() => {
+  1044→    const map = new Map<string, { paid: number; verifying: boolean }>()
+  1045→    for (const t of facts.txns) {
+  1046→      const cur = map.get(t.studentId) ?? { paid: 0, verifying: false }
+  1047→      if (t.status === 'Success' || t.status === 'Under Verification') cur.paid += t.amount
+  1048→      if (t.status === 'Under Verification') cur.verifying = true
+  1049→      map.set(t.studentId, cur)
+  1050→    }
+  1051→    return map
+  1052→  }, [facts.txns])
+  1053→
+  1054→  const paidCount = scoped.filter((s) => {
+  1055→    const st = studentStates.get(s.id)
+  1056→    const paid = st?.paid ?? 0
+  1057→    return isCustom ? paid > 0 : paid >= charge.amount
+  1058→  }).length
+  1059→
+  1060→  // Bound payments, newest first (Payments tab).
+  1061→  const payments = useMemo(
+  1062→    () => [...facts.txns].sort((a, b) => b.date.localeCompare(a.date) || b.receiptNo.localeCompare(a.receiptNo)),
+  1063→    [facts.txns],
+  1064→  )
+  1065→
+  1066→  // Compact meta rows — record context without a separate management tab.
+  1067→  const metaRows: Array<{ label: string; value: string }> = []
+  1068→  if (charge.description) metaRows.push({ label: 'Description', value: charge.description })
+  1069→  if (charge.instructions) metaRows.push({ label: 'Instructions', value: charge.instructions })
+  1070→  if (charge.reference) metaRows.push({ label: 'Reference', value: charge.reference })
+  1071→  metaRows.push({
+  1072→    label: 'Created by',
+  1073→    value: `${charge.createdBy}${charge.createdAt ? ` · ${formatDate(charge.createdAt)}` : ''}`,
+  1074→  })
+  1075→  metaRows.push({ label: 'Session', value: charge.academicYear })
+  1076→  metaRows.push({ label: 'Due date', value: formatDate(charge.dueDate) })
+  1077→  if (charge.status === 'Closed') {
+  1078→    metaRows.push({
+  1079→      label: 'Closed',
+  1080→      value: `${charge.closedAt ? formatDate(charge.closedAt) : '—'}${charge.closeNote ? ` — ${charge.closeNote}` : ''}`,
+  1081→    })
+  1082→  }
+  1083→  if (charge.status === 'Cancelled') {
+  1084→    metaRows.push({ label: 'Cancelled', value: charge.cancelReason ?? 'No reason recorded' })
+  1085→  }
+  1086→  if (charge.status === 'Archived') {
+  1087→    metaRows.push({
+  1088→      label: 'Archived',
+  1089→      value: `${charge.archivedAt ? formatDate(charge.archivedAt) : '—'}${charge.archiveNote ? ` — ${charge.archiveNote}` : ''}`,
+  1090→    })
+  1091→  }
+  1092→
+  1093→  const expectedDisplay = charge.status === 'Draft'
+  1094→    ? isCustom
+  1095→      ? charge.targetAmount ? formatINR(charge.targetAmount) : 'Open'
+  1096→      : formatINR(charge.amount * scoped.length)
+  1097→    : isCustom
+  1098→      ? charge.targetAmount && charge.targetAmount > 0 ? formatINR(charge.targetAmount) : 'Open'
+  1099→      : formatINR(facts.expected)
+  1100→  const pendingDisplay = facts.expected > 0
+  1101→    ? formatINR(Math.max(0, facts.expected - facts.collected))
+  1102→    : isCustom ? '—' : formatINR(0)
+  1103→
+  1104→  return (
+  1105→    <Sheet open onOpenChange={(o) => { if (!o) onClose() }}>
+  1106→      <SheetContent side="right" className="w-full sm:max-w-md p-0 gap-0 flex flex-col">
+  1107→        {/* Header — icon chip + name + status + source line */}
+  1108→        <SheetHeader className="space-y-0 border-b border-border/60 px-4 pb-3 pt-4 text-left">
+  1109→          <div className="flex items-start gap-3 pr-8">
+  1110→            <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', categoryTone(charge.category))}>
+  1111→              <CategoryIcon category={charge.category} className="h-4 w-4" />
+  1112→            </span>
+  1113→            <div className="min-w-0">
+  1114→              <div className="flex items-center gap-1.5 min-w-0">
+  1115→                <SheetTitle className="truncate text-sm font-bold leading-tight">{charge.name}</SheetTitle>
+  1116→                <StatusChip status={charge.status} />
+  1117→              </div>
+  1118→              <SheetDescription className="mt-0.5 truncate text-[10px] text-muted-foreground">
+  1119→                {app ? `Linked form · ${app.title}` : charge.status === 'Draft' ? 'Draft — not published yet' : 'Standalone'} · {charge.category}
+  1120→              </SheetDescription>
+  1121→            </div>
+  1122→          </div>
+  1123→        </SheetHeader>
+  1124→
+  1125→        {/* Summary strip — 4 labelled mini tiles + progress */}
+  1126→        <div className="border-b border-border/60 px-4 pb-2.5 pt-3">
+  1127→          <div className="grid grid-cols-4 gap-1.5">
+  1128→            <MiniTile label="Expected" value={expectedDisplay} />
+  1129→            <MiniTile label="Collected" value={charge.status === 'Draft' ? '—' : formatINR(facts.collected)} accent={facts.collected > 0} />
+  1130→            <MiniTile label="Pending" value={charge.status === 'Draft' ? '—' : pendingDisplay} />
+  1131→            <MiniTile label="Students" value={String(charge.status === 'Draft' ? scoped.length : facts.students)} />
+  1132→          </div>
+  1133→          {charge.status !== 'Draft' && facts.pct != null && (
+  1134→            <div className="mt-2 flex items-center gap-1.5">
+  1135→              <div aria-hidden className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+  1136→                <motion.div
+  1137→                  initial={{ width: 0 }}
+  1138→                  animate={{ width: `${facts.pct}%` }}
+  1139→                  transition={{ duration: 0.5, ease: 'easeOut' }}
+  1140→                  className="h-full rounded-full bg-emerald-500"
+  1141→                />
+  1142→              </div>
+  1143→              <span className="w-7 text-right text-[9px] font-semibold text-muted-foreground tabular-nums">{facts.pct}%</span>
+  1144→            </div>
+  1145→          )}
+  1146→        </div>
+  1147→
+  1148→        {/* Linked form block (§29/§36) — responses + payments at a glance */}
+  1149→        {app && (
+  1150→          <div className="border-b border-border/60 px-4 py-2.5">
+  1151→            <div className="flex items-center gap-2.5">
+  1152→              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 ring-1 ring-sky-500/20">
+  1153→                <FileText className="h-3.5 w-3.5" />
+  1154→              </span>
+  1155→              <div className="min-w-0 flex-1">
+  1156→                <p className="truncate text-[11px] font-semibold">{app.title}</p>
+  1157→                <p className="text-[9.5px] text-muted-foreground truncate">
+  1158→                  {linkedSubs.length} response{linkedSubs.length === 1 ? '' : 's'} · deadline {app.deadline ? formatDate(app.deadline) : '—'} · form handles responses, this collection handles the money
+  1159→                </p>
+  1160→              </div>
+  1161→              <span className="shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground">Linked form</span>
+  1162→            </div>
+  1163→          </div>
+  1164→        )}
+  1165→
+  1166→        {/* Compact segmented tab row */}
+  1167→        <div className="flex items-center gap-1 border-b border-border/60 px-4 py-2" role="tablist" aria-label="Collection detail tabs">
+  1168→          {DETAIL_TABS.map((t) => (
+  1169→            <button
+  1170→              key={t.value}
+  1171→              type="button"
+  1172→              role="tab"
+  1173→              aria-selected={tab === t.value}
+  1174→              onClick={() => setTab(t.value)}
+  1175→              className={cn(
+  1176→                'rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors',
+  1177→                tab === t.value ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/50',
+  1178→              )}
+  1179→            >
+  1180→              {t.label}
+  1181→            </button>
+  1182→          ))}
+  1183→        </div>
+  1184→
+  1185→        {/* Body */}
+  1186→        <div className="flex-1 overflow-y-auto px-4 py-3">
+  1187→          {tab === 'students' && (
+  1188→            <div>
+  1189→              <p className="pb-1.5 text-[10px] text-muted-foreground">
+  1190→                {charge.status === 'Draft'
+  1191→                  ? 'Draft scope preview — publish to make it an obligation.'
+  1192→                  : `${paidCount} of ${scoped.length} paid${isCustom ? ' · any contribution counts' : ''}`}
+  1193→              </p>
+  1194→              <div className="divide-y divide-border/60">
+  1195→                {scoped.map((s) => {
+  1196→                  const st = studentStates.get(s.id)
+  1197→                  const paid = st?.paid ?? 0
+  1198→                  const isPaid = isCustom ? paid > 0 : paid >= charge.amount
+  1199→                  return (
+  1200→                    <div key={s.id} className="flex items-center gap-2.5 py-2">
+  1201→                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-bold text-muted-foreground">
+  1202→                        {initialsOf(s.name)}
+  1203→                      </span>
+  1204→                      <div className="min-w-0 flex-1">
+  1205→                        <p className="truncate text-xs font-medium">{s.name}</p>
+  1206→                        <p className="text-[9px] text-muted-foreground">{s.className}{paid > 0 ? ` · paid ${formatINR(paid)}` : ''}</p>
+  1207→                      </div>
+  1208→                      {charge.status === 'Draft' ? (
+  1209→                        <MiniChip className="bg-muted text-muted-foreground">Draft</MiniChip>
+  1210→                      ) : isPaid ? (
+  1211→                        <MiniChip className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">Paid</MiniChip>
+  1212→                      ) : st?.verifying ? (
+  1213→                        <MiniChip className="bg-amber-500/10 text-amber-700 dark:text-amber-300">Verifying</MiniChip>
+  1214→                      ) : (
+  1215→                        <MiniChip className="bg-muted text-muted-foreground">Not paid</MiniChip>
+  1216→                      )}
+  1217→                    </div>
+  1218→                  )
+  1219→                })}
+  1220→                {scoped.length === 0 && (
+  1221→                  <p className="py-6 text-center text-xs text-muted-foreground">No students match this collection&apos;s scope.</p>
+  1222→                )}
+  1223→              </div>
+  1224→            </div>
+  1225→          )}
+  1226→
+  1227→          {tab === 'payments' && (
+  1228→            <div>
+  1229→              {payments.length > 0 ? (
+  1230→                <div className="divide-y divide-border/60">
+  1231→                  {payments.map((t) => (
+  1232→                    <div key={t.id} className="flex items-center gap-2.5 py-2">
+  1233→                      <div className="min-w-0 flex-1">
+  1234→                        <p className="truncate text-xs font-medium">{t.studentName}</p>
+  1235→                        <p className="font-mono text-[10px] text-muted-foreground">{t.receiptNo}</p>
+  1236→                      </div>
+  1237→                      <div className="shrink-0 text-right">
+  1238→                        <p className="text-xs font-bold tabular-nums">{formatINR(t.amount)}</p>
+  1239→                        <p className="mt-0.5 text-[9px] text-muted-foreground">{t.mode} · {formatDate(t.date)}</p>
+  1240→                      </div>
+  1241→                      <FeeStatusBadge status={t.status} />
+  1242→                    </div>
+  1243→                  ))}
+  1244→                </div>
+  1245→              ) : (
+  1246→                <p className="py-6 text-center text-xs text-muted-foreground">
+  1247→                  {charge.status === 'Draft'
+  1248→                    ? 'No payments can exist while the collection is a draft.'
+  1249→                    : 'No payments recorded against this collection yet.'}
+  1250→                </p>
+  1251→              )}
+  1252→            </div>
+  1253→          )}
+  1254→
+  1255→          {/* Record context — quiet meta block below the tab content */}
+  1256→          {metaRows.length > 0 && (
+  1257→            <div className="mt-4 rounded-lg bg-muted/30 px-3 py-2.5">
+  1258→              <div className="divide-y divide-border/40">
+  1259→                {metaRows.map((r) => (
+  1260→                  <div key={r.label} className="py-1.5 first:pt-0 last:pb-0">
+  1261→                    <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">{r.label}</p>
+  1262→                    <p className="mt-0.5 break-words text-[11px] font-medium">{r.value}</p>
+  1263→                  </div>
+  1264→                ))}
+  1265→              </div>
+  1266→            </div>
+  1267→          )}
+  1268→        </div>
+  1269→
+  1270→        {/* Lifecycle footer — state-aware (§5) */}
+  1271→        <div className="border-t border-border/60 px-4 py-3 flex items-center gap-2 flex-wrap">
+  1272→          {charge.status === 'Draft' && (
+  1273→            <>
+  1274→              <Button size="sm" className="h-7 text-[11px] gap-1" onClick={onPublish}>
+  1275→                <Send className="h-3 w-3" /> Publish
+  1276→              </Button>
+  1277→              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={onEdit}>
+  1278→                <PencilLine className="h-3 w-3" /> Edit
+  1279→              </Button>
+  1280→              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 ml-auto text-rose-600 hover:text-rose-700 dark:text-rose-400" onClick={onDelete}>
+  1281→                <Trash2 className="h-3 w-3" /> Delete draft
+  1282→              </Button>
+  1283→            </>
+  1284→          )}
+  1285→          {charge.status === 'Active' && (
+  1286→            <>
+  1287→              {onCollect && (
+  1288→                <Button size="sm" className="h-7 text-[11px] gap-1" onClick={onCollect}>
+  1289→                  <Wallet className="h-3 w-3" /> Record payment
+  1290→                </Button>
+  1291→              )}
+  1292→              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={onEdit}>
+  1293→                <PencilLine className="h-3 w-3" /> Edit details
+  1294→              </Button>
+  1295→              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 ml-auto" onClick={onCloseCollection}>
+  1296→                <Lock className="h-3 w-3" /> Close collection
+  1297→              </Button>
+  1298→            </>
+  1299→          )}
+  1300→          {charge.status === 'Closed' && (
+  1301→            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={onArchive}>
+  1302→              <Archive className="h-3 w-3" /> Archive
+  1303→            </Button>
+  1304→          )}
+  1305→          {(charge.status === 'Archived' || charge.status === 'Cancelled') && (
+  1306→            <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+  1307→              <IndianRupee className="h-3 w-3" /> Payment history is permanent and stays readable.
+  1308→            </p>
+  1309→          )}
+  1310→        </div>
+  1311→      </SheetContent>
+  1312→    </Sheet>
+  1313→  )
+  1314→}
+  1315→

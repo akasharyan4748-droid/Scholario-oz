@@ -155,7 +155,7 @@ export function MyFormsView() {
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs text-muted-foreground min-w-0 truncate">
-          Create the official form for your event → Principal approval → publish &amp; operate
+          Create a form for a tour, workshop, event or consent you run → Principal approval → publish &amp; operate
         </p>
         <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={() => setView({ name: 'builder' })}>
           <Plus className="h-3 w-3" /> New Form
@@ -167,8 +167,8 @@ export function MyFormsView() {
           <ClipboardList className="h-6 w-6 mx-auto text-muted-foreground/40" />
           <p className="mt-2.5 text-sm font-semibold">No forms yet</p>
           <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed">
-            Create the application form for an event you are in-charge of. It goes to the
-            Principal for approval before students can see it.
+            Build the form for something you are in-charge of — a tour, workshop, competition or consent. It goes to the
+            Principal for approval before students can see it. Money is collected separately by the school office.
           </p>
           <Button variant="outline" size="sm" className="h-7 mt-3 text-[11px] gap-1" onClick={() => setView({ name: 'builder' })}>
             <Plus className="h-3 w-3" /> Create your first form
@@ -301,7 +301,7 @@ export function MyFormsView() {
           <div className="fixed inset-x-0 top-1/2 z-[66] mx-auto w-[min(420px,calc(100vw-2rem))] -translate-y-1/2 rounded-xl border border-border bg-card p-4 shadow-lg">
             <p className="text-sm font-semibold">Submit for Principal approval</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              The Principal reviews the form, payment configuration and questions. You cannot publish without approval.
+              The Principal reviews the form — its questions, scope and any linked money collection. You cannot publish without approval.
             </p>
             <textarea
               className="mt-2.5 w-full min-h-[64px] rounded-md border border-border bg-transparent px-2.5 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"

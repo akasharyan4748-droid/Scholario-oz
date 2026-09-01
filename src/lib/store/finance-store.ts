@@ -488,7 +488,23 @@ export function useFinanceAttention(): FinanceAttentionItem[] {
       })
     }
 
-    // 8 — Reserves below the 3-month operating target.
+    // 8 — Additional collections drafted but never published — work stuck
+    //     BEFORE it can collect money (APPS-IA-1 drafts are invisible to
+    //     students until published; the Principal is the only one who can
+    //     unblock them).
+    const draftCharges = feeData.additionalCharges.filter((c) => c.status === 'Draft')
+    if (draftCharges.length > 0) {
+      items.push({
+        id: 'collection-drafts',
+        severity: 'info',
+        title: 'Draft collections not published',
+        description: `${draftCharges.length} draft collection${draftCharges.length > 1 ? 's' : ''} waiting — students can\u2019t pay until published`,
+        cta: 'Open Collections',
+        module: 'fees',
+      })
+    }
+
+    // 9 — Reserves below the 3-month operating target.
     const cashAvailable = balanceSheet.find((b) => b.account === 'Cash & Bank Balance')?.amount ?? 0
     const monthlyOperatingExpense = financeStats.monthlyRevenue.reduce((s, m) => s + m.expense, 0) / 12
     const reserveCoverage = monthlyOperatingExpense > 0 ? Math.round((cashAvailable / monthlyOperatingExpense) * 10) / 10 : 0

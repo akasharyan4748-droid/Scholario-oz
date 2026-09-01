@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Bell, Menu, Plus, Globe, Radio, Megaphone, Mail } from 'lucide-react'
 import { useAuth } from '@/lib/store/auth-store'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
+import { useLiveFeedStore } from '@/lib/store/live-feed-store'
 import { school } from '@/lib/mock/school'
 // SaaS-STAGE-2A — the shell footer reflects the ACTIVE TENANT's school
 // identity (falls back to the demo school profile for platform surfaces).
@@ -136,9 +137,9 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
           reconnectionDelay: 1500,
           timeout: 10000,
         })
-        socket.on('connect', () => setStreamLive(true))
-        socket.on('disconnect', () => setStreamLive(false))
-        socket.on('connect_error', () => setStreamLive(false))
+        socket.on('connect', () => { setStreamLive(true); useLiveFeedStore.getState().setConnected(true) })
+        socket.on('disconnect', () => { setStreamLive(false); useLiveFeedStore.getState().setConnected(false) })
+        socket.on('connect_error', () => { setStreamLive(false); useLiveFeedStore.getState().setConnected(false) })
         socket.on('school-event', (evt: StreamEvent) => {
           // Scope filter — super admins see the whole platform
           const scope = streamScopeRef.current
@@ -162,6 +163,18 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
             unread: true,
           }
           setNotifList((prev) => [item, ...prev].slice(0, 30))
+
+          // Mirror the same frame into the live-feed ring so dashboard
+          // surfaces (principal Live Activity ticker) can render it without
+          // opening a second socket connection.
+          useLiveFeedStore.getState().push({
+            kind: evt.kind,
+            title: item.title ?? evt.title,
+            detail: item.description ?? evt.detail,
+            amount: evt.amount,
+            method: evt.method,
+            at: evt.at,
+          })
 
           // Premium live toast — accent stripe + icon chip + LIVE pill
           toast.custom(
