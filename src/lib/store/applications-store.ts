@@ -69,6 +69,14 @@ export type ApplicationCategory =
   | 'Exam Application' | 'Board Form' | 'Transport' | 'Activity'
   | 'Certificate' | 'Donation' | 'Custom'
 
+/** APPS-IA-1 — the form's PURPOSE, decoupled from its subject category.
+ *  A form collects information/consent/registration; the category says what
+ *  it is ABOUT (a tour, a workshop…). Templates fix both; free-form builder
+ *  entries may pick any combination. */
+export type FormPurpose =
+  | 'Application' | 'Consent' | 'Registration' | 'Permission'
+  | 'Information' | 'Other'
+
 export type AppStatus =
   | 'Draft' | 'Pending Approval' | 'Changes Requested' | 'Approved' | 'Rejected'
   | 'Published' | 'Closed' | 'Archived'
@@ -152,8 +160,13 @@ export interface ApplicationFormField {
  * Registering a template + gating it in the Super Admin Control Center is
  * all a future form type needs — the store, lifecycle, payments, review,
  * printing and audit pipeline are entirely generic.
+ *
+ * APPS-IA-1 — the module is now GENERAL: the tour template is one of four
+ * seeds (tour · workshop · sports consent · blank/general). Educational
+ * Tour no longer defines the module; it is simply a form type.
  */
-export type ApplicationTemplateKey = 'educational_tour'
+export type ApplicationTemplateKey =
+  | 'educational_tour' | 'workshop_registration' | 'sports_consent' | 'general_application'
 
 export interface ApplicationTemplateDef {
   key: ApplicationTemplateKey
@@ -174,13 +187,13 @@ export interface ApplicationTemplateDef {
   consentStatement: string
 }
 
-/** The single active template. Future: Super Admin-controlled catalogue. */
+/** The template catalogue (seeded; future: Super Admin-controlled). */
 export const APPLICATION_TEMPLATES: Record<ApplicationTemplateKey, ApplicationTemplateDef> = {
   educational_tour: {
     key: 'educational_tour',
     label: 'Educational Tour',
     category: 'Tour',
-    tagline: 'Official tour application — consent, preferences and payment in one form.',
+    tagline: 'Tour consent, preferences and payment in one form.',
     descriptionPlaceholder: 'Itinerary summary, what the fee covers, conduct rules…',
     defaultLedgerLabel: 'Educational Tour',
     defaultAmount: 2500,
@@ -192,6 +205,49 @@ export const APPLICATION_TEMPLATES: Record<ApplicationTemplateKey, ApplicationTe
       { id: 't-photo', type: 'yesno', label: 'May photographs taken on the tour be used for school communication?', required: false, section: 'Consent' },
     ],
     consentStatement: 'I give consent for my ward to participate in the tour and accept the school\u2019s conduct rules for the trip.',
+  },
+  workshop_registration: {
+    key: 'workshop_registration',
+    label: 'Workshop Registration',
+    category: 'Workshop',
+    tagline: 'Register participants for a workshop — with optional fee.',
+    descriptionPlaceholder: 'What the workshop covers, what the fee includes, timings…',
+    defaultLedgerLabel: 'Workshop',
+    defaultAmount: 1000,
+    fields: [
+      { id: 'w-track', type: 'dropdown', label: 'Preferred track / batch', required: true, options: ['Morning batch', 'Afternoon batch'], section: 'Workshop Preferences' },
+      { id: 'w-kit', type: 'yesno', label: 'Do you need the take-home kit?', helpText: 'Included in the fee — tells us how many kits to arrange.', required: true, section: 'Workshop Preferences' },
+      { id: 'w-experience', type: 'dropdown', label: 'Experience level', required: true, options: ['Beginner', 'Intermediate', 'Advanced'], section: 'Workshop Preferences' },
+      { id: 'w-notes', type: 'longtext', label: 'Anything we should know?', helpText: 'Allergies, accessibility needs…', required: false, section: 'Medical & Emergency Details' },
+    ],
+    consentStatement: 'I confirm my ward may attend the workshop described above and follow the instructor\u2019s safety instructions.',
+  },
+  sports_consent: {
+    key: 'sports_consent',
+    label: 'Sports / Activity Consent',
+    category: 'Competition',
+    tagline: 'Parent consent for sports & competitions — no fee needed.',
+    descriptionPlaceholder: 'Competition/event details, team selection, gear requirements…',
+    defaultLedgerLabel: 'Sports',
+    defaultAmount: 0,
+    fields: [
+      { id: 's-events', type: 'multiselect', label: 'Events my ward will compete in', required: true, options: ['100 m sprint', 'Long jump', 'Relay', 'Chess', 'Table tennis'], section: 'Sports Preferences' },
+      { id: 's-fitness', type: 'yesno', label: 'Is your ward fit for competitive sport?', helpText: 'A doctor\u2019s note is required for chronic conditions.', required: true, section: 'Medical & Emergency Details' },
+      { id: 's-medical', type: 'longtext', label: 'Medical notes / allergies', helpText: 'Leave blank if none.', required: false, section: 'Medical & Emergency Details' },
+      { id: 's-transport', type: 'yesno', label: 'May your ward travel for inter-school fixtures?', required: true, section: 'Consent' },
+    ],
+    consentStatement: 'I consent to my ward participating in school sports activities and understand participation involves normal physical risk.',
+  },
+  general_application: {
+    key: 'general_application',
+    label: 'General Form',
+    category: 'Custom',
+    tagline: 'Blank form — write your own questions.',
+    descriptionPlaceholder: 'What this form is for and who should fill it…',
+    defaultLedgerLabel: 'School Form',
+    defaultAmount: 0,
+    fields: [],
+    consentStatement: 'I confirm that the information provided in this form is correct to the best of my knowledge.',
   },
 }
 
@@ -243,6 +299,9 @@ export interface SchoolApplication {
   sourceRef?: ApplicationSourceRef
   /** Template this application was created from (tour forms: educational_tour). */
   templateKey?: ApplicationTemplateKey
+  /** APPS-IA-1 — the form's PURPOSE (what it collects). Derived from the
+   *  template when omitted (backward compat). */
+  formPurpose?: FormPurpose
   academicYear: string
   /**
    * Who can apply. targetStudentIds overrides class scoping entirely when
@@ -344,6 +403,7 @@ export interface ApplicationAuditEvent {
     | 'application.approved' | 'application.rejected'
     | 'application.closed' | 'application.locked' | 'application.reopened'
     | 'application.archived' | 'application.duplicated' | 'application.note'
+    | 'application.deleted'
     | 'submission.recorded' | 'submission.submitted' | 'submission.resubmitted'
     | 'submission.approved' | 'submission.rejected' | 'submission.correction'
     | 'submission.withdrawn' | 'payment.initiated' | 'payment.completed'
@@ -522,6 +582,7 @@ export interface CreateApplicationInput {
   description?: string
   category: ApplicationCategory
   templateKey?: ApplicationTemplateKey
+  formPurpose?: FormPurpose
   source?: ApplicationSource
   sourceRef?: ApplicationSourceRef
   academicYear?: string
@@ -544,6 +605,10 @@ export interface CreateApplicationInput {
   paymentMode: PaymentModeConfig
   paymentAmount: number
   paymentFeeHeadLabel: string
+  /** APPS-IA-1 (§13) — explicitly LINK an existing Additional Collection
+   *  instead of creating one at publish time. Validation: the charge must
+   *  exist and not already be linked to a published form. */
+  paymentChargeId?: string
   formFields: ApplicationFormField[]
 }
 
@@ -568,6 +633,10 @@ interface ApplicationsState {
   reopenApplication: (id: string, actor: string) => { success: boolean; error?: string }
   archiveApplication: (id: string, actor: string) => void
   duplicateApplication: (id: string, actor: string) => { success: boolean; application?: SchoolApplication }
+  /** APPS-IA-1 (§6/§17) — permanently delete a DRAFT form. Only possible
+   *  with zero submissions (a submitted form is a school record). The
+   *  store refuses everything else with an honest reason. */
+  deleteApplicationDraft: (id: string, actor: string) => { success: boolean; error?: string }
 
   submitApplication: (input: {
     applicationId: string
@@ -632,6 +701,25 @@ function chargeCategoryOf(c: ApplicationCategory): AdditionalChargeCategory {
     case 'Transport': return 'Material' // closest coarse bucket available
     default: return 'Other'
   }
+}
+
+// ─── Purpose helpers (APPS-IA-1) ───────────────────────────────────────
+
+/** Template → default form purpose. Older records without formPurpose
+ *  derive theirs here so every list can show a TYPE column. */
+export function formPurposeOf(app: Pick<SchoolApplication, 'templateKey' | 'formPurpose' | 'category'>): FormPurpose {
+  if (app.formPurpose) return app.formPurpose
+  if (app.templateKey === 'educational_tour' || app.templateKey === 'sports_consent') return 'Consent'
+  if (app.templateKey === 'workshop_registration') return 'Registration'
+  if (app.templateKey === 'general_application') return 'Application'
+  return 'Application'
+}
+
+/** Template → default form purpose (input-side convenience). */
+function templatePurposeOf(templateKey?: ApplicationTemplateKey): FormPurpose {
+  if (templateKey === 'educational_tour' || templateKey === 'sports_consent') return 'Consent'
+  if (templateKey === 'workshop_registration') return 'Registration'
+  return 'Application'
 }
 
 // ─── Student eligibility notification (existing announcements system) ──
@@ -729,6 +817,23 @@ export const useApplicationsStore = create<ApplicationsState>()(
         )) {
           return { success: false, error: `An application titled "${trimmed}" already exists this session.` }
         }
+        // APPS-IA-1 (§13) — explicit collection LINK validation. The charge
+        // must exist and not already be the financial engine of ANOTHER
+        // published form (one charge, one live form — no duplicate money).
+        let linkedChargeId: string | undefined
+        if (input.paymentMode !== 'None' && input.paymentChargeId) {
+          const charge = useFeeStore.getState().additionalCharges.find((c) => c.id === input.paymentChargeId)
+          if (!charge) return { success: false, error: 'The linked collection no longer exists.' }
+          const owner = state.applications.find(
+            (a) => a.payment.chargeId === charge.id && a.status === 'Published' && a.id !== undefined,
+          )
+          if (owner) {
+            return { success: false, error: `That collection is already linked to "${owner.title}". Link a different collection or create a new one.` }
+          }
+          linkedChargeId = charge.id
+          // The charge's amount is the financial truth — the form follows it.
+          input = { ...input, paymentAmount: charge.allowCustomAmount ? charge.amount : charge.amount }
+        }
         const nowIso = new Date().toISOString()
         const actorRole = opts?.actorRole ?? 'Principal'
         // TEACHER PERMISSION: a teacher creating a form is its in-charge by
@@ -770,7 +875,9 @@ export const useApplicationsStore = create<ApplicationsState>()(
             mode: input.paymentMode,
             amount: Math.max(0, input.paymentAmount),
             feeHeadLabel: input.paymentFeeHeadLabel.trim() || trimmed,
+            ...(linkedChargeId ? { chargeId: linkedChargeId } : {}),
           },
+          formPurpose: input.formPurpose ?? templatePurposeOf(input.templateKey),
           formFields: input.formFields.map((f) => ({ ...f })),
           status: 'Draft',
           createdBy: actor,
@@ -930,6 +1037,15 @@ export const useApplicationsStore = create<ApplicationsState>()(
             }
             chargeId = created.charge.id
             chargeCreated = true
+          }
+        }
+        // APPS-IA-1 (§13) — a form explicitly linked to a DRAFT collection
+        // brings that collection live with it: publishing the form is the
+        // publish signal for the linked charge too (one action, one truth).
+        if (chargeId) {
+          const linked = useFeeStore.getState().additionalCharges.find((c) => c.id === chargeId)
+          if (linked && linked.status === 'Draft') {
+            useFeeStore.getState().publishAdditionalCharge(linked.id, actor)
           }
         }
 
@@ -1155,6 +1271,31 @@ export const useApplicationsStore = create<ApplicationsState>()(
           }),
         })
         return { success: true, application: copy }
+      },
+
+      // ── APPS-IA-1 (§6/§17): delete a DRAFT form (submissions make it a
+      // permanent school record — the store refuses with an honest reason).
+      deleteApplicationDraft: (id, actor) => {
+        const state = get()
+        const app = state.applications.find((a) => a.id === id)
+        if (!app) return { success: false, error: 'Form not found.' }
+        if (app.status !== 'Draft') {
+          return { success: false, error: `This form is ${app.status.toLowerCase()} — submitted forms are school records. Close or archive it instead.` }
+        }
+        const submissions = state.submissions.filter((s) => s.applicationId === id)
+        if (submissions.length > 0) {
+          return { success: false, error: `${submissions.length} response${submissions.length === 1 ? '' : 's'} exist — this form cannot be deleted. Close it instead; responses stay on record.` }
+        }
+        const nowIso = new Date().toISOString()
+        set({
+          applications: state.applications.filter((a) => a.id !== id),
+          audit: pushAudit(state, {
+            ts: nowIso, applicationId: id, actor, actorRole: 'Principal',
+            action: 'application.deleted',
+            message: `Draft form "${app.title}" deleted by ${actor} before publication (no submissions existed).`,
+          }),
+        })
+        return { success: true }
       },
 
       submitApplication: (input) => {
@@ -1442,24 +1583,26 @@ export const useApplicationsStore = create<ApplicationsState>()(
     }),
     {
       name: 'scholario-applications-v1',
-      version: 6,
+      // v7 (APPS-IA-1) — module generalization: the migrate function no
+      // longer drops non-Tour forms (workshop/consent/general are first-class
+      // now) and backfills formPurpose. Bump ensures every persisted
+      // namespace re-runs the (now inclusive) normalization once.
+      version: 7,
       storage: createTenantScopedStorage(TENANT_SCOPED_BASES.applications),
-      // v4→v5 — Educational Tour scope rebuild: older persisted namespaces
-      // may hold workshop/event/board demo forms. Keep ONLY Educational Tour
-      // applications (category 'Tour'); drop submissions and audit entries
-      // that no longer reference a kept application. Snapshot fields added
+      // v4→v5 — (historical) Educational Tour scope rebuild: namespaces were
+      // narrowed to Tour forms. v7 SUPERSEDES this — the module is general
+      // again and every category survives migration. Snapshot fields added
       // in v5 (rollNo/dob/gender/bloodGroup/address) are optional and simply
       // absent on pre-migration records — the print document renders only
       // what exists.
       //
-      // v5→v6 — APPS-FIN-LINK-1 demo hygiene: additionally drop the three
-      // throwaway dev-session tour applications (see applications-purge.ts)
-      // so namespaces rehydrated from older builds hold exactly the canonical
-      // dataset — the seeded Jaipur tour plus builder-created tours. The
-      // submission/audit filters below then drop every orphan of a dropped
-      // application, and the companion fee-store v12 migration purges the
-      // matching Additional Charges + application-bound payments in the same
-      // release so both sides of the linkage stay consistent.
+      // v5→v6 — APPS-FIN-LINK-1 demo hygiene: drop the three throwaway
+      // dev-session tour applications (see applications-purge.ts) so
+      // namespaces rehydrated from older builds hold the canonical dataset.
+      // The submission/audit filters below then drop every orphan of a
+      // dropped application, and the companion fee-store v12 migration purges
+      // the matching Additional Charges + application-bound payments in the
+      // same release so both sides of the linkage stay consistent.
       migrate: (persisted) => {
         const st = persisted as {
           applications?: SchoolApplication[]
@@ -1467,9 +1610,12 @@ export const useApplicationsStore = create<ApplicationsState>()(
           audit?: ApplicationAuditEvent[]
         } | undefined
         if (st?.applications) {
+          // v7 (APPS-IA-1) — the module is GENERAL: keep every category
+          // (previously only Tour forms survived this migration). The
+          // stale-id purge list stays authoritative for demo hygiene.
           const purge = new Set<string>(STALE_APPLICATION_PURGE.applicationIds)
           st.applications = st.applications
-            .filter((a) => a.category === 'Tour' && !purge.has(a.id))
+            .filter((a) => !purge.has(a.id))
             .map((a) => ({
               ...a,
               source: a.source ?? 'Custom',

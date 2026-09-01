@@ -166,6 +166,12 @@ export type AuditAction =
   | 'additional_charge.cancelled'
   | 'additional_charge.closed'
   | 'additional_charge.payment'
+  // ─── APPS-IA-1 — standalone-collection lifecycle ───
+  | 'additional_charge.draft_created'
+  | 'additional_charge.updated'
+  | 'additional_charge.published'
+  | 'additional_charge.archived'
+  | 'additional_charge.deleted'
   // ─── Payment infrastructure audit actions (Phase 4) ───
   | 'gateway.connected'
   | 'gateway.disconnected'
@@ -215,15 +221,20 @@ export type AdditionalChargeCategory =
   | 'Tour' | 'Workshop' | 'Competition' | 'Camp' | 'Event' | 'Material' | 'Donation' | 'Other'
 
 /**
- * Collection lifecycle (FIN-COLLECTION redesign):
+ * Collection lifecycle (FIN-COLLECTION → APPS-IA-1 generalization):
+ *   Draft    — being composed; NOT an obligation yet (excluded from student
+ *              accounts, the collect-payment wizard and student fees).
+ *              Editable in full and DELETABLE (no money can exist).
  *   Active   — open for collection (linked applications publish → Active)
  *   Closed   — collection window finished; complete payment history
  *              preserved and surfaced through the Record File view. A
  *              closed charge stops being an obligation for students.
+ *   Archived — historical read-only record; payment history stays
+ *              accessible forever (accounting integrity).
  *   Cancelled — revoked before completion; already-collected payments
  *              stay on record (audit trail).
  */
-export type AdditionalChargeStatus = 'Active' | 'Closed' | 'Cancelled'
+export type AdditionalChargeStatus = 'Draft' | 'Active' | 'Closed' | 'Archived' | 'Cancelled'
 
 /**
  * ADDITIONAL CHARGE — an event-based / special financial obligation that
@@ -261,6 +272,8 @@ export interface AdditionalCharge {
   createdBy: string
   createdAt: string
   status: AdditionalChargeStatus
+  /** Last edit timestamp (APPS-IA-1 lifecycle edits). */
+  updatedAt?: string
   /** Principal's reason when cancelling (audit trail only). */
   cancelReason?: string
   // ─── FIN-COLLECTION redesign (all optional for backward compat) ───
@@ -276,6 +289,17 @@ export interface AdditionalCharge {
   closedAt?: string
   /** Optional note recorded when closing the collection. */
   closeNote?: string
+  // ─── APPS-IA-1 standalone-collection lifecycle (all optional) ───
+  /** Optional collection open date (informational — shown in the UI). */
+  startDate?: string
+  /** Optional instructions shown to payers (payment channel guidance). */
+  instructions?: string
+  /** When a Draft collection was published (status Active). */
+  publishedAt?: string
+  /** When the collection was archived (status Archived). */
+  archivedAt?: string
+  /** Principal's reason when archiving. */
+  archiveNote?: string
 }
 
 export interface FeeHead {
@@ -1179,8 +1203,28 @@ interface FeeState {
   // ─── Additional Charge mutations (event-based collections) ─────────
   /** Create an Additional Charge (event-based collection) for the given
    *  classes/students. Does NOT touch any class fee structure. Emits an
-   *  immutable audit entry. */
-  createAdditionalCharge: (input: Omit<AdditionalCharge, 'id' | 'createdAt' | 'createdBy' | 'status'> & { actor?: string }) => { success: boolean; charge?: AdditionalCharge; error?: string }
+   *  immutable audit entry. New `status` input (APPS-IA-1): 'Draft'
+   *  creates a private, fully-editable, deletable collection; omitted →
+   *  'Active' (legacy callers keep their behaviour). */
+  createAdditionalCharge: (input: Omit<AdditionalCharge, 'id' | 'createdAt' | 'createdBy' | 'status'> & { actor?: string; status?: 'Draft' | 'Active' }) => { success: boolean; charge?: AdditionalCharge; error?: string }
+  /** Edit a collection. DRAFT: every field may change. ACTIVE: only
+   *  presentation/scope fields (description, dates, instructions,
+   *  target scope, targetAmount) — amount is locked once any payment
+   *  exists and name changes are refused while Active. Closed/Archived/
+   *  Cancelled are immutable. */
+  updateAdditionalCharge: (id: string, patch: Partial<Omit<AdditionalCharge, 'id' | 'createdAt' | 'createdBy'>>, actor?: string) => { success: boolean; error?: string }
+  /** Publish a DRAFT collection — it becomes an Active obligation for
+   *  its scoped students and appears in the collect-payment wizard. */
+  publishAdditionalCharge: (id: string, actor?: string) => { success: boolean; error?: string }
+  /** Archive a Closed (or Cancelled) collection — permanent read-only
+   *  historical record; payment history stays accessible. */
+  archiveAdditionalCharge: (id: string, actor?: string, note?: string) => { success: boolean; error?: string }
+  /** Permanently remove a collection. ONLY possible while it is a DRAFT
+   *  with zero bound transactions (payments) — published/closed/archived
+   *  collections can never be destructively deleted (financial
+   *  integrity). The UI additionally blocks deleting a draft that a
+   *  form links to. */
+  deleteAdditionalCharge: (id: string, actor?: string) => { success: boolean; error?: string }
   /** Close an Active collection (FIN-COLLECTION). Stops future
    *  obligation; collected payments + full history are preserved and
    *  the collection moves to the Record File view. */
@@ -1804,8 +1848,9 @@ export const useFeeStore = create<FeeState>()(
   // by applicableClassIds / studentIds, status 'Active' only).
   createAdditionalCharge: (input) => {
     const state = get()
-    const { actor: actorInput, ...rest } = input
+    const { actor: actorInput, status: statusInput, ...rest } = input
     const actor = actorInput ?? 'Principal'
+    const status: AdditionalChargeStatus = statusInput ?? 'Active'
     // ─── Validation ─────────────────────────────────────────────────
     if (!input.name || !input.name.trim()) {
       return { success: false, error: 'Charge name is required.' }
@@ -1821,16 +1866,21 @@ export const useFeeStore = create<FeeState>()(
     if (!input.dueDate) {
       return { success: false, error: 'Due date is required.' }
     }
-    if (!Array.isArray(input.applicableClassIds) || input.applicableClassIds.length === 0) {
+    // DRAFT collections support an explicit student scope with no class
+    // binding yet (the Principal may still be picking targets) — but a
+    // published collection always needs a real scope.
+    const hasScope = (Array.isArray(input.applicableClassIds) && input.applicableClassIds.length > 0)
+      || (Array.isArray(input.studentIds) && input.studentIds.length > 0)
+    if (!hasScope && status !== 'Draft') {
       return { success: false, error: 'Select at least one class for this charge.' }
     }
-    // Duplicate-name guard (case-insensitive, active charges only — a
+    // Duplicate-name guard (case-insensitive, live charges only — a
     // cancelled tour can legitimately be re-created next year).
     const dup = state.additionalCharges.find(
-      (c) => c.status === 'Active' && c.name.trim().toLowerCase() === input.name.trim().toLowerCase(),
+      (c) => (c.status === 'Active' || c.status === 'Draft') && c.name.trim().toLowerCase() === input.name.trim().toLowerCase(),
     )
     if (dup) {
-      return { success: false, error: `An active charge named "${dup.name}" already exists.` }
+      return { success: false, error: `A collection named "${dup.name}" already exists.` }
     }
     const charge: AdditionalCharge = {
       ...rest,
@@ -1838,7 +1888,8 @@ export const useFeeStore = create<FeeState>()(
       id: `AC-${Date.now().toString(36)}`,
       createdBy: actor,
       createdAt: new Date().toISOString(),
-      status: 'Active',
+      status,
+      ...(status === 'Active' ? { publishedAt: new Date().toISOString() } : {}),
     }
     // How many students the charge applies to (for the audit trail).
     const students = useStudentsStore.getState().students.filter((s) => s.status === 'Active')
@@ -1851,14 +1902,162 @@ export const useFeeStore = create<FeeState>()(
     set({
       additionalCharges: [charge, ...state.additionalCharges],
       audit: pushAudit(state, {
-        action: 'additional_charge.created',
+        action: status === 'Draft' ? 'additional_charge.draft_created' : 'additional_charge.created',
         actor,
         entityId: charge.id,
         entityType: 'additional_charge',
-        description: `Additional charge "${charge.name}" (${formatINR(charge.amount)} per student) created for ${appliesTo} student(s), due ${charge.dueDate}`,
+        description: `Collection "${charge.name}" (${formatINR(charge.amount)}${charge.allowCustomAmount ? ' suggested · custom amounts' : ' per student'}) created ${status === 'Draft' ? 'as a DRAFT' : ''} for ${appliesTo} student(s), due ${charge.dueDate}`,
       }),
     })
     return { success: true, charge }
+  },
+
+  // ─── APPS-IA-1: edit a collection (Draft = full; Active = safe fields). ──
+  updateAdditionalCharge: (id, patch, actorInput) => {
+    const state = get()
+    const actor = actorInput ?? 'Principal'
+    const charge = state.additionalCharges.find((c) => c.id === id)
+    if (!charge) return { success: false, error: 'Collection not found.' }
+    if (charge.status === 'Closed' || charge.status === 'Archived' || charge.status === 'Cancelled') {
+      return { success: false, error: `This collection is ${charge.status.toLowerCase()} — its record is permanent. Duplicate it instead if you need a new one.` }
+    }
+    const isDraft = charge.status === 'Draft'
+    // Money integrity: the per-student amount is only mutable while NO
+    // payment exists against the charge (drafts by definition have none,
+    // but an Active collection with zero payments may still be adjusted).
+    const boundPayments = state.transactions.filter((t) => t.additionalChargeId === id)
+    if (patch.amount !== undefined && boundPayments.length > 0) {
+      return { success: false, error: 'Payments already exist against this collection — the amount cannot change. Close it and create a new collection instead.' }
+    }
+    if (!isDraft) {
+      // ACTIVE — safe, presentation/scope fields only.
+      const forbidden = ['name', 'amount', 'mandatory', 'allowCustomAmount'] as const
+      const chargeRecord = charge as unknown as Record<string, unknown>
+      for (const key of forbidden) {
+        if (patch[key] !== undefined && patch[key] !== chargeRecord[key]) {
+          return { success: false, error: `"${key}" cannot change once the collection is live. Close this collection and create a new one for different terms.` }
+        }
+      }
+    }
+    if (patch.name !== undefined) {
+      const nextName = patch.name.trim()
+      if (!nextName) return { success: false, error: 'Collection name is required.' }
+      const dup = state.additionalCharges.find(
+        (c) => c.id !== id && (c.status === 'Active' || c.status === 'Draft') && c.name.trim().toLowerCase() === nextName.toLowerCase(),
+      )
+      if (dup) return { success: false, error: `A collection named "${dup.name}" already exists.` }
+    }
+    if (patch.applicableClassIds !== undefined && patch.applicableClassIds.length === 0 && !(patch.studentIds ?? charge.studentIds ?? []).length) {
+      return { success: false, error: 'Select at least one class (or specific students) for this collection.' }
+    }
+    const nowIso = new Date().toISOString()
+    set({
+      additionalCharges: state.additionalCharges.map((c) => c.id !== id ? c : {
+        ...c,
+        ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+        ...(patch.category !== undefined ? { category: patch.category } : {}),
+        ...(patch.description !== undefined ? { description: patch.description?.trim() || undefined } : {}),
+        ...(patch.amount !== undefined ? { amount: Math.max(0, patch.amount) } : {}),
+        ...(patch.applicableClassIds !== undefined ? { applicableClassIds: [...patch.applicableClassIds] } : {}),
+        ...(patch.studentIds !== undefined ? { studentIds: patch.studentIds.length ? [...patch.studentIds] : undefined } : {}),
+        ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate } : {}),
+        ...(patch.startDate !== undefined ? { startDate: patch.startDate || undefined } : {}),
+        ...(patch.mandatory !== undefined ? { mandatory: patch.mandatory } : {}),
+        ...(patch.allowCustomAmount !== undefined ? { allowCustomAmount: patch.allowCustomAmount } : {}),
+        ...(patch.targetAmount !== undefined ? { targetAmount: patch.targetAmount || undefined } : {}),
+        ...(patch.instructions !== undefined ? { instructions: patch.instructions?.trim() || undefined } : {}),
+        ...(patch.reference !== undefined ? { reference: patch.reference?.trim() || undefined } : {}),
+        updatedAt: nowIso,
+      }),
+      audit: pushAudit(state, {
+        action: 'additional_charge.updated',
+        actor,
+        entityId: id,
+        entityType: 'additional_charge',
+        description: `Collection "${charge.name}" updated${isDraft ? ' (draft)' : ' (safe fields)'}${patch.amount !== undefined ? ` — amount now ${formatINR(Math.max(0, patch.amount))}` : ''}`,
+      }),
+    })
+    return { success: true }
+  },
+
+  // ─── APPS-IA-1: publish a DRAFT collection → Active obligation. ───
+  publishAdditionalCharge: (id, actorInput) => {
+    const state = get()
+    const actor = actorInput ?? 'Principal'
+    const charge = state.additionalCharges.find((c) => c.id === id)
+    if (!charge) return { success: false, error: 'Collection not found.' }
+    if (charge.status !== 'Draft') {
+      return { success: false, error: 'Only a draft collection can be published.' }
+    }
+    if (!charge.applicableClassIds.length && !(charge.studentIds ?? []).length) {
+      return { success: false, error: 'Select at least one class (or specific students) before publishing.' }
+    }
+    const nowIso = new Date().toISOString()
+    set({
+      additionalCharges: state.additionalCharges.map((c) =>
+        c.id === id ? { ...c, status: 'Active' as const, publishedAt: nowIso, updatedAt: nowIso } : c,
+      ),
+      audit: pushAudit(state, {
+        action: 'additional_charge.published',
+        actor,
+        entityId: id,
+        entityType: 'additional_charge',
+        description: `Collection "${charge.name}" published — it is now an obligation for its scoped students.`,
+      }),
+    })
+    return { success: true }
+  },
+
+  // ─── APPS-IA-1: archive a Closed/Cancelled collection (read-only history). ──
+  archiveAdditionalCharge: (id, actorInput, note) => {
+    const state = get()
+    const actor = actorInput ?? 'Principal'
+    const charge = state.additionalCharges.find((c) => c.id === id)
+    if (!charge) return { success: false, error: 'Collection not found.' }
+    if (charge.status === 'Archived') return { success: false, error: 'Already archived.' }
+    if (charge.status !== 'Closed' && charge.status !== 'Cancelled') {
+      return { success: false, error: 'Close the collection first — only finished collections can be archived.' }
+    }
+    const nowIso = new Date().toISOString()
+    set({
+      additionalCharges: state.additionalCharges.map((c) =>
+        c.id === id ? { ...c, status: 'Archived' as const, archivedAt: nowIso, ...(note?.trim() ? { archiveNote: note.trim() } : {}), updatedAt: nowIso } : c,
+      ),
+      audit: pushAudit(state, {
+        action: 'additional_charge.archived',
+        actor,
+        entityId: id,
+        entityType: 'additional_charge',
+        description: `Collection "${charge.name}" archived — payment history stays readable forever.${note?.trim() ? ` ${note.trim()}` : ''}`,
+      }),
+    })
+    return { success: true }
+  },
+
+  // ─── APPS-IA-1: DELETE — drafts only, zero payments (§5/§17). ─────
+  deleteAdditionalCharge: (id, actorInput) => {
+    const state = get()
+    const actor = actorInput ?? 'Principal'
+    const charge = state.additionalCharges.find((c) => c.id === id)
+    if (!charge) return { success: false, error: 'Collection not found.' }
+    if (charge.status !== 'Draft') {
+      return { success: false, error: 'Only a draft can be deleted. Published collections carry payment history — close or archive them instead.' }
+    }
+    const bound = state.transactions.filter((t) => t.additionalChargeId === id)
+    if (bound.length > 0) {
+      return { success: false, error: `${bound.length} payment${bound.length === 1 ? '' : 's'} exist against this collection — it cannot be deleted.` }
+    }
+    set({
+      additionalCharges: state.additionalCharges.filter((c) => c.id !== id),
+      audit: pushAudit(state, {
+        action: 'additional_charge.deleted',
+        actor,
+        entityId: id,
+        entityType: 'additional_charge',
+        description: `Draft collection "${charge.name}" deleted before publication (no payments existed).`,
+      }),
+    })
+    return { success: true }
   },
 
   // ─── FIN-COLLECTION: close an Active collection. ────────────────
@@ -3501,8 +3700,20 @@ export const useFeeStore = create<FeeState>()(
   // `additionalCharges` array (event-based charges like the Class 8
   // Educational Tour) when the persisted state predates the key. Never
   // overwrites user-created charges; never touches transactions.
-  version: 12,
+  version: 13,
   migrate: (persistedState: any, fromVersion: number) => {
+    // v13 — APPS-IA-1 standalone-collection lifecycle: `status` gains
+    // 'Draft' and 'Archived' values and charges carry optional lifecycle
+    // timestamps. Purely additive — a defensive status backfill only; the
+    // version chain below keeps running (no early return, same as v12).
+    if (fromVersion < 13 && persistedState && typeof persistedState === 'object') {
+      const st = persistedState as Record<string, any>
+      if (Array.isArray(st.additionalCharges)) {
+        st.additionalCharges = (st.additionalCharges as any[]).map((c: any) =>
+          c && typeof c === 'object' && !c.status ? { ...c, status: 'Active' } : c,
+        )
+      }
+    }
     // v12 — APPS-FIN-LINK-1 demo hygiene: purge the three throwaway
     // dev-session tour applications (see applications-purge.ts) together
     // with their linked Additional Charges and application-bound

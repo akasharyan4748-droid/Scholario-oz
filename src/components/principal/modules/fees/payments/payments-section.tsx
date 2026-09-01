@@ -22,10 +22,11 @@
  *   3. Cash Verification — the verification workflow in the exact same
  *      compact table language (→ fees-approvals). Gateway-confirmed
  *      payments never appear here — they are recorded Paid automatically.
- *   4. Additional Collections — ALWAYS LAST. READ-ONLY payment status per
- *      existing event-based collection (expected · collected · students/
- *      payments · progress). Creation/recording lives in Applications &
- *      Forms (→ fees-additional-charges).
+ *   4. Additional Collections — ALWAYS LAST. First-class collections with
+ *      a full lifecycle (Draft → Active → Closed → Archived): the Principal
+ *      can CREATE them right here (+ New Collection — no form required,
+ *      §APPS-IA-1), record payments, and cross-check the linked form where
+ *      one exists (→ fees-additional-charges).
  *
  * What deliberately does NOT live here: financial KPIs, the collection trend,
  * payment-mode analytics (→ Overview) and the complete transaction ledger
@@ -128,9 +129,9 @@ export function PaymentsSection({ data, onCollect, onOpenTransactions }: Props) 
           slim row when nothing is pending) */}
       <FeesVerificationQueue data={data} />
 
-      {/* 4 — Additional Collections — ALWAYS LAST (read-only status per
-          collection; creation workflow lives in Applications & Forms) */}
-      <FeesAdditionalCharges data={data} />
+      {/* 4 — Additional Collections — ALWAYS LAST (lifecycle-aware:
+          creation + payment status per collection; forms link optionally) */}
+      <FeesAdditionalCharges data={data} onCollect={canCollect ? onCollect : undefined} />
     </div>
   )
 }

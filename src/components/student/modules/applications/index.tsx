@@ -19,10 +19,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Bus, Eye, FileText, Paperclip, ClipboardList, Undo2,
+  Eye, FileText, Paperclip, ClipboardList, Undo2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SectionHeading } from '@/components/shared/ui'
+import { CATEGORY_ICON as SHARED_CATEGORY_ICON } from '@/components/shared/application-category'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -42,12 +43,10 @@ import { useDemoStudent, submissionStatusChipClass, daysUntil } from './student'
 import { ApplyDialog } from './apply-dialog'
 import { SubmissionDocumentDialog } from './print-dialog'
 
-// ─── Category icons (single active type today: Educational Tour) ───────
+// ─── Category icons — the SHARED map (application-category.tsx) so every
+// category shows its own icon (APPS-IA-1: tour is just one type). ────────
 
-const CATEGORY_ICON: Record<string, LucideIcon> = {
-  Tour: Bus,
-  Trip: Bus,
-}
+const CATEGORY_ICON = SHARED_CATEGORY_ICON
 
 const FALLBACK_ICON = ClipboardList
 
@@ -124,7 +123,7 @@ export function StudentApplicationsModule() {
     <div className="space-y-6">
       <SectionHeading
         title="Applications & Forms"
-        subtitle="Educational tours, consents and tour payments open to you — apply online, pay online or at school, and keep the printed record."
+        subtitle="School applications, registrations and consent forms open to you — apply online, pay online or at school, and keep the printed record."
         icon={<ClipboardList className="h-5 w-5" />}
       />
 
@@ -143,7 +142,7 @@ export function StudentApplicationsModule() {
 
             <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
               {openForYou.length === 0 ? (
-                <EmptyLine icon={<ClipboardList className="h-5 w-5" />} text="No tour applications are open for your class right now — anything the school publishes for you will appear here and in your notifications." />
+                <EmptyLine icon={<ClipboardList className="h-5 w-5" />} text="No forms are open for your class right now — anything the school publishes for you will appear here and in your notifications." />
               ) : (
                 openForYou.map((app) => {
                   const sub = activeSubByApp.get(app.id) ?? null
@@ -178,7 +177,7 @@ export function StudentApplicationsModule() {
 
             <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
               {mySubmissions.length === 0 ? (
-                <EmptyLine icon={<Paperclip className="h-5 w-5" />} text="You haven't submitted any applications yet — open tours appear in the section above." />
+                <EmptyLine icon={<Paperclip className="h-5 w-5" />} text="You haven't submitted any forms yet — open forms appear in the section above." />
               ) : (
                 mySubmissions.map((sub) => {
                   const app = appById.get(sub.applicationId)

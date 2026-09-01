@@ -47,7 +47,7 @@ import {
 } from '@/components/ui/select'
 import { DatePicker } from '@/components/ui/date-picker'
 import {
-  useApplicationsStore, deriveSubmissionPayment,
+  useApplicationsStore, deriveSubmissionPayment, formPurposeOf,
   type ApplicationFormField, type ApplicationSubmission, type SchoolApplication,
 } from '@/lib/store/applications-store'
 import { useFeeStore } from '@/lib/store/fee-store'
@@ -132,6 +132,7 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
 
   const amount = app?.payment.amount ?? 0
   const needsPayment = !!app && app.payment.mode !== 'None'
+  const isTour = !!app && (app.category === 'Tour' || app.category === 'Trip' || app.templateKey === 'educational_tour')
 
   const closeDialog = () => {
     onOpenChange(false)
@@ -353,16 +354,16 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                       <p className="text-[10px] font-semibold">{app.academicYear}</p>
                     </div>
                   </div>
-                  <p className="mt-2 text-[8.5px] uppercase tracking-[0.2em] text-muted-foreground">Official Application · Educational Tour</p>
+                  <p className="mt-2 text-[8.5px] uppercase tracking-[0.2em] text-muted-foreground">Official {formPurposeOf(app)} Form · {app.category}</p>
                   <p className="text-sm font-bold leading-tight mt-0.5">{app.title}</p>
                 </div>
 
-                {/* ── Tour details (read-only) ── */}
+                {/* ── Activity details (read-only) ── */}
                 <section className="rounded-lg border border-border px-3.5 py-3">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">1. Tour details</p>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">1. {isTour ? 'Tour' : 'Activity'} details</p>
                   <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
                     {app.destination && <Particular icon={<Bus className="h-3 w-3" />} label="Destination" value={app.destination} />}
-                    <Particular icon={<CalendarDays className="h-3 w-3" />} label="Tour date" value={app.eventDate ? formatDate(app.eventDate) : 'To be announced'} />
+                    <Particular icon={<CalendarDays className="h-3 w-3" />} label={isTour ? 'Tour date' : 'Event date'} value={app.eventDate ? formatDate(app.eventDate) : 'To be announced'} />
                     <Particular icon={<CalendarDays className="h-3 w-3" />} label="Last date to apply" value={formatDate(app.deadline)} />
                     <Particular icon={<Landmark className="h-3 w-3" />} label="Fee per student" value={needsPayment ? `${formatINR(amount)}${app.payment.mode === 'Optional' ? ' (optional)' : ''}` : 'Free'} />
                     <Particular icon={<Users className="h-3 w-3" />} label="Teacher in-charge" value={app.inChargeName ?? 'To be assigned'} />
@@ -372,7 +373,9 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                   )}
                 </section>
 
-                {/* ── Student particulars (read-only, canonical record) ── */}
+                {/* ── Student particulars (read-only, canonical record — §20/§21
+                    minimal set: only what the form needs; DOB/blood group stay
+                    in the school record) ── */}
                 <section className="rounded-lg border border-border bg-muted/25 px-3.5 py-3">
                   <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
                     <User className="h-3 w-3" /> 2. Student particulars
@@ -382,13 +385,6 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                     <Particular label="Admission no." value={identity.canonical.admissionNo} mono />
                     <Particular label="Class / Section" value={`${identity.canonical.className} — ${identity.canonical.section}`} />
                     <Particular label="Roll no." value={identity.canonical.rollNo} />
-                    <Particular label="Date of birth" value={identity.canonical.dob ? formatDate(identity.canonical.dob) : '—'} />
-                    <Particular label="Blood group" value={identity.canonical.bloodGroup} />
-                    {identity.canonical.address && (
-                      <div className="col-span-2">
-                        <Particular label="Residence address" value={identity.canonical.address} />
-                      </div>
-                    )}
                   </div>
                   <p className="mt-2 text-[9.5px] text-muted-foreground">Taken from the school record — corrections go through the office.</p>
                 </section>
@@ -404,11 +400,11 @@ export function ApplyDialog({ open, onOpenChange, app, identity, existingSubmiss
                   </div>
                 </section>
 
-                {/* ── Tour-specific details (editable), grouped by section ── */}
+                {/* ── Form questions (editable), grouped by section ── */}
                 {(() => {
                   const groups = new Map<string, typeof app.formFields>()
                   for (const f of app.formFields) {
-                    const key = f.section ?? 'Tour Preferences'
+                    const key = f.section ?? 'Additional Questions'
                     const arr = groups.get(key) ?? []
                     arr.push(f)
                     groups.set(key, arr)

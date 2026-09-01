@@ -1,15 +1,19 @@
 'use client'
 
 /**
- * ApplicationPrintDocument — the OFFICIAL Educational Tour application form.
+ * ApplicationPrintDocument — the OFFICIAL school application/consent form.
  *
- * A genuine A4-portrait school-office document (not a web page print):
+ * A genuine A4-portrait school-office document (not a web page print),
+ * schema/data-driven per form type (APPS-IA-1 §25): a tour form shows
+ * tour details, a workshop form shows workshop details, a general form
+ * shows neither. The document renderer derives every label from the
+ * application record — nothing tour-specific is hardcoded.
  *   1. School header        — name, address, contacts, affiliation
- *   2. Title band           — APPLICATION FOR EDUCATIONAL TOUR + Form No.
- *   3. Tour details         — destination, tour date, deadline, fee, in-charge
+ *   2. Title band           — dynamic document title + Form No.
+ *   3. Activity details     — destination/event date, deadline, fee, in-charge
  *   4. Student particulars  — snapshotted from the school record at submit
  *   5. Guardian details     — snapshotted from the school record at submit
- *   6. Preferences & medical— the applicant's answers (or blank rules)
+ *   6. Answers              — the applicant's answers (or blank rules)
  *   7. Payment              — charge, amount, paid state, receipt numbers
  *   8. Declaration & consent— declaration paragraph + consent statement
  *   9. Signatures           — Guardian · Student · Teacher in-charge
@@ -20,7 +24,9 @@
  * submission's immutable identity snapshot. Nothing is invented; fields
  * with no value render as dotted fill-in rules (blank copies) or are
  * omitted (filled copies). There is deliberately NO House field —
- * Scholario does not use a house system.
+ * Scholario does not use a house system. §21 minimalism: student
+ * particulars print only what a consent form needs (name, admission no.,
+ * class/section) — DOB/gender/blood-group stay in the digital snapshot.
  *
  * Print mechanics: identical recipe to the fee receipt — clone into
  * #print-root at body level, hide everything else via body.application-
@@ -30,8 +36,9 @@
 import { useEffect, Fragment } from 'react'
 import type { ReactNode } from 'react'
 import { useSchoolSettingsStore } from '@/lib/store/school-settings-store/store'
-import type {
-  SchoolApplication, ApplicationSubmission, ReviewNote,
+import {
+  formPurposeOf,
+  type SchoolApplication, type ApplicationSubmission, type ReviewNote,
 } from '@/lib/store/applications-store'
 import { formatINR, formatDate } from '@/lib/format'
 
@@ -46,6 +53,31 @@ function answerToText(value: string | string[] | boolean | undefined): string {
 
 function attachmentNameFor(sub: ApplicationSubmission, fieldId: string): string | undefined {
   return sub.attachments?.[fieldId]?.name
+}
+
+/** Dynamic document title (§24/§25) — driven by the form's purpose + type. */
+function docTitleOf(app: SchoolApplication): string {
+  const purpose = formPurposeOf(app)
+  switch (app.templateKey) {
+    case 'educational_tour': return 'Educational Tour · Application & Consent Form'
+    case 'workshop_registration': return 'Workshop Registration Form'
+    case 'sports_consent': return 'Sports Participation Consent Form'
+    default:
+      if (app.category === 'Tour' || app.category === 'Trip') return 'Educational Tour · Application & Consent Form'
+      return `${purpose} Form`
+  }
+}
+
+/** The activity noun used across section headings and the declaration. */
+function activityNounOf(app: SchoolApplication): string {
+  switch (app.category) {
+    case 'Tour': case 'Trip': return 'tour'
+    case 'Workshop': return 'workshop'
+    case 'Competition': return 'competition'
+    case 'Camp': return 'camp'
+    case 'Event': case 'Activity': return 'activity'
+    default: return 'activity'
+  }
 }
 
 export interface AppPrintOptionsLike {
@@ -156,6 +188,9 @@ export function ApplicationPrintDocument({
   }, [])
 
   const formNo = sub ? `APPF-${sub.id.slice(-8).toUpperCase()}` : `APPF-${app.id.slice(-8).toUpperCase()}`
+  const docTitle = docTitleOf(app)
+  const noun = activityNounOf(app)
+  const isTour = app.category === 'Tour' || app.category === 'Trip' || app.templateKey === 'educational_tour'
   // Active school's own branding (tenant-scoped School Settings — never a
   // hardcoded school). Falls back to the store's seeded defaults.
   const g = useSchoolSettingsStore((s) => s.general)
@@ -197,7 +232,7 @@ export function ApplicationPrintDocument({
 
       {/* ── 2. Title band ── */}
       <div className="mt-4 text-center">
-        <h1 className="text-[15px] font-extrabold uppercase tracking-[0.08em] text-slate-900">Application for Educational Tour</h1>
+        <h1 className="text-[15px] font-extrabold uppercase tracking-[0.08em] text-slate-900">{docTitle}</h1>
         <p className="mt-0.5 text-[11px] font-semibold text-slate-600">{app.title}</p>
         {sub && (
           <p className="mt-1 inline-flex items-center gap-1.5 text-[9px] uppercase tracking-[0.14em] text-slate-500">
@@ -212,13 +247,13 @@ export function ApplicationPrintDocument({
         <p className="mt-3 text-[10.5px] leading-relaxed text-slate-600 border-l-2 border-slate-300 pl-3">{app.description}</p>
       )}
 
-      {/* ── 3. Tour details ── */}
+      {/* ── 3. Activity details ── */}
       <div className="mt-4">
-        <SectionHeading>1 · Tour Details</SectionHeading>
+        <SectionHeading>{`1 · ${isTour ? 'Tour' : 'Activity'} Details`}</SectionHeading>
         <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border border-slate-200 px-4 py-2.5">
-          <DetailRow label="Tour" value={app.title} />
-          <DetailRow label="Destination" value={app.destination ?? <BlankRule w="w-32" />} />
-          <DetailRow label="Tour date" value={app.eventDate ? formatDate(app.eventDate) : <BlankRule />} />
+          {isTour ? <DetailRow label="Tour" value={app.title} /> : <DetailRow label="Form" value={app.title} />}
+          {app.destination ? <DetailRow label="Destination" value={app.destination} /> : null}
+          {app.eventDate ? <DetailRow label={isTour ? 'Tour date' : 'Event date'} value={formatDate(app.eventDate)} /> : <DetailRow label={isTour ? 'Tour date' : 'Event date'} value={<BlankRule />} />}
           <DetailRow label="Teacher in-charge" value={app.inChargeName ?? <BlankRule />} />
           <DetailRow label="Last date to apply" value={formatDate(app.deadline)} />
           <DetailRow label="Participation" value={app.participation} />
@@ -233,7 +268,7 @@ export function ApplicationPrintDocument({
         </div>
       </div>
 
-      {/* ── 4. Student particulars (snapshot) ── */}
+      {/* ── 4. Student particulars (snapshot — §21 minimal set) ── */}
       <div className="mt-4">
         <SectionHeading>2 · Student Particulars</SectionHeading>
         <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border border-slate-200 px-4 py-2.5">
@@ -243,13 +278,6 @@ export function ApplicationPrintDocument({
               <DetailRow label="Admission no." value={<span className="font-mono">{sub.admissionNo}</span>} />
               <DetailRow label="Class / Section" value={`${sub.className} — ${sub.section}`} />
               <DetailRow label="Roll no." value={sub.rollNo ?? '—'} />
-              <DetailRow label="Date of birth" value={sub.dob ? formatDate(sub.dob) : '—'} />
-              <DetailRow label="Gender" value={sub.gender ?? '—'} />
-              <DetailRow label="Blood group" value={sub.bloodGroup ?? '—'} />
-              {sub.address && <div className="col-span-2 flex items-start justify-between gap-3 text-[11px]">
-                <span className="text-slate-400 shrink-0 pt-px">Residence address</span>
-                <span className="font-medium text-slate-700 text-right">{sub.address}</span>
-              </div>}
             </>
           ) : (
             <>
@@ -257,13 +285,6 @@ export function ApplicationPrintDocument({
               <DetailRow label="Admission no." value={<BlankRule w="w-32" />} />
               <DetailRow label="Class / Section" value={<BlankRule w="w-24" />} />
               <DetailRow label="Roll no." value={<BlankRule w="w-16" />} />
-              <DetailRow label="Date of birth" value={<BlankRule w="w-28" />} />
-              <DetailRow label="Gender" value={<BlankRule w="w-16" />} />
-              <DetailRow label="Blood group" value={<BlankRule w="w-16" />} />
-              <div className="col-span-2 flex items-start justify-between gap-3 text-[11px]">
-                <span className="text-slate-400 shrink-0 pt-px">Residence address</span>
-                <span className="w-2/3 border-b border-dotted border-slate-300" />
-              </div>
             </>
           )}
         </div>
@@ -315,7 +336,7 @@ export function ApplicationPrintDocument({
       {/* ── 7. Payment ── */}
       {app.payment.mode !== 'None' && (
         <div className="mt-4">
-          <SectionHeading>5 · Tour Fee &amp; Payment</SectionHeading>
+          <SectionHeading>5 · Fee &amp; Payment</SectionHeading>
           <div className="mt-1.5 rounded-md border border-slate-200 px-4 py-2.5 grid grid-cols-2 gap-x-6 gap-y-1">
             <DetailRow label="Fee head" value={app.payment.feeHeadLabel || app.title} />
             <DetailRow label="Amount payable" value={<span className="font-bold tabular-nums">{formatINR(app.payment.amount)}</span>} />
@@ -334,7 +355,7 @@ export function ApplicationPrintDocument({
               </>
             ) : null}
             <div className="col-span-2 border-t border-dashed border-slate-100 pt-1 text-[9px] text-slate-400">
-              Tour fees are collected separately from the student&apos;s regular annual fees (via Fee Management · Additional Collections).
+              This fee is collected separately from the student&apos;s regular annual fees (via Fee Management · Additional Collections).
             </div>
           </div>
         </div>
@@ -344,7 +365,7 @@ export function ApplicationPrintDocument({
       <div className="mt-4">
         <SectionHeading>6 · Declaration &amp; Consent</SectionHeading>
         <p className="mt-1.5 text-[10px] leading-relaxed text-slate-600">
-          We have read the tour details and rules given above. The particulars furnished are correct to the best of our
+          We have read the {noun} details and rules given above. The particulars furnished are correct to the best of our
           knowledge, and we understand that the school takes reasonable care but students participate at their own risk
           for the activities described. {' '}
           <span className="font-medium text-slate-700">{app.guardianConsent.statement ?? ''}</span>

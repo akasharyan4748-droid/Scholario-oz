@@ -1,0 +1,1658 @@
+You are working on SCHOLARIO-OS, an enterprise-grade School ERP used by School Principals, Administrators, Teachers, Staff and Students/Parents.
+
+I want you to make a complete, production-quality refinement of the relationship between:
+
+1. Fee Management
+2. Fee Management → Payments
+3. Fee Management → Additional Collections
+4. Applications & Forms
+5. Educational Tours / Workshops / Events / Other Collections
+6. Application / Consent Forms
+
+This is NOT just a visual change.
+
+You must first inspect the existing implementation, routes, components, database schema, relationships, payment logic, session logic, permissions and existing data.
+
+Then implement the correct product architecture and UX.
+
+Work like a senior product designer + senior full-stack engineer building a real commercial School ERP.
+
+Do not create a superficial mockup.
+
+Do not break existing Fee Management, Payments, Student Accounts, Applications & Forms, or existing payment records.
+
+==================================================
+CORE PROBLEM TO FIX
+==================================================
+
+Currently:
+
+Fee Management → Payments contains an "Additional Collections" area.
+
+It shows things such as:
+
+- Educational Tour — Jaipur
+- Robotics Workshop
+- School Development Fund
+
+There are tabs such as:
+
+- All collections
+- Application payments
+
+However, the current UX does not clearly explain or provide a proper workflow for:
+
+"Where does a normal collection come from?"
+
+At the same time, there is another module:
+
+Applications & Forms
+
+which currently appears heavily focused around Educational Tours.
+
+This is conceptually wrong.
+
+Applications & Forms should NOT be a "Tours" module.
+
+It should be a GENERAL SCHOOL APPLICATION / CONSENT / REGISTRATION SYSTEM.
+
+Additional Collections should be able to exist independently of an application.
+
+An application may optionally create or be connected to a collection, but every collection must NOT require an application.
+
+This distinction is extremely important.
+
+==================================================
+1. DEFINE THE CORRECT PRODUCT MODEL
+==================================================
+
+SCHOLARIO-OS should conceptually support:
+
+A. Regular Fee
+B. Additional Collection
+C. Application / Form
+D. Optional connection between an Application and an Additional Collection
+
+Think of them as separate but connectable objects.
+
+--------------------------------------------------
+A. REGULAR FEE
+--------------------------------------------------
+
+Examples:
+
+- Tuition Fee
+- Development Fee
+- Transport Fee
+- Annual Charges
+- Examination Fee if configured as regular fee
+
+These continue to work through the existing Fee Management / Fee Structures / Student Accounts system.
+
+DO NOT disrupt this.
+
+--------------------------------------------------
+B. ADDITIONAL COLLECTION
+--------------------------------------------------
+
+An Additional Collection is a school-created money collection outside the normal recurring/class fee structure.
+
+Examples:
+
+- Educational Tour
+- Robotics Workshop
+- Annual Day Costume
+- Sports Competition
+- Olympiad Registration
+- School Development Fund
+- Exam Material
+- ID Card Replacement
+- Special Event
+- Picnic
+- Uniform / Activity Charges
+- Any other one-time or special collection
+
+A Principal must be able to create an Additional Collection directly.
+
+It must NOT require an Application Form.
+
+--------------------------------------------------
+C. APPLICATION / FORM
+--------------------------------------------------
+
+An Application/Form is a structured submission or consent request.
+
+Examples:
+
+- Educational Tour Consent
+- Sports Competition Registration
+- Club Registration
+- Student Activity Permission
+- Medical Information Form
+- Event Participation Form
+- Transport Request
+- Leave Application
+- General School Application
+- Parent Consent
+- Any other school-defined form
+
+Forms are not inherently financial.
+
+A form may have:
+
+- no payment
+- an optional payment
+- a required payment
+- a linked Additional Collection
+
+But the form itself should remain a separate concept.
+
+==================================================
+2. ADDITIONAL COLLECTIONS MUST HAVE THEIR OWN CREATION WORKFLOW
+==================================================
+
+In:
+
+Fee Management → Payments → Additional Collections
+
+the Principal must be able to create a new collection.
+
+Add a clear action such as:
+
+"+ New Collection"
+
+or
+
+"+ Create Collection"
+
+Use whichever wording best fits the existing SCHOLARIO design language.
+
+This should open a clean creation flow.
+
+The Principal should be able to define:
+
+- Collection name
+- Collection type/category
+- Description
+- Session
+- Applicable classes / sections
+- Applicable students
+- Amount
+- Whether the amount is fixed or custom
+- Start date
+- Due date
+- Payment methods allowed
+- Optional instructions/notes
+- Status
+
+Potential collection types can include:
+
+- Educational Tour
+- Workshop
+- Event
+- Competition
+- Donation
+- Material / Item
+- Activity
+- Other
+
+Do not overcomplicate this.
+
+If the existing database already has a suitable category/type system, reuse it.
+
+==================================================
+3. FIX THE EXISTING "ADDITIONAL COLLECTIONS" UI
+==================================================
+
+The Additional Collections area inside Fee Management → Payments should clearly communicate what it contains.
+
+It should not feel like a random list of applications.
+
+It should represent MONEY COLLECTIONS.
+
+A collection row/card should clearly show:
+
+Collection name
+Type
+Applicable students/class
+Amount
+Collected
+Expected
+Outstanding
+Due date
+Status
+Payment count
+
+For example:
+
+Educational Tour — Jaipur
+Tour · Class 8 · 4 students
+
+₹0 collected
+of ₹10,000 expected
+
+Due 15 Sep 2026
+
+Open
+0 payments
+
+Another:
+
+Robotics Workshop
+Workshop · Class 9 · 4 students
+
+₹0 collected
+of ₹4,000 expected
+
+Due 30 Oct 2026
+
+Open
+0 payments
+
+This is good information architecture.
+
+==================================================
+4. ALL COLLECTIONS vs APPLICATION PAYMENTS
+==================================================
+
+Keep the distinction between:
+
+"All Collections"
+
+and
+
+"Application Payments"
+
+but make the meaning clear.
+
+ALL COLLECTIONS:
+
+Shows every Additional Collection created by the school, regardless of whether it originated from an application.
+
+Examples:
+
+- Robotics Workshop
+- School Development Fund
+- Educational Tour
+- Annual Day Costume
+
+APPLICATION PAYMENTS:
+
+Shows payments that are associated with Applications/Forms which have a payment component.
+
+Do not make "Application Payments" the only way collections can exist.
+
+A collection created manually must appear under All Collections.
+
+If a collection is linked to an application, it can also be represented in Application Payments where appropriate.
+
+Do not duplicate financial transactions.
+
+The same payment must not appear as two independent payments in the database.
+
+==================================================
+5. COLLECTION LIFECYCLE
+==================================================
+
+Implement a clear lifecycle.
+
+Recommended:
+
+DRAFT
+↓
+PUBLISHED / OPEN
+↓
+CLOSED
+↓
+ARCHIVED
+
+A newly created collection starts as:
+
+DRAFT
+
+While it is still a draft:
+
+The Principal can:
+
+- edit
+- change applicable students
+- change amount
+- change dates
+- change description
+- delete the collection
+
+IMPORTANT:
+
+A draft collection MUST have a Delete option.
+
+This directly fixes the current problem where the newly created Educational Tour cannot be deleted even though it has not been published.
+
+--------------------------------------------------
+AFTER PUBLISHING
+--------------------------------------------------
+
+Once a collection is Published/Open:
+
+DO NOT allow destructive deletion.
+
+The Principal can:
+
+- edit permitted details
+- close collection
+- view payments
+- view participants
+- view outstanding amounts
+- view collection history
+- archive after completion
+
+Do not allow deletion that could destroy financial history.
+
+If a published collection has already received payments, absolutely do not provide destructive deletion.
+
+Instead use:
+
+"Close Collection"
+
+or
+
+"Archive"
+
+depending on state.
+
+This preserves accounting integrity.
+
+==================================================
+6. APPLICATION / FORM LIFECYCLE
+==================================================
+
+Applications/forms should follow a similar safe lifecycle where appropriate:
+
+DRAFT
+↓
+PUBLISHED
+↓
+CLOSED
+↓
+ARCHIVED
+
+Draft form:
+
+- Edit
+- Preview
+- Duplicate
+- Delete
+
+Published form:
+
+- View
+- Edit only where safe
+- Close
+- View responses
+- View linked payments if applicable
+
+After responses/payment data exist:
+
+Do NOT allow destructive deletion.
+
+This is critical because submitted applications become school records.
+
+==================================================
+7. APPLICATIONS & FORMS MUST BECOME GENERIC
+==================================================
+
+The current Applications & Forms page uses:
+
+"New Educational Tour"
+
+This is wrong at the module level.
+
+Applications & Forms is not only for tours.
+
+Change the main creation action to something generic, such as:
+
+"+ New Form"
+
+or
+
+"+ New Application"
+
+Choose the wording that best fits the actual product.
+
+Do NOT keep:
+
+"New Educational Tour"
+
+as the primary module-level creation action.
+
+Educational Tour should be one possible form/template/type.
+
+==================================================
+8. APPLICATIONS & FORMS PAGE
+==================================================
+
+The page should represent:
+
+Applications & Forms
+
+with a clear, generic description.
+
+Do not write a tour-specific description.
+
+Instead use something concise and Principal-friendly, for example:
+
+"Create and manage school applications, registrations and consent forms."
+
+Do not use technical descriptions.
+
+The page should support different form types.
+
+Examples:
+
+Educational Tour
+Workshop Registration
+Competition Registration
+Parent Consent
+Club / Activity Registration
+Transport Request
+General Application
+
+Use the actual existing data model where possible.
+
+Do not create fake records just to fill the UI.
+
+==================================================
+9. NEW FORM CREATION
+==================================================
+
+When Principal clicks:
+
+"+ New Form"
+
+provide a clean creation flow.
+
+The Principal should first select the purpose/type.
+
+For example:
+
+--------------------------------
+Create New Form
+
+What is this form for?
+
+○ Application
+○ Consent
+○ Registration
+○ Permission
+○ Information Collection
+○ Other
+
+Form title:
+[________________________]
+
+Description:
+[________________________]
+
+Then continue to form builder/configuration.
+
+Do not make this unnecessarily complicated.
+
+The Principal is not a developer.
+
+==================================================
+10. FORMS SHOULD SUPPORT OPTIONAL PAYMENT
+==================================================
+
+A form may optionally be connected to an Additional Collection.
+
+For example:
+
+Educational Tour — Jaipur
+
+Form:
+"Parent Consent & Tour Registration"
+
+Linked Collection:
+"Educational Tour — Jaipur"
+
+Amount:
+₹2,500 per student
+
+In this case:
+
+The parent/student fills the form.
+
+The system records the application.
+
+The payment is handled through the linked collection/payment workflow.
+
+IMPORTANT:
+
+Do not merge form responses and payment transactions into one object.
+
+They are related but separate.
+
+==================================================
+11. COLLECTION WITHOUT FORM
+==================================================
+
+A Principal must also be able to create:
+
+"School Development Fund"
+
+without creating an application.
+
+Or:
+
+"Robotics Workshop"
+
+without requiring a form.
+
+The collection simply applies to selected students/classes and has an amount and due date.
+
+The Principal should then be able to record/receive payments.
+
+This is a core requirement.
+
+==================================================
+12. FORM WITHOUT PAYMENT
+==================================================
+
+The opposite must also work.
+
+A Principal should be able to create a form that collects information/consent but no money.
+
+Example:
+
+"Sports Participation Consent"
+
+No payment required.
+
+The system should not force the Principal to create a collection.
+
+==================================================
+13. OPTIONAL LINKING
+==================================================
+
+When creating a form, offer:
+
+Payment required?
+
+[ No ] [ Yes ]
+
+If Yes:
+
+Allow:
+
+"Link existing collection"
+
+or
+
+"Create new collection"
+
+Do not automatically create duplicate collections.
+
+If an existing collection already exists, the Principal should be able to link the form to it.
+
+This is much cleaner than creating a new collection every time.
+
+==================================================
+14. APPLICATIONS & FORMS — DASHBOARD
+==================================================
+
+Improve the existing Applications & Forms overview.
+
+Current metrics such as:
+
+Active Tours
+Awaiting Review
+Awaiting Payment
+Total Applications
+
+are too tour-specific.
+
+Replace them with generic metrics.
+
+For example:
+
+Active Forms
+Awaiting Review
+Awaiting Payment
+Total Responses
+
+OR, if the actual data model provides better metrics:
+
+Published Forms
+Pending Responses
+Pending Review
+Total Submissions
+
+Choose metrics based on actual data.
+
+Do not keep:
+
+"Active Tours"
+
+on a generic Applications & Forms page.
+
+==================================================
+15. APPLICATION LIST
+==================================================
+
+The current table should become generic.
+
+Columns could be:
+
+FORM / APPLICATION
+TYPE
+OWNER / CREATED BY
+DEADLINE
+RESPONSES
+PAYMENT
+STATUS
+ACTIONS
+
+Examples:
+
+Educational Tour Consent
+Consent
+Principal
+15 Sep 2026
+4 responses
+₹0 collected
+Open
+
+Robotics Workshop Registration
+Registration
+Principal
+30 Oct 2026
+0 responses
+₹0 collected
+Draft
+
+School Development Form
+Information
+Principal
+—
+8 responses
+No payment
+Closed
+
+Use the actual available information.
+
+==================================================
+16. ACTION MENU
+==================================================
+
+The current action menu has:
+
+Edit details
+Close now
+Lock immediately
+View details
+Duplicate as new draft
+
+This needs to be simplified and made state-aware.
+
+For DRAFT:
+
+- Edit
+- Preview
+- Duplicate
+- Delete
+
+For PUBLISHED / OPEN:
+
+- View details
+- Edit
+- Close
+- Duplicate as new draft
+
+For CLOSED:
+
+- View details
+- Duplicate as new draft
+- Archive where applicable
+
+For ARCHIVED:
+
+- View details
+- Duplicate as new draft
+
+Do not show meaningless actions for a particular state.
+
+For example:
+
+Do not show "Close now" on an already closed form.
+
+Do not show "Delete" on a published form with submissions.
+
+==================================================
+17. DELETE CONFIRMATION
+==================================================
+
+When deleting a draft collection or draft form:
+
+Show a proper confirmation dialog.
+
+Example:
+
+Delete draft?
+
+"This draft has not been published and has no active submissions or payments. It will be permanently removed."
+
+[Cancel] [Delete Draft]
+
+Do not use scary or technical language.
+
+If deletion is unsafe because submissions/payments exist:
+
+Do NOT offer deletion.
+
+Explain:
+
+"This item contains submitted/payment records and cannot be deleted. You can close or archive it instead."
+
+==================================================
+18. EDUCATIONAL TOUR SHOULD BE A TEMPLATE / TYPE
+==================================================
+
+Educational Tour should NOT define the entire Applications & Forms module.
+
+It should simply be one type.
+
+For example:
+
+Form Type:
+Educational Tour
+
+Possible predefined template:
+
+"Educational Tour Consent"
+
+When selected, the system can provide sensible fields such as:
+
+- Student
+- Class/Section
+- Parent/Guardian
+- Contact number
+- Emergency contact
+- Food preference
+- Relevant medical/allergy information
+- Consent
+- Signature
+
+But do not force every form to use these fields.
+
+==================================================
+19. CONSENT FORM UX — REDESIGN COMPLETELY
+==================================================
+
+The current consent form/proforma is too complicated and contains too much UI/decorative structure.
+
+I do NOT want a flashy web-page-looking form.
+
+I want something that looks like an actual official school document.
+
+Think:
+
+Microsoft Word / professionally typed school office document.
+
+NOT:
+
+marketing landing page
+web dashboard
+colorful application
+card-heavy UI
+over-designed SaaS form
+
+The generated form should be formal, clean, restrained and printable.
+
+==================================================
+20. ONLINE FORM — SIMPLE AND PRACTICAL
+==================================================
+
+The online parent/student form should be easy to complete.
+
+Do NOT expose unnecessary implementation/UI elements.
+
+Remove unnecessary:
+
+- decorative cards
+- excessive section borders
+- excessive icons
+- unnecessary badges
+- unnecessary animation
+- unnecessary explanatory text
+- redundant fields
+- duplicate student information
+
+Use a simple vertical form.
+
+Only ask for information actually required for the selected activity.
+
+IMPORTANT:
+
+Do not collect information just because it exists in the student's profile.
+
+If the system already knows:
+
+- student name
+- admission number
+- class
+- section
+- roll number
+
+then prefill it.
+
+If appropriate, make existing student information read-only instead of asking the parent to type it again.
+
+==================================================
+21. CONSENT FORM — RECOMMENDED CONTENT
+==================================================
+
+For an Educational Tour Consent Form, the system should intelligently use only relevant fields.
+
+A professional form could contain:
+
+SCHOOL NAME
+School address / affiliation information where configured
+
+EDUCATIONAL TOUR
+Destination
+Travel dates
+Duration
+Tour fee
+Important instructions if configured
+
+STUDENT DETAILS
+Student name
+Admission number
+Class / Section
+
+PARENT / GUARDIAN
+Parent/Guardian name
+Mobile number
+Emergency contact
+
+HEALTH / CARE
+Relevant allergy or medical information
+Food preference if genuinely needed
+Other important care instructions
+
+CONSENT
+
+A concise official declaration.
+
+Example structure:
+
+"I hereby give my consent for my ward to participate in the above-mentioned school educational excursion. I confirm that the information provided is correct and authorize the school to provide appropriate assistance in case of an emergency. I have instructed my ward to follow school rules and the directions of the accompanying staff."
+
+Then:
+
+[ ] I agree to the above declaration.
+
+PARENT / GUARDIAN SIGNATURE
+
+Digital signature / typed name according to the supported workflow.
+
+Date
+
+Place if genuinely required.
+
+That is enough.
+
+Do NOT automatically include:
+
+- Student photo box
+- Tear-off slip
+- "RECEIVED" stamp
+- decorative badges
+- unnecessary circular metadata
+- excessive legal language
+- redundant student fields
+- unnecessary house/blood group/roll number unless the school specifically requires them
+- unnecessary UI tabs inside the form
+- excessive colored sections
+
+Only include such fields if they are actually configured as required by the school/form.
+
+==================================================
+22. IMPORTANT — DO NOT HARDCODE THE REFERENCE FORM
+==================================================
+
+The React code I provided is only a DESIGN / CONTENT REFERENCE.
+
+Do NOT simply copy that code into SCHOLARIO-OS.
+
+Do NOT hardcode:
+
+"Delhi Public Heritage Senior Secondary School"
+
+"Jaipur – Jodhpur – Jaisalmer"
+
+specific student names
+
+specific phone numbers
+
+specific dates
+
+specific charges
+
+or any other demo information from the reference.
+
+Build a reusable dynamic form system.
+
+Use actual school/session/student/form/collection data.
+
+==================================================
+23. OFFICIAL DOCUMENT OUTPUT
+==================================================
+
+The final generated consent/application document should look like an official school office document.
+
+The visual direction:
+
+- white page
+- clean typography
+- black/dark text
+- restrained use of one school accent if needed
+- proper alignment
+- professional spacing
+- no excessive rounded cards
+- no unnecessary shadows
+- no dashboard-like UI inside the document
+- no decorative gradients
+- no oversized icons
+- no unnecessary colored boxes
+
+Think of a properly typeset Microsoft Word document printed on A4 paper.
+
+It should look credible if:
+
+1. printed
+2. downloaded as PDF
+3. emailed to a parent
+4. attached to school records
+
+==================================================
+24. DOCUMENT HEADER
+==================================================
+
+Use a professional school letterhead-style header.
+
+If school logo exists:
+
+show it.
+
+School name:
+prominent
+
+Optional:
+affiliation / address / contact
+
+Then a clear document title:
+
+PARENTAL CONSENT FORM
+
+or:
+
+EDUCATIONAL TOUR CONSENT FORM
+
+Then activity-specific information.
+
+Do not create a giant decorative banner.
+
+==================================================
+25. DOCUMENT CONTENT SHOULD BE DYNAMIC
+==================================================
+
+If the form is:
+
+Educational Tour Consent
+
+show tour information.
+
+If the form is:
+
+Sports Competition Consent
+
+show competition information.
+
+If it is:
+
+Workshop Registration
+
+show workshop information.
+
+If it is:
+
+General Application
+
+do not show tour fields.
+
+The document renderer must be schema/data driven.
+
+==================================================
+26. SIGNATURE HANDLING
+==================================================
+
+Support the existing legitimate signature workflow, but keep it simple.
+
+Possible:
+
+Parent/Guardian Name
+Signature
+Date
+
+If digital signature is supported:
+
+- Draw signature
+- Type name
+
+Keep the interface compact.
+
+Do not create a large signature-designing application.
+
+The final document should place the signature naturally at the bottom.
+
+==================================================
+27. PRINT / PDF
+==================================================
+
+The generated document should be optimized for:
+
+A4 portrait.
+
+Before printing:
+
+provide:
+
+Print
+Download PDF
+
+where supported by the existing architecture.
+
+The printed result should NOT include:
+
+- dashboard navigation
+- web app header
+- buttons
+- tabs
+- search
+- filters
+- UI controls
+- unnecessary page backgrounds
+
+Only the official document itself should print.
+
+Ensure:
+
+- no clipping
+- no overflow
+- no broken tables
+- no unnecessary blank second page
+- no accidental browser UI
+- signatures remain visible
+- long text wraps correctly
+
+==================================================
+28. FORM BUILDER — DO NOT OVERENGINEER
+==================================================
+
+Applications & Forms should eventually support reusable configurable forms.
+
+A simple builder should allow authorized staff to configure:
+
+- Title
+- Description
+- Form type
+- Fields
+- Required / optional
+- Student-specific or parent-specific
+- Deadline
+- Payment requirement
+- Linked collection
+- Submission settings
+
+Supported basic field types can include:
+
+- Short text
+- Long text
+- Number
+- Phone
+- Date
+- Dropdown
+- Checkbox
+- Radio choice
+- File upload if already supported
+- Signature if supported
+
+Do not build an unnecessarily complex Typeform clone.
+
+The Principal should be able to create a useful school form quickly.
+
+==================================================
+29. COLLECTION + FORM RELATIONSHIP
+==================================================
+
+Make the relationship explicit in the UI.
+
+For example:
+
+Educational Tour — Jaipur
+
+Collection:
+₹2,500 / student
+
+Linked form:
+Educational Tour Consent
+
+4 applications
+₹0 collected
+₹10,000 expected
+
+The Principal should be able to navigate between:
+
+Collection → Linked Form
+
+and:
+
+Form → Linked Collection
+
+without confusion.
+
+==================================================
+30. PAYMENT DATA INTEGRITY
+==================================================
+
+This is critical.
+
+Do not create duplicate payment records when a form is linked to a collection.
+
+A payment should have a clear relationship to:
+
+Student
+Collection
+Optional Form/Application
+Session
+
+Historical payment data must remain intact.
+
+If a form is later closed, existing payments remain visible.
+
+If a collection is archived, its payment history remains accessible.
+
+Never delete financial history simply because a form/collection is closed.
+
+==================================================
+31. SESSION AWARENESS
+==================================================
+
+Collections and forms should belong to an academic session where appropriate.
+
+Example:
+
+2026–27
+
+Educational Tour — Jaipur
+
+When the session changes, do not mix historical records into the new session.
+
+Archived session records should remain accessible as historical records.
+
+Use the existing SCHOLARIO session architecture.
+
+Do not invent a second session system.
+
+==================================================
+32. PRINCIPAL-FRIENDLY LANGUAGE
+==================================================
+
+The Principal is not a developer.
+
+Use:
+
+"New Collection"
+"Create Form"
+"Publish"
+"Close"
+"Archive"
+"View Responses"
+"Payment Details"
+"Download"
+"Delete Draft"
+
+Avoid:
+
+"Entity"
+"Object"
+"Record mutation"
+"Schema"
+"Workflow node"
+"Data object"
+"Backend state"
+
+The UI must be self-explanatory.
+
+==================================================
+33. REMOVE UNNECESSARY DESCRIPTION TEXT
+==================================================
+
+Follow the UX principle we established earlier:
+
+The navigation already tells the Principal where they are.
+
+Do not repeat section names unnecessarily.
+
+For example:
+
+Applications & Forms
+
+should NOT immediately show another huge:
+
+Applications & Forms
+
+heading underneath.
+
+Likewise, avoid long developer-style descriptions.
+
+Use concise supporting text only where it actually helps.
+
+==================================================
+34. PRESERVE THE EXISTING SCHOLARIO DESIGN SYSTEM
+==================================================
+
+Do not redesign SCHOLARIO from scratch.
+
+Maintain:
+
+- current sidebar
+- header
+- typography
+- spacing system
+- green primary action language
+- subtle borders
+- rounded cards
+- clean enterprise aesthetic
+- existing icons
+- current responsive behaviour
+
+However, improve information hierarchy wherever necessary.
+
+Applications & Forms should feel like the same product as:
+
+Fee Management
+Salary & Payroll
+Student Accounts
+Salary Structure
+
+==================================================
+35. EMPTY STATES
+==================================================
+
+Design proper empty states.
+
+For Additional Collections:
+
+"No additional collections yet."
+
+"Create a collection for a tour, event, workshop, activity or any special school charge."
+
+[+ New Collection]
+
+For Applications & Forms:
+
+"No forms yet."
+
+"Create an application, consent, registration or information form."
+
+[+ New Form]
+
+Do not show fake demo records to make the screen look populated.
+
+==================================================
+36. COLLECTION DETAILS
+==================================================
+
+Opening an Additional Collection should provide a clean overview.
+
+Show:
+
+Collection name
+Type
+Session
+Status
+Applicable students/classes
+Amount
+Expected
+Collected
+Outstanding
+Due date
+
+Then:
+
+Participants / Students
+
+Payment status per student:
+
+Student
+Class
+Amount
+Paid
+Due
+Status
+
+Then payment history.
+
+If linked to an application:
+
+show:
+
+Linked Form
+Responses
+Pending responses
+
+Make navigation between the two easy.
+
+==================================================
+37. COLLECTION REPORT
+==================================================
+
+A Principal should be able to understand:
+
+How much was expected?
+How much was collected?
+How much remains?
+Who paid?
+Who has not paid?
+When was each payment made?
+How was it paid?
+
+Provide a useful collection report/export if the existing architecture supports exports.
+
+Do not expose raw database fields.
+
+==================================================
+38. SECURITY / PERMISSIONS
+==================================================
+
+Respect the existing role/permission architecture.
+
+Only authorized users should be able to:
+
+- create collections
+- edit collections
+- publish collections
+- close/archive collections
+- access payment records
+- create/publish forms
+- view responses
+- export sensitive information
+
+Students/parents must only see forms/collections relevant to them.
+
+Do not weaken existing Row Level Security or authorization rules.
+
+==================================================
+39. EXISTING DATA MIGRATION / COMPATIBILITY
+==================================================
+
+There may already be records such as:
+
+Educational Tour — Jaipur
+Robotics Workshop
+School Development Fund
+
+Do not delete them.
+
+Adapt existing records into the improved model.
+
+If existing Educational Tour data is currently represented as an application-generated collection, preserve it and establish the correct relationship:
+
+Application/Form
+↕
+Additional Collection
+
+where appropriate.
+
+Do not create duplicate collections during migration.
+
+==================================================
+40. DO NOT BREAK CURRENT FEATURES
+==================================================
+
+Preserve:
+
+Fee Management
+Payments
+Transactions
+Student Accounts
+Fee Structures
+Settings
+
+Applications & Forms
+
+Communication
+Messages
+other modules
+
+Do not modify unrelated modules.
+
+==================================================
+41. FINAL UX PRINCIPLE
+==================================================
+
+The product should clearly communicate:
+
+FORM = collects information / consent / registration.
+
+COLLECTION = collects money.
+
+PAYMENT = records the actual money transaction.
+
+A FORM MAY LINK TO A COLLECTION.
+
+A COLLECTION DOES NOT REQUIRE A FORM.
+
+This distinction must be reflected in:
+
+UI
+navigation
+database relationships
+creation workflows
+status
+payment reporting
+permissions
+historical records
+
+==================================================
+42. FINAL ACCEPTANCE TEST
+==================================================
+
+After implementation, test these exact scenarios:
+
+SCENARIO 1
+Principal creates:
+
+"Robotics Workshop"
+
+₹1,000 per student
+
+No form.
+
+Result:
+Collection works normally and appears under All Collections.
+
+SCENARIO 2
+Principal creates:
+
+"School Development Fund"
+
+Custom amount.
+
+No form.
+
+Result:
+Collection works normally.
+
+SCENARIO 3
+Principal creates:
+
+"Educational Tour — Jaipur"
+
+and creates:
+
+"Educational Tour Consent"
+
+Form.
+
+Links the form to the collection.
+
+Result:
+Parents submit form.
+Payment can be recorded against the linked collection.
+No duplicate payment is created.
+
+SCENARIO 4
+Principal creates a draft collection.
+
+Before publishing:
+
+Delete is available.
+
+Principal deletes it.
+
+Result:
+Draft disappears permanently.
+
+SCENARIO 5
+Principal publishes a collection.
+
+Result:
+Delete is no longer available.
+
+Instead:
+
+Close / Archive
+
+is available according to lifecycle.
+
+SCENARIO 6
+A published collection receives payments.
+
+Result:
+It can NEVER be destructively deleted.
+
+Payment history remains available.
+
+SCENARIO 7
+Principal creates a form:
+
+"Sports Participation Consent"
+
+No payment.
+
+Result:
+Form works without any collection.
+
+SCENARIO 8
+Principal creates a form:
+
+"Workshop Registration"
+
+with payment required.
+
+Result:
+Principal can link an existing collection OR create a collection.
+
+SCENARIO 9
+Principal opens Applications & Forms.
+
+Result:
+The page does NOT look like an Educational Tour module.
+
+It is clearly a generic school forms/application system.
+
+SCENARIO 10
+Principal generates an Educational Tour Consent Form.
+
+Result:
+The online form is simple.
+
+The final document is:
+
+clean
+formal
+A4
+official-looking
+Microsoft Word-like
+print-ready
+
+with no unnecessary decorative UI.
+
+==================================================
+43. FINAL DESIGN REVIEW
+==================================================
+
+Before declaring the work complete, inspect the entire flow as a Principal.
+
+Ask:
+
+- Can I understand what a Collection is?
+- Can I create a collection without creating a form?
+- Can I create a form without payment?
+- Can I connect a form to an existing collection?
+- Can I delete something while it is still a draft?
+- Is deletion safely disabled after publication/payment?
+- Can I see who paid?
+- Can I see who has not paid?
+- Can I see the linked form?
+- Can I see form responses?
+- Can I distinguish forms from collections?
+- Does Applications & Forms feel generic rather than tour-specific?
+- Does the consent form look like a real school document?
+- Is unnecessary UI removed?
+- Is the language understandable to a Principal?
+- Is the entire workflow production-safe?
+
+If any answer is no, fix it before finishing.
+
+==================================================
+MOST IMPORTANT
+==================================================
+
+Do not treat this request as "change some labels and buttons."
+
+This is an information-architecture and workflow correction.
+
+The final architecture must make these concepts cleanly understandable:
+
+APPLICATION / FORM
+→ collects information, consent or registration
+
+ADDITIONAL COLLECTION
+→ defines a school-specific amount to be collected
+
+PAYMENT
+→ records actual money received
+
+LINK
+→ optionally connects an application/form to an additional collection
+
+DRAFT
+→ editable and deletable
+
+PUBLISHED
+→ active and protected from destructive deletion
+
+CLOSED
+→ no new submissions/payments where appropriate, but history remains
+
+ARCHIVED
+→ historical read-only record
+
+Build this carefully using the existing SCHOLARIO-OS architecture instead of creating a parallel system.
+
+Use the supplied React consent-form code only as a reference for the information/content direction. Do not copy its hardcoded demo data or unnecessarily complex UI.
+
+The final result should feel like a mature commercial School ERP designed by a senior product designer and engineered by a senior full-stack team.
