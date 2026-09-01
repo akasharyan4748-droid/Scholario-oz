@@ -60,8 +60,8 @@ const FINE_PER_DAY = 5
 const SEED_BOOKS: Book[] = [
   { id: 'BK001', title: 'Wings of Fire', author: 'Dr. A.P.J. Abdul Kalam', isbn: '978-8173711466', category: 'Biography', publisher: 'Universities Press', copies: 12, issued: 4, available: 8, status: 'Available' },
   { id: 'BK002', title: 'The Jungle Book', author: 'Rudyard Kipling', isbn: '978-9380816798', category: 'Fiction', publisher: 'Penguin', copies: 15, issued: 6, available: 9, status: 'Available' },
-  { id: 'BK003', title: 'Panchatantra Tales', author: 'Vishnu Sharma', isbn: '978-8126414838', category: 'Story Books', copies: 20, issued: 6, available: 14, status: 'Available' },
-  { id: 'BK004', title: 'Mathematics for Class 2', author: 'NCERT', isbn: '978-8174507344', category: 'Textbooks', copies: 25, issued: 3, available: 22, status: 'Available' },
+  { id: 'BK003', title: 'Panchatantra Tales', author: 'Vishnu Sharma', isbn: '978-8126414838', category: 'Story Books', copies: 20, issued: 7, available: 13, status: 'Available' },
+  { id: 'BK004', title: 'Mathematics for Class 2', author: 'NCERT', isbn: '978-8174507344', category: 'Textbooks', copies: 25, issued: 4, available: 21, status: 'Available' },
   { id: 'BK005', title: 'Our Environment', author: 'NCERT', isbn: '978-8174507351', category: 'Textbooks', copies: 25, issued: 5, available: 20, status: 'Available' },
   { id: 'BK006', title: 'Akbar and Birbal', author: 'Amar Chitra Katha', isbn: '978-8184820058', category: 'Story Books', copies: 10, issued: 4, available: 6, status: 'Available' },
   { id: 'BK007', title: 'Encyclopedia of Science', author: 'DK', isbn: '978-1405394834', category: 'Reference', copies: 6, issued: 3, available: 3, status: 'Low Stock' },
@@ -69,7 +69,7 @@ const SEED_BOOKS: Book[] = [
   { id: 'BK009', title: 'A Brief History of Time', author: 'Stephen Hawking', isbn: '978-0553380163', category: 'Science', copies: 8, issued: 5, available: 3, status: 'Low Stock' },
   { id: 'BK010', title: 'Indian Constitution', author: 'DD Basu', isbn: '978-9350356400', category: 'Reference', copies: 5, issued: 0, available: 5, status: 'Available' },
   { id: 'BK011', title: 'The Wonder That Was India', author: 'A.L. Basham', isbn: '978-8187013946', category: 'Biography', copies: 4, issued: 4, available: 0, status: 'Out of Stock' },
-  { id: 'BK012', title: 'Physics for Class 10', author: 'HC Verma', isbn: '978-8170189113', category: 'Textbooks', copies: 30, issued: 12, available: 18, status: 'Available' },
+  { id: 'BK012', title: 'Physics for Class 10', author: 'HC Verma', isbn: '978-8170189113', category: 'Textbooks', copies: 30, issued: 13, available: 17, status: 'Available' },
   { id: 'BK013', title: 'National Geographic Kids', author: 'Nat Geo', isbn: '978-1426338005', category: 'Magazines', copies: 15, issued: 8, available: 7, status: 'Available' },
   { id: 'BK014', title: 'The Discovery of India', author: 'Jawaharlal Nehru', isbn: '978-0143031031', category: 'Biography', copies: 6, issued: 2, available: 4, status: 'Available' },
   { id: 'BK015', title: 'Chemistry Lab Manual', author: 'NCERT', isbn: '978-8174507375', category: 'Textbooks', copies: 20, issued: 10, available: 10, status: 'Available' },
@@ -102,6 +102,21 @@ const SEED_RESERVATIONS: Reservation[] = [
   { id: 'RES001', bookId: 'BK011', bookTitle: 'The Wonder That Was India', borrowerId: 'STU-15', borrowerName: 'Pari Khanna', date: '2025-11-20', status: 'Waiting' },
 ]
 
+// Current-session borrower records — the logged-in student (Aarav Sharma,
+// STU-2024-018, Class 2) and teacher (Rohit Mehta, T-014) so their role
+// views show REAL circulation data from this same store (no second source).
+// Dates are relative to "today" so overdue/status computations stay honest.
+function rel(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
+}
+const SESSION_BORROWER_ISSUES: IssueRecord[] = [
+  { id: 'ISS101', bookId: 'BK003', bookTitle: 'Panchatantra Tales', borrowerId: 'STU-2024-018', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024018', class: 'Class 2-A', issueDate: rel(6), dueDate: rel(-8), status: 'Issued', fine: 0, fineStatus: 'Pending' },
+  { id: 'ISS102', bookId: 'BK004', bookTitle: 'Mathematics for Class 2', borrowerId: 'STU-2024-018', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024018', class: 'Class 2-A', issueDate: rel(20), dueDate: rel(-2), status: 'Overdue', fine: 10, fineStatus: 'Pending' },
+  { id: 'ISS103', bookId: 'BK008', bookTitle: 'Tenali Raman Stories', borrowerId: 'STU-2024-018', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024018', class: 'Class 2-A', issueDate: rel(40), dueDate: rel(26), returnDate: rel(25), status: 'Returned', fine: 0, fineStatus: 'Paid' },
+  { id: 'ISS104', bookId: 'BK012', bookTitle: 'Physics for Class 10', borrowerId: 'T-014', borrowerName: 'Rohit Mehta', borrowerType: 'teacher', issueDate: rel(9), dueDate: rel(-5), status: 'Issued', fine: 0, fineStatus: 'Pending' },
+  { id: 'ISS105', bookId: 'BK001', bookTitle: 'Wings of Fire', borrowerId: 'T-014', borrowerName: 'Rohit Mehta', borrowerType: 'teacher', issueDate: rel(35), dueDate: rel(33), returnDate: rel(30), status: 'Returned', fine: 0, fineStatus: 'Paid' },
+]
+
 interface LibraryState {
   books: Book[]
   issues: IssueRecord[]
@@ -124,7 +139,7 @@ interface LibraryState {
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
   books: SEED_BOOKS,
-  issues: SEED_ISSUES,
+  issues: [...SESSION_BORROWER_ISSUES, ...SEED_ISSUES],
   reservations: SEED_RESERVATIONS,
   search: '',
   categoryFilter: 'all',

@@ -38,13 +38,15 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Package, Plus, AlertTriangle, FileBarChart2, History,
+  Boxes, IndianRupee, ArrowRightLeft,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs } from '../shared/segmented-tabs'
 import { useInventoryStore, useInventoryData } from '@/lib/store/inventory-store'
 import type { InventoryItem } from '@/lib/store/inventory-store'
-import { INV_GLOBAL_STYLES, type InvTab } from './inventory-shared'
+import { formatINR } from '@/lib/format'
+import { INV_GLOBAL_STYLES, InvKpiCard, type InvTab } from './inventory-shared'
 import { ItemsTable } from './items-table'
 import { AddItemDialog } from './add-item-dialog'
 import { ItemActionDialog, type ActionKind } from './item-action-dialog'
@@ -119,6 +121,47 @@ export function InventoryModule() {
         >
           <Plus className="h-3.5 w-3.5" /> Add Item
         </Button>
+      </div>
+
+      {/* KPI overview strip — compact summary above the tab content.
+          Values come from useInventoryData().analytics (single source); each
+          card deep-links to the relevant tab. Small cards (p-3.5, text-xl) —
+          a summary strip, not a hero. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        <InvKpiCard
+          icon={<Boxes className="h-4 w-4" />}
+          label="Total Items"
+          value={analytics.totalItems}
+          sub={`${analytics.categoryCount} categories`}
+          accent="cyan"
+          delay={0}
+        />
+        <InvKpiCard
+          icon={<IndianRupee className="h-4 w-4" />}
+          label="Stock Value"
+          value={formatINR(analytics.totalValue, true)}
+          sub="at current unit rates"
+          accent="emerald"
+          delay={0.05}
+        />
+        <InvKpiCard
+          icon={<AlertTriangle className="h-4 w-4" />}
+          label="Low / Out of Stock"
+          value={analytics.lowStockCount + analytics.outOfStockCount}
+          sub={`${analytics.outOfStockCount} out · ${analytics.lowStockCount} low`}
+          accent="amber"
+          onClick={() => setTab('lowstock')}
+          delay={0.1}
+        />
+        <InvKpiCard
+          icon={<ArrowRightLeft className="h-4 w-4" />}
+          label="Movements"
+          value={movementsCount}
+          sub="all stock activity"
+          accent="violet"
+          onClick={() => setTab('movements')}
+          delay={0.15}
+        />
       </div>
 
       {/* Active tab content with AnimatePresence transitions */}

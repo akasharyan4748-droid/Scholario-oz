@@ -195,6 +195,11 @@ const DEFAULT_TEMPLATES: DocumentTemplate[] = [
 function seedDocs(): GeneratedDocument[] {
   const base = [
     { type: 'Bonafide' as DocType, name: 'Aarav Sharma', adm: 'DSO2024001', cls: 'Class 9', daysAgo: 2, status: 'Issued' as DocStatus },
+    // Session student (Aarav Sharma, STU-2024-018, Class 2) — their own
+    // certificate records so the student role view has real data from this
+    // same store (no second source).
+    { type: 'Bonafide' as DocType, name: 'Aarav Sharma', adm: 'DSO2024018', cls: 'Class 2-A', daysAgo: 12, status: 'Issued' as DocStatus, studentId: 'STU-2024-018' },
+    { type: 'Character' as DocType, name: 'Aarav Sharma', adm: 'DSO2024018', cls: 'Class 2-A', daysAgo: 34, status: 'Downloaded' as DocStatus, studentId: 'STU-2024-018' },
     { type: 'Transfer' as DocType, name: 'Diya Patel', adm: 'DSO2024002', cls: 'Class 9', daysAgo: 5, status: 'Downloaded' as DocStatus },
     { type: 'Character' as DocType, name: 'Vivaan Reddy', adm: 'DSO2024003', cls: 'Class 9', daysAgo: 7, status: 'Printed' as DocStatus },
     { type: 'ID Card' as DocType, name: 'Ananya Singh', adm: 'DSO2024004', cls: 'Class 9', daysAgo: 11, status: 'Issued' as DocStatus },
@@ -216,7 +221,7 @@ function seedDocs(): GeneratedDocument[] {
       id: `doc-seed-${i + 1}`,
       docType: b.type,
       docNumber,
-      studentId: undefined,
+      studentId: b.studentId,
       studentName: b.name,
       admissionNo: b.adm,
       class: b.cls,

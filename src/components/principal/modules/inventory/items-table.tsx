@@ -13,7 +13,7 @@
  */
 
 import { motion } from 'framer-motion'
-import { Package, Search, MapPin, MoreVertical, Plus, ArrowUpCircle, ArrowDownCircle, AlertTriangle, RotateCcw } from 'lucide-react'
+import { Package, Search, MapPin, MoreVertical, Plus, ArrowUpCircle, ArrowDownCircle, AlertTriangle, RotateCcw, Pen, Trophy, Armchair, FlaskConical, Monitor } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -43,6 +43,20 @@ const STATUSES: Array<{ value: string; label: string }> = [
 ]
 
 type ActionKind = 'add' | 'issue' | 'damaged' | 'return'
+
+// Distinct icon per category — improves scannability vs one generic box.
+function categoryIcon(category: string, className: string) {
+  switch (category) {
+    case 'Stationery': return <Pen className={className} />
+    case 'Sports': return <Trophy className={className} />
+    case 'Furniture': return <Armchair className={className} />
+    case 'Lab Equipment': return <FlaskConical className={className} />
+    case 'Electronics': return <Monitor className={className} />
+    case 'IT Equipment': return <Monitor className={className} />
+    case 'Cleaning': return <Package className={className} />
+    default: return <Package className={className} />
+  }
+}
 
 interface ItemsTableProps {
   onAction: (kind: ActionKind, item: InventoryItem) => void
@@ -156,7 +170,7 @@ export function ItemsTable({ onAction }: ItemsTableProps) {
                               ? 'bg-amber-500/10 text-amber-600'
                               : 'bg-primary/10 text-primary',
                         )}>
-                          <Package className="h-4 w-4" />
+                          {categoryIcon(it.category, 'h-4 w-4')}
                         </div>
                         <div className="min-w-0 max-w-[260px]">
                           <p className="font-medium text-sm truncate">{it.name}</p>

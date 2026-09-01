@@ -25,6 +25,30 @@ export function TabHeader({
   )
 }
 
+// Compact section group used inside a SettingsTab to cluster related
+// fields (Finance Settings grouping pattern): a 10px uppercase muted
+// label with a hairline rule, then the field grid. Keeps long forms
+// scannable without adding visual weight.
+export function FieldGroup({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2.5">
+        <h4 className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground">
+          {label}
+        </h4>
+        <div className="h-px flex-1 bg-border" aria-hidden />
+      </div>
+      {children}
+    </section>
+  )
+}
+
 // Wrapper used by every settings tab. Renders a GlassCard with consistent
 // padding/spacing. When `action` is provided, the header sits in a flex row
 // alongside the action slot (e.g. the "Add Book to Store" button); otherwise

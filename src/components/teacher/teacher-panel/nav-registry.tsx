@@ -2,7 +2,7 @@ import {
   LayoutDashboard, CalendarDays, CalendarCheck, BookOpen, ClipboardList,
   FileText, Users, BarChart3, Megaphone, BookMarked, CalendarClock, Award,
   FolderOpen, Shield, MessageSquareHeart, Heart, ClipboardCheck, Monitor,
-  Sparkles, Wallet,
+  Sparkles, Wallet, Library,
 } from 'lucide-react'
 import type { NavGroup } from '@/components/shell/app-shell'
 import type { TeacherRecord, PositionAssignment } from '@/lib/store/teachers-store'
@@ -48,6 +48,7 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions }: NavRegi
         { key: 'proctoring', label: 'Exam Proctoring', icon: <ClipboardCheck className="h-4.5 w-4.5" />, badge: 3 },
         { key: 'students', label: 'Student Directory', icon: <Users className="h-4.5 w-4.5" /> },
         { key: 'resources', label: 'Resource Library', icon: <FolderOpen className="h-4.5 w-4.5" /> },
+        { key: 'school-library', label: 'School Library', icon: <Library className="h-4.5 w-4.5" /> },
       ],
     },
     {
