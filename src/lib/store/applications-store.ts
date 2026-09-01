@@ -4,11 +4,16 @@
  * Applications & Forms store — the SCHOOL APPLICATION + CONSENT + PAYMENT +
  * APPROVAL + DOCUMENT + RECORD system.
  *
- * SCOPE (module rebuild): the Principal UI currently operates EXACTLY ONE
- * form type — the Educational Tour — via the template registry below. The
- * architecture stays fully generic (any "form + student participation +
- * fee + approval + printable document" workflow) so future Super Admin-
- * controlled templates slot in by registering here — no store surgery.
+ * SCOPE (TOUR-1 rebuild): the module operates EXACTLY ONE built-in form —
+ * the "Educational Tour — Parent Consent Form". There is NO form builder
+ * and NO create-form concept: the Principal (or an authorized Teacher,
+ * subject to the existing approval workflow) reuses the permanent template
+ * for each session/tour, configures the session-specific particulars
+ * (destination, dates, fee, circular number…), publishes it, takes it down
+ * and manages submissions + payments. The architecture stays generic
+ * underneath (any "form + student participation + fee + approval +
+ * printable document" workflow) so future Super Admin-controlled templates
+ * slot in by registering here — no store surgery.
  *
  * ARCHITECTURE (financial integration — CRITICAL):
  *   Publishing an application with payment Required/Optional creates (or
@@ -168,6 +173,21 @@ export interface ApplicationFormField {
 export type ApplicationTemplateKey =
   | 'educational_tour' | 'workshop_registration' | 'sports_consent' | 'general_application'
 
+/**
+ * TOUR-1 — the FIXED field set of the built-in Educational Tour — Parent
+ * Consent Form. The form is a permanent ready-made school template: its
+ * layout and questions can NOT be redesigned or extended from the UI.
+ * Student particulars are ALWAYS auto-filled from the school record and
+ * never part of the template. The migration (v8) normalizes every existing
+ * tour instance to exactly this set.
+ */
+export const TOUR_FORM_FIELDS: ApplicationFormField[] = [
+  { id: 't-meal', type: 'dropdown', label: 'Food preference', required: true, options: ['Vegetarian', 'Non-Vegetarian', 'Jain'], section: 'Health & Care' },
+  { id: 't-motion', type: 'yesno', label: 'Any motion sickness / travel-related concern?', required: true, section: 'Health & Care' },
+  { id: 't-medical', type: 'longtext', label: 'Relevant health / medical note', helpText: 'Allergies, medication, doctor\u2019s advice. Leave blank if none.', required: false, section: 'Health & Care' },
+  { id: 't-emergency', type: 'text', label: 'Emergency contact for the tour', helpText: 'Name and mobile of an adult reachable during the trip.', required: true, section: 'Parent / Guardian Details' },
+]
+
 export interface ApplicationTemplateDef {
   key: ApplicationTemplateKey
   /** Nav / button label ("Educational Tour"). */
@@ -191,19 +211,13 @@ export interface ApplicationTemplateDef {
 export const APPLICATION_TEMPLATES: Record<ApplicationTemplateKey, ApplicationTemplateDef> = {
   educational_tour: {
     key: 'educational_tour',
-    label: 'Educational Tour',
+    label: 'Educational Tour — Parent Consent Form',
     category: 'Tour',
-    tagline: 'Tour consent, preferences and payment in one form.',
+    tagline: 'The school\u2019s official tour consent form — reuse for every session.',
     descriptionPlaceholder: 'Itinerary summary, what the fee covers, conduct rules…',
     defaultLedgerLabel: 'Educational Tour',
     defaultAmount: 2500,
-    fields: [
-      { id: 't-meal', type: 'dropdown', label: 'Meal preference', required: true, options: ['Vegetarian', 'Non-Vegetarian', 'Jain'], section: 'Tour Preferences' },
-      { id: 't-shirt', type: 'radio', label: 'Tour T-shirt size', required: true, options: ['S', 'M', 'L', 'XL'], section: 'Tour Preferences' },
-      { id: 't-emergency', type: 'emergency-contact', label: 'Emergency contact on tour', helpText: 'An adult relative besides the guardians listed above.', required: true, section: 'Medical & Emergency Details' },
-      { id: 't-medical', type: 'longtext', label: 'Medical notes / allergies', helpText: 'Leave blank if none.', required: false, section: 'Medical & Emergency Details' },
-      { id: 't-photo', type: 'yesno', label: 'May photographs taken on the tour be used for school communication?', required: false, section: 'Consent' },
-    ],
+    fields: TOUR_FORM_FIELDS.map((f) => ({ ...f })),
     consentStatement: 'I give consent for my ward to participate in the tour and accept the school\u2019s conduct rules for the trip.',
   },
   workshop_registration: {
@@ -303,6 +317,25 @@ export interface SchoolApplication {
   sourceRef?: ApplicationSourceRef
   /** Template this application was created from (tour forms: educational_tour). */
   templateKey?: ApplicationTemplateKey
+  // ─── TOUR-1 — session-specific tour particulars. The form LAYOUT is
+  // fixed; only these genuinely-change-per-session values are editable in
+  // the configuration screen. All optional for backward compatibility.
+  /** Last day of the tour (eventDate = first day). */
+  tourEndDate?: string
+  /** Human duration, e.g. "3 Days / 2 Nights". */
+  durationDays?: string
+  /** Circular / reference number printed on the official form. */
+  circularNo?: string
+  /** Date of the circular (yyyy-mm-dd). */
+  circularDate?: string
+  /** Accompanying staff (free text, printed on the form). */
+  accompanyingStaff?: string
+  /** Short tour information / instructions for parents. */
+  tourInstructions?: string
+  /** Gender eligibility when the tour is gender-specific. */
+  genderEligibility?: 'All' | 'Boys' | 'Girls'
+  /** How the tour fee may be paid: online, at the school counter, or both. */
+  paymentAvailability?: 'Both' | 'Online' | 'Cash'
   /** APPS-IA-1 — the form's PURPOSE (what it collects). Derived from the
    *  template when omitted (backward compat). */
   formPurpose?: FormPurpose
@@ -383,6 +416,10 @@ export interface ApplicationSubmission {
   address?: string
   guardianName: string
   guardianPhone: string
+  /** TOUR-1 — unique application/participation number for THIS tour
+   *  (e.g. TOUR-26-27-11-G-001). Assigned once at submission time; stable
+   *  forever after; sequential within the class + gender group. */
+  serialNo?: string
   /** Answers to the template's application-specific fields. */
   answers: Record<string, string | string[] | boolean>
   /** Uploaded file metadata (name/size snapshot). */
@@ -581,14 +618,76 @@ export interface StudentLite {
   className: string
   classId: string
   section: string
+  gender?: string
 }
 
-export function isEligibleForApplication(app: SchoolApplication, student: Pick<StudentLite, 'classId' | 'section' | 'id'>): boolean {
+export function isEligibleForApplication(app: SchoolApplication, student: Pick<StudentLite, 'classId' | 'section' | 'id' | 'gender'>): boolean {
   if (app.status !== 'Published') return false
   if (app.targetStudentIds?.length) return app.targetStudentIds.includes(student.id)
   if (!app.targetClassIds.includes(student.classId)) return false
-  if (app.targetSectionNames?.length) return app.targetSectionNames.includes(student.section)
+  if (app.targetSectionNames?.length && !app.targetSectionNames.includes(student.section)) return false
+  // TOUR-1 — gender-scoped tours only accept students of that gender.
+  if (app.genderEligibility === 'Boys' || app.genderEligibility === 'Girls') {
+    const g = (student.gender ?? '').toLowerCase()
+    if (!g) return false
+    const isBoy = g.startsWith('m') || g.startsWith('b')
+    const isGirl = g.startsWith('f') || g.startsWith('g')
+    if (app.genderEligibility === 'Boys' && !isBoy) return false
+    if (app.genderEligibility === 'Girls' && !isGirl) return false
+  }
   return true
+}
+
+// ─── TOUR-1 — unique tour serial / participation number ────────────────
+
+/** "2026-2027" → "26-27" (session tag inside every serial number). */
+export function tourSessionTag(academicYear: string): string {
+  const m = academicYear.match(/(\d{4})\D+(\d{2,4})?/)
+  if (!m) return academicYear.replace(/\D/g, '').slice(-4) || '00-00'
+  const a = m[1].slice(2)
+  const b = m[2] ? m[2].slice(-2) : String((Number(m[1]) + 1) % 100).padStart(2, '0')
+  return `${a}-${b}`
+}
+
+/** "Class 11" → "11"; "Nursery" → "N" (class tag inside the serial). */
+export function tourClassTag(className: string): string {
+  const m = className.match(/Class\s*(\d+)/i)
+  if (m) return m[1]
+  return className.trim().charAt(0).toUpperCase() || 'X'
+}
+
+/** Gender code — B / G / X (unknown). */
+export function tourGenderTag(gender?: string): 'B' | 'G' | 'X' {
+  const g = (gender ?? '').toLowerCase()
+  if (g.startsWith('m') || g.startsWith('b')) return 'B'
+  if (g.startsWith('f') || g.startsWith('g')) return 'G'
+  return 'X'
+}
+
+/**
+ * The next serial number for a tour submission. Sequential within the
+ * (class, gender) group, unique across the whole tour, stable once written.
+ * Format: TOUR-26-27-11-G-001.
+ */
+export function nextTourSerial(
+  app: SchoolApplication,
+  allSubmissions: Array<Pick<ApplicationSubmission, 'applicationId' | 'className' | 'gender' | 'serialNo'>>,
+  className: string,
+  gender?: string,
+): string {
+  const classTag = tourClassTag(className)
+  const genderTag = tourGenderTag(gender)
+  const prefix = `TOUR-${tourSessionTag(app.academicYear)}-${classTag}-${genderTag}-`
+  const used = new Set(
+    allSubmissions
+      .filter((s) => s.applicationId === app.id && s.serialNo?.startsWith(prefix))
+      .map((s) => s.serialNo),
+  )
+  for (let i = 1; i <= 999; i++) {
+    const candidate = `${prefix}${String(i).padStart(3, '0')}`
+    if (!used.has(candidate)) return candidate
+  }
+  return `${prefix}${Date.now().toString(36).toUpperCase()}`
 }
 
 // ─── Store contract ───────────────────────────────────────────────────
@@ -627,6 +726,15 @@ export interface CreateApplicationInput {
    *  exist and not already be linked to a published form. */
   paymentChargeId?: string
   formFields: ApplicationFormField[]
+  // ─── TOUR-1 — session-specific tour particulars (see SchoolApplication). ───
+  tourEndDate?: string
+  durationDays?: string
+  circularNo?: string
+  circularDate?: string
+  accompanyingStaff?: string
+  tourInstructions?: string
+  genderEligibility?: 'All' | 'Boys' | 'Girls'
+  paymentAvailability?: 'Both' | 'Online' | 'Cash'
 }
 
 interface ApplicationsState {
@@ -873,6 +981,15 @@ export const useApplicationsStore = create<ApplicationsState>()(
           sourceRef: input.sourceRef,
           academicYear: year,
           formVersion: 1,
+          // TOUR-1 — session-specific tour particulars.
+          ...(input.tourEndDate ? { tourEndDate: input.tourEndDate } : {}),
+          ...(input.durationDays?.trim() ? { durationDays: input.durationDays.trim() } : {}),
+          ...(input.circularNo?.trim() ? { circularNo: input.circularNo.trim() } : {}),
+          ...(input.circularDate ? { circularDate: input.circularDate } : {}),
+          ...(input.accompanyingStaff?.trim() ? { accompanyingStaff: input.accompanyingStaff.trim() } : {}),
+          ...(input.tourInstructions?.trim() ? { tourInstructions: input.tourInstructions.trim() } : {}),
+          ...(input.genderEligibility && input.genderEligibility !== 'All' ? { genderEligibility: input.genderEligibility } : {}),
+          ...(input.paymentAvailability ? { paymentAvailability: input.paymentAvailability } : {}),
           targetClassIds: [...input.targetClassIds],
           targetSectionNames: input.targetSectionNames?.length ? [...input.targetSectionNames] : undefined,
           targetStudentIds: input.targetStudentIds?.length ? [...input.targetStudentIds] : undefined,
@@ -968,6 +1085,16 @@ export const useApplicationsStore = create<ApplicationsState>()(
             ...(patch.physicalSignatureRequired !== undefined ? { physicalSignatureRequired: patch.physicalSignatureRequired } : {}),
             ...(patch.inChargeTeacherId !== undefined ? { inChargeTeacherId: patch.inChargeTeacherId || undefined } : {}),
             ...(patch.inChargeName !== undefined ? { inChargeName: patch.inChargeName || undefined } : {}),
+            // TOUR-1 — session-specific tour particulars (patch-through;
+            // empty string clears an optional value).
+            ...(patch.tourEndDate !== undefined ? { tourEndDate: patch.tourEndDate || undefined } : {}),
+            ...(patch.durationDays !== undefined ? { durationDays: patch.durationDays.trim() || undefined } : {}),
+            ...(patch.circularNo !== undefined ? { circularNo: patch.circularNo.trim() || undefined } : {}),
+            ...(patch.circularDate !== undefined ? { circularDate: patch.circularDate || undefined } : {}),
+            ...(patch.accompanyingStaff !== undefined ? { accompanyingStaff: patch.accompanyingStaff.trim() || undefined } : {}),
+            ...(patch.tourInstructions !== undefined ? { tourInstructions: patch.tourInstructions.trim() || undefined } : {}),
+            ...(patch.genderEligibility !== undefined ? { genderEligibility: patch.genderEligibility } : {}),
+            ...(patch.paymentAvailability !== undefined ? { paymentAvailability: patch.paymentAvailability } : {}),
             ...(patch.formFields !== undefined && !publishedLockedMoney ? { formFields: patch.formFields } : {}),
             updatedAt: nowIso,
             // NOTE: money config (mode/amount/label) intentionally NOT mutable
@@ -1207,7 +1334,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           applications: state.applications.map((a) => a.id !== id ? a : { ...a, status: 'Closed', updatedAt: nowIso }),
           audit: pushAudit(state, {
             ts: nowIso, applicationId: id, actor, actorRole: 'Principal',
-            action: 'application.closed', message: `Application "${app.title}" closed to new submissions${reason ? ` — ${reason}` : ''}. All records preserved.`,
+            action: 'application.closed', message: `Application "${app.title}" taken down by ${actor} — new submissions stopped. All submissions, payments and history remain on record.`,
           }),
         })
       },
@@ -1333,6 +1460,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           return { success: true, existingSubmissionId: existing.id, submission: existing }
         }
         const nowIso = new Date().toISOString()
+        const serialNo = nextTourSerial(app, state.submissions, input.student.className, input.student.gender)
         const sub: ApplicationSubmission = {
           id: newId('SUB'),
           applicationId: app.id,
@@ -1349,6 +1477,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           ...(input.student.address ? { address: input.student.address } : {}),
           guardianName: input.student.guardianName,
           guardianPhone: input.student.guardianPhone,
+          serialNo,
           answers: input.answers,
           attachments: input.attachments,
           submittedAt: nowIso,
@@ -1515,6 +1644,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           return { success: false, error: 'A submission already exists for this student.', submission: existing }
         }
         const nowIso = new Date().toISOString()
+        const serialNo = nextTourSerial(app, state.submissions, input.student.className, input.student.gender)
         const sub: ApplicationSubmission = {
           id: newId('SUB'),
           applicationId: app.id,
@@ -1531,6 +1661,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           ...(input.student.address ? { address: input.student.address } : {}),
           guardianName: input.student.guardianName,
           guardianPhone: input.student.guardianPhone,
+          serialNo,
           answers: {}, // paper form — answers live on the signed physical document
           submittedAt: nowIso,
           submittedByRole: 'Office',
@@ -1604,11 +1735,13 @@ export const useApplicationsStore = create<ApplicationsState>()(
     }),
     {
       name: 'scholario-applications-v1',
-      // v7 (APPS-IA-1) — module generalization: the migrate function no
-      // longer drops non-Tour forms (workshop/consent/general are first-class
-      // now) and backfills formPurpose. Bump ensures every persisted
-      // namespace re-runs the (now inclusive) normalization once.
-      version: 7,
+      // v8 (TOUR-1) — the module is refocused on the ONE built-in
+      // Educational Tour — Parent Consent Form: every tour instance's
+      // formFields are normalized to the FIXED template set (the form
+      // layout is permanent — nothing may be redesigned from the UI), and
+      // persisted submissions that predate serial numbers keep their records
+      // (serialNo is optional and simply absent on pre-migration rows).
+      version: 8,
       storage: createTenantScopedStorage(TENANT_SCOPED_BASES.applications),
       // v4→v5 — (historical) Educational Tour scope rebuild: namespaces were
       // narrowed to Tour forms. v7 SUPERSEDES this — the module is general
@@ -1642,7 +1775,13 @@ export const useApplicationsStore = create<ApplicationsState>()(
               source: a.source ?? 'Custom',
               createdByRole: a.createdByRole ?? 'Principal',
               approvalNotes: a.approvalNotes ?? [],
-              formFields: (a.formFields ?? []).map((f) => ({ ...f, section: f.section ?? 'Tour Preferences' })),
+              // v8 (TOUR-1) — normalize the tour template's field set: the
+              // built-in consent form is FIXED; legacy builder-era fields
+              // (t-shirt size, photo consent…) are retired. Submissions keep
+              // their answers — retired ids simply no longer render.
+              formFields: (a.templateKey === 'educational_tour' || a.category === 'Tour' || a.category === 'Trip')
+                ? TOUR_FORM_FIELDS.map((f) => ({ ...f }))
+                : (a.formFields ?? []).map((f) => ({ ...f, section: f.section ?? 'Tour Preferences' })),
             }))
         }
         if (st?.submissions && st.applications) {
@@ -1673,6 +1812,14 @@ function seedApplications(): SchoolApplication[] {
       templateKey: 'educational_tour',
       source: 'Event',
       academicYear: YEAR,
+      tourEndDate: '2026-10-10',
+      durationDays: '3 Days / 2 Nights',
+      circularNo: 'GW/EDU/TOUR/2026-27/07',
+      circularDate: '2026-08-18',
+      accompanyingStaff: 'Ms. Kavita Joshi (PGT History) · Mr. Deepak Nair (Sports Coach) · Ms. Farah Khan (Lady Attendant)',
+      tourInstructions: 'Reporting time 6:00 AM at the school gate on the day of departure. Students must carry their school ID card, comfortable walking shoes and a light jacket. Electronic items above a smartphone are not permitted.',
+      genderEligibility: 'All',
+      paymentAvailability: 'Both',
       targetClassIds: ['C11'],
       deadline: '2026-09-15',
       eventDate: '2026-10-08',
@@ -1737,10 +1884,13 @@ export function ensureApplicationSeedData(): void {
       { 't-meal': 'Vegetarian', 't-shirt': 'XL', 't-emergency': 'Mahesh Verma — 99100 55667', 't-medical': 'Lactose intolerant.', 't-photo': true },
     ]
 
-    const out: ApplicationSubmission[] = c11.map((stu, i) => {
+    // Serials are assigned sequentially over the generated set (class +
+    // gender aware) — the same rules as a live submission.
+    const seeded: ApplicationSubmission[] = []
+    for (const [i, stu] of c11.entries()) {
       const submittedAt = '2026-08-24T09:00:00Z'
       const isCorrection = i === 2
-      return {
+      seeded.push({
         id: `SUB-SEED-JP-${i + 1}`,
         applicationId: tour.id,
         studentId: stu.id,
@@ -1756,6 +1906,7 @@ export function ensureApplicationSeedData(): void {
         address: stu.address,
         guardianName: stu.guardianName,
         guardianPhone: stu.guardianPhone,
+        serialNo: nextTourSerial(tour, seeded, stu.className, stu.gender),
         answers: answerSets[i % answerSets.length],
         submittedAt,
         submittedByRole: 'Student' as const,
@@ -1769,8 +1920,9 @@ export function ensureApplicationSeedData(): void {
         resubmissionCount: 0,
         formVersion: 1,
         updatedAt: submittedAt,
-      }
-    })
+      })
+    }
+    const out = seeded
 
     useApplicationsStore.setState({
       submissions: out,

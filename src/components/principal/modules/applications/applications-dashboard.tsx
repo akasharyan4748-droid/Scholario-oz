@@ -1,75 +1,71 @@
 'use client'
 
 /**
- * ApplicationsDashboard — compact command centre for Applications & Forms.
+ * ApplicationsDashboard (TOUR-1 §1) — the Applications & Forms home.
  *
- * APPS-IA-1 — the module is GENERAL (§7/§8/§9): any school application,
- * registration or consent form. Educational Tour is one TEMPLATE/type, not
- * the module's identity. Forms collect RESPONSES; money is collected by
- * ADDITIONAL COLLECTIONS (Fee Management → Payments) which a form may
- * optionally link to (§41). The pipeline reads left-to-right: create →
- * publish → students respond (and pay via the linked collection) →
- * review → official record.
+ * ONE permanent built-in form lives here:
  *
- * Follows Salary & Payroll proportions: one toolbar (context + action), a
- * small metric strip, one filter row, then a full-bleed divide-y table
- * where every row expands into contextual STATE-AWARE actions (§16).
- * Enterprise calm.
+ *   Educational Tour — Parent Consent Form
+ *
+ * There is NO "New Form" / "Create Form" action — the template is
+ * ready-made and fixed. The Principal (or an authorized Teacher) reuses it
+ * for a session, and each use appears below as a tour instance with its
+ * own submissions, payments and history. Actions on the template card:
+ * View · Use / Configure for Session · Preview · Download Blank.
+ * Actions on each instance: open management, publish (draft), take down.
  */
 
-import { Fragment, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Archive, CheckCircle2, ChevronDown, ClipboardList, Copy, Eye, Lock, PencilLine,
-  Plus, Search, Send, Trash2, XCircle, Undo2,
+  Bus, CheckCircle2, ChevronRight, Eye, FileDown, Lock, PencilLine,
+  Search, Send, ShieldCheck, Users, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
-import {
   useApplicationsStore, effectiveAppStatus, combinedSubmissionStatus,
-  deriveSubmissionPayment, formPurposeOf,
   type SchoolApplication, type ApplicationSubmission,
 } from '@/lib/store/applications-store'
-import { CATEGORY_ICON } from '@/components/shared/application-category'
+import { APPLICATION_TEMPLATES } from '@/lib/store/applications-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { AppStatusBadge } from './application-detail'
+import { TourFormDocument, useFitA4Zoom, printTourDocument, downloadTourDocument, tourDocFileName } from './tour-form-document'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { Printer, Download } from 'lucide-react'
 
 const ACTOR = 'Dr. Ananya Iyer'
 
 interface Props {
   onOpenApplication: (id: string) => void
-  onStartCreate: () => void
-  onStartEdit: (id: string) => void
+  onUseTemplate: () => void
+  onEditSession: (id: string) => void
 }
 
-type StatusFilter = 'all' | 'active' | 'Pending Approval' | 'Draft' | 'Approved' | 'Locked' | 'Closed' | 'Archived'
+type StatusFilter = 'all' | 'active' | 'draft' | 'down' | 'approval'
 
-export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStartEdit }: Props) {
+export function ApplicationsDashboard({ onOpenApplication, onUseTemplate, onEditSession }: Props) {
   const applications = useApplicationsStore((s) => s.applications)
   const submissions = useApplicationsStore((s) => s.submissions)
-  const deleteApplicationDraft = useApplicationsStore((s) => s.deleteApplicationDraft)
-
+  const publishApplication = useApplicationsStore((s) => s.publishApplication)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [sessionFilter, setSessionFilter] = useState<string>('all')
-  const [recordOpen, setRecordOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<SchoolApplication | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+
+  // ONLY tour instances of the built-in template live in this module.
+  const tourInstances = useMemo(
+    () => applications.filter(
+      (a) => a.templateKey === 'educational_tour' || a.category === 'Tour' || a.category === 'Trip',
+    ),
+    [applications],
+  )
 
   const subsByApp = useMemo(() => {
     const m = new Map<string, ApplicationSubmission[]>()
@@ -81,489 +77,297 @@ export function ApplicationsDashboard({ onOpenApplication, onStartCreate, onStar
     return m
   }, [submissions])
 
-  // Permanent-record pool: closed/locked/archived.
-  const recordApps = useMemo(
-    () => applications.filter((a) => {
-      const st = effectiveAppStatus(a)
-      return st === 'Closed' || st === 'Locked' || st === 'Archived'
-    }),
-    [applications],
-  )
-
-  // ── Generic metrics (§14): forms + responses, not tours ──
-  const metrics = useMemo(() => {
-    let active = 0
-    let closing = 0
-    let awaitingReview = 0
-    let awaitingMoney = 0
-    for (const a of applications) {
-      const st = effectiveAppStatus(a)
-      if (st === 'Open') active++
-      if (st === 'Closing Soon') { active++; closing++ }
-      if (st === 'Pending Approval') awaitingReview++
-      if (st === 'Closed' || st === 'Locked') continue
-      const subs = subsByApp.get(a.id) ?? []
-      for (const s of subs) {
-        const cs = combinedSubmissionStatus(a, s)
-        if (['Submitted', 'Under Review'].includes(cs)) awaitingReview++
-        if (cs === 'Awaiting Payment' || cs === 'Awaiting Verification') awaitingMoney++
-      }
-    }
-    return { active, closing, awaitingReview, awaitingMoney, responses: submissions.length }
-  }, [applications, subsByApp, submissions])
-
-  const sessionOptions = useMemo(
-    () => Array.from(new Set(applications.map((a) => a.academicYear))).sort().reverse(),
-    [applications],
-  )
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return [...applications]
+    return tourInstances
       .filter((a) => {
         const eff = effectiveAppStatus(a)
-        if (statusFilter === 'active' && !(['Open', 'Closing Soon'] as string[]).includes(eff as string)) return false
-        if (['Draft', 'Archived', 'Pending Approval', 'Approved'].includes(statusFilter) && a.status !== statusFilter) return false
-        if ((statusFilter === 'Locked' || statusFilter === 'Closed') && eff !== statusFilter) return false
-        if (sessionFilter !== 'all' && a.academicYear !== sessionFilter) return false
-        if (q && !a.title.toLowerCase().includes(q)) return false
+        if (statusFilter === 'active' && !['Open', 'Closing Soon'].includes(eff)) return false
+        if (statusFilter === 'draft' && !['Draft', 'Pending Approval', 'Approved', 'Changes Requested', 'Rejected', 'Scheduled'].includes(eff)) return false
+        if (statusFilter === 'down' && !['Closed', 'Locked', 'Archived'].includes(eff)) return false
+        if (statusFilter === 'approval' && a.status !== 'Pending Approval') return false
+        if (q && !`${a.title} ${a.destination ?? ''} ${a.academicYear}`.toLowerCase().includes(q)) return false
         return true
       })
       .sort((a, b) => {
         const rank = (app: SchoolApplication) => {
           switch (effectiveAppStatus(app)) {
-            case 'Pending Approval': return -1 // approval queue on top
+            case 'Pending Approval': return -1
             case 'Open': case 'Closing Soon': return 0
             case 'Draft': case 'Changes Requested': case 'Rejected': case 'Approved': case 'Scheduled': return 1
-            case 'Locked': case 'Closed': return 2
-            default: return 3
+            default: return 2
           }
         }
         return rank(a) - rank(b) || b.createdAt.localeCompare(a.createdAt)
       })
-  }, [applications, search, statusFilter, sessionFilter])
+  }, [tourInstances, search, statusFilter])
 
-  const handleDeleteDraft = () => {
-    if (!deleteTarget) return
-    const r = deleteApplicationDraft(deleteTarget.id, ACTOR)
-    setDeleteTarget(null)
-    if (r.success) {
-      toast.success('Draft deleted', { description: 'The form was removed permanently — nothing had been submitted.' })
+  const activeCount = tourInstances.filter((a) => ['Open', 'Closing Soon'].includes(effectiveAppStatus(a))).length
+  const approvalCount = tourInstances.filter((a) => a.status === 'Pending Approval').length
+
+  const publishDraft = (id: string) => {
+    const res = publishApplication(id, ACTOR)
+    if (res.success) {
+      toast.success('Tour published — eligible students notified.')
     } else {
-      toast.error('Could not delete', { description: r.error })
+      toast.error('Could not publish', { description: res.error })
     }
   }
 
   return (
-    <div className="space-y-4">
-      {/* Toolbar — generic module description (§8) + creation action (§7) */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-xs text-muted-foreground min-w-0 truncate">
-          Create and manage school applications, registrations and consent forms
-        </p>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setRecordOpen(true)} aria-label="Open record file of past forms">
-            <Archive className="h-3 w-3" /> Record File
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={onStartCreate}>
-            <Plus className="h-3 w-3" /> New Form
-          </Button>
-        </div>
-      </div>
-
-      {/* Metric strip — all counts derived from live records (§14). */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MetricTile label="Active forms" value={metrics.active} hint={metrics.closing ? `${metrics.closing} closing soon` : undefined} />
-        <MetricTile label="Awaiting review" value={metrics.awaitingReview} tone="amber" hint="approvals + responses" />
-        <MetricTile label="Awaiting payment" value={metrics.awaitingMoney} tone="amber" hint="pay or cash verify" />
-        <MetricTile label="Total responses" value={metrics.responses} />
-      </div>
-
-      {/* Filter row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input className="pl-8 h-8 text-xs" placeholder="Search forms…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search forms" />
-        </div>
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-          <SelectTrigger className="h-8 w-[140px] text-xs" aria-label="Status filter"><SelectValue /></SelectTrigger>
-          <SelectContent className="z-[70]">
-            <SelectItem value="all" className="text-xs">All statuses</SelectItem>
-            <SelectItem value="active" className="text-xs">Active now</SelectItem>
-            <SelectItem value="Pending Approval" className="text-xs">Pending approval</SelectItem>
-            <SelectItem value="Draft" className="text-xs">Drafts</SelectItem>
-            <SelectItem value="Approved" className="text-xs">Approved</SelectItem>
-            <SelectItem value="Locked" className="text-xs">Locked</SelectItem>
-            <SelectItem value="Closed" className="text-xs">Closed</SelectItem>
-            <SelectItem value="Archived" className="text-xs">Archived</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={sessionFilter} onValueChange={setSessionFilter}>
-          <SelectTrigger className="h-8 w-[140px] text-xs" aria-label="Session filter"><SelectValue /></SelectTrigger>
-          <SelectContent className="z-[70]">
-            <SelectItem value="all" className="text-xs">All sessions</SelectItem>
-            {sessionOptions.map((y) => (
-              <SelectItem key={y} value={y} className="text-xs">{y}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* overflow-x-auto + min-width wrapper: narrow viewports scroll
-          horizontally INSIDE the card instead of clipping columns. */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden overflow-x-auto">
-        <div className="min-w-[760px]">
-          <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-b border-border/60 bg-muted/30 text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">
-            <span className="flex-1">Form</span>
-            <span className="w-24 shrink-0 hidden md:block">Type</span>
-            <span className="w-32 shrink-0 hidden lg:block">In-charge</span>
-            <span className="w-28 shrink-0">Deadline</span>
-            <span className="w-20 shrink-0 text-right">Responses</span>
-            <span className="w-36 shrink-0 text-right">Payment</span>
-            <span className="w-24 shrink-0 text-right">Status</span>
-            <span className="w-[72px] shrink-0" />
+    <div className="space-y-4 max-w-7xl mx-auto" data-testid="applications-dashboard">
+      {/* ── The ONE built-in form (§1) ── */}
+      <motion.section
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-xl border border-border bg-card overflow-hidden"
+        aria-label="Built-in form"
+      >
+        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
+            <Bus className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-sm font-semibold tracking-tight">Educational Tour — Parent Consent Form</h2>
+              <Badge variant="outline" className="text-[9px] h-4 px-1.5 gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400">
+                <ShieldCheck className="h-2.5 w-2.5" /> Built-in school form
+              </Badge>
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+              The school&apos;s official A4 consent form — destination, dates, fee and circular details are filled in per session.
+              The printed layout stays fixed. Reuse it whenever the school runs a tour.
+            </p>
           </div>
-          {filtered.length > 0 && (
-            <div className="divide-y divide-border">
-              {filtered.map((a, i) => (
-                <Row
+          <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setPreviewOpen(true)}>
+              <Eye className="h-3 w-3" /> Preview
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => { setPreviewOpen(true) }}>
+              <FileDown className="h-3 w-3" /> Blank form
+            </Button>
+            <Button size="sm" className="h-7 text-[11px] gap-1" onClick={onUseTemplate}>
+              <PencilLine className="h-3 w-3" /> Use for a session
+            </Button>
+          </div>
+        </div>
+      </motion.section>
+
+      {/* ── Session instances toolbar ── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          <h3 className="text-xs font-semibold tracking-tight shrink-0">Tour sessions</h3>
+          <span className="text-[10px] text-muted-foreground">
+            {activeCount} open · {tourInstances.length} total
+            {approvalCount > 0 && <span className="text-amber-600 dark:text-amber-400"> · {approvalCount} awaiting approval</span>}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative w-40 sm:w-52">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search tours…"
+              className="h-8 pl-8 text-xs"
+              aria-label="Search tour sessions"
+            />
+          </div>
+          <StatusFilterSelect value={statusFilter} onChange={setStatusFilter} />
+        </div>
+      </div>
+
+      {/* ── Instance list ── */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        {filtered.length === 0 ? (
+          <div className="px-4 py-10 text-center">
+            <p className="mx-auto max-w-md text-xs text-muted-foreground">
+              {tourInstances.length === 0
+                ? 'No tour sessions yet — press "Use for a session" on the consent form above to configure one.'
+                : 'No tour sessions match.'}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {filtered.map((a) => {
+              const eff = effectiveAppStatus(a)
+              const subs = (subsByApp.get(a.id) ?? []).filter((s) => s.status !== 'Withdrawn')
+              let paid = 0
+              for (const s of subs) {
+                const cs = combinedSubmissionStatus(a, s)
+                if (cs === 'Paid · Under Review' || cs === 'Approved' || cs === 'Awaiting Verification') paid++
+              }
+              return (
+                <InstanceRow
                   key={a.id}
                   app={a}
-                  index={i}
-                  submissions={subsByApp.get(a.id) ?? []}
+                  eff={eff}
+                  total={subs.length}
+                  paid={paid}
                   onOpen={() => onOpenApplication(a.id)}
-                  onEdit={() => onStartEdit(a.id)}
-                  onDelete={() => setDeleteTarget(a)}
+                  onConfigure={() => onEditSession(a.id)}
+                  onPublish={() => publishDraft(a.id)}
                 />
-              ))}
-            </div>
-          )}
-        </div>
-        {filtered.length === 0 && (
-          <div className="py-12 text-center">
-            <ClipboardList className="h-6 w-6 mx-auto text-muted-foreground/40" />
-            <p className="mt-2 text-xs text-muted-foreground">No forms match this view.</p>
-            <Button variant="outline" size="sm" className="h-7 mt-3 text-[11px]" onClick={onStartCreate}>
-              Create the first one
-            </Button>
+              )
+            })}
           </div>
         )}
       </div>
+      <p className="text-[10px] text-muted-foreground">
+        Taking a tour down stops new submissions only — submissions, payments, serials and history always stay on record.
+      </p>
 
-      {/* Record File: permanent institutional record of finished forms */}
-      <RecordFileDialog
-        open={recordOpen}
-        onOpenChange={setRecordOpen}
-        recordApps={recordApps}
-        subsByApp={subsByApp}
-        onOpenApplication={onOpenApplication}
-      />
-
-      {/* Delete-draft confirmation (§17) */}
-      {deleteTarget && (
-        <AlertDialog open onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
-          <AlertDialogContent className="max-w-sm">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete draft form?</AlertDialogTitle>
-              <AlertDialogDescription>
-                {`"${deleteTarget.title}" has not been published and has no responses. It will be permanently removed.`}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-rose-600 hover:bg-rose-700 text-white"
-                onClick={handleDeleteDraft}
-              >
-                Delete Draft
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
+      {/* Template preview dialog */}
+      <TemplatePreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} />
     </div>
   )
 }
 
-// ─── Record File dialog (kept as its own component to stay readable) ───
-
-function RecordFileDialog({
-  open, onOpenChange, recordApps, subsByApp, onOpenApplication,
-}: {
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  recordApps: SchoolApplication[]
-  subsByApp: Map<string, ApplicationSubmission[]>
-  onOpenApplication: (id: string) => void
-}) {
+function StatusFilterSelect({ value, onChange }: { value: StatusFilter; onChange: (v: StatusFilter) => void }) {
+  const options: Array<{ value: StatusFilter; label: string }> = [
+    { value: 'all', label: 'All' },
+    { value: 'active', label: 'Open now' },
+    { value: 'approval', label: 'Awaiting approval' },
+    { value: 'draft', label: 'Drafts' },
+    { value: 'down', label: 'Taken down' },
+  ]
+  const current = options.find((o) => o.value === value)?.label ?? 'All'
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Record File</DialogTitle>
-          <DialogDescription>
-            Closed, locked and archived forms — permanent institutional record
-          </DialogDescription>
-        </DialogHeader>
-        <div className="max-h-[60vh] overflow-y-auto divide-y divide-border">
-          {recordApps.length === 0 ? (
-            <p className="py-8 text-center text-xs text-muted-foreground">Nothing archived yet.</p>
-          ) : (
-            recordApps.map((a) => {
-              const Icon = CATEGORY_ICON[a.category] ?? ClipboardList
-              return (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => { onOpenChange(false); onOpenApplication(a.id) }}
-                  className="flex w-full items-center gap-3 py-2.5 text-left transition-colors hover:bg-muted/40"
-                  aria-label={`Open ${a.title}`}
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 ring-1 ring-violet-500/20 dark:text-violet-400">
-                    <Icon className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-semibold">{a.title}</span>
-                    <span className="block truncate text-[10px] text-muted-foreground">
-                      {(subsByApp.get(a.id) ?? []).length} responses · deadline {a.deadline ? formatDate(a.deadline) : '—'}
-                    </span>
-                  </span>
-                  <AppStatusBadge status={effectiveAppStatus(a)} />
-                </button>
-              )
-            })
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 text-[11px] gap-1" aria-label="Filter tour sessions">
+          {current} <ChevronRight className="h-3 w-3 -rotate-90" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {options.map((o) => (
+          <DropdownMenuItem key={o.value} onClick={() => onChange(o.value)}>{o.label}</DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
-// ─── Metric tile ───────────────────────────────────────────────────────
-
-function MetricTile({ label, value, hint, tone }: { label: string; value: number; hint?: string; tone?: 'amber' }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg bg-muted/40 px-3 py-2">
-      <p className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground">{label}</p>
-      <p className={cn('text-lg font-bold tabular-nums leading-tight mt-0.5', tone === 'amber' && 'text-amber-600 dark:text-amber-400')}>
-        {value}
-      </p>
-      {hint && <p className="text-[9px] text-muted-foreground truncate">{hint}</p>}
-    </motion.div>
-  )
-}
-
-// ─── One form row ──────────────────────────────────────────────────────
-
-function Row({ app, index, submissions, onOpen, onEdit, onDelete }: {
+function InstanceRow({ app, eff, total, paid, onOpen, onConfigure, onPublish }: {
   app: SchoolApplication
-  index: number
-  submissions: ApplicationSubmission[]
+  eff: string
+  total: number
+  paid: number
   onOpen: () => void
-  onEdit: () => void
-  onDelete: () => void
+  onConfigure: () => void
+  onPublish: () => void
 }) {
-  const publishApplication = useApplicationsStore((s) => s.publishApplication)
-  const [confirmPublish, setConfirmPublish] = useState(false)
-  const closeApplication = useApplicationsStore((s) => s.closeApplication)
-  const reopenApplication = useApplicationsStore((s) => s.reopenApplication)
-  const lockApplication = useApplicationsStore((s) => s.lockApplication)
-  const duplicateApplication = useApplicationsStore((s) => s.duplicateApplication)
-  const archiveApplication = useApplicationsStore((s) => s.archiveApplication)
-
-  const status = effectiveAppStatus(app)
-  const approved = submissions.filter((s) => s.status === 'Approved').length
-  const purpose = formPurposeOf(app)
-  const RowIcon = CATEGORY_ICON[app.category] ?? ClipboardList
-
-  // Money roll-up straight off the canonical ledger via derived payments.
-  const collected = submissions.reduce((sum, s) => sum + deriveSubmissionPayment(app, s).paidAmount, 0)
-  const anyPendingCash = submissions.some((s) => combinedSubmissionStatus(app, s) === 'Awaiting Verification')
-
-  // ── STATE-AWARE action menu (§16): only meaningful actions per state ──
-  const actionItems: Array<{ label: string; icon: React.ReactNode; onSelect?: () => void; danger?: boolean }> = []
-  if (app.status === 'Pending Approval') {
-    actionItems.push({ label: 'Review & approve', icon: <CheckCircle2 className="h-3.5 w-3.5" />, onSelect: onOpen })
-  }
-  if (app.status === 'Approved' || app.status === 'Draft') {
-    actionItems.push({ label: 'Publish now', icon: <Send className="h-3.5 w-3.5" />, onSelect: () => setConfirmPublish(true) })
-  }
-  if (app.status === 'Changes Requested' || app.status === 'Rejected') {
-    actionItems.push({ label: 'Edit & review note', icon: <PencilLine className="h-3.5 w-3.5" />, onSelect: onEdit })
-  }
-  if (app.status === 'Published' && (status === 'Open' || status === 'Closing Soon')) {
-    actionItems.push({ label: 'Edit details', icon: <PencilLine className="h-3.5 w-3.5" />, onSelect: onEdit })
-    actionItems.push({ label: 'Close now', icon: <XCircle className="h-3.5 w-3.5" />, onSelect: () => { closeApplication(app.id, ACTOR); toast.success('Closed — records preserved.') } })
-    actionItems.push({ label: 'Lock immediately', icon: <Lock className="h-3.5 w-3.5" />, onSelect: () => { lockApplication(app.id, ACTOR); toast.info('Locked.') } })
-  }
-  if (status === 'Closed' || status === 'Locked') {
-    actionItems.push({ label: 'Reopen (before deadline)', icon: <Undo2 className="h-3.5 w-3.5" />, onSelect: () => {
-      const r = reopenApplication(app.id, ACTOR)
-      toast[r.success ? 'success' : 'error'](r.success ? 'Reopened' : 'Cannot reopen', r.success ? undefined : { description: r.error })
-    } })
-    actionItems.push({ label: 'Archive', icon: <Archive className="h-3.5 w-3.5" />, onSelect: () => { archiveApplication(app.id, ACTOR); toast.info('Archived — history stays readable.') } })
-  }
-  const coreActionsStart = actionItems.length
-  if (app.status === 'Draft') {
-    actionItems.push(
-      { label: 'Edit draft', icon: <PencilLine className="h-3.5 w-3.5" />, onSelect: onEdit },
-      { label: 'Preview form', icon: <Eye className="h-3.5 w-3.5" />, onSelect: onOpen },
-      { label: 'Delete draft', icon: <Trash2 className="h-3.5 w-3.5" />, onSelect: onDelete, danger: true },
-    )
-  } else {
-    actionItems.push({ label: 'View details', icon: <ClipboardList className="h-3.5 w-3.5" />, onSelect: onOpen })
-  }
-  actionItems.push({ label: 'Duplicate as new draft', icon: <Copy className="h-3.5 w-3.5" />, onSelect: () => {
-    const r = duplicateApplication(app.id, ACTOR)
-    if (r.success) toast.success('Duplicated')
-  } })
-  if (status !== 'Open' && status !== 'Closing Soon' && status !== 'Archived' && app.status !== 'Draft' && !actionItems.some((a) => a.label === 'Archive')) {
-    actionItems.push({ label: 'Archive', icon: <Archive className="h-3.5 w-3.5" />, onSelect: () => { archiveApplication(app.id, ACTOR); toast.info('Archived — history stays readable.') } })
-  }
+  const badgeTone =
+    eff === 'Open' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400'
+      : eff === 'Closing Soon' ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
+        : eff === 'Pending Approval' ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-400'
+          : eff === 'Draft' ? 'border-border bg-muted/60 text-muted-foreground'
+            : 'border-border bg-muted/60 text-muted-foreground'
+  const canPublish = ['Draft', 'Approved', 'Changes Requested', 'Rejected'].includes(app.status)
 
   return (
-    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * 0.03, 0.2) }}>
-      <div className="relative flex items-center gap-3 px-4 py-2.5 hover:bg-muted/25 transition-colors">
-        <button type="button" onClick={onOpen} className="absolute inset-0 z-0 cursor-pointer" aria-label={`Open ${app.title}`} />
-        <span className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
-          <RowIcon className="h-4 w-4" />
-        </span>
-        <button type="button" onClick={onOpen} className="relative z-10 min-w-0 flex-1 text-left">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <p className="text-xs font-semibold truncate">{app.title}</p>
-            {app.participation === 'Mandatory' && (
-              <Badge variant="outline" className="text-[8px] h-3.5 px-1 shrink-0">Mandatory</Badge>
-            )}
-            {app.status === 'Draft' && (
-              <Badge variant="outline" className="text-[8px] h-3.5 px-1 shrink-0">Draft</Badge>
-            )}
-          </div>
-          <p className="text-[10px] text-muted-foreground truncate">
-            {app.payment.mode === 'None' ? 'No fee' : `${formatINR(app.payment.amount)} / student`}
-            {' · '}{approved}/{submissions.length || 0} approved
-            {' · '}{app.academicYear}
-          </p>
-        </button>
+    <div className="flex items-center gap-3 px-3 sm:px-4 py-3 hover:bg-muted/30 transition-colors group">
+      <span className={cn(
+        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1',
+        ['Open', 'Closing Soon'].includes(eff) ? 'bg-primary/10 text-primary ring-primary/15' : 'bg-muted/60 text-muted-foreground ring-border',
+      )}>
+        <Bus className="h-4 w-4" />
+      </span>
 
-        {/* Type */}
-        <div className="w-24 shrink-0 hidden md:block relative z-10">
-          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold bg-muted text-muted-foreground">
-            {purpose}
-          </span>
-        </div>
-
-        {/* In-charge */}
-        <div className="w-32 shrink-0 hidden lg:block relative z-10">
-          <p className="text-[11px] font-medium truncate">{app.inChargeName ?? '—'}</p>
-          <p className="text-[9px] text-muted-foreground">{app.createdByRole === 'Teacher' ? 'teacher-created' : 'principal'}</p>
-        </div>
-
-        {/* Deadline */}
-        <div className="w-28 shrink-0 hidden sm:block relative z-10">
-          <p className="text-[11px] font-medium tabular-nums">{app.deadline ? formatDate(app.deadline) : '—'}</p>
-          {status === 'Open' || status === 'Closing Soon' ? (
-            <DeadlineCountdown deadline={app.deadline} />
-          ) : (
-            <p className="text-[9px] text-muted-foreground">{status}</p>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="text-xs font-semibold truncate">{app.title}</p>
+          <Badge variant="outline" className={cn('text-[9px] h-4 px-1.5 shrink-0', badgeTone)}>{eff}</Badge>
+          {(eff === 'Closed' || eff === 'Locked' || eff === 'Archived') && (
+            <Badge variant="outline" className="text-[9px] h-4 px-1.5 shrink-0 gap-1">
+              <Lock className="h-2.5 w-2.5" /> records kept
+            </Badge>
           )}
         </div>
-
-        {/* Responses */}
-        <div className="w-20 shrink-0 text-right hidden md:block relative z-10">
-          <p className="text-xs font-bold tabular-nums">{submissions.length}</p>
-          <p className="text-[9px] text-muted-foreground">{approved} approved</p>
-        </div>
-
-        {/* Payment */}
-        <div className="w-36 shrink-0 text-right hidden lg:block relative z-10">
-          {app.payment.mode === 'None' ? (
-            <p className="text-[10px] text-muted-foreground">no fee</p>
-          ) : (
-            <>
-              <p className="text-xs font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                {formatINR(collected, true)} collected
-              </p>
-              <p className="text-[9px] text-muted-foreground">
-                {anyPendingCash
-                  ? 'cash verifying…'
-                  : submissions.length > 0
-                    ? `of ${formatINR(app.payment.amount * submissions.length, true)} expected`
-                    : `${formatINR(app.payment.amount, true)} / student`}
-              </p>
-            </>
-          )}
-        </div>
-
-        {/* Status */}
-        <div className="w-24 shrink-0 flex justify-end relative z-10">
-          <AppStatusBadge status={status} />
-        </div>
-
-        {/* Actions — Radix dropdown portals to <body> so the menu stays on-screen. */}
-        <div className="relative z-10 shrink-0 w-[72px] flex justify-end">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] hover:bg-muted/60 transition-colors"
-                aria-label={`Actions for ${app.title}`}
-              >
-                Actions <ChevronDown className="h-3 w-3" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52 z-[70]">
-              {actionItems.map((item, i) => (
-                <Fragment key={item.label}>
-                  {i === coreActionsStart && i > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuItem
-                    onSelect={() => item.onSelect?.()}
-                    className={cn('text-[11px]', item.danger && 'text-rose-600 focus:text-rose-600 dark:text-rose-400 dark:focus:text-rose-400')}
-                  >
-                    {item.icon} {item.label}
-                  </DropdownMenuItem>
-                </Fragment>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[10px] text-muted-foreground">
+          <span>{app.destination ?? '—'}</span>
+          {app.eventDate && <span>· {formatDate(app.eventDate)}{app.tourEndDate ? ` – ${formatDate(app.tourEndDate)}` : ''}</span>}
+          <span>· {app.academicYear}</span>
+          <span>· {app.payment.mode === 'None' ? 'No fee' : `${formatINR(app.payment.amount)} per student`}</span>
+          <span>· {total} submitted{total > 0 ? `, ${paid} paid` : ''}</span>
+          {app.inChargeName && <span>· in-charge {app.inChargeName}</span>}
+        </p>
       </div>
 
-      {/* PART 6 — publish confirmation (honest one-way-door copy) */}
-      {confirmPublish && (
-        <AlertDialog open onOpenChange={(o) => { if (!o) setConfirmPublish(false) }}>
-          <AlertDialogContent className="max-w-sm">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Publish form?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Once published, “{app.title}” can be shared with students and parents and cannot be permanently deleted.
-                {submissions.length > 0 && ' Existing responses stay on record.'}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  setConfirmPublish(false)
-                  const r = publishApplication(app.id, ACTOR)
-                  toast[r.success ? 'success' : 'error'](r.success ? 'Published' : 'Publish failed', r.success ? { description: 'Eligible students have been notified.' } : { description: r.error })
-                }}
-              >
-                Publish Form
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
-    </motion.div>
+      <div className="shrink-0 flex items-center gap-1.5">
+        {canPublish && (
+          <Button size="sm" className="h-7 text-[11px] px-2.5 gap-1" onClick={onPublish}>
+            <Send className="h-3 w-3" /> Publish
+          </Button>
+        )}
+        {['Draft', 'Open', 'Closing Soon', 'Scheduled'].includes(eff) && (
+          <Button variant="outline" size="sm" className="h-7 text-[11px] px-2.5 gap-1 hidden sm:inline-flex" onClick={onConfigure}>
+            <PencilLine className="h-3 w-3" /> Configure
+          </Button>
+        )}
+        <Button variant="outline" size="sm" className="h-7 text-[11px] px-2.5 gap-1" onClick={onOpen}>
+          <Users className="h-3 w-3" /> Manage
+        </Button>
+      </div>
+    </div>
   )
 }
 
-function DeadlineCountdown({ deadline }: { deadline: string }) {
-  const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86_400_000)
-  if (!Number.isFinite(days)) return null
-  return days >= 0 ? (
-    <p className="text-[9px] text-muted-foreground">{days} day{days === 1 ? '' : 's'} left</p>
-  ) : (
-    <p className="text-[9px] text-rose-500">passed {Math.abs(days)}d ago</p>
+// ─── Template preview (the fixed official blank form) ──────────────────
+
+function TemplatePreviewDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const [ref, zoom] = useFitA4Zoom<HTMLDivElement>()
+  // A representative blank template — destination placeholders resolve to
+  // fill-in rules exactly like the real blank copy.
+  const app: SchoolApplication = useMemo(() => ({
+    id: 'TEMPLATE',
+    title: 'Educational Tour',
+    category: 'Tour',
+    templateKey: 'educational_tour',
+    source: 'Event',
+    academicYear: '—',
+    deadline: '—',
+    participation: 'Optional',
+    guardianConsent: { required: true, method: 'Digital', statement: APPLICATION_TEMPLATES.educational_tour.consentStatement },
+    teacherApprovalRequired: false,
+    physicalSignatureRequired: false,
+    payment: { mode: 'None', amount: 0, feeHeadLabel: 'Educational Tour' },
+    formFields: [],
+    status: 'Draft',
+    createdBy: ACTOR,
+    createdByRole: 'Principal',
+    approvalNotes: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }), [])
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="pb-2 border-b border-border shrink-0">
+          <DialogTitle className="text-base flex items-center gap-2">
+            <Eye className="h-4 w-4 text-primary" /> Educational Tour — Parent Consent Form
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            The fixed official A4 template. Session details (destination, dates, fee, circular number…) fill in when you use it.
+          </DialogDescription>
+        </DialogHeader>
+        <div ref={ref} className="flex-1 min-h-0 overflow-auto bg-muted/40 p-2 rounded-md">
+          <div style={{ zoom, width: 'fit-content', margin: '0 auto' }}>
+            <TourFormDocument app={app} />
+          </div>
+        </div>
+        <DialogFooter className="border-t border-border pt-3 shrink-0">
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => downloadTourDocument('BLANK-Educational-Tour-Consent-Form')}>
+            <Download className="h-3.5 w-3.5" /> Download blank
+          </Button>
+          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => printTourDocument()}>
+            <Printer className="h-3.5 w-3.5" /> Print
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => onOpenChange(false)}>
+            <CheckCircle2 className="h-3.5 w-3.5" /> Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -1,29 +1,29 @@
 'use client'
 
 /**
- * ApplicationsModule — Principal entry point for the Applications & Forms
- * system, registered as a dedicated module in the Finance group (connected
- * to Fee Management without adding top-level Fee tabs).
+ * ApplicationsModule — Principal entry point for Applications & Forms.
  *
- * Internal view state keeps everything inside ONE normal module surface —
- * dashboard ⇄ builder ⇄ detail — no browser-level routes, exactly like the
- * Fees / Salary shells. Every action flows through applications-store and
- * (for money) fee-store pipelines.
+ * TOUR-1: exactly ONE built-in form (Educational Tour — Parent Consent
+ * Form). Internal view state keeps everything inside ONE module surface —
+ * dashboard ⇄ session configuration ⇄ submissions management — no browser
+ * routes, exactly like the Fees / Salary shells. Every action flows through
+ * applications-store and (for money) fee-store pipelines.
  */
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  useApplicationsStore, ensureApplicationSeedData,
-} from '@/lib/store/applications-store'
+import { useApplicationsStore, ensureApplicationSeedData } from '@/lib/store/applications-store'
+import type { SchoolApplication } from '@/lib/store/applications-store'
 import { PageTransition } from '@/components/shared/ui'
 import { ApplicationsDashboard } from './applications-dashboard'
-import { ApplicationBuilder } from './application-builder'
-import { ApplicationDetail } from './application-detail'
+import { TourConfigScreen } from './tour-config'
+import { TourSubmissions } from './tour-submissions'
+
+const ACTOR = 'Dr. Ananya Iyer'
 
 type View =
   | { name: 'dashboard' }
-  | { name: 'builder'; editingId?: string }
+  | { name: 'config'; editingId?: string }
   | { name: 'detail'; appId: string }
 
 export function ApplicationsModule() {
@@ -44,7 +44,7 @@ export function ApplicationsModule() {
       <PageTransition className="space-y-4">
         <AnimatePresence mode="wait">
           <motion.div
-            key={view.name + ('appId' in view ? view.appId : '')}
+            key={view.name + ('appId' in view ? view.appId : '') + ('editingId' in view ? view.editingId ?? '' : '')}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
@@ -54,22 +54,23 @@ export function ApplicationsModule() {
             {view.name === 'dashboard' && (
               <ApplicationsDashboard
                 onOpenApplication={(id) => setView({ name: 'detail', appId: id })}
-                onStartCreate={() => setView({ name: 'builder' })}
-                onStartEdit={(id) => setView({ name: 'builder', editingId: id })}
+                onUseTemplate={() => setView({ name: 'config' })}
+                onEditSession={(id) => setView({ name: 'config', editingId: id })}
               />
             )}
-            {view.name === 'builder' && (
-              <BuilderHost
+            {view.name === 'config' && (
+              <ConfigHost
                 editingId={view.editingId}
-                onClose={() => setView({ name: 'dashboard' })}
-                onSaved={(id) => setView({ name: 'detail', appId: id })}
+                onBack={() => setView({ name: 'dashboard' })}
+                onSaved={(id) => setView({ name: 'config', editingId: id })}
+                onPublished={(id) => setView({ name: 'detail', appId: id })}
               />
             )}
             {view.name === 'detail' && (
-              <ApplicationDetail
-                app={useApplicationsStore.getState().applications.find((a) => a.id === view.appId)!}
+              <DetailHost
+                appId={view.appId}
                 onBack={() => setView({ name: 'dashboard' })}
-                onEdit={() => setView({ name: 'builder', editingId: view.appId })}
+                onEdit={(id) => setView({ name: 'config', editingId: id })}
               />
             )}
           </motion.div>
@@ -79,25 +80,46 @@ export function ApplicationsModule() {
   )
 }
 
-function BuilderHost({ editingId, onClose, onSaved }: {
+function ConfigHost({ editingId, onBack, onSaved, onPublished }: {
   editingId?: string
-  onClose: () => void
-  onSaved: (appId: string) => void
+  onBack: () => void
+  onSaved: (id: string) => void
+  onPublished: (id: string) => void
 }) {
-  const editing = useApplicationsStore((s) => s.applications.find((a) => a.id === editingId))
+  const editing = useApplicationsStore((s) => (editingId ? s.applications.find((a) => a.id === editingId) : undefined))
   if (editingId && !editing) {
-    onClose()
+    onBack()
     return null
   }
   return (
-    <ApplicationBuilder
-      key={editing?.id ?? 'new'}
+    <TourConfigScreen
       editing={editing}
-      onClose={onClose}
-      onSaved={() => {
-        if (editingId) onSaved(editingId)
-        else onClose()
-      }}
+      actorRole="Principal"
+      actorName={ACTOR}
+      onBack={onBack}
+      onSaved={onSaved}
+      onPublished={onPublished}
+    />
+  )
+}
+
+function DetailHost({ appId, onBack, onEdit }: {
+  appId: string
+  onBack: () => void
+  onEdit: (id: string) => void
+}) {
+  const app = useApplicationsStore((s) => s.applications.find((a) => a.id === appId))
+  if (!app) {
+    onBack()
+    return null
+  }
+  const live: SchoolApplication = app
+  return (
+    <TourSubmissions
+      key={live.id}
+      app={live}
+      onBack={onBack}
+      onEdit={() => onEdit(live.id)}
     />
   )
 }
