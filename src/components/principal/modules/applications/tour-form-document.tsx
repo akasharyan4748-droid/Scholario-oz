@@ -387,7 +387,7 @@ export function TourFormDocument({ app, sub, payment }: TourFormDocumentProps) {
           <div key={who} className="text-center">
             <div style={{ height: '11mm', borderBottom: '0.3mm dotted #555', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '0.5mm' }}>
               {sig && sig.mode === 'drawn' && sig.data.startsWith('data:image/png') ? (
-                // eslint-disable-next-line @next/next/no-img-element
+                 
                 <img src={sig.data} alt={`Signature of ${sig.signerName}`} style={{ maxHeight: '10mm', maxWidth: '100%', objectFit: 'contain' }} />
               ) : sig && sig.mode === 'typed' ? (
                 <span style={{ fontSize: '13px', fontStyle: 'italic' }}>{sig.data}</span>

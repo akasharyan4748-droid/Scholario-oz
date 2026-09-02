@@ -29,6 +29,7 @@ import {
   combinedSubmissionStatus,
 } from '@/lib/store/applications-store'
 import type { SchoolApplication, ApplicationCategory } from '@/lib/store/applications-store'
+import { useFeeStore } from '@/lib/store/fee-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { useAuth } from '@/lib/store/auth-store'
 import { formatDate } from '@/lib/format'
@@ -59,6 +60,9 @@ export function ApplicationReviewsModule() {
   const applications = useApplicationsStore((s) => s.applications)
   const submissions = useApplicationsStore((s) => s.submissions)
   const classes = useStudentsStore((s) => s.classes)
+  // Payment chips derive from the canonical fee ledger — subscribing keeps
+  // them live when the office records a payment from another screen.
+  useFeeStore((s) => s.transactions)
 
   // Top-level workspace switch — reviews (assigned forms) vs my own forms.
   const [workspace, setWorkspace] = useState<'reviews' | 'my-forms'>('reviews')

@@ -142,7 +142,7 @@ export function TourConfigScreen({ editing, actorRole, teacherId, actorName, onB
   const [mobileView, setMobileView] = useState<'form' | 'preview'>('form')
 
   const teacherOptions = useMemo(
-    () => teachers.filter((t) => t.status !== 'Former').map((t) => ({ id: t.id, name: t.name })),
+    () => teachers.filter((t) => t.status === 'Active' || t.status === 'On Leave').map((t) => ({ id: t.id, name: t.name })),
     [teachers],
   )
   const inChargeLocked = actorRole === 'Teacher' && !!teacherId
@@ -704,9 +704,10 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function Group({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+function Group({ group, icon, title, children }: { group?: FieldGroup; icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
     <motion.section
+      data-field-group={group}
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       className="rounded-xl border border-border bg-card"

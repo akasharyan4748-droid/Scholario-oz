@@ -37,8 +37,8 @@ import { formatINR, formatDate, initials } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
-  ApplicationPrintDocument, printApplicationDocument, downloadApplicationDocument, applicationDocFileName,
-} from '@/components/principal/modules/applications/application-print'
+  TourFormDocument, useFitA4Zoom, printTourDocument, downloadTourDocument, tourDocFileName,
+} from '@/components/principal/modules/applications/tour-form-document'
 import { SubmissionStatusChip } from './review-detail'
 
 type Decision = 'approve' | 'reject' | 'request_correction'
@@ -64,6 +64,8 @@ export function ReviewDialog({ app, sub, onClose }: {
   const [decisionNote, setDecisionNote] = useState('')
   const [note, setNote] = useState('')
   const [docFile, setDocFile] = useState('')
+  // Properly-scaled A4 preview of the official tour document.
+  const [a4Ref, a4Zoom] = useFitA4Zoom<HTMLDivElement>()
 
   const confirmDecision = () => {
     if (!pendingDecision || !decisionNote.trim()) return
@@ -210,23 +212,19 @@ export function ReviewDialog({ app, sub, onClose }: {
           </div>
         )}
 
-        {/* ── Filled official document preview + print/download ── */}
+        {/* ── Filled OFFICIAL A4 document preview + print/download (TOUR-1:
+              the same fixed template the school prints) ── */}
         <div className="rounded-lg border border-border bg-muted/30 p-3">
-          <div className="rounded-md bg-card shadow-sm overflow-hidden">
-            <ApplicationPrintDocument
-              app={app}
-              sub={sub}
-              paymentLines={app.payment.mode !== 'None' ? [
-                { label: 'Payment status', value: pay.status },
-                ...(pay.receiptNos.length ? [{ label: 'Receipts', value: pay.receiptNos.join(', ') }] : []),
-              ] : []}
-            />
+          <div ref={a4Ref} className="rounded-md overflow-auto bg-muted/40">
+            <div style={{ zoom: a4Zoom, width: 'fit-content', margin: '0 auto' }}>
+              <TourFormDocument app={app} sub={sub} payment={pay} />
+            </div>
           </div>
           <div className="flex items-center justify-end gap-1.5 mt-2.5">
-            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => printApplicationDocument()}>
+            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => printTourDocument()}>
               <Printer className="h-3 w-3" /> Print
             </Button>
-            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => downloadApplicationDocument(applicationDocFileName({ app, sub }))}>
+            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => downloadTourDocument(tourDocFileName(app, sub))}>
               <Download className="h-3 w-3" /> Download
             </Button>
           </div>

@@ -36,6 +36,7 @@ import {
   deriveSubmissionPayment,
   type ApplicationSubmission, type SchoolApplication,
 } from '@/lib/store/applications-store'
+import { useFeeStore } from '@/lib/store/fee-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -59,6 +60,9 @@ interface ApplyDialogState {
 export function StudentApplicationsModule() {
   const applications = useApplicationsStore((s) => s.applications)
   const submissions = useApplicationsStore((s) => s.submissions)
+  // Payment chips derive from the canonical fee ledger — subscribing keeps
+  // them live when the office records a payment from another screen.
+  useFeeStore((s) => s.transactions)
 
   const identity = useDemoStudent()
   const canonical = identity?.canonical

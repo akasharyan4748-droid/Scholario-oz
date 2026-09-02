@@ -33,6 +33,7 @@ import {
 } from '@/lib/store/applications-store'
 import { APPLICATION_TEMPLATES } from '@/lib/store/applications-store'
 import { formatINR, formatDate } from '@/lib/format'
+import { useFeeStore } from '@/lib/store/fee-store'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { TourFormDocument, useFitA4Zoom, printTourDocument, downloadTourDocument, tourDocFileName } from './tour-form-document'
@@ -55,6 +56,10 @@ export function ApplicationsDashboard({ onOpenApplication, onUseTemplate, onEdit
   const applications = useApplicationsStore((s) => s.applications)
   const submissions = useApplicationsStore((s) => s.submissions)
   const publishApplication = useApplicationsStore((s) => s.publishApplication)
+  // Payment status on every row is derived from the canonical fee ledger —
+  // subscribe so counter collections instantly refresh the per-tour paid
+  // counts rendered below.
+  useFeeStore((s) => s.transactions)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -326,6 +331,7 @@ function TemplatePreviewDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     templateKey: 'educational_tour',
     source: 'Event',
     academicYear: '—',
+    targetClassIds: [],
     deadline: '—',
     participation: 'Optional',
     guardianConsent: { required: true, method: 'Digital', statement: APPLICATION_TEMPLATES.educational_tour.consentStatement },

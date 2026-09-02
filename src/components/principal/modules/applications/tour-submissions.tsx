@@ -23,7 +23,7 @@
  * role payments enter as Under Verification). Nothing here bypasses it.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Banknote, CheckCircle2, ChevronRight, ClipboardList, Download,
@@ -112,6 +112,13 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
   const bundleRef = useRef<HTMLDivElement>(null)
 
   // ── Derived data ──
+  // FEE-STORE SUBSCRIPTION — payments for this tour live in the canonical
+  // fee ledger, NOT in this store. Subscribing to the transaction list makes
+  // every payment-derived memo (summary, filters, tab counts, payment rows)
+  // recompute the moment money lands — without it the metrics would silently
+  // go stale after a counter collection.
+  const feeTransactions = useFeeStore((s) => s.transactions)
+
   const mySubs = useMemo(
     () => submissions.filter((s) => s.applicationId === app.id),
     [submissions, app.id],
@@ -120,7 +127,7 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
     () => audit.filter((e) => e.applicationId === app.id).slice(0, 60),
     [audit, app.id],
   )
-  const txns = useMemo(() => applicationPayments(app), [app])
+  const txns = useMemo(() => applicationPayments(app), [app, feeTransactions])
 
   const classOptions = useMemo(() => {
     const m = new Map<string, string>()
@@ -133,21 +140,23 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
     return Array.from(m.keys()).sort()
   }, [mySubs, classFilter])
 
-  const stateOf = (s: ApplicationSubmission) => tourSubmissionState(app, s)
+  const stateOf = useCallback(
+    (s: ApplicationSubmission) => tourSubmissionState(app, s),
+    [app],
+  )
 
   const summary = useMemo(() => {
     let paid = 0, unpaid = 0, pending = 0, verified = 0
     for (const s of mySubs) {
       if (s.status === 'Withdrawn') continue
-      const st = stateOf(s)
+      const st = tourSubmissionState(app, s)
       if (st === 'Verified / Received') { verified++; paid++ }
       else if (st === 'Submitted — Paid') paid++
       else if (st === 'Submitted — Payment Pending') pending++
       else if (st === 'Submitted — Unpaid') unpaid++
     }
     return { total: mySubs.filter((s) => s.status !== 'Withdrawn').length, paid, unpaid, pending, verified }
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  }, [mySubs, app])
+  }, [mySubs, app, feeTransactions])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -156,7 +165,7 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
       if (classFilter !== 'all' && s.classId !== classFilter) return false
       if (sectionFilter !== 'all' && s.section !== sectionFilter) return false
       if (genderFilter !== 'all' && genderLabel(s.gender) !== genderFilter) return false
-      const st = stateOf(s)
+      const st = tourSubmissionState(app, s)
       if (payFilter === 'paid' && !(st === 'Submitted — Paid' || st === 'Verified / Received')) return false
       if (payFilter === 'unpaid' && st !== 'Submitted — Unpaid') return false
       if (payFilter === 'pending' && st !== 'Submitted — Payment Pending') return false
@@ -169,8 +178,7 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
       if (stateFilter === 'withdrawn' && st !== 'Withdrawn') return false
       return true
     }).sort((a, b) => (a.serialNo ?? a.id).localeCompare(b.serialNo ?? b.id))
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  }, [mySubs, search, classFilter, sectionFilter, genderFilter, payFilter, stateFilter, app])
+  }, [mySubs, search, classFilter, sectionFilter, genderFilter, payFilter, stateFilter, app, feeTransactions])
 
   const activeFilters =
     (classFilter !== 'all' ? 1 : 0) + (sectionFilter !== 'all' ? 1 : 0) +
@@ -275,7 +283,7 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
       setBundle(null)
     }, 400)
     return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [bundle])
 
   const downloadSelected = () => {
@@ -293,10 +301,10 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
     }
     if (attendanceScope === 'male') rows = rows.filter((s) => genderLabel(s.gender) === 'Male')
     if (attendanceScope === 'female') rows = rows.filter((s) => genderLabel(s.gender) === 'Female')
-    if (attendanceScope === 'paid') rows = rows.filter((s) => ['Submitted — Paid', 'Verified / Received'].includes(stateOf(s)))
-    if (attendanceScope === 'unpaid') rows = rows.filter((s) => stateOf(s) === 'Submitted — Unpaid')
-    if (attendanceScope === 'pending') rows = rows.filter((s) => stateOf(s) === 'Submitted — Payment Pending')
-    if (attendanceScope === 'verified') rows = rows.filter((s) => stateOf(s) === 'Verified / Received')
+    if (attendanceScope === 'paid') rows = rows.filter((s) => ['Submitted — Paid', 'Verified / Received'].includes(tourSubmissionState(app, s)))
+    if (attendanceScope === 'unpaid') rows = rows.filter((s) => tourSubmissionState(app, s) === 'Submitted — Unpaid')
+    if (attendanceScope === 'pending') rows = rows.filter((s) => tourSubmissionState(app, s) === 'Submitted — Payment Pending')
+    if (attendanceScope === 'verified') rows = rows.filter((s) => tourSubmissionState(app, s) === 'Verified / Received')
     return rows
       .sort((a, b) => (a.serialNo ?? a.id).localeCompare(b.serialNo ?? b.id))
       .map((s) => ({
@@ -310,7 +318,7 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
         guardianName: s.guardianName,
         guardianPhone: s.guardianPhone,
         paymentStatus: (() => {
-          const st = stateOf(s)
+          const st = tourSubmissionState(app, s)
           if (app.payment.mode === 'None') return 'No fee'
           if (st === 'Verified / Received' || st === 'Submitted — Paid') return 'Paid'
           if (st === 'Submitted — Payment Pending') return 'Pending'
@@ -320,8 +328,7 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
           : s.physicalDoc.status === 'Received' ? 'Received'
             : s.status === 'Approved' ? 'Approved' : 'Pending',
       }))
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  }, [mySubs, attendanceScope, app])
+  }, [mySubs, attendanceScope, app, feeTransactions])
 
   const attendanceScopeLabel = useMemo(() => {
     switch (attendanceScope) {
@@ -839,15 +846,15 @@ function StatusBadge({ eff }: { eff: string }) {
   return <Badge variant="outline" className={cn('text-[9px] h-4 px-1.5', tone)}>{eff}</Badge>
 }
 
-function FilterSelect({ value, onChange, placeholder, options, ariaLabel }: {
-  value: string
-  onChange: (v: string) => void
+function FilterSelect<T extends string>({ value, onChange, placeholder, options, ariaLabel }: {
+  value: T
+  onChange: (v: T) => void
   placeholder: string
   options: Array<{ value: string; label: string }>
   ariaLabel: string
 }) {
   return (
-    <Select value={value} onValueChange={(v) => onChange(v === value && v !== 'all' ? 'all' : v)}>
+    <Select value={value} onValueChange={(v) => onChange((v === value && v !== 'all' ? 'all' : v) as T)}>
       <SelectTrigger className="h-8 w-[110px] text-[11px]" aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>

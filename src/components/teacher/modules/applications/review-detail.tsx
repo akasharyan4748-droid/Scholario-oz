@@ -34,8 +34,8 @@ import type {
 import { formatDate, initials } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
-  ApplicationPrintDocument, printApplicationDocument, downloadApplicationDocument, applicationDocFileName,
-} from '@/components/principal/modules/applications/application-print'
+  TourFormDocument, useFitA4Zoom, printTourDocument, downloadTourDocument, tourDocFileName,
+} from '@/components/principal/modules/applications/tour-form-document'
 import { ReviewDialog } from './review-dialog'
 
 // ─── Status badge recipes (same tones as the Principal module) ─────────
@@ -99,6 +99,8 @@ export function ApplicationReviewDetail({ app: liveAppRef, onBack }: {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [reviewingId, setReviewingId] = useState<string | null>(null)
+  // Properly-scaled A4 preview of the official blank tour form.
+  const [a4Ref, a4Zoom] = useFitA4Zoom<HTMLDivElement>()
 
   const status = effectiveAppStatus(app)
 
@@ -214,7 +216,7 @@ export function ApplicationReviewDetail({ app: liveAppRef, onBack }: {
       </div>
 
       {/* ── Blank printable form (hidden while the review dialog owns the
-            shared .app-print-doc node) ── */}
+            shared .tour-print-doc node) ── */}
       {!reviewingId && (
         <details className="group rounded-xl border border-border bg-card">
           <summary className="flex cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-xs font-semibold">
@@ -223,14 +225,16 @@ export function ApplicationReviewDetail({ app: liveAppRef, onBack }: {
             <span className="text-[10px] font-normal text-muted-foreground">print for offline paper distribution</span>
           </summary>
           <div className="border-t border-border/60 bg-muted/30 p-4">
-            <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
-              <ApplicationPrintDocument app={app} />
+            <div ref={a4Ref} className="rounded-lg overflow-auto bg-muted/40">
+              <div style={{ zoom: a4Zoom, width: 'fit-content', margin: '0 auto' }}>
+                <TourFormDocument app={app} />
+              </div>
             </div>
             <div className="flex items-center justify-end gap-1.5 mt-2.5">
-              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => printApplicationDocument()}>
+              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => printTourDocument()}>
                 <Printer className="h-3 w-3" /> Print / Save PDF
               </Button>
-              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => downloadApplicationDocument(applicationDocFileName({ app }))}>
+              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => downloadTourDocument(tourDocFileName(app))}>
                 <Download className="h-3 w-3" /> Download
               </Button>
             </div>

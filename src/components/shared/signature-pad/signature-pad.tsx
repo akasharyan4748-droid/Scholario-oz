@@ -161,7 +161,17 @@ export function SignaturePad({
             <button
               key={v}
               type="button"
-              onClick={() => setMode(v)}
+              onClick={() => {
+                setMode(v)
+                // The typed box pre-fills with the guardian's name from the
+                // school record (defaultSigner). Switching to Type mode with
+                // that untouched pre-fill must COMMIT it — otherwise the pad
+                // looks complete while the parent form's signature state is
+                // still null and validation fails. The user can still edit.
+                if (v === 'typed' && !signatureComplete(value) && typedName.trim().length > 1) {
+                  commitTyped(typedName)
+                }
+              }}
               aria-pressed={mode === v}
               className={cn(
                 'inline-flex items-center gap-1 rounded-full px-2.5 h-5 text-[10px] font-medium transition-all',

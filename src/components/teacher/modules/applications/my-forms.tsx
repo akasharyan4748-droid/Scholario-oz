@@ -1,24 +1,30 @@
 'use client'
 
 /**
- * MyFormsView — TEACHER form creation + management (PART 4/15).
+ * MyFormsView — TEACHER tour-session configuration + management (TOUR-1).
  *
- * A teacher assigned as in-charge can CREATE the official form for their
- * event, SUBMIT it for Principal approval, act on the Principal's decision
- * (edit & resubmit after "Changes Requested"), PUBLISH an Approved form,
- * and download the blank official PDF for offline distribution.
+ * A teacher assigned as in-charge can USE the school's ONE built-in form
+ * (Educational Tour — Parent Consent Form) for a session, SUBMIT it for
+ * Principal approval, act on the Principal's decision (edit & resubmit
+ * after "Changes Requested"), PUBLISH an Approved form, and download the
+ * blank official A4 for offline distribution.
  *
- * PERMISSION BOUNDARY (PART 4 — enforced at the store level, mirrored here):
- *   • the teacher is always the in-charge of forms they create
+ * TOUR-1 BOUNDARY: there is NO form builder here — the layout of the
+ * official consent form is fixed forever. The teacher configures only the
+ * session particulars (destination, dates, fee…) through the same
+ * TourConfigScreen the Principal uses.
+ *
+ * PERMISSION BOUNDARY (enforced at the store level, mirrored here):
+ *   • the teacher is always the in-charge of sessions they create
  *   • publishing is impossible until the Principal approves (store gate)
  *   • financial configuration cannot be changed after creation (store gate)
  *   • money operations NEVER appear in this UI
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  ArrowLeft, Bus, CalendarDays, CheckCircle2, ClipboardList, Download, FileText,
+  Bus, CalendarDays, CheckCircle2, ClipboardList, Download, FileText,
   FlaskConical, Landmark, PencilLine, Plus, Send, ShieldAlert, Sparkles, Tag,
   Tent, Trophy, Award, HandHeart,
 } from 'lucide-react'
@@ -33,8 +39,10 @@ import { useAuth } from '@/lib/store/auth-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { formatDate } from '@/lib/format'
 import { toast } from 'sonner'
-import { ApplicationBuilder } from '@/components/principal/modules/applications/application-builder'
-import { applicationDocFileName, downloadApplicationDocument } from '@/components/principal/modules/applications/application-print'
+import { TourConfigScreen } from '@/components/principal/modules/applications/tour-config'
+import {
+  TourFormDocument, tourDocFileName,
+} from '@/components/principal/modules/applications/tour-form-document'
 import { AppStatusBadge, ApplicationReviewDetail } from './review-detail'
 
 const CATEGORY_ICON: Record<ApplicationCategory, LucideIcon> = {
@@ -127,22 +135,19 @@ export function MyFormsView() {
     )
   }
 
-  // ── Builder (create / edit my draft) ──
+  // ── Session configuration (create / edit my draft — the ONE built-in
+  //    template; no form builder exists anywhere in this module) ──
   if (view.name === 'builder') {
     return (
-      <div className="space-y-4">
-        <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setView({ name: 'list' })}>
-          <ArrowLeft className="h-3 w-3" /> Back to my forms
-        </Button>
-        <ApplicationBuilder
-          key={editing?.id ?? 'teacher-new'}
-          editing={editing}
-          teacherMode
-          fixedInCharge={{ id: meId, name: meName }}
-          onClose={() => setView({ name: 'list' })}
-          onSaved={() => setView({ name: 'list' })}
-        />
-      </div>
+      <TourConfigScreen
+        editing={editing}
+        actorRole="Teacher"
+        teacherId={meId || undefined}
+        actorName={meName}
+        onBack={() => setView({ name: 'list' })}
+        onSaved={() => setView({ name: 'list' })}
+        onPublished={() => setView({ name: 'list' })}
+      />
     )
   }
 
@@ -155,23 +160,24 @@ export function MyFormsView() {
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs text-muted-foreground min-w-0 truncate">
-          Create a form for a tour, workshop, event or consent you run → Principal approval → publish &amp; operate
+          Use the school&apos;s official tour consent form for a session you run → Principal approval → publish &amp; operate
         </p>
         <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={() => setView({ name: 'builder' })}>
-          <Plus className="h-3 w-3" /> New Form
+          <Plus className="h-3 w-3" /> Use form for a session
         </Button>
       </div>
 
       {mine.length === 0 ? (
         <div className="rounded-xl border border-border bg-card py-12 text-center">
           <ClipboardList className="h-6 w-6 mx-auto text-muted-foreground/40" />
-          <p className="mt-2.5 text-sm font-semibold">No forms yet</p>
+          <p className="mt-2.5 text-sm font-semibold">No tour sessions yet</p>
           <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed">
-            Build the form for something you are in-charge of — a tour, workshop, competition or consent. It goes to the
-            Principal for approval before students can see it. Money is collected separately by the school office.
+            Use the school&apos;s official consent form for a tour you are in-charge of — fill in the destination, dates and
+            fee for this session. It goes to the Principal for approval before students can see it. Money is collected
+            separately by the school office.
           </p>
           <Button variant="outline" size="sm" className="h-7 mt-3 text-[11px] gap-1" onClick={() => setView({ name: 'builder' })}>
-            <Plus className="h-3 w-3" /> Create your first form
+            <Plus className="h-3 w-3" /> Use the form for a session
           </Button>
         </div>
       ) : (
@@ -325,21 +331,42 @@ export function MyFormsView() {
   )
 }
 
-/** Blank official PDF — print / download for offline distribution (PART 11). */
+/** Blank official A4 — download for offline distribution (TOUR-1 §11).
+ *  The blank document renders off-screen (the SAME fixed template) so the
+ *  download always has a real node to serialise — never a silent no-op. */
 function BlankPdfButton({ appId }: { appId: string }) {
   const app = useApplicationsStore((s) => s.applications.find((a) => a.id === appId))
+  const hostRef = useRef<HTMLDivElement>(null)
   if (!app) return null
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-7 text-[11px] gap-1 text-muted-foreground"
-      onClick={() => {
-        downloadApplicationDocument(applicationDocFileName({ app }))
-        toast.success('Blank form downloaded', { description: 'Print and distribute; record received paper forms in Reviews.' })
-      }}
-    >
-      <Download className="h-3 w-3" /> Blank form
-    </Button>
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 text-[11px] gap-1 text-muted-foreground"
+        onClick={() => {
+          const node = hostRef.current?.querySelector('.tour-print-doc')
+          if (!node) return
+          const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${tourDocFileName(app)}</title></head><body>${node.outerHTML}</body></html>`
+          const blob = new Blob([html], { type: 'text/html' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${tourDocFileName(app)}.html`
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          URL.revokeObjectURL(url)
+          toast.success('Blank form downloaded', { description: 'Print and distribute; record received paper forms in Reviews.' })
+        }}
+      >
+        <Download className="h-3 w-3" /> Blank form
+      </Button>
+      {/* Off-screen live render of the official blank document — the
+          download serialises this exact node. */}
+      <div ref={hostRef} aria-hidden className="fixed left-[-9999px] top-0 pointer-events-none">
+        <TourFormDocument app={app} />
+      </div>
+    </>
   )
 }

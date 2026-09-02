@@ -1,0 +1,738 @@
+     1→'use client'
+     2→
+     3→/**
+     4→ * TourConfigScreen — the SESSION SETUP screen for the built-in
+     5→ * "Educational Tour — Parent Consent Form" (TOUR-1 §2).
+     6→ *
+     7→ * Replaces the retired form builder: the template's layout is FIXED and
+     8→ * cannot be redesigned. The Principal (or an authorized Teacher, whose
+     9→ * draft then passes through the existing Principal approval workflow)
+    10→ * edits ONLY the information that genuinely changes per session/tour:
+    11→ *
+    12→ *   tour title · destination · tour dates · duration · tour fee · payment
+    13→ *   availability · circular/ref no · circular date · tour in-charge ·
+    14→ *   accompanying staff · short instructions · eligible classes · gender
+    15→ *   eligibility · last date to apply
+    16→ *
+    17→ * The pipeline is explicit and simple: DRAFT → PREVIEW → PUBLISH.
+    18→ * A live, properly-scaled A4 preview of the official printed form renders
+    19→ * beside the configuration on desktop (and behind a Preview toggle on
+    20→ * smaller screens). No developer language, no form-design vocabulary.
+    21→ */
+    22→
+    23→import { useMemo, useState } from 'react'
+    24→import { motion } from 'framer-motion'
+    25→import {
+    26→  ArrowLeft, CalendarDays, CheckCircle2, FileText, IndianRupee, Info, Printer,
+    27→  Save, Send, Eye, Users,
+    28→} from 'lucide-react'
+    29→import { Button } from '@/components/ui/button'
+    30→import { Badge } from '@/components/ui/badge'
+    31→import { Input } from '@/components/ui/input'
+    32→import { Label } from '@/components/ui/label'
+    33→import { Textarea } from '@/components/ui/textarea'
+    34→import {
+    35→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    36→} from '@/components/ui/select'
+    37→import {
+    38→  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    39→  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+    40→} from '@/components/ui/alert-dialog'
+    41→import {
+    42→  useApplicationsStore, TOUR_FORM_FIELDS, APPLICATION_TEMPLATES,
+    43→  effectiveAppStatus, isApplicationEditable,
+    44→  type SchoolApplication, type CreateApplicationInput,
+    45→} from '@/lib/store/applications-store'
+    46→import { useTeachersStore } from '@/lib/store/teachers-store'
+    47→import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
+    48→import { CURRENT_ACADEMIC_YEAR } from '@/lib/store/fee-store-data'
+    49→import { formatINR } from '@/lib/format'
+    50→import { cn } from '@/lib/utils'
+    51→import { toast } from 'sonner'
+    52→import { TourFormDocument, useFitA4Zoom, printTourDocument, downloadTourDocument, tourDocFileName } from './tour-form-document'
+    53→
+    54→const PRINCIPAL = 'Dr. Ananya Iyer'
+    55→
+    56→type FieldGroup = 'basics' | 'schedule' | 'circular' | 'eligibility' | 'fee'
+    57→
+    58→interface ConfigDraft {
+    59→  title: string
+    60→  destination: string
+    61→  eventDate: string
+    62→  tourEndDate: string
+    63→  durationDays: string
+    64→  deadline: string
+    65→  circularNo: string
+    66→  circularDate: string
+    67→  inChargeTeacherId: string
+    68→  inChargeName: string
+    69→  accompanyingStaff: string
+    70→  tourInstructions: string
+    71→  targetClassIds: string[]
+    72→  genderEligibility: 'All' | 'Boys' | 'Girls'
+    73→  paymentAmount: number
+    74→  paymentAvailability: 'Both' | 'Online' | 'Cash'
+    75→}
+    76→
+    77→function draftOf(app?: SchoolApplication): ConfigDraft {
+    78→  const t = APPLICATION_TEMPLATES.educational_tour
+    79→  if (!app) {
+    80→    return {
+    81→      title: '',
+    82→      destination: '',
+    83→      eventDate: '',
+    84→      tourEndDate: '',
+    85→      durationDays: '',
+    86→      deadline: '',
+    87→      circularNo: '',
+    88→      circularDate: '',
+    89→      inChargeTeacherId: '',
+    90→      inChargeName: '',
+    91→      accompanyingStaff: '',
+    92→      tourInstructions: '',
+    93→      targetClassIds: [],
+    94→      genderEligibility: 'All',
+    95→      paymentAmount: t.defaultAmount,
+    96→      paymentAvailability: 'Both',
+    97→    }
+    98→  }
+    99→  return {
+   100→    title: app.title,
+   101→    destination: app.destination ?? '',
+   102→    eventDate: app.eventDate ?? '',
+   103→    tourEndDate: app.tourEndDate ?? '',
+   104→    durationDays: app.durationDays ?? '',
+   105→    deadline: app.deadline,
+   106→    circularNo: app.circularNo ?? '',
+   107→    circularDate: app.circularDate ?? '',
+   108→    inChargeTeacherId: app.inChargeTeacherId ?? '',
+   109→    inChargeName: app.inChargeName ?? '',
+   110→    accompanyingStaff: app.accompanyingStaff ?? '',
+   111→    tourInstructions: app.tourInstructions ?? '',
+   112→    targetClassIds: [...app.targetClassIds],
+   113→    genderEligibility: app.genderEligibility ?? 'All',
+   114→    paymentAmount: app.payment.mode === 'None' ? 0 : app.payment.amount,
+   115→    paymentAvailability: app.paymentAvailability ?? 'Both',
+   116→  }
+   117→}
+   118→
+   119→interface Props {
+   120→  /** Existing tour instance to reconfigure (undefined = a fresh session). */
+   121→  editing?: SchoolApplication
+   122→  actorRole: 'Principal' | 'Teacher'
+   123→  teacherId?: string
+   124→  actorName: string
+   125→  onBack: () => void
+   126→  /** Called after the draft is saved (new instance created). */
+   127→  onSaved: (appId: string) => void
+   128→  /** Called after a successful publish. */
+   129→  onPublished: (appId: string) => void
+   130→}
+   131→
+   132→export function TourConfigScreen({ editing, actorRole, teacherId, actorName, onBack, onSaved, onPublished }: Props) {
+   133→  const createApplication = useApplicationsStore((s) => s.createApplication)
+   134→  const updateApplication = useApplicationsStore((s) => s.updateApplication)
+   135→  const publishApplication = useApplicationsStore((s) => s.publishApplication)
+   136→  const submitForApproval = useApplicationsStore((s) => s.submitForApproval)
+   137→  const teachers = useTeachersStore((s) => s.teachers)
+   138→
+   139→  const [draft, setDraft] = useState<ConfigDraft>(() => draftOf(editing))
+   140→  const [saving, setSaving] = useState(false)
+   141→  const [publishOpen, setPublishOpen] = useState(false)
+   142→  const [mobileView, setMobileView] = useState<'form' | 'preview'>('form')
+   143→
+   144→  const teacherOptions = useMemo(
+   145→    () => teachers.filter((t) => t.status !== 'Former').map((t) => ({ id: t.id, name: t.name })),
+   146→    [teachers],
+   147→  )
+   148→  const inChargeLocked = actorRole === 'Teacher' && !!teacherId
+   149→
+   150→  const set = <K extends keyof ConfigDraft>(key: K, value: ConfigDraft[K]) =>
+   151→    setDraft((d) => ({ ...d, [key]: value }))
+   152→
+   153→  const toggleClass = (classId: string) =>
+   154→    setDraft((d) => ({
+   155→      ...d,
+   156→      targetClassIds: d.targetClassIds.includes(classId)
+   157→        ? d.targetClassIds.filter((c) => c !== classId)
+   158→        : [...d.targetClassIds, classId],
+   159→    }))
+   160→
+   161→  // Validation — plain-English, school-administrator language.
+   162→  const problems = useMemo(() => {
+   163→    const p: string[] = []
+   164→    if (!draft.title.trim()) p.push('Give the tour a title (e.g. "Educational Tour — Jaipur").')
+   165→    if (!draft.destination.trim()) p.push('Enter the destination.')
+   166→    if (!draft.eventDate) p.push('Pick the tour start date.')
+   167→    if (!draft.deadline) p.push('Pick the last date to apply.')
+   168→    if (draft.eventDate && draft.deadline && draft.deadline >= draft.eventDate) {
+   169→      // allowed, but a warning not an error — keep silent here
+   170→    }
+   171→    if (draft.tourEndDate && draft.eventDate && draft.tourEndDate < draft.eventDate) {
+   172→      p.push('The tour end date cannot be before the start date.')
+   173→    }
+   174→    if (draft.targetClassIds.length === 0) p.push('Select at least one eligible class.')
+   175→    if (draft.paymentAmount > 0 && draft.paymentAmount < 1) p.push('Enter a valid tour fee.')
+   176→    if (!draft.inChargeTeacherId && !inChargeLocked) p.push('Choose the teacher / tour in-charge.')
+   177→    return p
+   178→  }, [draft, inChargeLocked])
+   179→
+   180→  // Live preview model — the official document as configured so far.
+   181→  const previewApp: SchoolApplication = useMemo(() => ({
+   182→    id: editing?.id ?? 'PREVIEW',
+   183→    title: draft.title.trim() || 'Educational Tour',
+   184→    destination: draft.destination.trim() || undefined,
+   185→    description: undefined,
+   186→    category: 'Tour',
+   187→    templateKey: 'educational_tour',
+   188→    source: 'Event',
+   189→    academicYear: editing?.academicYear ?? CURRENT_ACADEMIC_YEAR,
+   190→    tourEndDate: draft.tourEndDate || undefined,
+   191→    durationDays: draft.durationDays.trim() || undefined,
+   192→    circularNo: draft.circularNo.trim() || undefined,
+   193→    circularDate: draft.circularDate || undefined,
+   194→    accompanyingStaff: draft.accompanyingStaff.trim() || undefined,
+   195→    tourInstructions: draft.tourInstructions.trim() || undefined,
+   196→    genderEligibility: draft.genderEligibility,
+   197→    paymentAvailability: draft.paymentAvailability,
+   198→    targetClassIds: draft.targetClassIds,
+   199→    deadline: draft.deadline || '—',
+   200→    eventDate: draft.eventDate || undefined,
+   201→    participation: 'Optional',
+   202→    guardianConsent: { required: true, method: 'Digital' as const, statement: APPLICATION_TEMPLATES.educational_tour.consentStatement },
+   203→    teacherApprovalRequired: false,
+   204→    physicalSignatureRequired: false,
+   205→    inChargeTeacherId: inChargeLocked ? teacherId : draft.inChargeTeacherId || undefined,
+   206→    inChargeName: inChargeLocked ? actorName : (draft.inChargeName || undefined),
+   207→    payment: {
+   208→      mode: draft.paymentAmount > 0 ? 'Required' as const : 'None' as const,
+   209→      amount: draft.paymentAmount,
+   210→      feeHeadLabel: draft.title.trim() || 'Educational Tour',
+   211→      chargeId: editing?.payment.chargeId,
+   212→    },
+   213→    formFields: TOUR_FORM_FIELDS.map((f) => ({ ...f })),
+   214→    status: 'Draft',
+   215→    createdBy: actorName,
+   216→    createdByRole: actorRole,
+   217→    approvalNotes: [],
+   218→    createdAt: new Date().toISOString(),
+   219→    updatedAt: new Date().toISOString(),
+   220→  }), [draft, editing, actorRole, actorName, inChargeLocked, teacherId])
+   221→
+   222→  const buildInput = (): CreateApplicationInput => ({
+   223→    title: draft.title.trim() || 'Educational Tour',
+   224→    destination: draft.destination.trim(),
+   225→    description: draft.tourInstructions.trim() || undefined,
+   226→    category: 'Tour',
+   227→    templateKey: 'educational_tour',
+   228→    source: 'Event',
+   229→    academicYear: editing?.academicYear,
+   230→    targetClassIds: draft.targetClassIds,
+   231→    deadline: draft.deadline,
+   232→    eventDate: draft.eventDate || undefined,
+   233→    tourEndDate: draft.tourEndDate || undefined,
+   234→    durationDays: draft.durationDays,
+   235→    circularNo: draft.circularNo,
+   236→    circularDate: draft.circularDate || undefined,
+   237→    accompanyingStaff: draft.accompanyingStaff,
+   238→    tourInstructions: draft.tourInstructions,
+   239→    genderEligibility: draft.genderEligibility,
+   240→    paymentAvailability: draft.paymentAvailability,
+   241→    participation: 'Optional',
+   242→    guardianConsentRequired: true,
+   243→    guardianConsentMethod: 'Digital',
+   244→    consentStatement: APPLICATION_TEMPLATES.educational_tour.consentStatement,
+   245→    teacherApprovalRequired: false,
+   246→    physicalSignatureRequired: false,
+   247→    inChargeTeacherId: inChargeLocked ? teacherId : draft.inChargeTeacherId,
+   248→    inChargeName: inChargeLocked ? actorName : draft.inChargeName,
+   249→    paymentMode: draft.paymentAmount > 0 ? 'Required' : 'None',
+   250→    paymentAmount: Math.max(0, draft.paymentAmount),
+   251→    paymentFeeHeadLabel: draft.title.trim() || 'Educational Tour',
+   252→    formFields: TOUR_FORM_FIELDS.map((f) => ({ ...f })),
+   253→  })
+   254→
+   255→  /** Save the session configuration (creates the instance on first save). */
+   256→  const saveDraft = () => {
+   257→    if (problems.length > 0) {
+   258→      toast.error('A few details are missing', { description: problems[0] })
+   259→      return
+   260→    }
+   261→    setSaving(true)
+   262→    try {
+   263→      if (editing) {
+   264→        const res = updateApplication(editing.id, buildInput(), actorName, { actorRole, teacherId })
+   265→        if (!res.success) {
+   266→          toast.error('Could not save', { description: res.error })
+   267→          return
+   268→        }
+   269→        toast.success('Session details saved')
+   270→        onSaved(editing.id)
+   271→      } else {
+   272→        const res = createApplication(buildInput(), actorName, { actorRole, teacherId })
+   273→        if (!res.success || !res.application) {
+   274→          toast.error('Could not save', { description: res.error })
+   275→          return
+   276→        }
+   277→        toast.success('Draft saved — review the preview, then publish.', {
+   278→          description: 'The form stays a draft until you publish it for students.',
+   279→        })
+   280→        onSaved(res.application.id)
+   281→      }
+   282→    } finally {
+   283→      setSaving(false)
+   284→    }
+   285→  }
+   286→
+   287→  const publish = () => {
+   288→    const id = editing?.id
+   289→    if (!id) return
+   290→    setPublishOpen(false)
+   291→    const res = publishApplication(id, actorName, { actorRole, teacherId })
+   292→    if (res.success) {
+   293→      toast.success('Tour published — eligible students have been notified.', {
+   294→        description: `"${draft.title}" is now open for applications until ${draft.deadline}.`,
+   295→      })
+   296→      onPublished(id)
+   297→    } else {
+   298→      toast.error('Could not publish', { description: res.error })
+   299→    }
+   300→  }
+   301→
+   302→  const submitForPrincipalApproval = () => {
+   303→    const id = editing?.id
+   304→    if (!id) return
+   305→    const res = submitForApproval(id, actorName, 'Teacher', 'Ready for review — please approve and publish.', { teacherId })
+   306→    if (res.success) {
+   307→      toast.success('Sent to the Principal for approval', { description: 'You will publish it once approved.' })
+   308→      onSaved(id)
+   309→    } else {
+   310→      toast.error('Could not send', { description: res.error })
+   311→    }
+   312→  }
+   313→
+   314→  const canEdit = !editing || isApplicationEditable(editing)
+   315→  const effStatus = editing ? effectiveAppStatus(editing) : 'Draft'
+   316→  const isTeacherPending = actorRole === 'Teacher' && ['Pending Approval', 'Approved'].includes(editing?.status ?? '')
+   317→  const alreadyPublished = ['Published', 'Open', 'Closing Soon', 'Closed', 'Locked'].includes(effStatus)
+   318→
+   319→  const [previewRef, previewZoom] = useFitA4Zoom<HTMLDivElement>()
+   320→
+   321→  return (
+   322→    <div className="space-y-4 max-w-7xl mx-auto" data-testid="tour-config">
+   323→      {/* Header — back, title, DRAFT → PREVIEW → PUBLISH pipeline */}
+   324→      <div className="flex items-center justify-between gap-3 flex-wrap">
+   325→        <div className="flex items-center gap-3 min-w-0">
+   326→          <Button variant="outline" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={onBack} aria-label="Back to Applications and Forms">
+   327→            <ArrowLeft className="h-4 w-4" />
+   328→          </Button>
+   329→          <div className="min-w-0">
+   330→            <h2 className="text-sm font-semibold tracking-tight truncate">
+   331→              {editing ? 'Configure session' : 'Use for a new session'}
+   332→            </h2>
+   333→            <p className="text-[11px] text-muted-foreground truncate">
+   334→              Educational Tour — Parent Consent Form · the printed layout stays fixed
+   335→            </p>
+   336→          </div>
+   337→        </div>
+   338→        <div className="flex items-center gap-2 flex-wrap">
+   339→          {editing && <StatusBadge status={effStatus} />}
+   340→          <div className="hidden md:flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+   341→            <PipelineChip active label="Draft" />
+   342→            <span aria-hidden="true">→</span>
+   343→            <PipelineChip active={!!draft.destination && !!draft.eventDate} label="Preview" />
+   344→            <span aria-hidden="true">→</span>
+   345→            <PipelineChip active={alreadyPublished} label="Publish" />
+   346→          </div>
+   347→        </div>
+   348→      </div>
+   349→
+   350→      {/* Mobile form/preview toggle */}
+   351→      <div className="flex md:hidden rounded-lg border border-border bg-muted/40 p-0.5" role="tablist" aria-label="Configure or preview">
+   352→        {(['form', 'preview'] as const).map((v) => (
+   353→          <button
+   354→            key={v}
+   355→            role="tab"
+   356→            aria-selected={mobileView === v}
+   357→            className={cn(
+   358→              'flex-1 rounded-md py-1.5 text-[11px] font-medium capitalize transition-colors',
+   359→              mobileView === v ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground',
+   360→            )}
+   361→            onClick={() => setMobileView(v)}
+   362→          >
+   363→            {v === 'form' ? 'Session details' : 'A4 preview'}
+   364→          </button>
+   365→        ))}
+   366→      </div>
+   367→
+   368→      <div className="grid lg:grid-cols-12 gap-4 items-start">
+   369→        {/* ── Left: session configuration ── */}
+   370→        <div className={cn('lg:col-span-7 space-y-4', mobileView === 'preview' && 'hidden md:block')}>
+   371→          {!canEdit && (
+   372→            <p className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+   373→              This tour is {effStatus.toLowerCase()} — session details are locked. Records and submissions stay on file.
+   374→            </p>
+   375→          )}
+   376→
+   377→          <Group group="basics" icon={<Info className="h-3.5 w-3.5" />} title="Tour">
+   378→            <FieldRow>
+   379→              <Field label="Tour title" required>
+   380→                <Input
+   381→                  value={draft.title}
+   382→                  onChange={(e) => set('title', e.target.value)}
+   383→                  placeholder="Educational Tour — Jaipur"
+   384→                  className="h-8 text-xs"
+   385→                  disabled={!canEdit}
+   386→                  aria-label="Tour title"
+   387→                />
+   388→              </Field>
+   389→              <Field label="Destination" required>
+   390→                <Input
+   391→                  value={draft.destination}
+   392→                  onChange={(e) => set('destination', e.target.value)}
+   393→                  placeholder="Jaipur, Rajasthan"
+   394→                  className="h-8 text-xs"
+   395→                  disabled={!canEdit}
+   396→                  aria-label="Destination"
+   397→                />
+   398→              </Field>
+   399→            </FieldRow>
+   400→            <FieldRow>
+   401→              <Field label="Duration">
+   402→                <Input
+   403→                  value={draft.durationDays}
+   404→                  onChange={(e) => set('durationDays', e.target.value)}
+   405→                  placeholder="3 Days / 2 Nights"
+   406→                  className="h-8 text-xs"
+   407→                  disabled={!canEdit}
+   408→                  aria-label="Duration"
+   409→                />
+   410→              </Field>
+   411→              <Field label="Gender eligibility">
+   412→                <Select value={draft.genderEligibility} onValueChange={(v) => set('genderEligibility', v as ConfigDraft['genderEligibility'])} disabled={!canEdit}>
+   413→                  <SelectTrigger className="h-8 text-xs" aria-label="Gender eligibility">
+   414→                    <SelectValue />
+   415→                  </SelectTrigger>
+   416→                  <SelectContent>
+   417→                    <SelectItem value="All">All students</SelectItem>
+   418→                    <SelectItem value="Boys">Boys only</SelectItem>
+   419→                    <SelectItem value="Girls">Girls only</SelectItem>
+   420→                  </SelectContent>
+   421→                </Select>
+   422→              </Field>
+   423→            </FieldRow>
+   424→            <Field label="Short tour information for parents">
+   425→              <Textarea
+   426→                value={draft.tourInstructions}
+   427→                onChange={(e) => set('tourInstructions', e.target.value)}
+   428→                placeholder="Reporting time, what to carry, conduct rules…"
+   429→                className="min-h-[64px] text-xs"
+   430→                disabled={!canEdit}
+   431→                aria-label="Tour information for parents"
+   432→              />
+   433→            </Field>
+   434→          </Group>
+   435→
+   436→          <Group group="schedule" icon={<CalendarDays className="h-3.5 w-3.5" />} title="Dates">
+   437→            <FieldRow>
+   438→              <Field label="Tour start date" required>
+   439→                <Input
+   440→                  type="date"
+   441→                  value={draft.eventDate}
+   442→                  onChange={(e) => set('eventDate', e.target.value)}
+   443→                  className="h-8 text-xs"
+   444→                  disabled={!canEdit}
+   445→                  aria-label="Tour start date"
+   446→                />
+   447→              </Field>
+   448→              <Field label="Tour end date">
+   449→                <Input
+   450→                  type="date"
+   451→                  value={draft.tourEndDate}
+   452→                  onChange={(e) => set('tourEndDate', e.target.value)}
+   453→                  className="h-8 text-xs"
+   454→                  disabled={!canEdit}
+   455→                  aria-label="Tour end date"
+   456→                />
+   457→              </Field>
+   458→              <Field label="Last date to apply" required>
+   459→                <Input
+   460→                  type="date"
+   461→                  value={draft.deadline}
+   462→                  onChange={(e) => set('deadline', e.target.value)}
+   463→                  className="h-8 text-xs"
+   464→                  disabled={!canEdit}
+   465→                  aria-label="Last date to apply"
+   466→                />
+   467→              </Field>
+   468→            </FieldRow>
+   469→          </Group>
+   470→
+   471→          <Group group="circular" icon={<FileText className="h-3.5 w-3.5" />} title="Circular">
+   472→            <FieldRow>
+   473→              <Field label="Circular / reference no.">
+   474→                <Input
+   475→                  value={draft.circularNo}
+   476→                  onChange={(e) => set('circularNo', e.target.value)}
+   477→                  placeholder="GW/EDU/TOUR/2026-27/07"
+   478→                  className="h-8 text-xs"
+   479→                  disabled={!canEdit}
+   480→                  aria-label="Circular reference number"
+   481→                />
+   482→              </Field>
+   483→              <Field label="Circular date">
+   484→                <Input
+   485→                  type="date"
+   486→                  value={draft.circularDate}
+   487→                  onChange={(e) => set('circularDate', e.target.value)}
+   488→                  className="h-8 text-xs"
+   489→                  disabled={!canEdit}
+   490→                  aria-label="Circular date"
+   491→                />
+   492→              </Field>
+   493→            </FieldRow>
+   494→            <FieldRow>
+   495→              <Field label="Teacher / tour in-charge" required={!inChargeLocked}>
+   496→                {inChargeLocked ? (
+   497→                  <Input value={actorName} readOnly className="h-8 text-xs bg-muted/50" aria-label="Tour in-charge" />
+   498→                ) : (
+   499→                  <Select
+   500→                    value={draft.inChargeTeacherId}
+   501→                    onValueChange={(v) => {
+   502→                      const t = teacherOptions.find((x) => x.id === v)
+   503→                      setDraft((d) => ({ ...d, inChargeTeacherId: v, inChargeName: t?.name ?? '' }))
+   504→                    }}
+   505→                    disabled={!canEdit}
+   506→                  >
+   507→                    <SelectTrigger className="h-8 text-xs" aria-label="Tour in-charge">
+   508→                      <SelectValue placeholder="Choose a teacher" />
+   509→                    </SelectTrigger>
+   510→                    <SelectContent className="max-h-64">
+   511→                      {teacherOptions.map((t) => (
+   512→                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+   513→                      ))}
+   514→                    </SelectContent>
+   515→                  </Select>
+   516→                )}
+   517→              </Field>
+   518→              <Field label="Accompanying staff">
+   519→                <Input
+   520→                  value={draft.accompanyingStaff}
+   521→                  onChange={(e) => set('accompanyingStaff', e.target.value)}
+   522→                  placeholder="Ms. Kavita Joshi · Mr. Deepak Nair"
+   523→                  className="h-8 text-xs"
+   524→                  disabled={!canEdit}
+   525→                  aria-label="Accompanying staff"
+   526→                />
+   527→              </Field>
+   528→            </FieldRow>
+   529→          </Group>
+   530→
+   531→          <Group group="eligibility" icon={<Users className="h-3.5 w-3.5" />} title="Eligibility">
+   532→            <Field label="Applicable classes" required>
+   533→              <div className="flex flex-wrap gap-1.5">
+   534→                {ACADEMIC_CLASSES.map((c) => {
+   535→                  const active = draft.targetClassIds.includes(c.id)
+   536→                  return (
+   537→                    <button
+   538→                      key={c.id}
+   539→                      type="button"
+   540→                      aria-pressed={active}
+   541→                      aria-label={`${active ? 'Remove' : 'Add'} ${c.name}${c.stream ? ` ${c.stream}` : ''}`}
+   542→                      disabled={!canEdit}
+   543→                      className={cn(
+   544→                        'h-7 rounded-md border px-2 text-[11px] font-medium transition-colors',
+   545→                        active
+   546→                          ? 'border-primary/40 bg-primary/10 text-primary'
+   547→                          : 'border-border text-muted-foreground hover:border-foreground/25 hover:text-foreground',
+   548→                        !canEdit && 'opacity-60 cursor-not-allowed',
+   549→                      )}
+   550→                      onClick={() => toggleClass(c.id)}
+   551→                    >
+   552→                      {c.name}{c.stream ? ` · ${c.stream}` : ''}
+   553→                    </button>
+   554→                  )
+   555→                })}
+   556→              </div>
+   557→            </Field>
+   558→          </Group>
+   559→
+   560→          <Group group="fee" icon={<IndianRupee className="h-3.5 w-3.5" />} title="Tour fee & payment">
+   561→            <FieldRow>
+   562→              <Field label="Tour fee per student">
+   563→                <Input
+   564→                  type="number"
+   565→                  min={0}
+   566→                  value={draft.paymentAmount || ''}
+   567→                  onChange={(e) => set('paymentAmount', Number(e.target.value) || 0)}
+   568→                  placeholder="2500"
+   569→                  className="h-8 text-xs"
+   570→                  disabled={!canEdit || (editing?.status === 'Published' && !!editing.payment.chargeId)}
+   571→                  aria-label="Tour fee per student"
+   572→                />
+   573→              </Field>
+   574→              <Field label="Payment can be made by">
+   575→                <Select value={draft.paymentAvailability} onValueChange={(v) => set('paymentAvailability', v as ConfigDraft['paymentAvailability'])} disabled={!canEdit}>
+   576→                  <SelectTrigger className="h-8 text-xs" aria-label="Payment availability">
+   577→                    <SelectValue />
+   578→                  </SelectTrigger>
+   579→                  <SelectContent>
+   580→                    <SelectItem value="Both">Online and cash</SelectItem>
+   581→                    <SelectItem value="Online">Online only</SelectItem>
+   582→                    <SelectItem value="Cash">Cash at school only</SelectItem>
+   583→                  </SelectContent>
+   584→                </Select>
+   585→              </Field>
+   586→            </FieldRow>
+   587→            <p className="text-[10px] text-muted-foreground">
+   588→              {draft.paymentAmount > 0
+   589→                ? `Students may submit the form first and pay ${formatINR(draft.paymentAmount)} later — unpaid submissions stay visible and are never rejected automatically. This fee is an application charge; it never mixes with tuition or annual fees.`
+   590→                : 'No tour fee — this form only collects the consent and information.'}
+   591→            </p>
+   592→            {editing?.status === 'Published' && editing.payment.chargeId && (
+   593→              <p className="text-[10px] text-muted-foreground">
+   594→                The fee is locked while the tour is published — the linked collection in Fee Management owns the amount.
+   595→              </p>
+   596→            )}
+   597→          </Group>
+   598→
+   599→          {/* Action bar */}
+   600→          <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+   601→            <div className="flex items-center gap-2">
+   602→              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => printTourDocument()} disabled={problems.length > 0}>
+   603→                <Printer className="h-3.5 w-3.5" /> Print blank form
+   604→              </Button>
+   605→              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => downloadTourDocument(tourDocFileName(previewApp))} disabled={problems.length > 0}>
+   606→                <FileText className="h-3.5 w-3.5" /> Download blank
+   607→              </Button>
+   608→            </div>
+   609→            <div className="flex items-center gap-2">
+   610→              {canEdit && (
+   611→                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={saveDraft} disabled={saving}>
+   612→                  <Save className="h-3.5 w-3.5" /> {editing ? 'Save changes' : 'Save draft'}
+   613→                </Button>
+   614→              )}
+   615→              {actorRole === 'Principal' && (editing?.status === 'Draft' || editing?.status === 'Changes Requested' || editing?.status === 'Rejected' || editing?.status === 'Approved') && (
+   616→                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setPublishOpen(true)} disabled={problems.length > 0}>
+   617→                  <Send className="h-3.5 w-3.5" /> Publish for students
+   618→                </Button>
+   619→              )}
+   620→              {actorRole === 'Teacher' && editing?.status === 'Draft' && (
+   621→                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={submitForPrincipalApproval} disabled={problems.length > 0}>
+   622→                  <Send className="h-3.5 w-3.5" /> Send to Principal
+   623→                </Button>
+   624→              )}
+   625→            </div>
+   626→          </div>
+   627→          {problems.length > 0 && (
+   628→            <p className="text-[10px] text-muted-foreground">
+   629→              Complete {problems.length === 1 ? 'one detail' : `${problems.length} details`} to enable print and publish.
+   630→            </p>
+   631→          )}
+   632→          {isTeacherPending && (
+   633→            <p className="rounded-lg border border-sky-200 bg-sky-50 dark:border-sky-500/30 dark:bg-sky-500/10 px-3 py-2 text-[11px] text-sky-700 dark:text-sky-400">
+   634→              {editing?.status === 'Pending Approval'
+   635→                ? 'Waiting for the Principal\u2019s approval. You will publish it once approved.'
+   636→                : 'Approved by the Principal — you can publish it now.'}
+   637→            </p>
+   638→          )}
+   639→        </div>
+   640→
+   641→        {/* ── Right: live A4 preview ── */}
+   642→        <div className={cn('lg:col-span-5', mobileView === 'form' && 'hidden md:block')}>
+   643→          <div className="lg:sticky lg:top-4">
+   644→            <div className="rounded-xl border border-border bg-muted/30 overflow-hidden">
+   645→              <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+   646→                <p className="text-[11px] font-semibold flex items-center gap-1.5">
+   647→                  <Eye className="h-3.5 w-3.5 text-muted-foreground" /> Live A4 preview
+   648→                </p>
+   649→                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Official school form</Badge>
+   650→              </div>
+   651→              <div ref={previewRef} className="max-h-[70vh] overflow-auto p-2">
+   652→                <div style={{ zoom: previewZoom, width: 'fit-content', margin: '0 auto' }}>
+   653→                  <TourFormDocument app={previewApp} />
+   654→                </div>
+   655→              </div>
+   656→              <p className="px-3 py-1.5 text-[9.5px] text-muted-foreground border-t border-border">
+   657→                Exactly what prints on A4 paper — students, parents and the office see this document.
+   658→              </p>
+   659→            </div>
+   660→          </div>
+   661→        </div>
+   662→      </div>
+   663→
+   664→      {/* Publish confirmation */}
+   665→      <AlertDialog open={publishOpen} onOpenChange={setPublishOpen}>
+   666→        <AlertDialogContent className="sm:max-w-md">
+   667→          <AlertDialogHeader>
+   668→            <AlertDialogTitle className="text-base">Publish this tour for students?</AlertDialogTitle>
+   669→            <AlertDialogDescription className="text-xs leading-relaxed">
+   670→              {draft.destination ? <span>&ldquo;{draft.title}&rdquo; to {draft.destination} </span> : <span>&ldquo;{draft.title}&rdquo; </span>}
+   671→              for {draft.targetClassIds.length} class{draft.targetClassIds.length === 1 ? '' : 'es'}.
+   672→              {draft.paymentAmount > 0 ? ` A tour fee of ${formatINR(draft.paymentAmount)} will be collected as an application charge.` : ' No fee is charged.'}
+   673→              {' '}Eligible students receive a notification and can apply until {draft.deadline}. You can take it down anytime — every submission and payment stays on record.
+   674→            </AlertDialogDescription>
+   675→          </AlertDialogHeader>
+   676→          <AlertDialogFooter>
+   677→            <AlertDialogCancel className="h-8 text-xs">Keep as draft</AlertDialogCancel>
+   678→            <AlertDialogAction className="h-8 text-xs" onClick={(e) => { e.preventDefault(); publish() }}>
+   679→              <CheckCircle2 className="h-3.5 w-3.5" /> Publish
+   680→            </AlertDialogAction>
+   681→          </AlertDialogFooter>
+   682→        </AlertDialogContent>
+   683→      </AlertDialog>
+   684→    </div>
+   685→  )
+   686→}
+   687→
+   688→// ─── Small building blocks ─────────────────────────────────────────────
+   689→
+   690→function PipelineChip({ active, label }: { active?: boolean; label: string }) {
+   691→  return (
+   692→    <span className={cn(
+   693→      'inline-flex items-center rounded-md border px-1.5 py-0.5',
+   694→      active ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400' : 'border-border text-muted-foreground',
+   695→    )}>
+   696→      {label}
+   697→    </span>
+   698→  )
+   699→}
+   700→
+   701→function StatusBadge({ status }: { status: string }) {
+   702→  return (
+   703→    <Badge variant="outline" className="text-[9px] h-4 px-1.5 capitalize">{status}</Badge>
+   704→  )
+   705→}
+   706→
+   707→function Group({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+   708→  return (
+   709→    <motion.section
+   710→      initial={{ opacity: 0, y: 4 }}
+   711→      animate={{ opacity: 1, y: 0 }}
+   712→      className="rounded-xl border border-border bg-card"
+   713→    >
+   714→      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+   715→        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">{icon}</span>
+   716→        <h3 className="text-xs font-semibold tracking-tight">{title}</h3>
+   717→      </div>
+   718→      <div className="p-4 space-y-3">{children}</div>
+   719→    </motion.section>
+   720→  )
+   721→}
+   722→
+   723→function FieldRow({ children }: { children: React.ReactNode }) {
+   724→  return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{children}</div>
+   725→}
+   726→
+   727→function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+   728→  return (
+   729→    <div className="space-y-1">
+   730→      <Label className="text-[10px] font-medium text-muted-foreground">
+   731→        {label}
+   732→        {required && <span className="text-rose-500 ml-0.5">*</span>}
+   733→      </Label>
+   734→      {children}
+   735→    </div>
+   736→  )
+   737→}
+   738→
