@@ -1460,3 +1460,33 @@ Work Log:
 Stage Summary:
 - Applications & Forms is now EXACTLY one production-grade workflow: fixed official template → session setup → publish → prefilled consent submissions (payment optional) → serials → bulk A4 form downloads + attendance lists → take down → refund-gated deletion. No builder, no extra form types, no parallel money.
 - Scope deliberately NOT built (per §22): generic builder, categories, drag-drop, approval engine, analytics, AI, houses.
+
+---
+Task ID: TOUR-CONSENT-2
+Agent: main (Z.ai Code)
+Task: Fresh-session re-verification of the completed TOUR-CONSENT-1 implementation — full E2E re-run in the browser, spec-compliance audit (§1–§24), fix any regressions found.
+
+Work Log:
+- SESSION STATE: HEAD b8adca8 (TOUR-CONSENT-1) already pushed, tree clean; dev server healthy (PID 1719, cwd project, 200 OK) — dev.log EADDRINUSE lines are the known sandbox-watchdog duplicate-spawn noise, real server unaffected (left alone per PREVIEW-RESTORE-1).
+- RE-VERIFIED LIVE (agent-browser, zero console errors/warnings):
+  (1) §1 dashboard: template-first card (View / Use·Configure / Preview / Download Blank ⌄), NO New-Form button, KPIs, session rows with Actions.
+  (2) §14 submissions: 5 tiles (Submitted/Paid/Unpaid/Verifying/Verified), search + class/gender/status filters, serials TOUR-26-27-8-A-M-001…004, checkbox bulk + Forms ⌄ + Attendance list ⌄ + Answers CSV + Record paper form.
+  (3) §3–§5/§G/§H/§I review dialog A4: school header (logo/CBSE/address/photo box), circular+date between rules, PARENT CONSENT FORM + सहमति पत्र, tour serial box, Tour Information / Student Details (no House) / Parent-Guardian / Health (motion sickness) / dynamic declaration clauses i–v / 3 signature blocks (Name·Date·Place) / dashed cut line + office slip (received/verified + stamp) / doc footer; Print + Download.
+  (4) §2 config: compact session-only fields (title/destination/duration/dates/circular no+date/in-charge select from staff/accompanying staff/instructions/class pills/gender/fee mode+amount/Online-Cash-Both/deadline with Examination-style compact date picker), LIVE scaled A4 preview updating per keystroke, Draft→Preview→Publish stepper; created "Educational Tour — National Science Centre ₹1,200 Class 6 deadline 15 Sep" and published; charge AC-mtjayts9 auto-created in fee-store (single-ledger linkage verified in store JSON).
+  (5) §19 notifications: publish + eligibility-expansion announcements verified in DB (audience CLASS:Class 6 / CLASS:Class 2 rows with correct timestamps); student bell audience-filter verified against the REAL DB student record.
+  (6) §6/§7/§8 student: edited tour to add Class 2 + Class 4 (expansion notify fired for added classes only) → student sees tour card → preview-first apply dialog ("Your school record fills the form automatically") → Accept & Apply → questions (meal/T-shirt/emergency/medical/motion/photo-consent) with required-field validation toast → review step with permanent-snapshot note → submit → payment step (Online/Cash/pay-later) → CLOSED without paying → "Awaiting Payment · Submitted · Not Paid" in My submissions (Unpaid is first-class, never rejected).
+  (7) §9 pay-later: Pay ₹1,200 → UPI → SAME submission flips to Paid · Under Review with receipt RCP-2026-1061, still exactly 1 record; fee-store TXN carries applicationId+chargeId linkage; Fee Management → Payments top row shows Kabir Reddy · Educational Tour ↳ TOUR-26-27-4-B-M-001 · ₹1,200 · UPI · Paid.
+  (8) §13 serial assigned at submit: TOUR-26-27-4-B-M-001 (class-section-gender-seq).
+  (9) §15/§16: Forms ⌄ → "Download all shown (.html)" fired (toast "Downloading 1 completed form"); Attendance list ⌄ → CSV export fired (file confirmed in downloads/).
+  (10) §11 Take down via row Actions → status Closed, "Taken down" label, ₹1.2K collected + 1 response preserved.
+  (11) §12 delete guard: Delete permanently on paid tour → blocked toast "₹1,200 of tour fees is still unrefunded. Refund through Fee Management first — paid records can never be silently deleted."; refund via application Payments tab (reason dialog) → "Refund issued… receipt history stays intact"; delete then SUCCEEDS — submissions cleared, charge → Cancelled, refunded TXN (refundedAmount/At stamped) preserved in Fee Management ledger.
+  (12) §18 teacher: Application Reviews shows assigned Jaipur tour (Reviews / My Forms & Drafts, "Reviewing participation only — money is handled by the school office"), My Forms uses Use Tour Template → Principal-approval pipeline (no parallel permission system).
+  (13) §21 responsive: 390px — dashboard, tour detail, submissions, and full-screen A4 review dialog all render with scrollWidth==390 (no overflow); footer sticks bottom; desktop fine.
+- DATA DUALITY INVESTIGATED (no code change): demo student's API-session DB record (aarav.sharma@greenwood.edu.in → Grade 9 - A) differs from the client mock roster (Class 2-A) and the canonical students-store twin (STU-18 → Class 4-B, name "Kabir Reddy" per PRNG seed). This is the documented demo masquerade duality: eligibility + form identity use the canonical twin (by design), bell audience-matching uses the DB — each pipeline individually correct; document here so future sessions don't mistake it for a routing bug.
+- BUG FIXED: student dashboard welcome banner rendered "Class Class 2-A" (literal prefix + className already containing "Class") — dropped the literal prefix; verified "Class 2-A · Roll #18" live.
+- GATES: bunx tsc --noEmit ✓ 0 errors · bun run lint ✓ clean · console zero errors · 390px no overflow.
+
+Stage Summary:
+- TOUR-CONSENT-1 implementation re-proven end-to-end in a fresh session across Principal/Teacher/Student roles: template-first module, official A4 document, serials, payment-optional submissions, canonical single-ledger payments, takedown + refund-gated deletion — all §24 target flows green with 0 console errors.
+- 1 fix: student dashboard banner "Class Class 2-A" → "Class 2-A".
+- Committed as tour-consent-2 and pushed to origin/main.
