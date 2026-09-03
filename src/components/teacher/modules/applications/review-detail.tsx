@@ -34,8 +34,9 @@ import type {
 import { formatDate, initials } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
-  TourFormDocument, useFitA4Zoom, printTourDocument, downloadTourDocument, tourDocFileName,
+  TourFormDocument, useFitA4Zoom, printTourDocument,
 } from '@/components/principal/modules/applications/tour-form-document'
+import { downloadTourFormPDF } from '@/components/principal/modules/applications/tour-form-pdf'
 import { ReviewDialog } from './review-dialog'
 
 // ─── Status badge recipes (same tones as the Principal module) ─────────
@@ -234,7 +235,7 @@ export function ApplicationReviewDetail({ app: liveAppRef, onBack }: {
               <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => printTourDocument()}>
                 <Printer className="h-3 w-3" /> Print / Save PDF
               </Button>
-              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => downloadTourDocument(tourDocFileName(app))}>
+              <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => { void downloadTourFormPDF(app) }}>
                 <Download className="h-3 w-3" /> Download
               </Button>
             </div>

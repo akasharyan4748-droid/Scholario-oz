@@ -23,7 +23,7 @@
  * role payments enter as Under Verification). Nothing here bypasses it.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Banknote, CheckCircle2, ChevronRight, ClipboardList, Download,
@@ -59,10 +59,12 @@ import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
-  TourFormDocument, useFitA4Zoom, printTourDocument, downloadTourDocument,
-  downloadTourDocumentBundle, downloadTourAttendanceList, tourDocFileName,
-  type TourAttendanceRow,
+  TourFormDocument, useFitA4Zoom, printTourDocument,
 } from './tour-form-document'
+import {
+  downloadTourFormPDF, downloadTourFormsBundlePDF, downloadTourAttendancePDF,
+  type TourAttendanceRow,
+} from './tour-form-pdf'
 import { tourSubmissionState, tourStateChipClass, paymentChipClass, genderLabel } from './tour-state'
 
 const ACTOR = 'Dr. Ananya Iyer'
@@ -109,7 +111,6 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
   const [attendanceOpen, setAttendanceOpen] = useState(false)
   const [attendanceScope, setAttendanceScope] = useState('all')
   const [bundle, setBundle] = useState<ApplicationSubmission[] | null>(null)
-  const bundleRef = useRef<HTMLDivElement>(null)
 
   // ── Derived data ──
   // FEE-STORE SUBSCRIPTION — payments for this tour live in the canonical
@@ -270,21 +271,27 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
     else toast.error('Could not verify', { description: res.error })
   }
 
-  // Bulk bundle → download after the hidden documents render.
+  // Bulk bundle → ONE multi-page A4 PDF (one completed form per student).
   useEffect(() => {
     if (!bundle) return
-    const t = setTimeout(() => {
-      const el = bundleRef.current
-      if (el && bundle.length > 0) {
-        const n = downloadTourDocumentBundle(el, `TOUR-FORMS-${app.title.replace(/[^\w]+/g, '-').slice(0, 30)}-${bundle.length}-students`)
-        if (n > 0) toast.success(`${n} completed form${n === 1 ? '' : 's'} downloaded`, { description: 'Official A4 design, print-ready — one page per student.' })
-        else toast.error('Nothing to download')
-      }
+    const run = async () => {
+      const subs = bundle
       setBundle(null)
-    }, 400)
-    return () => clearTimeout(t)
-     
-  }, [bundle])
+      if (subs.length === 0) {
+        toast.error('Nothing to download')
+        return
+      }
+      const n = await downloadTourFormsBundlePDF(app, subs)
+      if (n > 0) {
+        toast.success(`${n} completed form${n === 1 ? '' : 's'} downloaded`, {
+          description: 'One A4 page per student, serial order — ready to print.',
+        })
+      } else {
+        toast.error('Could not generate the bundle')
+      }
+    }
+    void run()
+  }, [bundle, app])
 
   const downloadSelected = () => {
     const subs = filtered.filter((s) => selected.has(s.id))
@@ -738,7 +745,7 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
           <DialogFooter>
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setAttendanceOpen(false)}>Close</Button>
             <Button size="sm" className="h-8 text-xs gap-1" disabled={attendanceRows.length === 0} onClick={() => {
-              downloadTourAttendanceList(app, attendanceRows, attendanceScopeLabel)
+              downloadTourAttendancePDF(app, attendanceRows, attendanceScopeLabel)
               setAttendanceOpen(false)
               toast.success('Attendance list downloaded', { description: `${attendanceRows.length} rows · ${attendanceScopeLabel}` })
             }}>
@@ -765,11 +772,6 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Hidden bundle renderer for bulk downloads */}
-      <div ref={bundleRef} aria-hidden="true" className="fixed top-0 left-[-9999px] pointer-events-none">
-        {bundle?.map((s) => <TourFormDocument key={s.id} app={app} sub={s} />)}
-      </div>
     </div>
   )
 }
@@ -901,7 +903,7 @@ function BlankFormDialog({ app, open, onOpenChange }: {
           </div>
         </div>
         <DialogFooter className="border-t border-border pt-3 shrink-0">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => downloadTourDocument(tourDocFileName(app))}>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => { void downloadTourFormPDF(app).then((ok) => { if (!ok) toast.error('Could not generate the form') }) }}>
             <Download className="h-3.5 w-3.5" /> Download
           </Button>
           <Button size="sm" className="h-8 text-xs gap-1" onClick={() => printTourDocument()}>
@@ -991,7 +993,7 @@ function SubmissionDrawer({ sub, app, onClose, onPay, onVerify, onReceived }: {
                   <ClipboardList className="h-3.5 w-3.5" /> Mark form received
                 </Button>
               )}
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => downloadTourDocument(tourDocFileName(app, sub))}>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => { void downloadTourFormPDF(app, sub, { payment: pay ?? undefined }).then((ok) => { if (!ok) toast.error('Could not generate the form') }) }}>
                 <Download className="h-3.5 w-3.5" /> Download
               </Button>
               <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => printTourDocument()}>

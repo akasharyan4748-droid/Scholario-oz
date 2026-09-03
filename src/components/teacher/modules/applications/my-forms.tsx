@@ -21,7 +21,7 @@
  *   • money operations NEVER appear in this UI
  */
 
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Bus, CalendarDays, CheckCircle2, ClipboardList, Download, FileText,
@@ -40,9 +40,7 @@ import { useStudentsStore } from '@/lib/store/students-store'
 import { formatDate } from '@/lib/format'
 import { toast } from 'sonner'
 import { TourConfigScreen } from '@/components/principal/modules/applications/tour-config'
-import {
-  TourFormDocument, tourDocFileName,
-} from '@/components/principal/modules/applications/tour-form-document'
+import { downloadTourFormPDF } from '@/components/principal/modules/applications/tour-form-pdf'
 import { AppStatusBadge, ApplicationReviewDetail } from './review-detail'
 
 const CATEGORY_ICON: Record<ApplicationCategory, LucideIcon> = {
@@ -332,41 +330,23 @@ export function MyFormsView() {
 }
 
 /** Blank official A4 — download for offline distribution (TOUR-1 §11).
- *  The blank document renders off-screen (the SAME fixed template) so the
- *  download always has a real node to serialise — never a silent no-op. */
+ *  Generates the genuine A4 PDF directly from the session's details. */
 function BlankPdfButton({ appId }: { appId: string }) {
   const app = useApplicationsStore((s) => s.applications.find((a) => a.id === appId))
-  const hostRef = useRef<HTMLDivElement>(null)
   if (!app) return null
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 text-[11px] gap-1 text-muted-foreground"
-        onClick={() => {
-          const node = hostRef.current?.querySelector('.tour-print-doc')
-          if (!node) return
-          const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${tourDocFileName(app)}</title></head><body>${node.outerHTML}</body></html>`
-          const blob = new Blob([html], { type: 'text/html' })
-          const url = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = `${tourDocFileName(app)}.html`
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
-          URL.revokeObjectURL(url)
-          toast.success('Blank form downloaded', { description: 'Print and distribute; record received paper forms in Reviews.' })
-        }}
-      >
-        <Download className="h-3 w-3" /> Blank form
-      </Button>
-      {/* Off-screen live render of the official blank document — the
-          download serialises this exact node. */}
-      <div ref={hostRef} aria-hidden className="fixed left-[-9999px] top-0 pointer-events-none">
-        <TourFormDocument app={app} />
-      </div>
-    </>
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 text-[11px] gap-1 text-muted-foreground"
+      onClick={() => {
+        void downloadTourFormPDF(app).then((ok) => {
+          if (ok) toast.success('Blank form downloaded', { description: 'Print and distribute; record received paper forms in Reviews.' })
+          else toast.error('Could not generate the form')
+        })
+      }}
+    >
+      <Download className="h-3 w-3" /> Blank form
+    </Button>
   )
 }

@@ -37,8 +37,9 @@ import { formatINR, formatDate, initials } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
-  TourFormDocument, useFitA4Zoom, printTourDocument, downloadTourDocument, tourDocFileName,
+  TourFormDocument, useFitA4Zoom, printTourDocument,
 } from '@/components/principal/modules/applications/tour-form-document'
+import { downloadTourFormPDF } from '@/components/principal/modules/applications/tour-form-pdf'
 import { SubmissionStatusChip } from './review-detail'
 
 type Decision = 'approve' | 'reject' | 'request_correction'
@@ -224,7 +225,7 @@ export function ReviewDialog({ app, sub, onClose }: {
             <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => printTourDocument()}>
               <Printer className="h-3 w-3" /> Print
             </Button>
-            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => downloadTourDocument(tourDocFileName(app, sub))}>
+            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => { void downloadTourFormPDF(app, sub, { payment: pay ?? undefined }) }}>
               <Download className="h-3 w-3" /> Download
             </Button>
           </div>

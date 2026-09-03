@@ -15,6 +15,10 @@
  *   • blank copies print dotted fill-in rules; filled copies print the
  *     immutable submission snapshot (auto-filled from the school record)
  *
+ * Downloads are handled by tour-form-pdf.ts (genuine jsPDF A4 documents —
+ * never HTML blobs). This file keeps the on-screen A4 component, its
+ * fit-to-container zoom, and the browser Print pipeline.
+ *
  * Structure (fixed forever — the form layout cannot be redesigned):
  *   A. School header: emblem · name · affiliation · address · photo box
  *      + circular no. / date row between two strong rules
@@ -43,7 +47,7 @@ import {
 } from '@/lib/store/applications-store'
 import { formatINR, formatDate } from '@/lib/format'
 
-// ─── Download / print plumbing ─────────────────────────────────────────
+// ─── Print plumbing ─────────────────────────────────────────────────
 
 /** Prints ONLY this document; everything else is hidden while printing. */
 export function printTourDocument(): void {
@@ -65,56 +69,6 @@ export function printTourDocument(): void {
   window.addEventListener('afterprint', cleanup)
   setTimeout(cleanup, 30_000)
   window.print()
-}
-
-const STANDALONE_CSS = `body{margin:0;background:#fff;font-family:Georgia,'Times New Roman',serif;-webkit-print-color-adjust:exact}
-@page{size:A4 portrait;margin:0}
-.tour-print-doc{width:210mm;min-height:297mm;box-sizing:border-box;padding:12mm 13mm 10mm;background:#fff;color:#111}
-@media print{.tour-print-doc{box-shadow:none!important}}`
-
-/** Wraps rendered document markup into a standalone printable HTML file. */
-function downloadHtml(fileName: string, inner: string): void {
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${fileName}</title><style>${STANDALONE_CSS}</style></head><body>${inner}</body></html>`
-  const blob = new Blob([html], { type: 'text/html' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${fileName}.html`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
-
-/** Downloads the live `.tour-print-doc` as a standalone print-ready file. */
-export function downloadTourDocument(fileName: string): void {
-  const node = document.querySelector('.tour-print-doc')
-  if (!node) return
-  downloadHtml(fileName, node.outerHTML)
-}
-
-/**
- * Bulk download: collects EVERY `.tour-print-doc` inside `containerEl`
- * (one per student), wraps each in a page with a page break, and produces
- * ONE print-ready file. Used by "download selected / all / class-wise /
- * gender-wise" sets.
- */
-export function downloadTourDocumentBundle(containerEl: HTMLElement, fileName: string): number {
-  const nodes = Array.from(containerEl.querySelectorAll('.tour-print-doc'))
-  if (nodes.length === 0) return 0
-  const inner = nodes
-    .map((n) => `<div class="tour-page" style="page-break-after:always">${n.outerHTML}</div>`)
-    .join('')
-  downloadHtml(fileName, inner)
-  return nodes.length
-}
-
-/** File name for a saved/printed artefact. */
-export function tourDocFileName(app: SchoolApplication, sub?: ApplicationSubmission): string {
-  const tour = app.title.replace(/[^\w]+/g, '-').slice(0, 36)
-  return sub
-    ? `${sub.serialNo ?? sub.id}-${sub.studentName.replace(/\s+/g, '-')}-${tour}`
-    : `BLANK-${tour}`
 }
 
 // ─── A4 preview scaling (properly scaled, scrollable) ──────────────────
@@ -452,93 +406,3 @@ export function TourFormDocument({ app, sub, payment }: TourFormDocumentProps) {
   )
 }
 
-// ─── Attendance / master list export ───────────────────────────────────
-
-export interface TourAttendanceRow {
-  serialNo: string
-  studentName: string
-  className: string
-  section: string
-  gender: string
-  rollNo?: string
-  admissionNo: string
-  guardianName: string
-  guardianPhone: string
-  paymentStatus: string
-  verificationStatus: string
-}
-
-/**
- * Builds the printable attendance / master list for a tour as a standalone
- * A4-landscape HTML file: official letterhead, the requested scope in the
- * title, every column staff need on the trip, and an empty signature
- * column per row. One document, page-break aware.
- */
-export function downloadTourAttendanceList(
-  app: SchoolApplication,
-  rows: TourAttendanceRow[],
-  scopeLabel: string,
-): void {
-  const g = useSchoolSettingsStore.getState().general
-  const schoolName = g.schoolName?.trim() || 'School'
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const tableRows = rows
-    .map((r, i) => `<tr>
-      <td class="c">${i + 1}</td>
-      <td class="mono">${esc(r.serialNo)}</td>
-      <td>${esc(r.studentName)}</td>
-      <td class="c">${esc(r.className)}</td>
-      <td class="c">${esc(r.section)}</td>
-      <td class="c">${esc(r.gender)}</td>
-      <td class="c">${esc(r.rollNo ?? '—')}</td>
-      <td class="mono c">${esc(r.admissionNo)}</td>
-      <td>${esc(r.guardianName)}</td>
-      <td class="mono c">${esc(r.guardianPhone)}</td>
-      <td class="c ${r.paymentStatus.includes('Paid') ? 'ok' : 'pend'}">${esc(r.paymentStatus)}</td>
-      <td class="c">${esc(r.verificationStatus)}</td>
-      <td class="sig"></td>
-    </tr>`)
-    .join('')
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Attendance list — ${esc(app.title)}</title>
-<style>
-@page{size:A4 landscape;margin:10mm}
-body{font-family:Georgia,'Times New Roman',serif;color:#111;margin:0;font-size:9.5px}
-.head{text-align:center;margin-bottom:3mm}
-.head h1{font-size:15px;letter-spacing:.08em;margin:0;text-transform:uppercase}
-.head .sub{font-size:8.5px;color:#333;margin-top:.5mm}
-table{width:100%;border-collapse:collapse;page-break-inside:auto}
-th,td{border:.3mm solid #333;padding:1.2mm 1.5mm;vertical-align:middle}
-th{background:#eee;font-size:8.5px;letter-spacing:.05em;text-transform:uppercase}
-tr{page-break-inside:avoid}
-td.mono{font-family:ui-monospace,monospace;font-size:8.5px}
-td.c{text-align:center}
-td.sig{min-width:18mm}
-.ok{font-weight:700}
-.pend{font-weight:700}
-.foot{margin-top:2mm;font-size:7.5px;color:#555;text-align:center}
-</style></head><body>
-<div class="head">
-  <h1>${esc(schoolName)}</h1>
-  <p class="sub">${esc(g.affiliation ?? '')}</p>
-  <p class="sub">Educational Tour Attendance / Master List — ${esc(app.title)}${app.destination ? ` (${esc(app.destination)})` : ''} · Session ${esc(app.academicYear)} · ${esc(scopeLabel)} · ${rows.length} student${rows.length === 1 ? '' : 's'}</p>
-</div>
-<table>
-  <thead><tr>
-    <th>#</th><th>Tour No.</th><th>Student Name</th><th>Class</th><th>Sec</th><th>Gender</th>
-    <th>Roll</th><th>Admission No.</th><th>Parent / Guardian</th><th>Mobile</th>
-    <th>Payment</th><th>Verification</th><th>Signature / Attendance</th>
-  </tr></thead>
-  <tbody>${tableRows}</tbody>
-</table>
-<p class="foot">In-charge: ${esc(app.inChargeName ?? '—')} · Prepared ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} · carry on the tour; mark attendance per row.</p>
-</body></html>`
-  const blob = new Blob([html], { type: 'text/html' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `ATTENDANCE-${app.title.replace(/[^\w]+/g, '-').slice(0, 36)}-${scopeLabel.replace(/[^\w]+/g, '-')}.html`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}

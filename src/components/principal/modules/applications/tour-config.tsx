@@ -50,7 +50,8 @@ import { CURRENT_ACADEMIC_YEAR } from '@/lib/store/fee-store-data'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { TourFormDocument, useFitA4Zoom, printTourDocument, downloadTourDocument, tourDocFileName } from './tour-form-document'
+import { TourFormDocument, useFitA4Zoom, printTourDocument } from './tour-form-document'
+import { downloadTourFormPDF } from './tour-form-pdf'
 
 const PRINCIPAL = 'Dr. Ananya Iyer'
 
@@ -601,7 +602,7 @@ export function TourConfigScreen({ editing, actorRole, teacherId, actorName, onB
               <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => printTourDocument()} disabled={problems.length > 0}>
                 <Printer className="h-3.5 w-3.5" /> Print blank form
               </Button>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => downloadTourDocument(tourDocFileName(previewApp))} disabled={problems.length > 0}>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => { void downloadTourFormPDF(previewApp).then((ok) => { if (!ok) toast.error('Could not generate the form') }) }} disabled={problems.length > 0}>
                 <FileText className="h-3.5 w-3.5" /> Download blank
               </Button>
             </div>

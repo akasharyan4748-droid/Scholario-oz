@@ -69,7 +69,14 @@ function drawFieldRows(doc: jsPDF, y: number, rows: FieldRow[]): number {
   let i = 0
   while (i < rows.length) {
     const left = rows[i]
-    const right = (i + 1 < rows.length && !rows[i + 1].wide && !left.wide) ? rows[i + 1] : undefined
+    if (left.wide) {
+      // Full-width row (address, emergency contact, medical note…).
+      const lines = renderCell(doc, M.left, left, CW, cursor)
+      cursor += 4.2 + (lines - 1) * 3.1
+      i += 1
+      continue
+    }
+    const right = (i + 1 < rows.length && !rows[i + 1].wide) ? rows[i + 1] : undefined
     const leftLines = renderCell(doc, M.left, left, COL_W, cursor)
     const rightLines = right
       ? renderCell(doc, M.left + COL_W + COL_GAP, right, COL_W, cursor)
@@ -91,7 +98,6 @@ function renderCell(doc: jsPDF, x: number, row: FieldRow, w: number, y: number):
 
   const ruleX = x + labelW + 2.2
   const ruleW = Math.max(8, x + w - ruleX)
-  const ruleY = y + 3.4
 
   doc.setDrawColor(INK.dotted)
   if (row.value !== undefined && row.value !== '') {
@@ -99,18 +105,22 @@ function renderCell(doc: jsPDF, x: number, row: FieldRow, w: number, y: number):
     doc.setFont(valueFont, 'normal')
     doc.setFontSize(7.5)
     doc.setTextColor(INK.main)
+    // Wrap DOWNWARD: the first value line sits on the label baseline, wrapped
+    // lines follow below, and the fill rule runs under the LAST line.
     const lines = doc.splitTextToSize(row.value, ruleW - 1) as string[]
-    const n = Array.isArray(lines) ? lines.length : 1
-    for (let k = 0; k < n; k++) {
-      doc.text(Array.isArray(lines) ? lines[k] : String(lines), ruleX, y + 3.1 - (n - 1 - k) * 3.1)
+    const list = Array.isArray(lines) ? lines : [String(lines)]
+    for (let k = 0; k < list.length; k++) {
+      doc.text(list[k], ruleX, y + 3.1 + k * 3.1)
     }
+    const lastRuleY = y + 3.4 + (list.length - 1) * 3.1
     doc.setDrawColor(INK.rule)
     doc.setLineWidth(0.2)
     doc.setLineDashPattern([], 0)
-    doc.line(ruleX, ruleY, x + w, ruleY)
-    return n
+    doc.line(ruleX, lastRuleY, x + w, lastRuleY)
+    return list.length
   }
   // Blank copy — the classic dotted fill-in rule.
+  const ruleY = y + 3.4
   doc.setLineWidth(0.35)
   doc.setLineDashPattern([0.45, 0.6], 0)
   doc.line(ruleX, ruleY, x + w, ruleY)
@@ -222,11 +232,11 @@ function drawCircularRow(doc: jsPDF, y: number, app: SchoolApplication): number 
   doc.setTextColor(INK.main)
   doc.text('Circular / Ref. No.:', M.left, y + 3.7)
   doc.setFont('times', 'normal')
-  doc.text(app.circularNo ?? '', M.left + 34, y + 3.7)
+  doc.text(app.circularNo ?? '', M.left + 36, y + 3.7)
   doc.setFont('times', 'bold')
-  doc.text('Date:', PAGE_W - M.right - 24, y + 3.7)
+  doc.text('Date:', PAGE_W - M.right - 44, y + 3.7)
   doc.setFont('times', 'normal')
-  doc.text(app.circularDate ? formatDate(app.circularDate) : '', PAGE_W - M.right - 18, y + 3.7)
+  doc.text(app.circularDate ? formatDate(app.circularDate) : '', PAGE_W - M.right, y + 3.7, { align: 'right' })
   doc.setDrawColor(INK.main)
   doc.setLineWidth(0.5)
   doc.line(M.left, y + 5.2, PAGE_W - M.right, y + 5.2)
@@ -265,11 +275,6 @@ async function buildTourFormPage(
     ? `${formatDate(app.eventDate)}${app.tourEndDate ? ` – ${formatDate(app.tourEndDate)}` : ''}`
     : ''
   const feeLabel = app.payment.mode === 'None' ? 'Nil' : inr(app.payment.amount)
-  const paymentStatus =
-    !pay || app.payment.mode === 'None' ? ''
-      : pay.status === 'Paid' ? `PAID · Receipt ${pay.receiptNos.join(', ') || '—'}`
-        : pay.status === 'Awaiting Verification' ? `PAYMENT PENDING · Receipt ${pay.pendingReceiptNo ?? '—'} (cash — under verification)`
-          : 'NOT PAID'
 
   const emergency = sub ? String(sub.answers['t-emergency'] ?? '') : ''
   const meal = sub ? String(sub.answers['t-meal'] ?? '') : ''
@@ -680,10 +685,10 @@ export function downloadTourAttendancePDF(
       margin: { left: 10, right: 10 },
       styles: {
         font: 'times', fontSize: 7, cellPadding: 1.3,
-        lineColor: [51, 51, 51], lineWidth: 0.2, textColor: INK.main as unknown as number[],
+        lineColor: [51, 51, 51], lineWidth: 0.2, textColor: [17, 17, 17],
       },
       headStyles: {
-        fillColor: [238, 238, 238], textColor: INK.main as unknown as number[],
+        fillColor: [238, 238, 238], textColor: [17, 17, 17],
         fontStyle: 'bold', halign: 'center',
       },
       columnStyles: {

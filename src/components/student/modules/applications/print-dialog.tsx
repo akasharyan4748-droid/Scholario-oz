@@ -16,9 +16,9 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import {
-  TourFormDocument, useFitA4Zoom, printTourDocument, downloadTourDocument,
-  tourDocFileName,
+  TourFormDocument, useFitA4Zoom, printTourDocument,
 } from '@/components/principal/modules/applications/tour-form-document'
+import { downloadTourFormPDF } from '@/components/principal/modules/applications/tour-form-pdf'
 import {
   applicationPayments, deriveSubmissionPayment,
   type ApplicationSubmission, type SchoolApplication,
@@ -88,7 +88,7 @@ export function SubmissionDocumentDialog({ open, onOpenChange, app, sub }: Submi
             variant="outline"
             size="sm"
             className="h-8 text-xs"
-            onClick={() => downloadTourDocument(tourDocFileName(app, sub))}
+            onClick={() => { void downloadTourFormPDF(app, sub, { payment: pay }) }}
           >
             <Download className="h-3.5 w-3.5" /> Download
           </Button>
