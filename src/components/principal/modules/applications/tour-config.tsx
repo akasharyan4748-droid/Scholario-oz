@@ -38,6 +38,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   useApplicationsStore, TOUR_FORM_FIELDS, APPLICATION_TEMPLATES,
   effectiveAppStatus, isApplicationEditable,
@@ -436,33 +437,32 @@ export function TourConfigScreen({ editing, actorRole, teacherId, actorName, onB
           <Group group="schedule" icon={<CalendarDays className="h-3.5 w-3.5" />} title="Dates">
             <FieldRow>
               <Field label="Tour start date" required>
-                <Input
-                  type="date"
+                <DatePicker
+                  compact
                   value={draft.eventDate}
-                  onChange={(e) => set('eventDate', e.target.value)}
-                  className="h-8 text-xs"
+                  onChange={(v) => set('eventDate', v)}
+                  placeholder="Start date"
                   disabled={!canEdit}
-                  aria-label="Tour start date"
                 />
               </Field>
               <Field label="Tour end date">
-                <Input
-                  type="date"
+                <DatePicker
+                  compact
                   value={draft.tourEndDate}
-                  onChange={(e) => set('tourEndDate', e.target.value)}
-                  className="h-8 text-xs"
+                  onChange={(v) => set('tourEndDate', v)}
+                  placeholder="End date"
+                  minDate={draft.eventDate || undefined}
                   disabled={!canEdit}
-                  aria-label="Tour end date"
                 />
               </Field>
               <Field label="Last date to apply" required>
-                <Input
-                  type="date"
+                <DatePicker
+                  compact
                   value={draft.deadline}
-                  onChange={(e) => set('deadline', e.target.value)}
-                  className="h-8 text-xs"
+                  onChange={(v) => set('deadline', v)}
+                  placeholder="Application deadline"
+                  maxDate={draft.eventDate || undefined}
                   disabled={!canEdit}
-                  aria-label="Last date to apply"
                 />
               </Field>
             </FieldRow>
@@ -481,13 +481,12 @@ export function TourConfigScreen({ editing, actorRole, teacherId, actorName, onB
                 />
               </Field>
               <Field label="Circular date">
-                <Input
-                  type="date"
+                <DatePicker
+                  compact
                   value={draft.circularDate}
-                  onChange={(e) => set('circularDate', e.target.value)}
-                  className="h-8 text-xs"
+                  onChange={(v) => set('circularDate', v)}
+                  placeholder="Circular date"
                   disabled={!canEdit}
-                  aria-label="Circular date"
                 />
               </Field>
             </FieldRow>

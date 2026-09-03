@@ -4,28 +4,29 @@
  * TourFormDocument — the OFFICIAL A4 school document behind the built-in
  * "Educational Tour — Parent Consent Form".
  *
- * TOUR-1 design contract: this is a REAL school-office form, not a web page.
- *   • exact A4 proportions (210mm × 297mm, mm-true paddings)
- *   • serif formal typography, near-black ink, thin professional rules
- *   • NO rounded cards, NO colour styling, NO dashboard language
+ * POLISH-1 design contract (final visual standard):
+ *   • a REAL institutional form: serif typography, near-black ink, one A4 page
+ *   • information hierarchy from the reference form — but MINIMAL boxing:
+ *     every data field is a clean "label ……………… value-on-rule" row, sections
+ *     are separated by whitespace + a small rule, and only the legal
+ *     declaration keeps a (single) box
+ *   • NO rounded cards, NO colour styling, NO dashboard language, NO fake
+ *     data / stamps / signatures, NO technical text
  *   • blank copies print dotted fill-in rules; filled copies print the
  *     immutable submission snapshot (auto-filled from the school record)
- *   • every value comes from the tour configuration + the school's own
- *     records — nothing is invented, no fake stamps, no fake signatures
  *
  * Structure (fixed forever — the form layout cannot be redesigned):
  *   A. School header: emblem · name · affiliation · address · photo box
  *      + circular no. / date row between two strong rules
  *   B. Title: PARENT CONSENT FORM · सहमति पत्र · Educational Tour — X
- *   C. Tour information box (destination, dates, duration, fee, staff)
- *   D. Student details table (name, admission no., class, section, roll,
+ *   C. Tour information rows (destination, dates, duration, fee, staff)
+ *   D. Student details rows (name, admission no., class, section, roll,
  *      blood group — NO house: Scholario has no house system)
- *   E. Parent / guardian details (name, mobile, address, emergency contact)
- *   F. Health / care information (food preference, medical note, motion
- *      sickness) — practical tour facts only
- *   G. Parental undertaking & declaration (dynamic student/tour facts)
+ *   E. Parent / guardian rows (name, mobile, address, emergency contact)
+ *   F. Health / care rows (food preference, medical note, motion sickness)
+ *   G. Parental undertaking & declaration — the single boxed block
  *   H. Signature area (student · parent/guardian · class teacher/in-charge)
- *   I. Office use — detachable receipt strip below a dashed rule
+ *   I. Office use — a slim strip below a dashed rule
  *
  * Print mechanics: same clone pipeline as the fee receipt — clone into
  * #print-root at body level, hide everything else via body.tour-printing,
@@ -116,7 +117,7 @@ export function tourDocFileName(app: SchoolApplication, sub?: ApplicationSubmiss
     : `BLANK-${tour}`
 }
 
-// ─── A4 preview scaling (spec §21: properly scaled, scrollable) ─────────
+// ─── A4 preview scaling (properly scaled, scrollable) ──────────────────
 
 /**
  * `useFitA4Zoom` — measures the container and returns the zoom factor that
@@ -142,46 +143,65 @@ export function useFitA4Zoom<T extends HTMLElement>(): [React.RefObject<T | null
   return [ref, zoom]
 }
 
-// ─── Document primitives (school-office register) ───────────────────────
+// ─── Document primitives (school-office register, de-boxed) ────────────
 
-function BlankRule({ w = 60, unit = 'mm' }: { w?: number; unit?: string }) {
-  return <span className="inline-block align-bottom" style={{ width: `${w}${unit}`, borderBottom: '0.35mm dotted #555' }} />
+/**
+ * DocRow — the core field presentation: a bold small-caps label followed by
+ * a fill-in rule. Blank copies print a dotted rule; filled copies print the
+ * value sitting on a light hairline. This replaces the old bordered grid
+ * cells — the form keeps its hierarchy with almost no boxes.
+ */
+function DocRow({ label, children, wide }: { label: string; children?: ReactNode; wide?: boolean }) {
+  const filled = children !== undefined && children !== null && children !== ''
+  return (
+    <div
+      className={wide ? 'col-span-2' : ''}
+      style={{ display: 'flex', alignItems: 'baseline', gap: '2.2mm', padding: '0.7mm 0', minWidth: 0 } as React.CSSProperties}
+    >
+      <span style={{ fontSize: '8px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#333', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {label}
+      </span>
+      <span
+        style={{
+          flex: 1, minWidth: 0, fontSize: '10px', color: '#111', textAlign: 'left',
+          borderBottom: filled ? '0.2mm solid #b5b5b5' : '0.35mm dotted #777',
+          paddingBottom: '0.3mm', lineHeight: 1.35,
+        }}
+      >
+        {children ?? '\u00A0'}
+      </span>
+    </div>
+  )
 }
 
 function PhotoBox() {
   return (
     <div
       className="shrink-0 flex flex-col items-center justify-start"
-      style={{ width: '25mm', height: '32mm', border: '0.3mm dashed #444' }}
+      style={{ width: '22mm', height: '28mm', border: '0.3mm dashed #444' }}
     >
-      <p style={{ fontSize: '6.5px', color: '#666', marginTop: '11mm', textAlign: 'center', lineHeight: 1.3 }}>
+      <p style={{ fontSize: '6px', color: '#666', marginTop: '9mm', textAlign: 'center', lineHeight: 1.35 }}>
         Affix recent<br />passport-size<br />photograph
       </p>
     </div>
   )
 }
 
-/** A bordered label : value cell of the official information grids. */
-function InfoCell({ label, value, wide }: { label: string; value: ReactNode; wide?: boolean }) {
+/** Section heading: bold caps + a light rule running to the margin. */
+function SectionTitle({ children }: { children: ReactNode }) {
   return (
-    <div className={wide ? 'col-span-2' : ''} style={{ border: '0.3mm solid #333', padding: '1.2mm 2mm', display: 'flex', gap: '1.5mm', alignItems: 'baseline' }}>
-      <span style={{ fontSize: '8.5px', fontWeight: 700, letterSpacing: '0.02em', color: '#222', minWidth: '26mm', flexShrink: 0 } as React.CSSProperties}>{label}</span>
-      <span style={{ fontSize: '10px', flex: 1, textAlign: 'right', color: '#111' }}>{value}</span>
+    <div className="flex items-baseline" style={{ gap: '2.5mm', marginTop: '3.2mm', marginBottom: '0.6mm' }}>
+      <p style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.18em', color: '#111', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+        {children}
+      </p>
+      <span aria-hidden style={{ flex: 1, borderBottom: '0.2mm solid #999', transform: 'translateY(-0.4mm)' }} />
     </div>
   )
 }
 
-function SectionTitle({ children }: { children: ReactNode }) {
-  return (
-    <p
-      style={{
-        fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.16em', color: '#111',
-        marginTop: '3.5mm', marginBottom: '1mm', textTransform: 'uppercase',
-      }}
-    >
-      {children}
-    </p>
-  )
+/** Two-column grid of DocRows with generous gutters, no borders. */
+function RowGrid({ children }: { children: ReactNode }) {
+  return <div className="grid grid-cols-2" style={{ columnGap: '7mm' }}>{children}</div>
 }
 
 // ─── The document ───────────────────────────────────────────────────────
@@ -250,7 +270,7 @@ export function TourFormDocument({ app, sub, payment }: TourFormDocumentProps) {
         {/* emblem */}
         <div
           className="shrink-0 flex items-center justify-center"
-          style={{ width: '16mm', height: '16mm', border: '0.4mm solid #333', borderRadius: '50%', fontSize: '12px', fontWeight: 700, letterSpacing: '0.03em' }}
+          style={{ width: '14mm', height: '14mm', border: '0.4mm solid #333', borderRadius: '50%', fontSize: '11px', fontWeight: 700, letterSpacing: '0.03em' }}
         >
           {logoText}
         </div>
@@ -274,25 +294,25 @@ export function TourFormDocument({ app, sub, payment }: TourFormDocumentProps) {
       </div>
 
       {/* circular no. / date row between two rules */}
-      <div style={{ borderTop: '0.3mm solid #333', marginTop: '2.5mm' }} />
-      <div className="flex items-center justify-between" style={{ padding: '1.2mm 0.5mm' }}>
+      <div style={{ borderTop: '0.3mm solid #333', marginTop: '2mm' }} />
+      <div className="flex items-center justify-between" style={{ padding: '1.1mm 0.5mm' }}>
         <p style={{ fontSize: '10px' }}>
           <span style={{ fontWeight: 700 }}>Circular / Ref. No.:</span>{' '}
-          {app.circularNo ?? <BlankRule w={40} />}
+          {app.circularNo || '\u00A0'}
         </p>
         <p style={{ fontSize: '10px' }}>
           <span style={{ fontWeight: 700 }}>Date:</span>{' '}
-          {app.circularDate ? formatDate(app.circularDate) : <BlankRule w={25} />}
+          {app.circularDate ? formatDate(app.circularDate) : '\u00A0'}
         </p>
       </div>
       <div style={{ borderTop: '0.5mm solid #111' }} />
 
       {/* ── B. Form title ── */}
-      <div className="text-center" style={{ marginTop: '3.5mm' }}>
+      <div className="text-center" style={{ marginTop: '3.2mm' }}>
         <p style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '0.14em' }}>
           PARENT CONSENT FORM
         </p>
-        <p style={{ fontSize: '12px', marginTop: '0.5mm', color: '#222' }}>सहमति पत्र</p>
+        <p style={{ fontSize: '12px', marginTop: '0.4mm', color: '#222' }}>सहमति पत्र</p>
         <p style={{ fontSize: '11px', marginTop: '1.2mm', fontWeight: 700 }}>
           Educational Tour — {destination}
         </p>
@@ -306,94 +326,99 @@ export function TourFormDocument({ app, sub, payment }: TourFormDocumentProps) {
 
       {/* ── C. Tour information ── */}
       <SectionTitle>Tour Information</SectionTitle>
-      <div className="grid grid-cols-2" style={{ gap: 0 }}>
-        <InfoCell label="Destination" value={destination} />
-        <InfoCell label="Travel dates" value={datesLabel || <BlankRule w={35} />} />
-        <InfoCell label="Duration" value={app.durationDays ?? <BlankRule w={25} />} />
-        <InfoCell label="Tour fee per student" value={<span style={{ fontWeight: 700 }}>{feeLabel}</span>} />
-        <InfoCell label="Teacher / Tour in-charge" value={app.inChargeName ?? <BlankRule w={25} />} />
-        <InfoCell label="Accompanying staff" value={app.accompanyingStaff ?? <BlankRule w={30} />} />
-      </div>
+      <RowGrid>
+        <DocRow label="Destination">{destination}</DocRow>
+        <DocRow label="Travel dates">{datesLabel || undefined}</DocRow>
+        <DocRow label="Duration">{app.durationDays || undefined}</DocRow>
+        <DocRow label="Tour fee per student">
+          <span style={{ fontWeight: 700 }}>{feeLabel}</span>
+        </DocRow>
+        <DocRow label="Teacher / tour in-charge">{app.inChargeName || undefined}</DocRow>
+        <DocRow label="Accompanying staff">{app.accompanyingStaff || undefined}</DocRow>
+      </RowGrid>
       {app.tourInstructions && (
-        <p style={{ fontSize: '8.5px', lineHeight: 1.45, color: '#333', marginTop: '1.2mm', borderTop: '0.3mm solid #999', borderBottom: '0.3mm solid #999', padding: '1mm 0.5mm' }}>
+        <p style={{ fontSize: '8.5px', lineHeight: 1.45, color: '#333', marginTop: '1.2mm' }}>
+          <span style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '7.5px' }}>Note:&nbsp;</span>
           {app.tourInstructions}
         </p>
       )}
 
       {/* ── D. Student details ── */}
       <SectionTitle>Student Details</SectionTitle>
-      <div className="grid grid-cols-2" style={{ gap: 0 }}>
-        <InfoCell label="Student name" value={sub?.studentName ?? <BlankRule w={45} />} />
-        <InfoCell label="Scholar / Admission No." value={sub ? <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '9px' }}>{sub.admissionNo}</span> : <BlankRule w={30} />} />
-        <InfoCell label="Class" value={sub?.className ?? <BlankRule w={18} />} />
-        <InfoCell label="Section" value={sub?.section ?? <BlankRule w={12} />} />
-        <InfoCell label="Roll No." value={sub?.rollNo ?? <BlankRule w={12} />} />
-        <InfoCell label="Blood group" value={sub?.bloodGroup ?? <BlankRule w={14} />} />
-      </div>
+      <RowGrid>
+        <DocRow label="Student name" wide>
+          {sub?.studentName ? <span style={{ fontWeight: 700 }}>{sub.studentName}</span> : undefined}
+        </DocRow>
+        <DocRow label="Admission no.">
+          {sub?.admissionNo
+            ? <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '9px' }}>{sub.admissionNo}</span>
+            : undefined}
+        </DocRow>
+        <DocRow label="Class / section">
+          {sub ? `${sub.className} — ${sub.section}` : undefined}
+        </DocRow>
+        <DocRow label="Roll no.">{sub?.rollNo || undefined}</DocRow>
+        <DocRow label="Blood group">{sub?.bloodGroup || undefined}</DocRow>
+      </RowGrid>
 
       {/* ── E. Parent / guardian details ── */}
       <SectionTitle>Parent / Guardian Details</SectionTitle>
-      <div className="grid grid-cols-2" style={{ gap: 0 }}>
-        <InfoCell label="Parent / Guardian name" value={sub?.guardianName ?? <BlankRule w={40} />} />
-        <InfoCell label="Parent mobile number" value={sub?.guardianPhone ?? <BlankRule w={28} />} />
-        <InfoCell label="Residential address" wide value={sub?.address ?? <BlankRule w={120} />} />
-        <InfoCell label="Emergency contact" value={emergency || <BlankRule w={38} />} />
-        <InfoCell label="Mode of application" value={sub ? (sub.mode === 'Digital' ? `Online · ${formatDate(sub.submittedAt)}` : `School office · ${formatDate(sub.submittedAt)}`) : <BlankRule w={30} />} />
-      </div>
+      <RowGrid>
+        <DocRow label="Parent / guardian name">{sub?.guardianName || undefined}</DocRow>
+        <DocRow label="Mobile number">{sub?.guardianPhone || undefined}</DocRow>
+        <DocRow label="Residential address" wide>{sub?.address || undefined}</DocRow>
+        <DocRow label="Emergency contact" wide>{emergency || undefined}</DocRow>
+      </RowGrid>
 
       {/* ── F. Health / care information ── */}
       <SectionTitle>Health / Care Information</SectionTitle>
-      <div className="grid grid-cols-2" style={{ gap: 0 }}>
-        <InfoCell label="Food preference" value={meal || <BlankRule w={25} />} />
-        <InfoCell
-          label="Motion sickness / travel concern"
-          value={
-            sub
-              ? motion === undefined ? '—' : motion ? 'Yes — see note' : 'No'
-              : <BlankRule w={18} />
-          }
-        />
-        <InfoCell label="Relevant health / medical note" wide value={medical || (sub ? '—' : <BlankRule w={120} />)} />
-      </div>
+      <RowGrid>
+        <DocRow label="Food preference">{meal || undefined}</DocRow>
+        <DocRow label="Motion sickness">
+          {sub
+            ? motion === undefined ? '—' : motion ? 'Yes — see note' : 'No'
+            : undefined}
+        </DocRow>
+        <DocRow label="Health / medical note" wide>{medical || (sub ? '—' : undefined)}</DocRow>
+      </RowGrid>
 
-      {/* ── G. Parental undertaking & declaration ── */}
+      {/* ── G. Parental undertaking & declaration (the single boxed block) ── */}
       <SectionTitle>Parental Undertaking &amp; Declaration</SectionTitle>
-      <div style={{ border: '0.3mm solid #333', padding: '2mm 2.5mm' }}>
-        <p style={{ fontSize: '9px', lineHeight: 1.55, color: '#111' }}>
-          I/We, <span style={{ fontWeight: 700 }}>{sub?.guardianName ?? <BlankRule w={35} />}</span>,
-          parent/guardian of <span style={{ fontWeight: 700 }}>{sub?.studentName ?? <BlankRule w={40} />}</span>
-          {' '}of <span style={{ fontWeight: 700 }}>{sub ? `${sub.className} — ${sub.section}` : <BlankRule w={20} />}</span>,
+      <div style={{ border: '0.3mm solid #333', padding: '1.8mm 2.4mm' }}>
+        <p style={{ fontSize: '9px', lineHeight: 1.5, color: '#111' }}>
+          I/We, <span style={{ fontWeight: 700 }}>{sub?.guardianName || '\u00A0'}</span>,
+          parent/guardian of <span style={{ fontWeight: 700 }}>{sub?.studentName || '\u00A0'}</span>
+          {' '}of <span style={{ fontWeight: 700 }}>{sub ? `${sub.className} — ${sub.section}` : '\u00A0'}</span>,
           hereby declare and undertake as follows:
         </p>
-        <ol style={{ fontSize: '9px', lineHeight: 1.6, color: '#111', margin: '1.2mm 0 0 5mm', paddingLeft: 0 }}>
+        <ol style={{ fontSize: '9px', lineHeight: 1.55, color: '#111', margin: '1mm 0 0 5mm', paddingLeft: 0 }}>
           <li>I/We give full consent for my/our ward to participate in the Educational Tour to <span style={{ fontWeight: 700 }}>{destination}</span>{datesLabel ? ` (${datesLabel})` : ''} organised by the school.</li>
           <li>The particulars furnished above are true and correct to the best of my/our knowledge.</li>
           <li>I/We have noted the tour dates, the fee payable and the conditions stated in the school circular.</li>
           <li>In case of illness or emergency during the tour, I/We authorise the school and the escorting staff to secure necessary medical assistance and treatment for my/our ward.</li>
           <li>My/our ward shall abide by the school&apos;s rules and the instructions of the escorting staff throughout the tour.</li>
         </ol>
-        <p style={{ fontSize: '8px', marginTop: '1.2mm', color: '#444' }}>
-          Place: ________________&nbsp;&nbsp;&nbsp;&nbsp;Date: ________________
+        <p style={{ fontSize: '8.5px', marginTop: '1.2mm', color: '#333' }}>
+          Place: ________________&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Date: ________________
         </p>
       </div>
 
       {/* ── H. Signature area ── */}
-      <div className="grid grid-cols-3" style={{ gap: '6mm', marginTop: '5mm' }}>
+      <div className="grid grid-cols-3" style={{ gap: '6mm', marginTop: '4mm' }}>
         {([
           { who: 'Student\u2019s Signature', name: sub?.studentName },
           { who: 'Parent / Guardian\u2019s Signature', name: sub?.guardianName, sig: sub?.signature },
           { who: 'Class Teacher / Tour In-charge', name: app.inChargeName },
         ] as Array<{ who: string; name?: string; sig?: ApplicationSubmission['signature'] }>).map(({ who, name, sig }) => (
           <div key={who} className="text-center">
-            <div style={{ height: '11mm', borderBottom: '0.3mm dotted #555', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '0.5mm' }}>
+            <div style={{ height: '10mm', borderBottom: '0.35mm dotted #555', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '0.5mm' }}>
               {sig && sig.mode === 'drawn' && sig.data.startsWith('data:image/png') ? (
-                 
-                <img src={sig.data} alt={`Signature of ${sig.signerName}`} style={{ maxHeight: '10mm', maxWidth: '100%', objectFit: 'contain' }} />
+                <img src={sig.data} alt={`Signature of ${sig.signerName}`} style={{ maxHeight: '9mm', maxWidth: '100%', objectFit: 'contain' }} />
               ) : sig && sig.mode === 'typed' ? (
                 <span style={{ fontSize: '13px', fontStyle: 'italic' }}>{sig.data}</span>
               ) : null}
             </div>
-            <p style={{ fontSize: '7.5px', fontWeight: 700, marginTop: '0.8mm' }}>{who}</p>
+            <p style={{ fontSize: '7.5px', fontWeight: 700, marginTop: '0.7mm' }}>{who}</p>
             <p style={{ fontSize: '7px', color: '#555' }}>
               {sig ? `Recorded online · ${formatDate(sig.signedAt)}` : name ? name : 'Name: ______________'}
             </p>
@@ -401,33 +426,25 @@ export function TourFormDocument({ app, sub, payment }: TourFormDocumentProps) {
         ))}
       </div>
 
-      {/* ── I. Office use — detachable receipt strip ── */}
-      <div style={{ marginTop: '5mm', borderTop: '0.5mm dashed #555', paddingTop: '1.5mm' }}>
-        <p style={{ fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textAlign: 'center' }}>
-          FOR OFFICE USE ONLY — RECEIPT
+      {/* ── I. Office use — slim strip below a dashed rule ── */}
+      <div style={{ marginTop: '4mm', borderTop: '0.5mm dashed #555', paddingTop: '1.2mm' }}>
+        <p style={{ fontSize: '8px', fontWeight: 700, letterSpacing: '0.16em', textAlign: 'center' }}>
+          FOR OFFICE USE ONLY
         </p>
-        <div className="grid grid-cols-3" style={{ gap: 0, marginTop: '1mm' }}>
-          <InfoCell label="Student" value={sub?.studentName ?? <BlankRule w={28} />} />
-          <InfoCell label="Class / Section" value={sub ? `${sub.className} / ${sub.section}` : <BlankRule w={16} />} />
-          <InfoCell label="Roll No." value={sub?.rollNo ?? <BlankRule w={10} />} />
-          <InfoCell label="Admission No." value={sub?.admissionNo ?? <BlankRule w={20} />} />
-          <InfoCell label="Tour" value={<span style={{ fontSize: '8px' }}>{app.title}</span>} />
-          <InfoCell label="Parent mobile" value={sub?.guardianPhone ?? <BlankRule w={20} />} />
-          <InfoCell label="Application No." value={sub?.serialNo ?? <BlankRule w={22} />} />
-          <InfoCell label="Payment status" value={paymentStatus ?? <BlankRule w={20} />} />
-          <InfoCell
-            label="Verified / Received"
-            value={
-              sub
-                ? sub.physicalDoc.status === 'Verified' ? 'Verified'
-                  : sub.physicalDoc.status === 'Received' ? 'Received'
-                    : sub.status === 'Approved' ? 'Approved'
-                      : 'Pending'
-                : <BlankRule w={18} />
-            }
-          />
-        </div>
-        <p style={{ fontSize: '7px', color: '#666', marginTop: '0.8mm', textAlign: 'center' }}>
+        <RowGrid>
+          <DocRow label="Application no.">{sub?.serialNo || undefined}</DocRow>
+          <DocRow label="Payment status">{paymentStatus ?? undefined}</DocRow>
+          <DocRow label="Verified / received">
+            {sub
+              ? sub.physicalDoc.status === 'Verified' ? 'Verified'
+                : sub.physicalDoc.status === 'Received' ? 'Received'
+                  : sub.status === 'Approved' ? 'Approved'
+                    : 'Pending'
+              : undefined}
+          </DocRow>
+          <DocRow label="Office date">{sub ? formatDate(sub.submittedAt) : undefined}</DocRow>
+        </RowGrid>
+        <p style={{ fontSize: '7px', color: '#666', marginTop: '0.6mm', textAlign: 'center' }}>
           Detach and retain with the office record · {schoolName}
         </p>
       </div>
@@ -435,7 +452,7 @@ export function TourFormDocument({ app, sub, payment }: TourFormDocumentProps) {
   )
 }
 
-// ─── Attendance / master list export (spec §16) ─────────────────────────
+// ─── Attendance / master list export ───────────────────────────────────
 
 export interface TourAttendanceRow {
   serialNo: string
