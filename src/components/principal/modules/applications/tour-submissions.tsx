@@ -110,7 +110,7 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
   const [blankOpen, setBlankOpen] = useState(false)
   const [attendanceOpen, setAttendanceOpen] = useState(false)
   const [attendanceScope, setAttendanceScope] = useState('all')
-  const [bundle, setBundle] = useState<ApplicationSubmission[] | null>(null)
+  const [bundle, setBundle] = useState<{ subs: ApplicationSubmission[]; label?: string } | null>(null)
 
   // ── Derived data ──
   // FEE-STORE SUBSCRIPTION — payments for this tour live in the canonical
@@ -140,6 +140,19 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
     for (const s of mySubs) if (classFilter === 'all' || s.classId === classFilter) m.set(s.section, s.section)
     return Array.from(m.keys()).sort()
   }, [mySubs, classFilter])
+
+  // Class × section groups for section-wise downloads.
+  const sectionGroups = useMemo(() => {
+    const m = new Map<string, { key: string; classId: string; className: string; section: string; subs: ApplicationSubmission[] }>()
+    for (const s of mySubs) {
+      if (s.status === 'Withdrawn') continue
+      const key = `${s.classId}|${s.section}`
+      const g = m.get(key) ?? { key, classId: s.classId, className: s.className, section: s.section, subs: [] }
+      g.subs.push(s)
+      m.set(key, g)
+    }
+    return Array.from(m.values()).sort((a, b) => a.className.localeCompare(b.className) || a.section.localeCompare(b.section))
+  }, [mySubs])
 
   const stateOf = useCallback(
     (s: ApplicationSubmission) => tourSubmissionState(app, s),
@@ -275,13 +288,13 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
   useEffect(() => {
     if (!bundle) return
     const run = async () => {
-      const subs = bundle
+      const { subs, label } = bundle
       setBundle(null)
       if (subs.length === 0) {
         toast.error('Nothing to download')
         return
       }
-      const n = await downloadTourFormsBundlePDF(app, subs)
+      const n = await downloadTourFormsBundlePDF(app, subs, label)
       if (n > 0) {
         toast.success(`${n} completed form${n === 1 ? '' : 's'} downloaded`, {
           description: 'One A4 page per student, serial order — ready to print.',
@@ -296,7 +309,7 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
   const downloadSelected = () => {
     const subs = filtered.filter((s) => selected.has(s.id))
     if (subs.length === 0) return
-    setBundle(subs)
+    setBundle({ subs, label: 'selected' })
   }
 
   // Attendance rows for the current scope selection.
@@ -398,19 +411,32 @@ export function TourSubmissions({ app: appProp, onBack, onEdit }: Props) {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-[10px]">Completed forms</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => setBundle(filtered.filter((s) => s.status !== 'Withdrawn'))} disabled={summary.total === 0}>
-                <FileDown className="h-3.5 w-3.5" /> All submitted ({summary.total})
+              <DropdownMenuItem onClick={() => setBundle({ subs: filtered.filter((s) => s.status !== 'Withdrawn'), label: activeFilters > 0 ? 'current-filter' : undefined })} disabled={summary.total === 0}>
+                <FileDown className="h-3.5 w-3.5" /> All submitted ({summary.total}){activeFilters > 0 ? ' · current filter' : ''}
               </DropdownMenuItem>
               {classOptions.map((c) => (
-                <DropdownMenuItem key={c.id} onClick={() => setBundle(mySubs.filter((s) => s.classId === c.id && s.status !== 'Withdrawn'))}>
+                <DropdownMenuItem key={c.id} onClick={() => setBundle({ subs: mySubs.filter((s) => s.classId === c.id && s.status !== 'Withdrawn'), label: c.name.replace(/\s+/g, '-') })}>
                   <FileDown className="h-3.5 w-3.5" /> {c.name} only
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuItem onClick={() => setBundle(mySubs.filter((s) => genderLabel(s.gender) === 'Male' && s.status !== 'Withdrawn'))} disabled={summary.total === 0}>
+              {sectionGroups.map((g) => (
+                <DropdownMenuItem key={g.key} onClick={() => setBundle({ subs: g.subs, label: `${g.className}-${g.section}` })}>
+                  <FileDown className="h-3.5 w-3.5" /> {g.className} — {g.section} only
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuItem onClick={() => setBundle({ subs: mySubs.filter((s) => genderLabel(s.gender) === 'Male' && s.status !== 'Withdrawn'), label: 'boys' })} disabled={summary.total === 0}>
                 <FileDown className="h-3.5 w-3.5" /> Boys only
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setBundle(mySubs.filter((s) => genderLabel(s.gender) === 'Female' && s.status !== 'Withdrawn'))} disabled={summary.total === 0}>
+              <DropdownMenuItem onClick={() => setBundle({ subs: mySubs.filter((s) => genderLabel(s.gender) === 'Female' && s.status !== 'Withdrawn'), label: 'girls' })} disabled={summary.total === 0}>
                 <FileDown className="h-3.5 w-3.5" /> Girls only
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[10px]">Payment lists</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setBundle({ subs: mySubs.filter((s) => ['Submitted — Paid', 'Verified / Received'].includes(tourSubmissionState(app, s))), label: 'paid' })} disabled={summary.paid === 0}>
+                <FileDown className="h-3.5 w-3.5" /> Paid students ({summary.paid})
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setBundle({ subs: mySubs.filter((s) => tourSubmissionState(app, s) === 'Submitted — Unpaid'), label: 'unpaid' })} disabled={summary.unpaid === 0}>
+                <FileDown className="h-3.5 w-3.5" /> Unpaid submissions ({summary.unpaid})
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-[10px]">Trip list</DropdownMenuLabel>

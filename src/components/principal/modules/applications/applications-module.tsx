@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useApplicationsStore, ensureApplicationSeedData } from '@/lib/store/applications-store'
+import { useApplicationsStore, ensureApplicationSeedData, type TourDocTemplate } from '@/lib/store/applications-store'
 import type { SchoolApplication } from '@/lib/store/applications-store'
 import { PageTransition } from '@/components/shared/ui'
 import { ApplicationsDashboard } from './applications-dashboard'
@@ -23,7 +23,7 @@ const ACTOR = 'Dr. Ananya Iyer'
 
 type View =
   | { name: 'dashboard' }
-  | { name: 'config'; editingId?: string }
+  | { name: 'config'; editingId?: string; template?: TourDocTemplate }
   | { name: 'detail'; appId: string }
 
 export function ApplicationsModule() {
@@ -54,13 +54,14 @@ export function ApplicationsModule() {
             {view.name === 'dashboard' && (
               <ApplicationsDashboard
                 onOpenApplication={(id) => setView({ name: 'detail', appId: id })}
-                onUseTemplate={() => setView({ name: 'config' })}
+                onUseTemplate={(docTemplate) => setView({ name: 'config', template: docTemplate })}
                 onEditSession={(id) => setView({ name: 'config', editingId: id })}
               />
             )}
             {view.name === 'config' && (
               <ConfigHost
                 editingId={view.editingId}
+                initialTemplate={view.template}
                 onBack={() => setView({ name: 'dashboard' })}
                 onSaved={(id) => setView({ name: 'config', editingId: id })}
                 onPublished={(id) => setView({ name: 'detail', appId: id })}
@@ -80,8 +81,9 @@ export function ApplicationsModule() {
   )
 }
 
-function ConfigHost({ editingId, onBack, onSaved, onPublished }: {
+function ConfigHost({ editingId, initialTemplate, onBack, onSaved, onPublished }: {
   editingId?: string
+  initialTemplate?: TourDocTemplate
   onBack: () => void
   onSaved: (id: string) => void
   onPublished: (id: string) => void
@@ -94,6 +96,7 @@ function ConfigHost({ editingId, onBack, onSaved, onPublished }: {
   return (
     <TourConfigScreen
       editing={editing}
+      initialTemplate={initialTemplate}
       actorRole="Principal"
       actorName={ACTOR}
       onBack={onBack}

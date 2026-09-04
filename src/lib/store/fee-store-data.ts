@@ -541,6 +541,22 @@ export const SEED_ADDITIONAL_CHARGES: AdditionalCharge[] = [
     createdAt: '2026-08-24T10:15:00Z',
     status: 'Active',
   },
+  // AF-TPL — the second seeded tour session (Scholario Modern A4 document).
+  {
+    id: 'AC-04',
+    name: 'Educational Tour — Mysuru',
+    category: 'Tour',
+    amount: 1500,
+    academicYear: '2026-2027',
+    applicableClassIds: ['C07'],
+    dueDate: '2026-12-20',
+    mandatory: false,
+    description: 'Two-day educational tour to Mysuru (transport, stay, entry fees). Digital consent — submit the form online, pay online or at the counter.',
+    reference: 'Mysuru Educational Tour 2026-27',
+    createdBy: 'Principal',
+    createdAt: '2026-09-02T09:30:00Z',
+    status: 'Active',
+  },
 ]
 
 // ─── Concession seed (PART 11 — auditable concession records) ─────────

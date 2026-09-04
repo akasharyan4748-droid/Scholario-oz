@@ -43,6 +43,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { TourFormDocument, useFitA4Zoom, printTourDocument } from './tour-form-document'
 import { downloadTourFormPDF } from './tour-form-pdf'
+import { NewApplicationDialog } from './new-application-dialog'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -56,7 +57,7 @@ const ACTOR = 'Dr. Ananya Iyer'
 
 interface Props {
   onOpenApplication: (id: string) => void
-  onUseTemplate: () => void
+  onUseTemplate: (docTemplate: 'classic' | 'modern') => void
   onEditSession: (id: string) => void
 }
 
@@ -72,6 +73,7 @@ export function ApplicationsDashboard({ onOpenApplication, onUseTemplate, onEdit
   useFeeStore((s) => s.transactions)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [newAppOpen, setNewAppOpen] = useState(false)
   const [previewApp, setPreviewApp] = useState<SchoolApplication | null>(null)
   const [publishConfirm, setPublishConfirm] = useState<SchoolApplication | null>(null)
   const [takeDownConfirm, setTakeDownConfirm] = useState<SchoolApplication | null>(null)
@@ -183,7 +185,7 @@ export function ApplicationsDashboard({ onOpenApplication, onUseTemplate, onEdit
             <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setPreviewApp(templateApp())}>
               <Eye className="h-3 w-3" /> Preview
             </Button>
-            <Button size="sm" className="h-7 text-[11px] gap-1" onClick={onUseTemplate}>
+            <Button size="sm" className="h-7 text-[11px] gap-1" onClick={() => setNewAppOpen(true)}>
               <PencilLine className="h-3 w-3" /> Use for a session
             </Button>
           </div>
@@ -259,6 +261,13 @@ export function ApplicationsDashboard({ onOpenApplication, onUseTemplate, onEdit
 
       {/* Session blank-form preview dialog */}
       <SessionPreviewDialog app={previewApp} onOpenChange={(o) => !o && setPreviewApp(null)} onDownloadBlank={downloadBlank} />
+
+      {/* New application → template selection → session configuration */}
+      <NewApplicationDialog
+        open={newAppOpen}
+        onOpenChange={setNewAppOpen}
+        onContinue={(docTemplate) => onUseTemplate(docTemplate)}
+      />
 
       {/* Publish confirmation */}
       <AlertDialog open={!!publishConfirm} onOpenChange={(o) => !o && setPublishConfirm(null)}>

@@ -120,6 +120,15 @@ export function DatePicker({
     setOpen(false)
   }
 
+  // Year dropdown range. Tours and fee deadlines routinely land NEXT
+  // academic year — the picker must reach at least two years ahead (or the
+  // explicit maxDate's year when one is given).
+  const yearRange = React.useMemo(() => {
+    const now = new Date().getFullYear()
+    const max = maxDate ? parseISO(maxDate) : null
+    return { fromYear: now - 100, toYear: Math.max(now + 2, max ? max.getFullYear() : now) }
+  }, [maxDate])
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -166,6 +175,8 @@ export function DatePicker({
           initialFocus
           captionLayout="dropdown"
           disabled={disabledMatcher}
+          fromYear={yearRange.fromYear}
+          toYear={yearRange.toYear}
           components={dayStateMap ? { DayButton: CustomDayButton } : undefined}
         />
       </PopoverContent>

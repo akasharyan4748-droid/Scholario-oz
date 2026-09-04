@@ -38,11 +38,14 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 import { DatePicker } from '@/components/ui/date-picker'
 import {
   useApplicationsStore, TOUR_FORM_FIELDS, APPLICATION_TEMPLATES,
-  effectiveAppStatus, isApplicationEditable,
-  type SchoolApplication, type CreateApplicationInput,
+  TOUR_DOC_TEMPLATES, TOUR_DOC_TEMPLATE_ORDER, effectiveAppStatus, isApplicationEditable,
+  type TourDocTemplate, type SchoolApplication, type CreateApplicationInput,
 } from '@/lib/store/applications-store'
 import { useTeachersStore } from '@/lib/store/teachers-store'
 import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
@@ -52,6 +55,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { TourFormDocument, useFitA4Zoom, printTourDocument } from './tour-form-document'
 import { downloadTourFormPDF } from './tour-form-pdf'
+import { DocTemplateThumb } from './new-application-dialog'
 
 const PRINCIPAL = 'Dr. Ananya Iyer'
 
@@ -74,9 +78,11 @@ interface ConfigDraft {
   genderEligibility: 'All' | 'Boys' | 'Girls'
   paymentAmount: number
   paymentAvailability: 'Both' | 'Online' | 'Cash'
+  /** AF-TPL — which of the two official A4 document layouts this session prints on. */
+  docTemplate: TourDocTemplate
 }
 
-function draftOf(app?: SchoolApplication): ConfigDraft {
+function draftOf(app?: SchoolApplication, initialTemplate?: TourDocTemplate): ConfigDraft {
   const t = APPLICATION_TEMPLATES.educational_tour
   if (!app) {
     return {
@@ -96,6 +102,7 @@ function draftOf(app?: SchoolApplication): ConfigDraft {
       genderEligibility: 'All',
       paymentAmount: t.defaultAmount,
       paymentAvailability: 'Both',
+      docTemplate: initialTemplate ?? 'classic',
     }
   }
   return {
@@ -115,12 +122,15 @@ function draftOf(app?: SchoolApplication): ConfigDraft {
     genderEligibility: app.genderEligibility ?? 'All',
     paymentAmount: app.payment.mode === 'None' ? 0 : app.payment.amount,
     paymentAvailability: app.paymentAvailability ?? 'Both',
+    docTemplate: app.docTemplate ?? 'classic',
   }
 }
 
 interface Props {
   /** Existing tour instance to reconfigure (undefined = a fresh session). */
   editing?: SchoolApplication
+  /** Chosen A4 document template for a FRESH session (from the selection dialog). */
+  initialTemplate?: TourDocTemplate
   actorRole: 'Principal' | 'Teacher'
   teacherId?: string
   actorName: string
@@ -131,16 +141,17 @@ interface Props {
   onPublished: (appId: string) => void
 }
 
-export function TourConfigScreen({ editing, actorRole, teacherId, actorName, onBack, onSaved, onPublished }: Props) {
+export function TourConfigScreen({ editing, initialTemplate, actorRole, teacherId, actorName, onBack, onSaved, onPublished }: Props) {
   const createApplication = useApplicationsStore((s) => s.createApplication)
   const updateApplication = useApplicationsStore((s) => s.updateApplication)
   const publishApplication = useApplicationsStore((s) => s.publishApplication)
   const submitForApproval = useApplicationsStore((s) => s.submitForApproval)
   const teachers = useTeachersStore((s) => s.teachers)
 
-  const [draft, setDraft] = useState<ConfigDraft>(() => draftOf(editing))
+  const [draft, setDraft] = useState<ConfigDraft>(() => draftOf(editing, initialTemplate))
   const [saving, setSaving] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
+  const [templatePickOpen, setTemplatePickOpen] = useState(false)
   const [mobileView, setMobileView] = useState<'form' | 'preview'>('form')
 
   const teacherOptions = useMemo(
@@ -197,6 +208,7 @@ export function TourConfigScreen({ editing, actorRole, teacherId, actorName, onB
     tourInstructions: draft.tourInstructions.trim() || undefined,
     genderEligibility: draft.genderEligibility,
     paymentAvailability: draft.paymentAvailability,
+    docTemplate: draft.docTemplate,
     targetClassIds: draft.targetClassIds,
     deadline: draft.deadline || '—',
     eventDate: draft.eventDate || undefined,
@@ -240,6 +252,7 @@ export function TourConfigScreen({ editing, actorRole, teacherId, actorName, onB
     tourInstructions: draft.tourInstructions,
     genderEligibility: draft.genderEligibility,
     paymentAvailability: draft.paymentAvailability,
+    docTemplate: draft.docTemplate,
     participation: 'Optional',
     guardianConsentRequired: true,
     guardianConsentMethod: 'Digital',
@@ -432,6 +445,30 @@ export function TourConfigScreen({ editing, actorRole, teacherId, actorName, onB
                 disabled={!canEdit}
                 aria-label="Tour information for parents"
               />
+            </Field>
+            {/* A4 document layout — chosen at creation, switchable while draft */}
+            <Field label="Document template">
+              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/30 p-2.5">
+                <DocTemplateThumb which={draft.docTemplate} scale={0.62} className="shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold">{TOUR_DOC_TEMPLATES[draft.docTemplate].label}</p>
+                  <p className="mt-0.5 text-[10.5px] text-muted-foreground leading-relaxed line-clamp-2">
+                    {TOUR_DOC_TEMPLATES[draft.docTemplate].blurb}
+                  </p>
+                </div>
+                {canEdit && !alreadyPublished ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px] shrink-0"
+                    onClick={() => setTemplatePickOpen(true)}
+                  >
+                    Change
+                  </Button>
+                ) : (
+                  <Badge variant="outline" className="text-[9px] h-4 px-1.5 shrink-0 text-muted-foreground">Locked</Badge>
+                )}
+              </div>
             </Field>
           </Group>
 
@@ -660,6 +697,52 @@ export function TourConfigScreen({ editing, actorRole, teacherId, actorName, onB
           </div>
         </div>
       </div>
+
+      {/* Document template switch (drafts only) */}
+      <Dialog open={templatePickOpen} onOpenChange={setTemplatePickOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Document template</DialogTitle>
+            <DialogDescription className="text-xs">
+              Used for the blank form, students&rsquo; submitted forms, print and PDF. Locked once the session is published.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-1">
+            {TOUR_DOC_TEMPLATE_ORDER.map((key) => {
+              const t = TOUR_DOC_TEMPLATES[key]
+              const selected = draft.docTemplate === key
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => set('docTemplate', key)}
+                  aria-pressed={selected}
+                  className={cn(
+                    'relative rounded-xl border p-3 flex flex-col items-center text-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    selected
+                      ? 'border-primary ring-1 ring-primary/30 shadow-sm'
+                      : 'border-border hover:border-primary/25 hover:bg-muted/30',
+                  )}
+                >
+                  {selected && (
+                    <span className="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    </span>
+                  )}
+                  <DocTemplateThumb which={key} />
+                  <p className="mt-2.5 text-xs font-semibold">{t.label}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground leading-relaxed">{t.blurb}</p>
+                </button>
+              )
+            })}
+          </div>
+          <DialogFooter>
+            <Button size="sm" className="h-8 text-xs" onClick={() => setTemplatePickOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Publish confirmation */}
       <AlertDialog open={publishOpen} onOpenChange={setPublishOpen}>

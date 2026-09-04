@@ -2,14 +2,13 @@
 
 /**
  * tour-form-pdf — REAL A4 PDF exports for the built-in
- * "Educational Tour — Parent Consent Form" (FINAL POLISH §1 / §10).
- *
- * Every artefact produced here is a genuine PDF document drawn with
- * jsPDF's vector primitives — the same export infrastructure the
- * Examinations / Salary / Attendance modules already use. No HTML
- * blobs, no browser-page substitutes: exact A4 geometry, print-safe
- * margins, Times (serif) typography and the de-boxed institutional
- * design of the on-screen TourFormDocument.
+ * "Educational Tour — Parent Consent Form", in BOTH document layouts
+ * (AF-TPL): 'classic' (formal office document) and 'modern' (airy
+ * Scholario layout). Every artefact is a genuine PDF drawn with jsPDF's
+ * vector primitives — the same export infrastructure the Examinations /
+ * Salary / Attendance modules use. No HTML blobs, no browser-page
+ * substitutes: exact A4 geometry, print-safe margins, Times (serif)
+ * typography.
  *
  *   • downloadTourFormPDF        — blank OR one completed form (one A4 page)
  *   • downloadTourFormsBundlePDF — many completed forms    (one page each)
@@ -23,28 +22,23 @@
  *     PDF title block stays English-only (the on-screen/print document
  *     keeps सहमति पत्र).
  *   • The drawn guardian signature (PNG data-URL) is embedded 1:1; the
- *     typed signature renders in Times italic exactly like the A4 HTML.
+ *     typed signature renders in Times italic exactly like the A4 page.
  */
 
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { useSchoolSettingsStore } from '@/lib/store/school-settings-store/store'
 import {
-  deriveSubmissionPayment,
-  type SchoolApplication,
-  type ApplicationSubmission,
-  type SubmissionPaymentInfo,
+  deriveSubmissionPayment, docTemplateOf,
+  type SchoolApplication, type TourDocTemplate,
+  type ApplicationSubmission, type SubmissionPaymentInfo,
 } from '@/lib/store/applications-store'
 import { formatINR, formatDate } from '@/lib/format'
 
-// ─── Geometry (A4 portrait, mm) ─────────────────────────────────────────
+// ─── Geometry (A4 portrait, mm) — per-template skins ───────────────────
 
 const PAGE_W = 210
 const PAGE_H = 297
-const M = { left: 13, right: 13, top: 12, bottom: 10 }
-const CW = PAGE_W - M.left - M.right // 184mm content width
-const COL_GAP = 7
-const COL_W = (CW - COL_GAP) / 2
 
 const INK = { main: '#111', soft: '#333', mid: '#444', mute: '#555', faint: '#666', rule: '#b5b5b5', dotted: '#777', light: '#999' }
 
@@ -53,7 +47,80 @@ function inr(amount: number): string {
   return formatINR(amount).replace(/^₹/, 'Rs ')
 }
 
-// ─── Field row engine (the de-boxed "label …… value-on-rule" rows) ─────
+interface PdfSkin {
+  /** Content margins. */
+  ml: number
+  mr: number
+  mt: number
+  /** Column layout. */
+  colGap: number
+  /** One field row (single-line) height + per wrapped line. */
+  rowH: number
+  rowLineH: number
+  /** Rule weights — blank dotted / filled hairline. */
+  blankWeight: number
+  filledWeight: number
+  blankDot: [number, number]
+  /** Section titles. */
+  sectionGap: number
+  sectionRule: boolean
+  /** Header + circular row treatment. */
+  header: 'classic' | 'modern'
+  /** Declaration. */
+  declBoxed: boolean
+  declLineH: number
+  declItemGap: number
+  declPlaceGap: number
+  /** Signatures. */
+  sigH: number
+  sigMarginTop: number
+  sigRule: 'dotted' | 'solid'
+  /** Office-use strip. */
+  officeMarginTop: number
+  officeRule: 'dashed' | 'solid'
+}
+
+const CLASSIC_SKIN: PdfSkin = {
+  ml: 13, mr: 13, mt: 12,
+  colGap: 7,
+  rowH: 4.2, rowLineH: 3.1,
+  blankWeight: 0.35, filledWeight: 0.2,
+  blankDot: [0.45, 0.6],
+  sectionGap: 3.2, sectionRule: true,
+  header: 'classic',
+  declBoxed: true, declLineH: 3.1, declItemGap: 0.9, declPlaceGap: 4.5,
+  sigH: 10, sigMarginTop: 4, sigRule: 'dotted',
+  officeMarginTop: 4, officeRule: 'dashed',
+}
+
+const MODERN_SKIN: PdfSkin = {
+  ml: 16, mr: 16, mt: 12,
+  colGap: 9,
+  rowH: 5.2, rowLineH: 3.2,
+  blankWeight: 0.3, filledWeight: 0.18,
+  blankDot: [0.4, 0.55],
+  sectionGap: 5.3, sectionRule: false,
+  header: 'modern',
+  declBoxed: false, declLineH: 4.0, declItemGap: 0.8, declPlaceGap: 5.2,
+  sigH: 10, sigMarginTop: 5.8, sigRule: 'solid',
+  officeMarginTop: 5.5, officeRule: 'solid',
+}
+
+function skinOf(app: SchoolApplication): PdfSkin {
+  return docTemplateOf(app) === 'modern' ? MODERN_SKIN : CLASSIC_SKIN
+}
+
+/** Right margin as an x coordinate (page edge minus margin). */
+function rightX(k: PdfSkin): number {
+  return PAGE_W - k.mr
+}
+
+/** Content width for a skin. */
+function contentW(k: PdfSkin): number {
+  return PAGE_W - k.ml - k.mr
+}
+
+// ─── Field row engine (the "label …… value-on-rule" rows) ─────────────
 
 interface FieldRow {
   label: string
@@ -64,37 +131,39 @@ interface FieldRow {
   mono?: boolean
 }
 
-function drawFieldRows(doc: jsPDF, y: number, rows: FieldRow[]): number {
+function drawFieldRows(doc: jsPDF, y: number, rows: FieldRow[], k: PdfSkin): number {
+  const cw = contentW(k)
+  const colW = (cw - k.colGap) / 2
   let cursor = y
   let i = 0
   while (i < rows.length) {
     const left = rows[i]
     if (left.wide) {
       // Full-width row (address, emergency contact, medical note…).
-      const lines = renderCell(doc, M.left, left, CW, cursor)
-      cursor += 4.2 + (lines - 1) * 3.1
+      const lines = renderCell(doc, k.ml, left, cw, cursor, k)
+      cursor += k.rowH + (lines - 1) * k.rowLineH
       i += 1
       continue
     }
     const right = (i + 1 < rows.length && !rows[i + 1].wide) ? rows[i + 1] : undefined
-    const leftLines = renderCell(doc, M.left, left, COL_W, cursor)
+    const leftLines = renderCell(doc, k.ml, left, colW, cursor, k)
     const rightLines = right
-      ? renderCell(doc, M.left + COL_W + COL_GAP, right, COL_W, cursor)
+      ? renderCell(doc, k.ml + colW + k.colGap, right, colW, cursor, k)
       : 1
-    cursor += 4.2 + (Math.max(leftLines, rightLines) - 1) * 3.1
+    cursor += k.rowH + (Math.max(leftLines, rightLines) - 1) * k.rowLineH
     i += right ? 2 : 1
   }
   return cursor
 }
 
 /** Draws one label + value-on-rule cell; returns the number of value lines. */
-function renderCell(doc: jsPDF, x: number, row: FieldRow, w: number, y: number): number {
+function renderCell(doc: jsPDF, x: number, row: FieldRow, w: number, y: number, k: PdfSkin): number {
   const label = row.label.toUpperCase()
   doc.setFont('times', 'bold')
-  doc.setFontSize(6)
-  doc.setTextColor(INK.soft)
-  const labelW = doc.getTextWidth(label) + label.length * 0.22
-  doc.text(label, x, y + 2.7, { charSpace: 0.22 })
+  doc.setFontSize(k.header === 'modern' ? 5.75 : 6)
+  doc.setTextColor(k.header === 'modern' ? '#6a6a6a' : INK.soft)
+  const labelW = doc.getTextWidth(label) + label.length * (k.header === 'modern' ? 0.17 : 0.22)
+  doc.text(label, x, y + 2.7, { charSpace: k.header === 'modern' ? 0.17 : 0.22 })
 
   const ruleX = x + labelW + 2.2
   const ruleW = Math.max(8, x + w - ruleX)
@@ -109,38 +178,41 @@ function renderCell(doc: jsPDF, x: number, row: FieldRow, w: number, y: number):
     // lines follow below, and the fill rule runs under the LAST line.
     const lines = doc.splitTextToSize(row.value, ruleW - 1) as string[]
     const list = Array.isArray(lines) ? lines : [String(lines)]
-    for (let k = 0; k < list.length; k++) {
-      doc.text(list[k], ruleX, y + 3.1 + k * 3.1)
+    for (let c = 0; c < list.length; c++) {
+      doc.text(list[c], ruleX, y + 3.1 + c * k.rowLineH)
     }
-    const lastRuleY = y + 3.4 + (list.length - 1) * 3.1
+    const lastRuleY = y + 3.4 + (list.length - 1) * k.rowLineH
     doc.setDrawColor(INK.rule)
-    doc.setLineWidth(0.2)
+    doc.setLineWidth(k.filledWeight)
     doc.setLineDashPattern([], 0)
     doc.line(ruleX, lastRuleY, x + w, lastRuleY)
     return list.length
   }
   // Blank copy — the classic dotted fill-in rule.
   const ruleY = y + 3.4
-  doc.setLineWidth(0.35)
-  doc.setLineDashPattern([0.45, 0.6], 0)
+  doc.setLineWidth(k.blankWeight)
+  doc.setLineDashPattern(k.blankDot, 0)
   doc.line(ruleX, ruleY, x + w, ruleY)
   doc.setLineDashPattern([], 0)
   return 1
 }
 
-/** Section heading: bold caps + a light rule running to the margin. */
-function drawSectionTitle(doc: jsPDF, y: number, text: string): number {
-  doc.setFont('times', 'bold')
-  doc.setFontSize(7)
-  doc.setTextColor(INK.main)
+/** Section heading — classic: caps + a rule to the margin; modern: bare caps. */
+function drawSectionTitle(doc: jsPDF, y: number, text: string, k: PdfSkin): number {
   const label = text.toUpperCase()
-  const w = doc.getTextWidth(label) + label.length * 0.5
-  doc.text(label, M.left, y + 3.4, { charSpace: 0.5 })
-  doc.setDrawColor(INK.light)
-  doc.setLineWidth(0.2)
-  doc.setLineDashPattern([], 0)
-  doc.line(M.left + w + 2.5, y + 2.9, PAGE_W - M.right, y + 2.9)
-  return y + 4.6
+  doc.setFont('times', k.header === 'modern' ? 'normal' : 'bold')
+  doc.setFontSize(k.header === 'modern' ? 6.25 : 7)
+  doc.setTextColor(k.header === 'modern' ? '#6a6a6a' : INK.main)
+  const cs = k.header === 'modern' ? 0.62 : 0.5
+  const w = doc.getTextWidth(label) + label.length * cs
+  doc.text(label, k.ml, y + 3.4, { charSpace: cs })
+  if (k.sectionRule) {
+    doc.setDrawColor(INK.light)
+    doc.setLineWidth(0.2)
+    doc.setLineDashPattern([], 0)
+    doc.line(k.ml + w + 2.5, y + 2.9, rightX(k), y + 2.9)
+  }
+  return y + (k.header === 'modern' ? 4.8 : 4.6)
 }
 
 // ─── School header (emblem · name · affiliation · address · photo box) ──
@@ -156,7 +228,7 @@ interface SchoolCtx {
 function schoolCtx(): SchoolCtx {
   const g = useSchoolSettingsStore.getState().general
   const schoolName = g.schoolName?.trim() || 'School'
-  const logoText = (g.logoText || schoolName.split(/\s+/).slice(0, 2).map((w) => w[0]).join('')).toUpperCase()
+  const logoText = (g.logoText || schoolName.split(/\s+/).slice(0, 2).map((word) => word[0]).join('')).toUpperCase()
   return {
     schoolName,
     logoText,
@@ -166,21 +238,28 @@ function schoolCtx(): SchoolCtx {
   }
 }
 
-function drawSchoolHeader(doc: jsPDF, s: SchoolCtx, y: number): number {
-  // Emblem — circled initials.
+function drawSchoolHeader(doc: jsPDF, s: SchoolCtx, y: number, k: PdfSkin): number {
+  const modern = k.header === 'modern'
+  // Emblem — classic: double ring; modern: single hairline circle.
   doc.setDrawColor(INK.soft)
-  doc.setLineWidth(0.4)
+  doc.setLineWidth(modern ? 0.25 : 0.4)
   doc.setLineDashPattern([], 0)
-  doc.circle(M.left + 7, y + 7, 7, 'S')
+  const em = modern ? 5.5 : 7.5
+  doc.circle(k.ml + em, y + em, em, 'S')
+  if (!modern) {
+    doc.setDrawColor(INK.mid)
+    doc.setLineWidth(0.2)
+    doc.circle(k.ml + em, y + em, em - 1.4, 'S')
+  }
   doc.setFont('times', 'bold')
-  doc.setFontSize(10)
+  doc.setFontSize(modern ? 8 : 10)
   doc.setTextColor(INK.main)
-  doc.text(s.logoText.slice(0, 4), M.left + 7, y + 8.4, { align: 'center' })
+  doc.text(s.logoText.slice(0, 4), k.ml + em, y + em + (modern ? 1.2 : 1.4), { align: 'center' })
 
-  // Student photograph box (dashed).
-  const px = PAGE_W - M.right - 22
-  doc.setDrawColor(INK.mid)
-  doc.setLineWidth(0.3)
+  // Student photograph box (dashed) — 22×28 on both layouts.
+  const px = rightX(k) - 22
+  doc.setDrawColor(modern ? '#aaa' : INK.mid)
+  doc.setLineWidth(modern ? 0.25 : 0.3)
   doc.setLineDashPattern([0.9, 0.7], 0)
   doc.line(px, y, px + 22, y)
   doc.line(px + 22, y, px + 22, y + 28)
@@ -189,7 +268,7 @@ function drawSchoolHeader(doc: jsPDF, s: SchoolCtx, y: number): number {
   doc.setLineDashPattern([], 0)
   doc.setFont('times', 'normal')
   doc.setFontSize(4.5)
-  doc.setTextColor(INK.faint)
+  doc.setTextColor(modern ? '#888' : INK.faint)
   doc.text('Affix recent', px + 11, y + 10, { align: 'center' })
   doc.text('passport-size', px + 11, y + 12, { align: 'center' })
   doc.text('photograph', px + 11, y + 14, { align: 'center' })
@@ -197,20 +276,23 @@ function drawSchoolHeader(doc: jsPDF, s: SchoolCtx, y: number): number {
   // Name · affiliation · address · contact (centred block).
   const cx = PAGE_W / 2
   doc.setFont('times', 'bold')
-  doc.setFontSize(13.5)
+  doc.setFontSize(modern ? 10.5 : 13.5)
   doc.setTextColor(INK.main)
-  doc.text(s.schoolName.toUpperCase(), cx, y + 6, { align: 'center', charSpace: 0.45 })
-  let ly = y + 10.6
+  doc.text(
+    s.schoolName.toUpperCase(), cx, y + (modern ? 5.6 : 6),
+    { align: 'center', charSpace: modern ? 1.1 : 0.45 },
+  )
+  let ly = y + (modern ? 10.2 : 10.6)
   if (s.affiliation) {
     doc.setFont('times', 'normal')
-    doc.setFontSize(6.5)
-    doc.setTextColor(INK.soft)
+    doc.setFontSize(modern ? 6.25 : 6.5)
+    doc.setTextColor(modern ? '#4a4a4a' : INK.soft)
     doc.text(s.affiliation, cx, ly, { align: 'center' })
-    ly += 3.2
+    ly += modern ? 3.1 : 3.2
   }
   if (s.address) {
     doc.setFontSize(6)
-    doc.setTextColor(INK.mid)
+    doc.setTextColor(modern ? '#666' : INK.mid)
     doc.text(s.address, cx, ly, { align: 'center' })
     ly += 3
   }
@@ -218,28 +300,53 @@ function drawSchoolHeader(doc: jsPDF, s: SchoolCtx, y: number): number {
     doc.setFontSize(6)
     doc.text(s.contact, cx, ly, { align: 'center' })
   }
+
+  if (modern) {
+    // Single hairline, generous space below.
+    doc.setDrawColor('#c9c9c9')
+    doc.setLineWidth(0.18)
+    doc.line(k.ml, y + 31.5, rightX(k), y + 31.5)
+    return y + 31.5
+  }
   return y + 28
 }
 
-/** Circular no. / date row between two rules. */
-function drawCircularRow(doc: jsPDF, y: number, app: SchoolApplication): number {
+/** Circular / ref row — classic: between two strong rules; modern: quiet line. */
+function drawCircularRow(doc: jsPDF, y: number, app: SchoolApplication, k: PdfSkin): number {
+  const modern = k.header === 'modern'
+  if (modern) {
+    doc.setFont('times', 'bold')
+    doc.setFontSize(7.25)
+    doc.setTextColor(INK.soft)
+    doc.text('Ref. No.', k.ml, y + 4.2, { charSpace: 0.2 })
+    doc.setFont('times', 'normal')
+    doc.setTextColor(INK.main)
+    doc.text(app.circularNo ?? '', k.ml + 19, y + 4.2)
+    doc.setFont('times', 'bold')
+    doc.setTextColor(INK.soft)
+    doc.text('Dated', rightX(k) - 46, y + 4.2, { charSpace: 0.2 })
+    doc.setFont('times', 'normal')
+    doc.setTextColor(INK.main)
+    doc.text(app.circularDate ? formatDate(app.circularDate) : '', rightX(k), y + 4.2, { align: 'right' })
+    return y + 5.4
+  }
   doc.setDrawColor(INK.soft)
   doc.setLineWidth(0.3)
   doc.setLineDashPattern([], 0)
-  doc.line(M.left, y, PAGE_W - M.right, y)
+  doc.line(k.ml, y, rightX(k), y)
   doc.setFont('times', 'bold')
   doc.setFontSize(7.5)
   doc.setTextColor(INK.main)
-  doc.text('Circular / Ref. No.:', M.left, y + 3.7)
+  doc.text('Circular / Ref. No.:', k.ml, y + 3.7)
   doc.setFont('times', 'normal')
-  doc.text(app.circularNo ?? '', M.left + 36, y + 3.7)
+  doc.text(app.circularNo ?? '', k.ml + 36, y + 3.7)
   doc.setFont('times', 'bold')
-  doc.text('Date:', PAGE_W - M.right - 44, y + 3.7)
+  doc.text('Date:', rightX(k) - 44, y + 3.7)
   doc.setFont('times', 'normal')
-  doc.text(app.circularDate ? formatDate(app.circularDate) : '', PAGE_W - M.right, y + 3.7, { align: 'right' })
+  doc.text(app.circularDate ? formatDate(app.circularDate) : '', rightX(k), y + 3.7, { align: 'right' })
   doc.setDrawColor(INK.main)
   doc.setLineWidth(0.5)
-  doc.line(M.left, y + 5.2, PAGE_W - M.right, y + 5.2)
+  doc.line(k.ml, y + 5.2, rightX(k), y + 5.2)
   return y + 5.2
 }
 
@@ -268,6 +375,7 @@ async function buildTourFormPage(
   opts: FormPageOpts = {},
 ): Promise<void> {
   const { sub, payment } = opts
+  const k = skinOf(app)
   const pay = payment ?? (sub ? deriveSubmissionPayment(app, sub) : undefined)
 
   const destination = app.destination ?? '________________________'
@@ -281,37 +389,57 @@ async function buildTourFormPage(
   const motion = sub ? sub.answers['t-motion'] : undefined
   const medical = sub ? String(sub.answers['t-medical'] ?? '') : ''
 
-  let y = M.top
-  y = drawSchoolHeader(doc, s, y) + 2
+  let y = k.mt
+  y = drawSchoolHeader(doc, s, y, k)
+  if (k.header === 'classic') y += 2
 
   // Circular no. / date row.
-  y = drawCircularRow(doc, y, app)
+  y = drawCircularRow(doc, y, app, k)
 
   // ── Title block ──
-  y += 3.2
-  doc.setFont('times', 'bold')
-  doc.setFontSize(11)
-  doc.setTextColor(INK.main)
-  doc.text('PARENT CONSENT FORM', PAGE_W / 2, y + 3.6, { align: 'center', charSpace: 1.0 })
-  doc.setFont('times', 'bold')
-  doc.setFontSize(8.5)
-  doc.setTextColor(INK.mid)
-  doc.text(`Educational Tour — ${destination}`, PAGE_W / 2, y + 7.6, { align: 'center' })
-  if (sub) {
+  if (k.header === 'modern') {
+    y += 7
+    doc.setFont('times', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(INK.main)
+    doc.text('PARENT CONSENT FORM', PAGE_W / 2, y + 3.4, { align: 'center', charSpace: 2.4 })
     doc.setFont('times', 'normal')
-    doc.setFontSize(6.5)
-    doc.setTextColor(INK.faint)
-    doc.text(
-      `Application No. ${sub.serialNo ?? sub.id}   ·   Session ${app.academicYear}`,
-      PAGE_W / 2,
-      y + 10.8,
-      { align: 'center', charSpace: 0.15 },
-    )
+    doc.setFontSize(7.5)
+    doc.setTextColor('#3c3c3c')
+    doc.text(`Educational Tour — ${destination}`, PAGE_W / 2, y + 7.4, { align: 'center' })
+    if (sub) {
+      doc.setFontSize(6.25)
+      doc.setTextColor('#6a6a6a')
+      doc.text(
+        `Application No. ${sub.serialNo ?? sub.id}   ·   Session ${app.academicYear}`,
+        PAGE_W / 2, y + 10.4, { align: 'center', charSpace: 0.25 },
+      )
+    }
+    y += 12.5
+  } else {
+    y += 3.2
+    doc.setFont('times', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(INK.main)
+    doc.text('PARENT CONSENT FORM', PAGE_W / 2, y + 3.6, { align: 'center', charSpace: 1.0 })
+    doc.setFont('times', 'bold')
+    doc.setFontSize(8.5)
+    doc.setTextColor(INK.mid)
+    doc.text(`Educational Tour — ${destination}`, PAGE_W / 2, y + 7.6, { align: 'center' })
+    if (sub) {
+      doc.setFont('times', 'normal')
+      doc.setFontSize(6.5)
+      doc.setTextColor(INK.faint)
+      doc.text(
+        `Application No. ${sub.serialNo ?? sub.id}   ·   Session ${app.academicYear}`,
+        PAGE_W / 2, y + 10.8, { align: 'center', charSpace: 0.15 },
+      )
+    }
+    y += 13
   }
-  y += 13
 
   // ── Tour information ──
-  y = drawSectionTitle(doc, y, 'Tour Information')
+  y = drawSectionTitle(doc, y, 'Tour Information', k)
   y = drawFieldRows(doc, y, [
     { label: 'Destination', value: app.destination },
     { label: 'Travel dates', value: datesLabel || undefined },
@@ -319,41 +447,41 @@ async function buildTourFormPage(
     { label: 'Tour fee per student', value: feeLabel },
     { label: 'Teacher / tour in-charge', value: app.inChargeName },
     { label: 'Accompanying staff', value: app.accompanyingStaff },
-  ])
+  ], k)
   if (app.tourInstructions) {
     doc.setFont('times', 'bold')
     doc.setFontSize(5.5)
     doc.setTextColor(INK.soft)
-    doc.text('NOTE:', M.left, y + 2.6, { charSpace: 0.15 })
+    doc.text('NOTE:', k.ml, y + 2.6, { charSpace: 0.15 })
     doc.setFont('times', 'normal')
     doc.setFontSize(6.5)
     doc.setTextColor(INK.soft)
-    const note = doc.splitTextToSize(app.tourInstructions, CW - 12) as string[]
-    for (let k = 0; k < note.length; k++) doc.text(note[k], M.left + 12, y + 2.6 + k * 2.9)
+    const note = doc.splitTextToSize(app.tourInstructions, contentW(k) - 12) as string[]
+    for (let c = 0; c < note.length; c++) doc.text(note[c], k.ml + 12, y + 2.6 + c * 2.9)
     y += Math.max(3.2, note.length * 2.9 + 0.6)
   }
 
   // ── Student details ──
-  y = drawSectionTitle(doc, y, 'Student Details')
+  y = drawSectionTitle(doc, y, 'Student Details', k)
   y = drawFieldRows(doc, y, [
     { label: 'Student name', value: sub?.studentName, wide: true },
     { label: 'Admission no.', value: sub?.admissionNo, mono: true },
     { label: 'Class / section', value: sub ? `${sub.className} — ${sub.section}` : undefined },
     { label: 'Roll no.', value: sub?.rollNo },
     { label: 'Blood group', value: sub?.bloodGroup },
-  ])
+  ], k)
 
   // ── Parent / guardian details ──
-  y = drawSectionTitle(doc, y, 'Parent / Guardian Details')
+  y = drawSectionTitle(doc, y, 'Parent / Guardian Details', k)
   y = drawFieldRows(doc, y, [
     { label: 'Parent / guardian name', value: sub?.guardianName },
     { label: 'Mobile number', value: sub?.guardianPhone },
     { label: 'Residential address', value: sub?.address, wide: true },
     { label: 'Emergency contact', value: emergency || undefined, wide: true },
-  ])
+  ], k)
 
   // ── Health / care information ──
-  y = drawSectionTitle(doc, y, 'Health / Care Information')
+  y = drawSectionTitle(doc, y, 'Health / Care Information', k)
   y = drawFieldRows(doc, y, [
     { label: 'Food preference', value: meal || undefined },
     {
@@ -361,17 +489,17 @@ async function buildTourFormPage(
       value: sub ? (motion === undefined ? '—' : motion ? 'Yes — see note' : 'No') : undefined,
     },
     { label: 'Health / medical note', value: medical || (sub ? '—' : undefined), wide: true },
-  ])
+  ], k)
 
-  // ── Parental undertaking & declaration (the single boxed block) ──
-  y = drawSectionTitle(doc, y, 'Parental Undertaking & Declaration')
-  y = drawDeclaration(doc, y, app, sub, destination, datesLabel)
+  // ── Parental undertaking & declaration ──
+  y = drawSectionTitle(doc, y, 'Parental Undertaking & Declaration', k)
+  y = drawDeclaration(doc, y, app, sub, destination, datesLabel, k)
 
   // ── Signature area ──
-  y = await drawSignatureArea(doc, y, app, sub)
+  y = await drawSignatureArea(doc, y, app, sub, k)
 
   // ── Office use strip ──
-  y = drawOfficeUse(doc, y, app, sub, pay, s.schoolName)
+  y = drawOfficeUse(doc, y, app, sub, pay, s.schoolName, k)
 
   doc.setProperties({
     title: sub ? `${sub.serialNo ?? sub.id} — ${app.title}` : `${app.title} — Blank Form`,
@@ -388,9 +516,10 @@ function drawDeclaration(
   sub: ApplicationSubmission | undefined,
   destination: string,
   datesLabel: string,
+  k: PdfSkin,
 ): number {
   const pad = 1.8
-  const inner = CW - 2 * pad
+  const inner = contentW(k) - 2 * pad
 
   doc.setFont('times', 'normal')
   doc.setFontSize(7)
@@ -408,40 +537,45 @@ function drawDeclaration(
     'My/our ward shall abide by the school\u2019s rules and the instructions of the escorting staff throughout the tour.',
   ].map((t) => doc.splitTextToSize(t, inner - 4) as string[])
 
-  const introH = intro.length * 3.1
-  const itemsH = items.reduce((sum, lines) => sum + lines.length * 3.1 + 0.9, 0)
-  const boxH = pad * 2 + introH + itemsH + 4.5
+  const introH = intro.length * k.declLineH
+  const itemsH = items.reduce((sum, lines) => sum + lines.length * k.declLineH + k.declItemGap, 0)
+  const boxH = pad * 2 + introH + itemsH + k.declPlaceGap
 
-  // The single box on the page.
-  doc.setDrawColor(INK.soft)
-  doc.setLineWidth(0.3)
-  doc.setLineDashPattern([], 0)
-  doc.rect(M.left, y, CW, boxH, 'S')
-
-  let cy = y + pad + 2.6
-  for (const line of intro) {
-    doc.text(line, M.left + pad, cy)
-    cy += 3.1
+  // Classic: the single box on the page. Modern: open text, no border.
+  if (k.declBoxed) {
+    doc.setDrawColor(INK.soft)
+    doc.setLineWidth(0.3)
+    doc.setLineDashPattern([], 0)
+    doc.rect(k.ml, y, contentW(k), boxH, 'S')
   }
-  cy += 0.9
+
+  const textX = k.ml + (k.declBoxed ? pad : 0.5)
+  let cy = y + (k.declBoxed ? pad : 0.4) + 2.6
+  for (const line of intro) {
+    doc.text(line, textX, cy)
+    cy += k.declLineH
+  }
+  cy += k.declItemGap
   let num = 1
+  const numX = textX + (k.declBoxed ? 1 : 0)
   for (const lines of items) {
     doc.setFont('times', 'bold')
-    doc.text(`${num}.`, M.left + pad + 1, cy)
+    doc.text(`${num}.`, numX, cy)
     doc.setFont('times', 'normal')
     for (const line of lines) {
-      doc.text(line, M.left + pad + 4.5, cy)
-      cy += 3.1
+      doc.text(line, textX + 4.5, cy)
+      cy += k.declLineH
     }
-    cy += 0.9
+    cy += k.declItemGap
     num++
   }
   doc.setFont('times', 'normal')
   doc.setFontSize(6.5)
   doc.setTextColor(INK.soft)
-  doc.text('Place: ______________________', M.left + pad, y + boxH - 1.6)
-  doc.text('Date: ______________________', M.left + CW - 62, y + boxH - 1.6)
-  return y + boxH
+  const placeY = y + boxH - 1.6
+  doc.text('Place: ______________________', textX, placeY)
+  doc.text('Date: ______________________', k.ml + contentW(k) - 62, placeY)
+  return y + boxH + (k.declBoxed ? 0 : 0.8)
 }
 
 async function drawSignatureArea(
@@ -449,17 +583,19 @@ async function drawSignatureArea(
   y: number,
   app: SchoolApplication,
   sub: ApplicationSubmission | undefined,
+  k: PdfSkin,
 ): Promise<number> {
-  const colW = (CW - 12) / 3
+  const cw = contentW(k)
+  const colW = (cw - (k.header === 'modern' ? 8 : 12)) / 3
   const cols = [
     { who: 'Student\u2019s Signature', name: sub?.studentName },
     { who: 'Parent / Guardian\u2019s Signature', name: sub?.guardianName, sig: sub?.signature },
     { who: 'Class Teacher / Tour In-charge', name: app.inChargeName },
   ]
-  y += 4
+  y += k.sigMarginTop
   for (let c = 0; c < cols.length; c++) {
-    const x = M.left + c * (colW + 6)
-    const ruleY = y + 10
+    const x = k.ml + c * (colW + (k.header === 'modern' ? 4 : 6))
+    const ruleY = y + k.sigH
     const sig = cols[c].sig
     if (sig && sig.mode === 'drawn' && sig.data.startsWith('data:image/png')) {
       const dims = await loadImageSize(sig.data)
@@ -479,10 +615,10 @@ async function drawSignatureArea(
       doc.setTextColor(INK.main)
       doc.text(sig.data, x + colW / 2, ruleY - 0.8, { align: 'center' })
     }
-    // Dotted signature rule.
+    // Signature rule — dotted on the classic form, hairline on modern.
     doc.setDrawColor(INK.mute)
-    doc.setLineWidth(0.35)
-    doc.setLineDashPattern([0.45, 0.6], 0)
+    doc.setLineWidth(k.sigRule === 'solid' ? 0.18 : 0.35)
+    doc.setLineDashPattern(k.sigRule === 'solid' ? [] : [0.45, 0.6], 0)
     doc.line(x, ruleY, x + colW, ruleY)
     doc.setLineDashPattern([], 0)
     // Caption.
@@ -498,7 +634,7 @@ async function drawSignatureArea(
       : cols[c].name ?? 'Name: ______________'
     doc.text(caption, x + colW / 2, ruleY + 5.2, { align: 'center' })
   }
-  return y + 16.5
+  return y + k.sigH + 6.5
 }
 
 function drawOfficeUse(
@@ -508,19 +644,25 @@ function drawOfficeUse(
   sub: ApplicationSubmission | undefined,
   pay: SubmissionPaymentInfo | undefined,
   schoolName: string,
+  k: PdfSkin,
 ): number {
-  y += 4
-  // Dashed top rule.
+  y += k.officeMarginTop
+  // Top rule — dashed on the classic form, hairline on modern.
   doc.setDrawColor(INK.mute)
-  doc.setLineWidth(0.5)
-  doc.setLineDashPattern([1.3, 0.9], 0)
-  doc.line(M.left, y, PAGE_W - M.right, y)
+  doc.setLineWidth(k.officeRule === 'solid' ? 0.18 : 0.5)
+  doc.setLineDashPattern(k.officeRule === 'solid' ? [] : [1.3, 0.9], 0)
+  doc.line(k.ml, y, rightX(k), y)
   doc.setLineDashPattern([], 0)
 
   doc.setFont('times', 'bold')
   doc.setFontSize(6)
-  doc.setTextColor(INK.main)
-  doc.text('FOR OFFICE USE ONLY', PAGE_W / 2, y + 2.8, { align: 'center', charSpace: 0.9 })
+  doc.setTextColor(k.header === 'modern' ? '#5a5a5a' : INK.main)
+  doc.text(
+    'FOR OFFICE USE ONLY',
+    k.header === 'modern' ? k.ml : PAGE_W / 2,
+    y + 2.8,
+    { align: k.header === 'modern' ? 'left' : 'center', charSpace: 0.9 },
+  )
 
   const verified =
     sub
@@ -536,12 +678,17 @@ function drawOfficeUse(
     { label: 'Payment status', value: paymentOf(app, pay) },
     { label: 'Verified / received', value: verified },
     { label: 'Office date', value: sub ? formatDate(sub.submittedAt) : undefined },
-  ])
+  ], k)
 
   doc.setFont('times', 'normal')
   doc.setFontSize(5.25)
   doc.setTextColor(INK.faint)
-  doc.text(`Detach and retain with the office record  ·  ${schoolName}`, PAGE_W / 2, y + 3, { align: 'center' })
+  doc.text(
+    `Detach and retain with the office record  ·  ${k.header === 'modern' ? app.academicYear : schoolName}`,
+    k.header === 'modern' ? rightX(k) : PAGE_W / 2,
+    y + 3,
+    { align: k.header === 'modern' ? 'right' : 'center' },
+  )
   return y + 3
 }
 
@@ -709,7 +856,6 @@ export function downloadTourAttendancePDF(
         if (data.section === 'body' && data.column.index === 9) {
           const v = String(data.cell.raw)
           if (v.includes('Paid')) data.cell.styles.textColor = [20, 115, 60]
-          else if (v.includes('Pending')) data.cell.styles.textColor = [161, 98, 7]
           else data.cell.styles.textColor = [161, 98, 7]
         }
       },

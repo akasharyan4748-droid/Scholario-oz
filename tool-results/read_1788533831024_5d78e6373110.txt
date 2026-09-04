@@ -1,0 +1,743 @@
+     1→'use client'
+     2→
+     3→/**
+     4→ * tour-form-pdf — REAL A4 PDF exports for the built-in
+     5→ * "Educational Tour — Parent Consent Form" (FINAL POLISH §1 / §10).
+     6→ *
+     7→ * Every artefact produced here is a genuine PDF document drawn with
+     8→ * jsPDF's vector primitives — the same export infrastructure the
+     9→ * Examinations / Salary / Attendance modules already use. No HTML
+    10→ * blobs, no browser-page substitutes: exact A4 geometry, print-safe
+    11→ * margins, Times (serif) typography and the de-boxed institutional
+    12→ * design of the on-screen TourFormDocument.
+    13→ *
+    14→ *   • downloadTourFormPDF        — blank OR one completed form (one A4 page)
+    15→ *   • downloadTourFormsBundlePDF — many completed forms    (one page each)
+    16→ *   • downloadTourAttendancePDF  — trip attendance / master list (A4 landscape)
+    17→ *   • tourPdfFileName            — canonical artefact naming
+    18→ *
+    19→ * Notes:
+    20→ *   • jsPDF's built-in Times has no ₹ glyph — amounts render as "Rs 2,500"
+    21→ *     (same convention as the payroll PDF export).
+    22→ *   • Devanagari cannot be embedded with the standard font set, so the
+    23→ *     PDF title block stays English-only (the on-screen/print document
+    24→ *     keeps सहमति पत्र).
+    25→ *   • The drawn guardian signature (PNG data-URL) is embedded 1:1; the
+    26→ *     typed signature renders in Times italic exactly like the A4 HTML.
+    27→ */
+    28→
+    29→import jsPDF from 'jspdf'
+    30→import autoTable from 'jspdf-autotable'
+    31→import { useSchoolSettingsStore } from '@/lib/store/school-settings-store/store'
+    32→import {
+    33→  deriveSubmissionPayment,
+    34→  type SchoolApplication,
+    35→  type ApplicationSubmission,
+    36→  type SubmissionPaymentInfo,
+    37→} from '@/lib/store/applications-store'
+    38→import { formatINR, formatDate } from '@/lib/format'
+    39→
+    40→// ─── Geometry (A4 portrait, mm) ─────────────────────────────────────────
+    41→
+    42→const PAGE_W = 210
+    43→const PAGE_H = 297
+    44→const M = { left: 13, right: 13, top: 12, bottom: 10 }
+    45→const CW = PAGE_W - M.left - M.right // 184mm content width
+    46→const COL_GAP = 7
+    47→const COL_W = (CW - COL_GAP) / 2
+    48→
+    49→const INK = { main: '#111', soft: '#333', mid: '#444', mute: '#555', faint: '#666', rule: '#b5b5b5', dotted: '#777', light: '#999' }
+    50→
+    51→/** ₹ is not renderable in the standard fonts — "Rs 2,500" instead. */
+    52→function inr(amount: number): string {
+    53→  return formatINR(amount).replace(/^₹/, 'Rs ')
+    54→}
+    55→
+    56→// ─── Field row engine (the de-boxed "label …… value-on-rule" rows) ─────
+    57→
+    58→interface FieldRow {
+    59→  label: string
+    60→  value?: string
+    61→  /** Spans the full content width. */
+    62→  wide?: boolean
+    63→  /** Monospace value (admission numbers etc.). */
+    64→  mono?: boolean
+    65→}
+    66→
+    67→function drawFieldRows(doc: jsPDF, y: number, rows: FieldRow[]): number {
+    68→  let cursor = y
+    69→  let i = 0
+    70→  while (i < rows.length) {
+    71→    const left = rows[i]
+    72→    if (left.wide) {
+    73→      // Full-width row (address, emergency contact, medical note…).
+    74→      const lines = renderCell(doc, M.left, left, CW, cursor)
+    75→      cursor += 4.2 + (lines - 1) * 3.1
+    76→      i += 1
+    77→      continue
+    78→    }
+    79→    const right = (i + 1 < rows.length && !rows[i + 1].wide) ? rows[i + 1] : undefined
+    80→    const leftLines = renderCell(doc, M.left, left, COL_W, cursor)
+    81→    const rightLines = right
+    82→      ? renderCell(doc, M.left + COL_W + COL_GAP, right, COL_W, cursor)
+    83→      : 1
+    84→    cursor += 4.2 + (Math.max(leftLines, rightLines) - 1) * 3.1
+    85→    i += right ? 2 : 1
+    86→  }
+    87→  return cursor
+    88→}
+    89→
+    90→/** Draws one label + value-on-rule cell; returns the number of value lines. */
+    91→function renderCell(doc: jsPDF, x: number, row: FieldRow, w: number, y: number): number {
+    92→  const label = row.label.toUpperCase()
+    93→  doc.setFont('times', 'bold')
+    94→  doc.setFontSize(6)
+    95→  doc.setTextColor(INK.soft)
+    96→  const labelW = doc.getTextWidth(label) + label.length * 0.22
+    97→  doc.text(label, x, y + 2.7, { charSpace: 0.22 })
+    98→
+    99→  const ruleX = x + labelW + 2.2
+   100→  const ruleW = Math.max(8, x + w - ruleX)
+   101→
+   102→  doc.setDrawColor(INK.dotted)
+   103→  if (row.value !== undefined && row.value !== '') {
+   104→    const valueFont = row.mono ? 'courier' : 'times'
+   105→    doc.setFont(valueFont, 'normal')
+   106→    doc.setFontSize(7.5)
+   107→    doc.setTextColor(INK.main)
+   108→    // Wrap DOWNWARD: the first value line sits on the label baseline, wrapped
+   109→    // lines follow below, and the fill rule runs under the LAST line.
+   110→    const lines = doc.splitTextToSize(row.value, ruleW - 1) as string[]
+   111→    const list = Array.isArray(lines) ? lines : [String(lines)]
+   112→    for (let k = 0; k < list.length; k++) {
+   113→      doc.text(list[k], ruleX, y + 3.1 + k * 3.1)
+   114→    }
+   115→    const lastRuleY = y + 3.4 + (list.length - 1) * 3.1
+   116→    doc.setDrawColor(INK.rule)
+   117→    doc.setLineWidth(0.2)
+   118→    doc.setLineDashPattern([], 0)
+   119→    doc.line(ruleX, lastRuleY, x + w, lastRuleY)
+   120→    return list.length
+   121→  }
+   122→  // Blank copy — the classic dotted fill-in rule.
+   123→  const ruleY = y + 3.4
+   124→  doc.setLineWidth(0.35)
+   125→  doc.setLineDashPattern([0.45, 0.6], 0)
+   126→  doc.line(ruleX, ruleY, x + w, ruleY)
+   127→  doc.setLineDashPattern([], 0)
+   128→  return 1
+   129→}
+   130→
+   131→/** Section heading: bold caps + a light rule running to the margin. */
+   132→function drawSectionTitle(doc: jsPDF, y: number, text: string): number {
+   133→  doc.setFont('times', 'bold')
+   134→  doc.setFontSize(7)
+   135→  doc.setTextColor(INK.main)
+   136→  const label = text.toUpperCase()
+   137→  const w = doc.getTextWidth(label) + label.length * 0.5
+   138→  doc.text(label, M.left, y + 3.4, { charSpace: 0.5 })
+   139→  doc.setDrawColor(INK.light)
+   140→  doc.setLineWidth(0.2)
+   141→  doc.setLineDashPattern([], 0)
+   142→  doc.line(M.left + w + 2.5, y + 2.9, PAGE_W - M.right, y + 2.9)
+   143→  return y + 4.6
+   144→}
+   145→
+   146→// ─── School header (emblem · name · affiliation · address · photo box) ──
+   147→
+   148→interface SchoolCtx {
+   149→  schoolName: string
+   150→  logoText: string
+   151→  affiliation: string
+   152→  address: string
+   153→  contact: string
+   154→}
+   155→
+   156→function schoolCtx(): SchoolCtx {
+   157→  const g = useSchoolSettingsStore.getState().general
+   158→  const schoolName = g.schoolName?.trim() || 'School'
+   159→  const logoText = (g.logoText || schoolName.split(/\s+/).slice(0, 2).map((w) => w[0]).join('')).toUpperCase()
+   160→  return {
+   161→    schoolName,
+   162→    logoText,
+   163→    affiliation: g.affiliation ?? '',
+   164→    address: g.address ?? '',
+   165→    contact: [g.phone && `Phone: ${g.phone}`, g.email && `E-mail: ${g.email}`].filter(Boolean).join('  ·  '),
+   166→  }
+   167→}
+   168→
+   169→function drawSchoolHeader(doc: jsPDF, s: SchoolCtx, y: number): number {
+   170→  // Emblem — circled initials.
+   171→  doc.setDrawColor(INK.soft)
+   172→  doc.setLineWidth(0.4)
+   173→  doc.setLineDashPattern([], 0)
+   174→  doc.circle(M.left + 7, y + 7, 7, 'S')
+   175→  doc.setFont('times', 'bold')
+   176→  doc.setFontSize(10)
+   177→  doc.setTextColor(INK.main)
+   178→  doc.text(s.logoText.slice(0, 4), M.left + 7, y + 8.4, { align: 'center' })
+   179→
+   180→  // Student photograph box (dashed).
+   181→  const px = PAGE_W - M.right - 22
+   182→  doc.setDrawColor(INK.mid)
+   183→  doc.setLineWidth(0.3)
+   184→  doc.setLineDashPattern([0.9, 0.7], 0)
+   185→  doc.line(px, y, px + 22, y)
+   186→  doc.line(px + 22, y, px + 22, y + 28)
+   187→  doc.line(px + 22, y + 28, px, y + 28)
+   188→  doc.line(px, y + 28, px, y)
+   189→  doc.setLineDashPattern([], 0)
+   190→  doc.setFont('times', 'normal')
+   191→  doc.setFontSize(4.5)
+   192→  doc.setTextColor(INK.faint)
+   193→  doc.text('Affix recent', px + 11, y + 10, { align: 'center' })
+   194→  doc.text('passport-size', px + 11, y + 12, { align: 'center' })
+   195→  doc.text('photograph', px + 11, y + 14, { align: 'center' })
+   196→
+   197→  // Name · affiliation · address · contact (centred block).
+   198→  const cx = PAGE_W / 2
+   199→  doc.setFont('times', 'bold')
+   200→  doc.setFontSize(13.5)
+   201→  doc.setTextColor(INK.main)
+   202→  doc.text(s.schoolName.toUpperCase(), cx, y + 6, { align: 'center', charSpace: 0.45 })
+   203→  let ly = y + 10.6
+   204→  if (s.affiliation) {
+   205→    doc.setFont('times', 'normal')
+   206→    doc.setFontSize(6.5)
+   207→    doc.setTextColor(INK.soft)
+   208→    doc.text(s.affiliation, cx, ly, { align: 'center' })
+   209→    ly += 3.2
+   210→  }
+   211→  if (s.address) {
+   212→    doc.setFontSize(6)
+   213→    doc.setTextColor(INK.mid)
+   214→    doc.text(s.address, cx, ly, { align: 'center' })
+   215→    ly += 3
+   216→  }
+   217→  if (s.contact) {
+   218→    doc.setFontSize(6)
+   219→    doc.text(s.contact, cx, ly, { align: 'center' })
+   220→  }
+   221→  return y + 28
+   222→}
+   223→
+   224→/** Circular no. / date row between two rules. */
+   225→function drawCircularRow(doc: jsPDF, y: number, app: SchoolApplication): number {
+   226→  doc.setDrawColor(INK.soft)
+   227→  doc.setLineWidth(0.3)
+   228→  doc.setLineDashPattern([], 0)
+   229→  doc.line(M.left, y, PAGE_W - M.right, y)
+   230→  doc.setFont('times', 'bold')
+   231→  doc.setFontSize(7.5)
+   232→  doc.setTextColor(INK.main)
+   233→  doc.text('Circular / Ref. No.:', M.left, y + 3.7)
+   234→  doc.setFont('times', 'normal')
+   235→  doc.text(app.circularNo ?? '', M.left + 36, y + 3.7)
+   236→  doc.setFont('times', 'bold')
+   237→  doc.text('Date:', PAGE_W - M.right - 44, y + 3.7)
+   238→  doc.setFont('times', 'normal')
+   239→  doc.text(app.circularDate ? formatDate(app.circularDate) : '', PAGE_W - M.right, y + 3.7, { align: 'right' })
+   240→  doc.setDrawColor(INK.main)
+   241→  doc.setLineWidth(0.5)
+   242→  doc.line(M.left, y + 5.2, PAGE_W - M.right, y + 5.2)
+   243→  return y + 5.2
+   244→}
+   245→
+   246→// ─── Signature image embedding ──────────────────────────────────────────
+   247→
+   248→function loadImageSize(src: string): Promise<{ w: number; h: number } | null> {
+   249→  return new Promise((resolve) => {
+   250→    const img = new Image()
+   251→    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
+   252→    img.onerror = () => resolve(null)
+   253→    img.src = src
+   254→  })
+   255→}
+   256→
+   257→// ─── The consent form page (one A4 sheet) ───────────────────────────────
+   258→
+   259→interface FormPageOpts {
+   260→  sub?: ApplicationSubmission
+   261→  payment?: SubmissionPaymentInfo
+   262→}
+   263→
+   264→async function buildTourFormPage(
+   265→  doc: jsPDF,
+   266→  s: SchoolCtx,
+   267→  app: SchoolApplication,
+   268→  opts: FormPageOpts = {},
+   269→): Promise<void> {
+   270→  const { sub, payment } = opts
+   271→  const pay = payment ?? (sub ? deriveSubmissionPayment(app, sub) : undefined)
+   272→
+   273→  const destination = app.destination ?? '________________________'
+   274→  const datesLabel = app.eventDate
+   275→    ? `${formatDate(app.eventDate)}${app.tourEndDate ? ` – ${formatDate(app.tourEndDate)}` : ''}`
+   276→    : ''
+   277→  const feeLabel = app.payment.mode === 'None' ? 'Nil' : inr(app.payment.amount)
+   278→
+   279→  const emergency = sub ? String(sub.answers['t-emergency'] ?? '') : ''
+   280→  const meal = sub ? String(sub.answers['t-meal'] ?? '') : ''
+   281→  const motion = sub ? sub.answers['t-motion'] : undefined
+   282→  const medical = sub ? String(sub.answers['t-medical'] ?? '') : ''
+   283→
+   284→  let y = M.top
+   285→  y = drawSchoolHeader(doc, s, y) + 2
+   286→
+   287→  // Circular no. / date row.
+   288→  y = drawCircularRow(doc, y, app)
+   289→
+   290→  // ── Title block ──
+   291→  y += 3.2
+   292→  doc.setFont('times', 'bold')
+   293→  doc.setFontSize(11)
+   294→  doc.setTextColor(INK.main)
+   295→  doc.text('PARENT CONSENT FORM', PAGE_W / 2, y + 3.6, { align: 'center', charSpace: 1.0 })
+   296→  doc.setFont('times', 'bold')
+   297→  doc.setFontSize(8.5)
+   298→  doc.setTextColor(INK.mid)
+   299→  doc.text(`Educational Tour — ${destination}`, PAGE_W / 2, y + 7.6, { align: 'center' })
+   300→  if (sub) {
+   301→    doc.setFont('times', 'normal')
+   302→    doc.setFontSize(6.5)
+   303→    doc.setTextColor(INK.faint)
+   304→    doc.text(
+   305→      `Application No. ${sub.serialNo ?? sub.id}   ·   Session ${app.academicYear}`,
+   306→      PAGE_W / 2,
+   307→      y + 10.8,
+   308→      { align: 'center', charSpace: 0.15 },
+   309→    )
+   310→  }
+   311→  y += 13
+   312→
+   313→  // ── Tour information ──
+   314→  y = drawSectionTitle(doc, y, 'Tour Information')
+   315→  y = drawFieldRows(doc, y, [
+   316→    { label: 'Destination', value: app.destination },
+   317→    { label: 'Travel dates', value: datesLabel || undefined },
+   318→    { label: 'Duration', value: app.durationDays },
+   319→    { label: 'Tour fee per student', value: feeLabel },
+   320→    { label: 'Teacher / tour in-charge', value: app.inChargeName },
+   321→    { label: 'Accompanying staff', value: app.accompanyingStaff },
+   322→  ])
+   323→  if (app.tourInstructions) {
+   324→    doc.setFont('times', 'bold')
+   325→    doc.setFontSize(5.5)
+   326→    doc.setTextColor(INK.soft)
+   327→    doc.text('NOTE:', M.left, y + 2.6, { charSpace: 0.15 })
+   328→    doc.setFont('times', 'normal')
+   329→    doc.setFontSize(6.5)
+   330→    doc.setTextColor(INK.soft)
+   331→    const note = doc.splitTextToSize(app.tourInstructions, CW - 12) as string[]
+   332→    for (let k = 0; k < note.length; k++) doc.text(note[k], M.left + 12, y + 2.6 + k * 2.9)
+   333→    y += Math.max(3.2, note.length * 2.9 + 0.6)
+   334→  }
+   335→
+   336→  // ── Student details ──
+   337→  y = drawSectionTitle(doc, y, 'Student Details')
+   338→  y = drawFieldRows(doc, y, [
+   339→    { label: 'Student name', value: sub?.studentName, wide: true },
+   340→    { label: 'Admission no.', value: sub?.admissionNo, mono: true },
+   341→    { label: 'Class / section', value: sub ? `${sub.className} — ${sub.section}` : undefined },
+   342→    { label: 'Roll no.', value: sub?.rollNo },
+   343→    { label: 'Blood group', value: sub?.bloodGroup },
+   344→  ])
+   345→
+   346→  // ── Parent / guardian details ──
+   347→  y = drawSectionTitle(doc, y, 'Parent / Guardian Details')
+   348→  y = drawFieldRows(doc, y, [
+   349→    { label: 'Parent / guardian name', value: sub?.guardianName },
+   350→    { label: 'Mobile number', value: sub?.guardianPhone },
+   351→    { label: 'Residential address', value: sub?.address, wide: true },
+   352→    { label: 'Emergency contact', value: emergency || undefined, wide: true },
+   353→  ])
+   354→
+   355→  // ── Health / care information ──
+   356→  y = drawSectionTitle(doc, y, 'Health / Care Information')
+   357→  y = drawFieldRows(doc, y, [
+   358→    { label: 'Food preference', value: meal || undefined },
+   359→    {
+   360→      label: 'Motion sickness',
+   361→      value: sub ? (motion === undefined ? '—' : motion ? 'Yes — see note' : 'No') : undefined,
+   362→    },
+   363→    { label: 'Health / medical note', value: medical || (sub ? '—' : undefined), wide: true },
+   364→  ])
+   365→
+   366→  // ── Parental undertaking & declaration (the single boxed block) ──
+   367→  y = drawSectionTitle(doc, y, 'Parental Undertaking & Declaration')
+   368→  y = drawDeclaration(doc, y, app, sub, destination, datesLabel)
+   369→
+   370→  // ── Signature area ──
+   371→  y = await drawSignatureArea(doc, y, app, sub)
+   372→
+   373→  // ── Office use strip ──
+   374→  y = drawOfficeUse(doc, y, app, sub, pay, s.schoolName)
+   375→
+   376→  doc.setProperties({
+   377→    title: sub ? `${sub.serialNo ?? sub.id} — ${app.title}` : `${app.title} — Blank Form`,
+   378→    subject: 'Parent Consent Form — Educational Tour',
+   379→    author: s.schoolName,
+   380→    creator: 'Scholario',
+   381→  })
+   382→}
+   383→
+   384→function drawDeclaration(
+   385→  doc: jsPDF,
+   386→  y: number,
+   387→  app: SchoolApplication,
+   388→  sub: ApplicationSubmission | undefined,
+   389→  destination: string,
+   390→  datesLabel: string,
+   391→): number {
+   392→  const pad = 1.8
+   393→  const inner = CW - 2 * pad
+   394→
+   395→  doc.setFont('times', 'normal')
+   396→  doc.setFontSize(7)
+   397→  doc.setTextColor(INK.main)
+   398→  const intro = doc.splitTextToSize(
+   399→    `I/We, ${sub?.guardianName ?? '________________'}, parent/guardian of ${sub?.studentName ?? '________________'} of ${sub ? `${sub.className} — ${sub.section}` : '____________'}, hereby declare and undertake as follows:`,
+   400→    inner,
+   401→  ) as string[]
+   402→
+   403→  const items = [
+   404→    `I/We give full consent for my/our ward to participate in the Educational Tour to ${destination}${datesLabel ? ` (${datesLabel})` : ''} organised by the school.`,
+   405→    'The particulars furnished above are true and correct to the best of my/our knowledge.',
+   406→    'I/We have noted the tour dates, the fee payable and the conditions stated in the school circular.',
+   407→    'In case of illness or emergency during the tour, I/We authorise the school and the escorting staff to secure necessary medical assistance and treatment for my/our ward.',
+   408→    'My/our ward shall abide by the school\u2019s rules and the instructions of the escorting staff throughout the tour.',
+   409→  ].map((t) => doc.splitTextToSize(t, inner - 4) as string[])
+   410→
+   411→  const introH = intro.length * 3.1
+   412→  const itemsH = items.reduce((sum, lines) => sum + lines.length * 3.1 + 0.9, 0)
+   413→  const boxH = pad * 2 + introH + itemsH + 4.5
+   414→
+   415→  // The single box on the page.
+   416→  doc.setDrawColor(INK.soft)
+   417→  doc.setLineWidth(0.3)
+   418→  doc.setLineDashPattern([], 0)
+   419→  doc.rect(M.left, y, CW, boxH, 'S')
+   420→
+   421→  let cy = y + pad + 2.6
+   422→  for (const line of intro) {
+   423→    doc.text(line, M.left + pad, cy)
+   424→    cy += 3.1
+   425→  }
+   426→  cy += 0.9
+   427→  let num = 1
+   428→  for (const lines of items) {
+   429→    doc.setFont('times', 'bold')
+   430→    doc.text(`${num}.`, M.left + pad + 1, cy)
+   431→    doc.setFont('times', 'normal')
+   432→    for (const line of lines) {
+   433→      doc.text(line, M.left + pad + 4.5, cy)
+   434→      cy += 3.1
+   435→    }
+   436→    cy += 0.9
+   437→    num++
+   438→  }
+   439→  doc.setFont('times', 'normal')
+   440→  doc.setFontSize(6.5)
+   441→  doc.setTextColor(INK.soft)
+   442→  doc.text('Place: ______________________', M.left + pad, y + boxH - 1.6)
+   443→  doc.text('Date: ______________________', M.left + CW - 62, y + boxH - 1.6)
+   444→  return y + boxH
+   445→}
+   446→
+   447→async function drawSignatureArea(
+   448→  doc: jsPDF,
+   449→  y: number,
+   450→  app: SchoolApplication,
+   451→  sub: ApplicationSubmission | undefined,
+   452→): Promise<number> {
+   453→  const colW = (CW - 12) / 3
+   454→  const cols = [
+   455→    { who: 'Student\u2019s Signature', name: sub?.studentName },
+   456→    { who: 'Parent / Guardian\u2019s Signature', name: sub?.guardianName, sig: sub?.signature },
+   457→    { who: 'Class Teacher / Tour In-charge', name: app.inChargeName },
+   458→  ]
+   459→  y += 4
+   460→  for (let c = 0; c < cols.length; c++) {
+   461→    const x = M.left + c * (colW + 6)
+   462→    const ruleY = y + 10
+   463→    const sig = cols[c].sig
+   464→    if (sig && sig.mode === 'drawn' && sig.data.startsWith('data:image/png')) {
+   465→      const dims = await loadImageSize(sig.data)
+   466→      if (dims && dims.w > 0 && dims.h > 0) {
+   467→        const maxW = colW - 6
+   468→        const maxH = 9
+   469→        const scale = Math.min(maxW / dims.w, maxH / dims.h)
+   470→        const w = dims.w * scale
+   471→        const h = dims.h * scale
+   472→        try {
+   473→          doc.addImage(sig.data, 'PNG', x + (colW - w) / 2, ruleY - h - 0.6, w, h)
+   474→        } catch { /* unembeddable image — leave the blank rule */ }
+   475→      }
+   476→    } else if (sig && sig.mode === 'typed') {
+   477→      doc.setFont('times', 'italic')
+   478→      doc.setFontSize(10)
+   479→      doc.setTextColor(INK.main)
+   480→      doc.text(sig.data, x + colW / 2, ruleY - 0.8, { align: 'center' })
+   481→    }
+   482→    // Dotted signature rule.
+   483→    doc.setDrawColor(INK.mute)
+   484→    doc.setLineWidth(0.35)
+   485→    doc.setLineDashPattern([0.45, 0.6], 0)
+   486→    doc.line(x, ruleY, x + colW, ruleY)
+   487→    doc.setLineDashPattern([], 0)
+   488→    // Caption.
+   489→    doc.setFont('times', 'bold')
+   490→    doc.setFontSize(5.5)
+   491→    doc.setTextColor(INK.main)
+   492→    doc.text(cols[c].who, x + colW / 2, ruleY + 2.6, { align: 'center' })
+   493→    doc.setFont('times', 'normal')
+   494→    doc.setFontSize(5.25)
+   495→    doc.setTextColor(INK.mute)
+   496→    const caption = sig
+   497→      ? `Recorded online · ${formatDate(sig.signedAt)}`
+   498→      : cols[c].name ?? 'Name: ______________'
+   499→    doc.text(caption, x + colW / 2, ruleY + 5.2, { align: 'center' })
+   500→  }
+   501→  return y + 16.5
+   502→}
+   503→
+   504→function drawOfficeUse(
+   505→  doc: jsPDF,
+   506→  y: number,
+   507→  app: SchoolApplication,
+   508→  sub: ApplicationSubmission | undefined,
+   509→  pay: SubmissionPaymentInfo | undefined,
+   510→  schoolName: string,
+   511→): number {
+   512→  y += 4
+   513→  // Dashed top rule.
+   514→  doc.setDrawColor(INK.mute)
+   515→  doc.setLineWidth(0.5)
+   516→  doc.setLineDashPattern([1.3, 0.9], 0)
+   517→  doc.line(M.left, y, PAGE_W - M.right, y)
+   518→  doc.setLineDashPattern([], 0)
+   519→
+   520→  doc.setFont('times', 'bold')
+   521→  doc.setFontSize(6)
+   522→  doc.setTextColor(INK.main)
+   523→  doc.text('FOR OFFICE USE ONLY', PAGE_W / 2, y + 2.8, { align: 'center', charSpace: 0.9 })
+   524→
+   525→  const verified =
+   526→    sub
+   527→      ? sub.physicalDoc.status === 'Verified' ? 'Verified'
+   528→        : sub.physicalDoc.status === 'Received' ? 'Received'
+   529→          : sub.status === 'Approved' ? 'Approved'
+   530→            : 'Pending'
+   531→      : undefined
+   532→
+   533→  y += 4
+   534→  y = drawFieldRows(doc, y, [
+   535→    { label: 'Application no.', value: sub?.serialNo, mono: true },
+   536→    { label: 'Payment status', value: paymentOf(app, pay) },
+   537→    { label: 'Verified / received', value: verified },
+   538→    { label: 'Office date', value: sub ? formatDate(sub.submittedAt) : undefined },
+   539→  ])
+   540→
+   541→  doc.setFont('times', 'normal')
+   542→  doc.setFontSize(5.25)
+   543→  doc.setTextColor(INK.faint)
+   544→  doc.text(`Detach and retain with the office record  ·  ${schoolName}`, PAGE_W / 2, y + 3, { align: 'center' })
+   545→  return y + 3
+   546→}
+   547→
+   548→function paymentOf(app: SchoolApplication, pay: SubmissionPaymentInfo | undefined): string | undefined {
+   549→  if (!pay || app.payment.mode === 'None') return undefined
+   550→  if (pay.status === 'Paid') return `PAID · Receipt ${pay.receiptNos.join(', ') || '—'}`
+   551→  if (pay.status === 'Awaiting Verification') return `PAYMENT PENDING · Receipt ${pay.pendingReceiptNo ?? '—'} (cash — under verification)`
+   552→  return 'NOT PAID'
+   553→}
+   554→
+   555→// ─── Public API ─────────────────────────────────────────────────────────
+   556→
+   557→/** File name for a saved/printed artefact (extension added by jsPDF). */
+   558→export function tourPdfFileName(app: SchoolApplication, sub?: ApplicationSubmission): string {
+   559→  const tour = app.title.replace(/[^\w]+/g, '-').slice(0, 36)
+   560→  return sub
+   561→    ? `${sub.serialNo ?? sub.id}-${sub.studentName.replace(/\s+/g, '-')}-${tour}`
+   562→    : `BLANK-${tour}`
+   563→}
+   564→
+   565→/**
+   566→ * Downloads the official consent form as a genuine A4 PDF — the blank
+   567→ * template (no submission) or one student's completed form.
+   568→ * Returns false (and toasts nothing) when generation fails.
+   569→ */
+   570→export async function downloadTourFormPDF(
+   571→  app: SchoolApplication,
+   572→  sub?: ApplicationSubmission,
+   573→  opts?: { payment?: SubmissionPaymentInfo; filename?: string },
+   574→): Promise<boolean> {
+   575→  try {
+   576→    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+   577→    await buildTourFormPage(doc, schoolCtx(), app, { sub, payment: opts?.payment })
+   578→    doc.save(`${opts?.filename ?? tourPdfFileName(app, sub)}.pdf`)
+   579→    return true
+   580→  } catch {
+   581→    return false
+   582→  }
+   583→}
+   584→
+   585→/**
+   586→ * Bulk download: every completed form in ONE multi-page A4 PDF — one
+   587→ * student per page, serial order. Returns the page count (0 on failure).
+   588→ */
+   589→export async function downloadTourFormsBundlePDF(
+   590→  app: SchoolApplication,
+   591→  subs: ApplicationSubmission[],
+   592→  scopeLabel?: string,
+   593→): Promise<number> {
+   594→  if (subs.length === 0) return 0
+   595→  try {
+   596→    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+   597→    const s = schoolCtx()
+   598→    for (let i = 0; i < subs.length; i++) {
+   599→      if (i > 0) doc.addPage('a4', 'portrait')
+   600→      await buildTourFormPage(doc, s, app, { sub: subs[i] })
+   601→    }
+   602→    const name = `TOUR-FORMS-${app.title.replace(/[^\w]+/g, '-').slice(0, 30)}-${subs.length}-students${scopeLabel ? `-${scopeLabel.replace(/[^\w]+/g, '-')}` : ''}`
+   603→    doc.save(`${name}.pdf`)
+   604→    return subs.length
+   605→  } catch {
+   606→    return 0
+   607→  }
+   608→}
+   609→
+   610→// ─── Attendance / master list (A4 landscape) ────────────────────────────
+   611→
+   612→export interface TourAttendanceRow {
+   613→  serialNo: string
+   614→  studentName: string
+   615→  className: string
+   616→  section: string
+   617→  gender: string
+   618→  rollNo?: string
+   619→  admissionNo: string
+   620→  guardianName: string
+   621→  guardianPhone: string
+   622→  paymentStatus: string
+   623→  verificationStatus: string
+   624→}
+   625→
+   626→/**
+   627→ * The trip's official attendance / master list as a real A4-landscape
+   628→ * PDF: school letterhead, one row per student, payment + verification
+   629→ * status and an empty signature column for the trip itself.
+   630→ */
+   631→export function downloadTourAttendancePDF(
+   632→  app: SchoolApplication,
+   633→  rows: TourAttendanceRow[],
+   634→  scopeLabel: string,
+   635→): boolean {
+   636→  if (rows.length === 0) return false
+   637→  try {
+   638→    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+   639→    const s = schoolCtx()
+   640→    const pw = doc.internal.pageSize.getWidth()
+   641→
+   642→    doc.setFont('times', 'bold')
+   643→    doc.setFontSize(13)
+   644→    doc.setTextColor(INK.main)
+   645→    doc.text(s.schoolName.toUpperCase(), pw / 2, 14, { align: 'center', charSpace: 0.4 })
+   646→    if (s.affiliation) {
+   647→      doc.setFont('times', 'normal')
+   648→      doc.setFontSize(7)
+   649→      doc.setTextColor(INK.soft)
+   650→      doc.text(s.affiliation, pw / 2, 18.2, { align: 'center' })
+   651→    }
+   652→    doc.setFont('times', 'normal')
+   653→    doc.setFontSize(8)
+   654→    doc.setTextColor(INK.main)
+   655→    doc.text(
+   656→      `Educational Tour Attendance / Master List — ${app.title}${app.destination ? ` (${app.destination})` : ''}  ·  Session ${app.academicYear}  ·  ${scopeLabel}  ·  ${rows.length} student${rows.length === 1 ? '' : 's'}`,
+   657→      pw / 2,
+   658→      22.4,
+   659→      { align: 'center' },
+   660→    )
+   661→
+   662→    const body = rows.map((r) => [
+   663→      r.serialNo,
+   664→      r.studentName,
+   665→      r.className,
+   666→      r.section,
+   667→      r.gender,
+   668→      r.rollNo ?? '—',
+   669→      r.admissionNo,
+   670→      r.guardianName,
+   671→      r.guardianPhone,
+   672→      r.paymentStatus,
+   673→      r.verificationStatus,
+   674→      '',
+   675→    ])
+   676→
+   677→    autoTable(doc, {
+   678→      startY: 26,
+   679→      head: [[
+   680→        'Tour No.', 'Student Name', 'Class', 'Sec', 'Gender', 'Roll',
+   681→        'Admission No.', 'Parent / Guardian', 'Mobile', 'Payment',
+   682→        'Verification', 'Signature / Attendance',
+   683→      ]],
+   684→      body,
+   685→      margin: { left: 10, right: 10 },
+   686→      styles: {
+   687→        font: 'times', fontSize: 7, cellPadding: 1.3,
+   688→        lineColor: [51, 51, 51], lineWidth: 0.2, textColor: [17, 17, 17],
+   689→      },
+   690→      headStyles: {
+   691→        fillColor: [238, 238, 238], textColor: [17, 17, 17],
+   692→        fontStyle: 'bold', halign: 'center',
+   693→      },
+   694→      columnStyles: {
+   695→        0: { cellWidth: 30, halign: 'left' },
+   696→        1: { cellWidth: 'auto' },
+   697→        2: { cellWidth: 12, halign: 'center' },
+   698→        3: { cellWidth: 9, halign: 'center' },
+   699→        4: { cellWidth: 14, halign: 'center' },
+   700→        5: { cellWidth: 10, halign: 'center' },
+   701→        6: { cellWidth: 25, halign: 'center' },
+   702→        7: { cellWidth: 'auto' },
+   703→        8: { cellWidth: 22, halign: 'center' },
+   704→        9: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },
+   705→        10: { cellWidth: 18, halign: 'center' },
+   706→        11: { cellWidth: 32 },
+   707→      },
+   708→      didParseCell: (data) => {
+   709→        if (data.section === 'body' && data.column.index === 9) {
+   710→          const v = String(data.cell.raw)
+   711→          if (v.includes('Paid')) data.cell.styles.textColor = [20, 115, 60]
+   712→          else if (v.includes('Pending')) data.cell.styles.textColor = [161, 98, 7]
+   713→          else data.cell.styles.textColor = [161, 98, 7]
+   714→        }
+   715→      },
+   716→    })
+   717→
+   718→    const finalY = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 26
+   719→    doc.setFont('times', 'normal')
+   720→    doc.setFontSize(6.5)
+   721→    doc.setTextColor(INK.mute)
+   722→    const note = `In-charge: ${app.inChargeName ?? '—'}  ·  Prepared ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}  ·  Carry on the tour — mark attendance per row.`
+   723→    if (finalY > 192) {
+   724→      doc.addPage('a4', 'landscape')
+   725→      doc.text(note, 10, 12)
+   726→    } else {
+   727→      doc.text(note, 10, finalY + 6)
+   728→    }
+   729→
+   730→    doc.setProperties({
+   731→      title: `Attendance list — ${app.title}`,
+   732→      subject: 'Educational Tour Attendance / Master List',
+   733→      author: s.schoolName,
+   734→      creator: 'Scholario',
+   735→    })
+   736→    const name = `ATTENDANCE-${app.title.replace(/[^\w]+/g, '-').slice(0, 36)}-${scopeLabel.replace(/[^\w]+/g, '-')}`
+   737→    doc.save(`${name}.pdf`)
+   738→    return true
+   739→  } catch {
+   740→    return false
+   741→  }
+   742→}
+   743→

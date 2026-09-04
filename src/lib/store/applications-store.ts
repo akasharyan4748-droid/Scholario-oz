@@ -173,6 +173,45 @@ export interface ApplicationFormField {
 export type ApplicationTemplateKey =
   | 'educational_tour' | 'workshop_registration' | 'sports_consent' | 'general_application'
 
+// ─── Document templates (AF-TPL) ─────────────────────────────────────────
+
+/**
+ * The TWO official A4 document layouts a tour session can print on. The
+ * layout is fixed (no editor); the choice is made when the application is
+ * created and flows through the blank form, the student's completed
+ * document, browser Print and every PDF download.
+ */
+export type TourDocTemplate = 'classic' | 'modern'
+
+export interface TourDocTemplateDef {
+  key: TourDocTemplate
+  /** Product name on the selection card. */
+  label: string
+  /** One-line description on the selection card. */
+  blurb: string
+}
+
+/** Catalogue shown while creating an application (order = display order). */
+export const TOUR_DOC_TEMPLATES: Record<TourDocTemplate, TourDocTemplateDef> = {
+  classic: {
+    key: 'classic',
+    label: 'Classic Office',
+    blurb: 'Traditional school-office document — strong letterhead, ruled fill-in lines, formal throughout.',
+  },
+  modern: {
+    key: 'modern',
+    label: 'Scholario Modern',
+    blurb: 'Clean sections and generous spacing — a lighter, airier A4 layout.',
+  },
+}
+
+export const TOUR_DOC_TEMPLATE_ORDER: TourDocTemplate[] = ['classic', 'modern']
+
+/** Resolves the document template of a tour application (default: classic). */
+export function docTemplateOf(app: Pick<SchoolApplication, 'docTemplate'> | undefined): TourDocTemplate {
+  return app?.docTemplate ?? 'classic'
+}
+
 /**
  * TOUR-1 — the FIXED field set of the built-in Educational Tour — Parent
  * Consent Form. The form is a permanent ready-made school template: its
@@ -336,6 +375,10 @@ export interface SchoolApplication {
   genderEligibility?: 'All' | 'Boys' | 'Girls'
   /** How the tour fee may be paid: online, at the school counter, or both. */
   paymentAvailability?: 'Both' | 'Online' | 'Cash'
+  /** AF-TPL — which of the two official A4 document layouts this session
+   *  prints on (chosen at creation; blank form, student copy, print and
+   *  PDF all follow it). Defaults to 'classic' for pre-choice records. */
+  docTemplate?: TourDocTemplate
   /** APPS-IA-1 — the form's PURPOSE (what it collects). Derived from the
    *  template when omitted (backward compat). */
   formPurpose?: FormPurpose
@@ -735,6 +778,8 @@ export interface CreateApplicationInput {
   tourInstructions?: string
   genderEligibility?: 'All' | 'Boys' | 'Girls'
   paymentAvailability?: 'Both' | 'Online' | 'Cash'
+  /** AF-TPL — A4 document layout for this session ('classic' | 'modern'). */
+  docTemplate?: TourDocTemplate
 }
 
 interface ApplicationsState {
@@ -990,6 +1035,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
           ...(input.tourInstructions?.trim() ? { tourInstructions: input.tourInstructions.trim() } : {}),
           ...(input.genderEligibility && input.genderEligibility !== 'All' ? { genderEligibility: input.genderEligibility } : {}),
           ...(input.paymentAvailability ? { paymentAvailability: input.paymentAvailability } : {}),
+          docTemplate: input.docTemplate ?? 'classic',
           targetClassIds: [...input.targetClassIds],
           targetSectionNames: input.targetSectionNames?.length ? [...input.targetSectionNames] : undefined,
           targetStudentIds: input.targetStudentIds?.length ? [...input.targetStudentIds] : undefined,
@@ -1058,6 +1104,13 @@ export const useApplicationsStore = create<ApplicationsState>()(
         if (!isApplicationEditable(app)) {
           return { success: false, error: `"${app.title}" is ${effectiveAppStatus(app)} — editing is locked. Historical data stays preserved.` }
         }
+        // AF-TPL — the A4 document layout is a print contract: once the
+        // session is live, students' submitted documents must keep the
+        // layout they were issued on.
+        if (patch.docTemplate !== undefined && patch.docTemplate !== app.docTemplate
+          && ['Published', 'Open', 'Closing Soon', 'Closed', 'Locked'].includes(effectiveAppStatus(app))) {
+          return { success: false, error: 'The document template is locked once the session is published — existing submissions keep their layout.' }
+        }
         const publishedLockedMoney = app.status === 'Published'
         const nowIso = new Date().toISOString()
         set({
@@ -1095,6 +1148,7 @@ export const useApplicationsStore = create<ApplicationsState>()(
             ...(patch.tourInstructions !== undefined ? { tourInstructions: patch.tourInstructions.trim() || undefined } : {}),
             ...(patch.genderEligibility !== undefined ? { genderEligibility: patch.genderEligibility } : {}),
             ...(patch.paymentAvailability !== undefined ? { paymentAvailability: patch.paymentAvailability } : {}),
+            ...(patch.docTemplate !== undefined ? { docTemplate: patch.docTemplate } : {}),
             ...(patch.formFields !== undefined && !publishedLockedMoney ? { formFields: patch.formFields } : {}),
             updatedAt: nowIso,
             // NOTE: money config (mode/amount/label) intentionally NOT mutable
@@ -1735,13 +1789,12 @@ export const useApplicationsStore = create<ApplicationsState>()(
     }),
     {
       name: 'scholario-applications-v1',
-      // v8 (TOUR-1) — the module is refocused on the ONE built-in
-      // Educational Tour — Parent Consent Form: every tour instance's
-      // formFields are normalized to the FIXED template set (the form
-      // layout is permanent — nothing may be redesigned from the UI), and
-      // persisted submissions that predate serial numbers keep their records
-      // (serialNo is optional and simply absent on pre-migration rows).
-      version: 8,
+      // v9 (AF-TPL) — tour sessions now print on one of TWO official A4
+      // document layouts chosen at creation ('classic' | 'modern'). The
+      // layout is fixed (no editor); pre-choice records default to the
+      // classic office document. v8's field-set normalization and the
+      // stale-id purge list remain authoritative.
+      version: 9,
       storage: createTenantScopedStorage(TENANT_SCOPED_BASES.applications),
       // v4→v5 — (historical) Educational Tour scope rebuild: namespaces were
       // narrowed to Tour forms. v7 SUPERSEDES this — the module is general
@@ -1782,6 +1835,10 @@ export const useApplicationsStore = create<ApplicationsState>()(
               formFields: (a.templateKey === 'educational_tour' || a.category === 'Tour' || a.category === 'Trip')
                 ? TOUR_FORM_FIELDS.map((f) => ({ ...f }))
                 : (a.formFields ?? []).map((f) => ({ ...f, section: f.section ?? 'Tour Preferences' })),
+              // v9 (AF-TPL) — the two official A4 document layouts. Sessions
+              // predating the choice keep the classic office document;
+              // demo variety: sessions titled for Mysuru showcase 'modern'.
+              docTemplate: a.docTemplate ?? (a.title?.toLowerCase().includes('mysuru') ? 'modern' : 'classic'),
             }))
         }
         if (st?.submissions && st.applications) {
@@ -1820,6 +1877,7 @@ function seedApplications(): SchoolApplication[] {
       tourInstructions: 'Reporting time 6:00 AM at the school gate on the day of departure. Students must carry their school ID card, comfortable walking shoes and a light jacket. Electronic items above a smartphone are not permitted.',
       genderEligibility: 'All',
       paymentAvailability: 'Both',
+      docTemplate: 'classic',
       targetClassIds: ['C11'],
       deadline: '2026-09-15',
       eventDate: '2026-10-08',
@@ -1841,6 +1899,49 @@ function seedApplications(): SchoolApplication[] {
       approvalNotes: [],
       createdAt: '2026-08-20T09:35:00Z',
       updatedAt: '2026-08-22T10:00:00Z',
+    },
+    // AF-TPL — the second seeded session, printed on the Scholario Modern
+    // A4 document (digital consent, Class 4) so a fresh demo shows BOTH
+    // document layouts side by side.
+    {
+      id: 'APP-MYSURU-2026',
+      title: 'Educational Tour — Mysuru',
+      destination: 'Mysuru, Karnataka',
+      description: 'Two-day educational tour to Mysuru covering the Mysore Palace, Chamundi Hills and the Regional Museum of Natural History. Fee covers transport, boarding, entry tickets and insurance.',
+      category: 'Tour',
+      templateKey: 'educational_tour',
+      source: 'Event',
+      academicYear: YEAR,
+      tourEndDate: '2027-01-16',
+      durationDays: '2 Days / 1 Night',
+      circularNo: 'GW/EDU/TOUR/2026-27/09',
+      circularDate: '2026-09-02',
+      accompanyingStaff: 'Ms. Kavita Joshi (PGT History) · Ms. Farah Khan (Lady Attendant)',
+      tourInstructions: 'Report at the school gate by 7:00 AM on the day of departure. Carry the school ID card, a water bottle and a cap.',
+      genderEligibility: 'All',
+      paymentAvailability: 'Both',
+      docTemplate: 'modern',
+      targetClassIds: ['C07'],
+      deadline: '2026-12-20',
+      eventDate: '2027-01-15',
+      participation: 'Optional',
+      guardianConsent: {
+        required: true,
+        method: 'Digital',
+        statement: tour.consentStatement,
+      },
+      teacherApprovalRequired: true,
+      physicalSignatureRequired: false,
+      inChargeTeacherId: 'T-014',
+      inChargeName: 'Rohan Mehta',
+      payment: { mode: 'Required', amount: 1500, feeHeadLabel: 'Educational Tour — Mysuru', chargeId: 'AC-04' },
+      formFields: tour.fields.map((f) => ({ ...f })),
+      status: 'Published',
+      createdBy: 'Dr. Ananya Iyer',
+      createdByRole: 'Principal',
+      approvalNotes: [],
+      createdAt: '2026-09-02T09:40:00Z',
+      updatedAt: '2026-09-03T10:00:00Z',
     },
   ]
 }
@@ -1924,6 +2025,52 @@ export function ensureApplicationSeedData(): void {
     }
     const out = seeded
 
+    // AF-TPL — Mysuru (Scholario Modern document) submissions: two Class 4
+    // applicants through the digital-consent flow. The demo student (STU-18,
+    // Class 4-B) is deliberately NOT seeded so the live apply wizard stays
+    // available on a fresh demo.
+    const mysuru = apps.find((a) => a.id === 'APP-MYSURU-2026')
+    if (mysuru) {
+      const c07 = students.filter((s) => s.classId === 'C07').slice(0, 2)
+      const mysuruAnswers: Array<Record<string, string | string[] | boolean>> = [
+        { 't-meal': 'Vegetarian', 't-motion': false, 't-emergency': 'Ramesh Iyer — 98450 12345', 't-medical': '' },
+        { 't-meal': 'Jain', 't-motion': true, 't-emergency': 'Priya Nair — 99020 33445', 't-medical': 'Bus-sickness — carries medication for long drives.' },
+      ]
+      const mysuruSubs: ApplicationSubmission[] = []
+      for (const [i, stu] of c07.entries()) {
+        const submittedAt = '2026-09-03T10:30:00Z'
+        mysuruSubs.push({
+          id: `SUB-SEED-MY-${i + 1}`,
+          applicationId: mysuru.id,
+          studentId: stu.id,
+          studentName: stu.name,
+          admissionNo: stu.admissionNo,
+          className: stu.className,
+          classId: stu.classId,
+          section: stu.section,
+          rollNo: stu.rollNo,
+          dob: stu.dob,
+          gender: stu.gender,
+          bloodGroup: stu.bloodGroup,
+          address: stu.address,
+          guardianName: stu.guardianName,
+          guardianPhone: stu.guardianPhone,
+          serialNo: nextTourSerial(mysuru, mysuruSubs, stu.className, stu.gender),
+          answers: mysuruAnswers[i % mysuruAnswers.length],
+          submittedAt,
+          submittedByRole: 'Student' as const,
+          mode: 'Digital' as const,
+          status: 'Submitted' as SubmissionWorkflowStatus,
+          physicalDoc: { status: 'Not Required' as const },
+          reviewNotes: [],
+          resubmissionCount: 0,
+          formVersion: 1,
+          updatedAt: submittedAt,
+        })
+      }
+      out.push(...mysuruSubs)
+    }
+
     useApplicationsStore.setState({
       submissions: out,
       audit: out.length ? SEED_APP_AUDIT() : [],
@@ -1944,6 +2091,16 @@ function SEED_APP_AUDIT(): ApplicationAuditEvent[] {
       id: 'AEV-SEED-2', ts: '2026-08-25T10:30:00Z', applicationId: 'APP-JAIPUR-2026', submissionId: 'SUB-SEED-JP-3',
       actor: 'Rohan Mehta', actorRole: 'Teacher', action: 'submission.correction',
       message: 'Corrections requested from a Class 11 applicant — emergency contact incomplete.',
+    },
+    {
+      id: 'AEV-SEED-3', ts: '2026-09-03T09:00:00Z', applicationId: 'APP-MYSURU-2026',
+      actor: 'Dr. Ananya Iyer', actorRole: 'Principal', action: 'application.published',
+      message: 'Published on the Scholario Modern A4 document — linked charge "Educational Tour — Mysuru" (₹1,500). Deadline 2026-12-20.',
+    },
+    {
+      id: 'AEV-SEED-4', ts: '2026-09-03T10:30:00Z', applicationId: 'APP-MYSURU-2026', submissionId: 'SUB-SEED-MY-1',
+      actor: 'System', actorRole: 'Principal', action: 'submission.submitted',
+      message: 'Two Class 4 applications received with digital guardian consent — awaiting payment.',
     },
   ]
 }

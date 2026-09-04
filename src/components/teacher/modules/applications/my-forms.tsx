@@ -32,7 +32,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
-  useApplicationsStore, effectiveAppStatus,
+  useApplicationsStore, effectiveAppStatus, type TourDocTemplate,
   type SchoolApplication, type ApplicationCategory,
 } from '@/lib/store/applications-store'
 import { useAuth } from '@/lib/store/auth-store'
@@ -41,6 +41,7 @@ import { formatDate } from '@/lib/format'
 import { toast } from 'sonner'
 import { TourConfigScreen } from '@/components/principal/modules/applications/tour-config'
 import { downloadTourFormPDF } from '@/components/principal/modules/applications/tour-form-pdf'
+import { NewApplicationDialog } from '@/components/principal/modules/applications/new-application-dialog'
 import { AppStatusBadge, ApplicationReviewDetail } from './review-detail'
 
 const CATEGORY_ICON: Record<ApplicationCategory, LucideIcon> = {
@@ -61,7 +62,7 @@ const CATEGORY_ICON: Record<ApplicationCategory, LucideIcon> = {
 
 type View =
   | { name: 'list' }
-  | { name: 'builder'; editingId?: string }
+  | { name: 'builder'; editingId?: string; template?: TourDocTemplate }
   | { name: 'detail'; appId: string }
 
 export function MyFormsView() {
@@ -74,6 +75,7 @@ export function MyFormsView() {
   const [view, setView] = useState<View>({ name: 'list' })
   const [noteFor, setNoteFor] = useState<string | null>(null)
   const [submitNote, setSubmitNote] = useState('')
+  const [newAppOpen, setNewAppOpen] = useState(false)
 
   const meId = user?.teacherId ?? ''
   const meName = user?.name ?? ''
@@ -139,6 +141,7 @@ export function MyFormsView() {
     return (
       <TourConfigScreen
         editing={editing}
+        initialTemplate={view.template}
         actorRole="Teacher"
         teacherId={meId || undefined}
         actorName={meName}
@@ -160,7 +163,7 @@ export function MyFormsView() {
         <p className="text-xs text-muted-foreground min-w-0 truncate">
           Use the school&apos;s official tour consent form for a session you run → Principal approval → publish &amp; operate
         </p>
-        <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={() => setView({ name: 'builder' })}>
+        <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 shrink-0" onClick={() => setNewAppOpen(true)}>
           <Plus className="h-3 w-3" /> Use form for a session
         </Button>
       </div>
@@ -325,6 +328,13 @@ export function MyFormsView() {
           </div>
         </>
       )}
+
+      {/* New application → document template → session configuration */}
+      <NewApplicationDialog
+        open={newAppOpen}
+        onOpenChange={setNewAppOpen}
+        onContinue={(docTemplate) => setView({ name: 'builder', template: docTemplate })}
+      />
     </div>
   )
 }
