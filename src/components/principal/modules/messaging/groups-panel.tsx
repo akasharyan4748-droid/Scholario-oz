@@ -1,36 +1,29 @@
 'use client'
 
 /**
- * GroupsPanel — Group management UI for the Messages & Inbox module.
+ * GroupsPanel — group management, shown when the Groups folder is active.
  *
- * Surfaces when the "Groups" folder is active (replaces the conversation
- * list). Each row shows the group's avatar, name, type pill, member count
- * and last activity (from the linked conversation). Clicking a row opens
- * the linked group conversation in the thread view; the "Members" button
- * opens the manage-members dialog; the "Compose" button opens the compose
- * modal with the group pre-selected as recipient.
+ * Calm, scannable rows: avatar · name · type + member count · last
+ * activity. Clicking a row opens the group's chat. A single "…" menu
+ * per row discloses the actions (Compose · Manage members · Delete)
+ * instead of a wall of floating buttons.
  *
- * Create Group dialog: name + type + smart auto-fill (Class Group →
- * class+section → parents of that class section; Teachers Group → class →
- * teachers of that class; Department Group → department → teachers in
- * that department; Staff Group → all staff) plus a manual member picker
- * (search teachers + parents from canonical data — NO duplicate data).
- *
- * Manage Members dialog: list current members with remove buttons + add
- * a single member at a time via the SearchableSelect.
- *
- * SCHOLARIO visual language preserved: rounded-xl cards, soft tinted
- * type pills, emerald → teal gradient on primary CTAs, violet → purple
- * gradient on group avatars (consistent with the existing group colour).
+ * Create Group dialog: smart auto-fill (class/section/department/staff)
+ * plus a searchable manual member picker — unchanged functionality,
+ * quieter visuals.
  */
 
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Users, Search, Settings2, MessageSquare, Trash2, UserPlus,
-  ChevronRight, X, GraduationCap, UserCog, Users2, Briefcase, Pencil,
-  Clock, Check,
+  X, GraduationCap, UserCog, Users2, Briefcase, PenSquare,
+  Check, MoreHorizontal,
 } from 'lucide-react'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   useMessagingStore,
   resolveMemberRefs,
@@ -39,10 +32,10 @@ import {
   getTeachersOfClass,
   getTeachersOfDepartment,
   getAllStaffRefs,
-  formatTimeAgo,
-  type GroupType,
+  formatListTime,
   GROUP_TYPE_LIST,
   type Group,
+  type GroupType,
   type MemberDisplay,
 } from '@/lib/store/messaging-store'
 import { useStudentsStore } from '@/lib/store/students-store'
@@ -67,7 +60,7 @@ const TYPE_ICON: Record<GroupType, React.ReactNode> = {
   'Staff Group': <Users2 className="h-3 w-3" />,
   'Department Group': <Briefcase className="h-3 w-3" />,
   'Parents Group': <Users className="h-3 w-3" />,
-  'Custom Group': <Pencil className="h-3 w-3" />,
+  'Custom Group': <PenSquare className="h-3 w-3" />,
 }
 
 const TYPE_PILL: Record<GroupType, string> = {
@@ -121,7 +114,6 @@ function getMemberPool(): PoolMember[] {
 // ─── Props ────────────────────────────────────────────────────────────
 
 interface Props {
-  /** Open the compose modal. Optional preselected recipient name. */
   onCompose: (recipientName?: string) => void
 }
 
@@ -137,9 +129,8 @@ export function GroupsPanel({ onCompose }: Props) {
   const deleteGroup = useMessagingStore((s) => s.deleteGroup)
 
   const [createOpen, setCreateOpen] = useState(false)
-  const [manageGroup, setManageGroup] = useState<Group | null>(null)
+  const [manageGroupId, setManageGroupId] = useState<string | null>(null)
 
-  // Filter groups by search query (name or type)
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return groups
@@ -148,98 +139,98 @@ export function GroupsPanel({ onCompose }: Props) {
     )
   }, [groups, searchQuery])
 
-  const handleOpenChat = (g: Group) => {
-    openConversation(g.conversationId)
-  }
-
   const handleDelete = (g: Group) => {
     deleteGroup(g.id)
     toast.success('Group deleted', { description: g.name })
   }
 
   return (
-    <div className="flex flex-col border-r border-border bg-card min-w-0">
+    <div className="flex h-full min-w-0 flex-col bg-card">
       {/* Header — search + Create Group */}
-      <div className="p-3 border-b border-border space-y-2">
+      <div className="shrink-0 space-y-2.5 border-b border-border px-3 pb-2.5 pt-3">
+        <div className="flex items-center gap-1.5">
+          <h2 className="truncate text-[13px] font-semibold text-foreground">Groups</h2>
+          <span className="inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-muted px-1.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+            {groups.length}
+          </span>
+          <div className="flex-1" />
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex h-7.5 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">New group</span>
+          </button>
+        </div>
+
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search groups…"
-            className="w-full h-8 pl-8 pr-8 text-xs rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+            aria-label="Search groups"
+            className="h-9 w-full rounded-lg border border-border bg-card pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+              className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-3 w-3" />
             </button>
           )}
         </div>
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" /> Create Group
-        </button>
       </div>
 
       {/* Groups list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
         {filtered.length > 0 ? (
-          filtered.map((g) => {
-            const convo = conversations.find((c) => c.id === g.conversationId)
-            const memberCount = g.memberRefs.length
-            const isActive = activeConversationId === g.conversationId
-            const lastActivity = convo ? formatTimeAgo(convo.lastTimestamp) : '—'
-            const lastMessage = convo?.lastMessage ?? 'No messages yet'
-            const unread = convo?.unread ?? 0
-            return (
-              <GroupRow
-                key={g.id}
-                group={g}
-                isActive={isActive}
-                memberCount={memberCount}
-                lastActivity={lastActivity}
-                lastMessage={lastMessage}
-                unread={unread}
-                onOpenChat={() => handleOpenChat(g)}
-                onManage={() => setManageGroup(g)}
-                onCompose={() => onCompose(g.name)}
-                onDelete={() => handleDelete(g)}
-              />
-            )
-          })
+          filtered.map((g) => (
+            <GroupRow
+              key={g.id}
+              group={g}
+              isActive={activeConversationId === g.conversationId}
+              lastActivity={
+                conversations.find((c) => c.id === g.conversationId)
+                  ? formatListTime(conversations.find((c) => c.id === g.conversationId)!.lastTimestamp)
+                  : '—'
+              }
+              onOpenChat={() => openConversation(g.conversationId)}
+              onManage={() => setManageGroupId(g.id)}
+              onCompose={() => onCompose(g.name)}
+              onDelete={() => handleDelete(g)}
+            />
+          ))
         ) : (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <Users className="h-8 w-8 text-muted-foreground/40 mb-2" />
+          <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+            <div className="mb-2.5 flex h-12 w-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground/50">
+              <Users className="h-6 w-6" />
+            </div>
             <p className="text-xs font-medium text-muted-foreground">
               {searchQuery ? 'No groups match your search' : 'No groups yet'}
             </p>
-            <p className="text-[10px] text-muted-foreground/70 mt-0.5 mb-3">
-              {searchQuery ? 'Try a different search term.' : 'Create a group to start a group conversation.'}
+            <p className="mt-0.5 text-[11px] text-muted-foreground/70">
+              {searchQuery ? 'Try a different search term.' : 'Create a group to message many people at once.'}
             </p>
             {!searchQuery && (
               <button
                 onClick={() => setCreateOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white"
+                className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               >
-                <Plus className="h-3 w-3" /> Create Group
+                <Plus className="h-3.5 w-3.5" /> Create Group
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* Create Group dialog */}
+      {/* Dialogs */}
       <CreateGroupDialog open={createOpen} onOpenChange={setCreateOpen} />
-
-      {/* Manage Members dialog */}
       <ManageMembersDialog
-        group={manageGroup}
-        onOpenChange={(open) => { if (!open) setManageGroup(null) }}
+        groupId={manageGroupId}
+        onOpenChange={(open) => { if (!open) setManageGroupId(null) }}
       />
     </div>
   )
@@ -248,125 +239,86 @@ export function GroupsPanel({ onCompose }: Props) {
 // ─── GroupRow ─────────────────────────────────────────────────────────
 
 function GroupRow({
-  group, isActive, memberCount, lastActivity, lastMessage, unread,
-  onOpenChat, onManage, onCompose, onDelete,
+  group, isActive, lastActivity, onOpenChat, onManage, onCompose, onDelete,
 }: {
   group: Group
   isActive: boolean
-  memberCount: number
   lastActivity: string
-  lastMessage: string
-  unread: number
   onOpenChat: () => void
   onManage: () => void
   onCompose: () => void
   onDelete: () => void
 }) {
-  const [hover, setHover] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const memberCount = group.memberRefs.length
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={onOpenChat}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => { setHover(false); setMenuOpen(false) }}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenChat() } }}
       className={cn(
-        'relative cursor-pointer px-3 py-2.5 border-b border-border/30 transition-colors group',
-        isActive ? 'bg-primary/5' : 'hover:bg-muted/30',
-        unread > 0 && 'bg-muted/20',
+        'group relative cursor-pointer border-b border-border/40 px-3 py-2.5 outline-none transition-colors',
+        'focus-visible:bg-muted/40',
+        isActive ? 'bg-primary/[0.07]' : 'hover:bg-muted/40',
       )}
     >
-      <div className="flex items-start gap-2.5">
-        {/* Avatar */}
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-white text-[11px] font-semibold">
+      {isActive && <span className="absolute inset-y-1 left-0 w-[3px] rounded-r-full bg-primary" aria-hidden="true" />}
+
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-600/90 text-[11px] font-semibold text-white">
           {avatarFromName(group.name)}
         </div>
 
-        {/* Content */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-1">
-            <p className={cn('text-xs truncate', unread > 0 ? 'font-bold text-foreground' : 'font-medium text-foreground/80')}>
-              {group.name}
-            </p>
-            <span className="text-[9px] text-muted-foreground shrink-0 flex items-center gap-0.5">
-              <Clock className="h-2.5 w-2.5" />
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate text-[13px] font-medium text-foreground/85">{group.name}</p>
+            <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/80 group-hover:hidden">
               {lastActivity}
             </span>
+            {/* Single action menu (disclosed on hover / always on touch) */}
+            <div className="hidden shrink-0 group-hover:block max-md:block">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Actions for ${group.name}`}
+                    className="flex h-6.5 w-6.5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem onClick={onOpenChat}>
+                    <MessageSquare className="h-3.5 w-3.5" /> Open chat
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onManage}>
+                    <Settings2 className="h-3.5 w-3.5" /> Manage members
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onCompose}>
+                    <PenSquare className="h-3.5 w-3.5" /> Compose to group
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-rose-600 focus:text-rose-600" onClick={onDelete}>
+                    <Trash2 className="h-3.5 w-3.5" /> Delete group
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 mt-0.5">
+          <div className="mt-0.5 flex items-center gap-1.5">
             <span className={cn(
-              'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
+              'inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold',
               TYPE_PILL[group.type],
             )}>
               {TYPE_ICON[group.type]}
-              {group.type}
+              {group.type.replace(' Group', '')}
             </span>
-            <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground tabular-nums">
+            <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px] tabular-nums text-muted-foreground">
               <Users className="h-2.5 w-2.5" />
-              {memberCount} member{memberCount === 1 ? '' : 's'}
+              {memberCount}
             </span>
-            {unread > 0 && (
-              <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[8px] font-bold tabular-nums ml-auto">
-                {unread}
-              </span>
-            )}
           </div>
-          <p className="text-[10px] text-muted-foreground truncate mt-0.5">{lastMessage}</p>
         </div>
       </div>
-
-      {/* Hover actions */}
-      {hover && (
-        <div className="absolute right-2 top-2 flex items-center gap-0.5 bg-card border border-border rounded-md shadow-sm p-0.5 z-10">
-          <button
-            onClick={(e) => { e.stopPropagation(); onCompose() }}
-            className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-emerald-500"
-            title="Compose to group"
-          >
-            <MessageSquare className="h-3 w-3" />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onManage() }}
-            className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-violet-500"
-            title="Manage members"
-          >
-            <Settings2 className="h-3 w-3" />
-          </button>
-          <div className="relative">
-            <button
-              onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
-              className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
-              title="More"
-            >
-              <ChevronRight className="h-3 w-3" />
-            </button>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuOpen(false) }} />
-                <div className="absolute right-0 mt-1 w-32 rounded-md border border-border bg-card shadow-md z-20 py-1">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onManage() }}
-                    className="w-full text-left px-2.5 py-1.5 text-[10px] hover:bg-muted/40 flex items-center gap-1.5"
-                  >
-                    <Settings2 className="h-3 w-3" /> Manage members
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onCompose() }}
-                    className="w-full text-left px-2.5 py-1.5 text-[10px] hover:bg-muted/40 flex items-center gap-1.5"
-                  >
-                    <MessageSquare className="h-3 w-3" /> Compose to group
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete() }}
-                    className="w-full text-left px-2.5 py-1.5 text-[10px] hover:bg-muted/40 flex items-center gap-1.5 text-rose-600"
-                  >
-                    <Trash2 className="h-3 w-3" /> Delete group
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -377,18 +329,14 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
   const createGroup = useMessagingStore((s) => s.createGroup)
   const [name, setName] = useState('')
   const [type, setType] = useState<GroupType>('Class Group')
-  // Smart picker state
-  const [className, setClassName] = useState<string>('') // e.g. "Class 10"
-  const [section, setSection] = useState<string>('')      // e.g. "A"
-  const [department, setDepartment] = useState<string>('') // e.g. "Science"
-  const [allStaff, setAllStaff] = useState(false)
-  // Members
+  const [className, setClassName] = useState<string>('')
+  const [section, setSection] = useState<string>('')
+  const [department, setDepartment] = useState<string>('')
   const [selectedRefs, setSelectedRefs] = useState<string[]>([])
   const [memberSearch, setMemberSearch] = useState('')
 
   const pool = useMemo(() => getMemberPool(), [])
 
-  // Class + section + department options (deduped)
   const classOptions = useMemo(() => {
     const seen = new Set<string>()
     const out: { id: string; label: string }[] = []
@@ -418,8 +366,7 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
   }, [])
 
   // Smart auto-fill: when the user picks a class+section / class / department,
-  // pre-fill the suggested members and a suggested name. The user can still
-  // tweak both before submitting.
+  // pre-fill the suggested members and a suggested name.
   const smartFill = useMemo(() => {
     if (type === 'Class Group' || type === 'Parents Group') {
       if (!className || !section) return null
@@ -429,7 +376,6 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
     }
     if (type === 'Teachers Group') {
       if (!className) return null
-      // Pull teachers across all sections of this class
       const cls = ACADEMIC_CLASSES.find((c) => c.name === className)
       const sections = cls?.sections ?? ['A']
       const refs = Array.from(new Set(sections.flatMap((s) => getTeachersOfClass(`${className}-${s}`))))
@@ -450,7 +396,6 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
     return null
   }, [type, className, section, department])
 
-  // Reset on dialog open + when type changes (clear smart picker state)
   useEffect(() => {
     if (open) {
       setName('')
@@ -458,15 +403,11 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
       setClassName('')
       setSection('')
       setDepartment('')
-      setAllStaff(false)
       setSelectedRefs([])
       setMemberSearch('')
     }
   }, [open])
 
-  // When smart-fill produces a suggestion, sync the name (if user hasn't typed
-  // anything yet) and merge the suggested refs into the selection (without
-  // losing any the user has explicitly added).
   useEffect(() => {
     if (!open) return
     if (smartFill) {
@@ -475,7 +416,6 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
     }
   }, [smartFill, open])
 
-  // Filter the pool by member search
   const filteredPool = useMemo(() => {
     const q = memberSearch.trim().toLowerCase()
     if (!q) return pool
@@ -494,11 +434,6 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
     setSelectedRefs((prev) => prev.includes(ref) ? prev.filter((r) => r !== ref) : [...prev, ref])
   }
 
-  const clearSmart = () => {
-    setSelectedRefs([])
-    setName('')
-  }
-
   const handleSubmit = () => {
     if (!canSubmit) {
       if (!name.trim()) toast.error('Group name is required')
@@ -512,28 +447,23 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
     onOpenChange(false)
   }
 
-  // Type select options
-  const typeOptions = GROUP_TYPE_LIST
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Users className="h-4 w-4 text-violet-600" />
             Create Group
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Pick a type to auto-fill members from your school's teachers and parents.
+            Pick a type to auto-fill members, or choose them manually.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           {/* Group name */}
           <div className="space-y-1">
-            <Label className="text-[11px] flex items-center gap-1.5">
-              <Pencil className="h-3 w-3" /> Group Name
-            </Label>
+            <Label className="text-[11px]">Group Name</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -544,17 +474,15 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
 
           {/* Group type */}
           <div className="space-y-1">
-            <Label className="text-[11px] flex items-center gap-1.5">
-              <Briefcase className="h-3 w-3" /> Group Type
-            </Label>
+            <Label className="text-[11px]">Group Type</Label>
             <div className="grid grid-cols-3 gap-1.5">
-              {typeOptions.map((t) => (
+              {GROUP_TYPE_LIST.map((t) => (
                 <button
                   key={t}
                   type="button"
                   onClick={() => { setType(t); setSelectedRefs([]); setName('') }}
                   className={cn(
-                    'flex items-center gap-1 px-2 py-1.5 rounded-md border text-[10px] font-medium transition-colors',
+                    'flex items-center gap-1 rounded-md border px-2 py-1.5 text-[10px] font-medium transition-colors',
                     type === t
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border text-muted-foreground hover:bg-muted/40',
@@ -624,21 +552,21 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
           )}
 
           {type === 'Staff Group' && (
-            <div className="rounded-md bg-amber-500/[0.04] dark:bg-amber-500/[0.06] border border-amber-500/20 px-3 py-2 text-[11px] text-muted-foreground">
+            <div className="rounded-md border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-[11px] text-muted-foreground dark:bg-amber-500/[0.06]">
               <span className="font-semibold text-amber-700 dark:text-amber-300">All Staff:</span>{' '}
-              All active teachers will be added as members. Untick the ones you want to exclude.
+              All active teachers will be added — untick anyone you want to exclude.
             </div>
           )}
 
           {type === 'Custom Group' && (
-            <div className="rounded-md bg-muted/40 border border-border px-3 py-2 text-[11px] text-muted-foreground">
+            <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
               Custom group — pick members manually below.
             </div>
           )}
 
           {/* Smart-fill hint */}
           {smartFill && smartFill.refs.length > 0 && (
-            <div className="rounded-md bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06] border border-emerald-500/20 px-3 py-2 text-[11px] text-muted-foreground flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2 text-[11px] text-muted-foreground dark:bg-emerald-500/[0.06]">
               <span>
                 <span className="font-semibold text-emerald-700 dark:text-emerald-300">Auto-filled:</span>{' '}
                 {smartFill.refs.length} member{smartFill.refs.length === 1 ? '' : 's'} from{' '}
@@ -649,8 +577,8 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
               </span>
               <button
                 type="button"
-                onClick={clearSmart}
-                className="text-[10px] text-muted-foreground hover:text-foreground underline shrink-0"
+                onClick={() => { setSelectedRefs([]); setName('') }}
+                className="shrink-0 text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
                 Clear
               </button>
@@ -659,7 +587,7 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
 
           {/* Selected members */}
           <div className="space-y-1">
-            <Label className="text-[11px] flex items-center justify-between">
+            <Label className="flex items-center justify-between text-[11px]">
               <span>Members ({selectedRefs.length})</span>
               {selectedRefs.length > 0 && (
                 <button
@@ -672,18 +600,20 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
               )}
             </Label>
             {selectedMembers.length > 0 ? (
-              <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto rounded-md border border-border bg-muted/20 p-2">
+              <div className="custom-scrollbar flex max-h-24 flex-wrap gap-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-2">
                 {selectedMembers.map((m) => (
                   <span
                     key={m.ref}
-                    className="inline-flex items-center gap-1 rounded-full bg-card border border-border pl-1.5 pr-1 py-0.5 text-[10px]"
+                    className="inline-flex items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-1.5 pr-1 text-[10px]"
                   >
-                    <span className={cn(
-                      'h-3.5 w-3.5 rounded-full text-white text-[7px] font-bold flex items-center justify-center',
-                      m.type === 'teacher'
-                        ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
-                        : 'bg-gradient-to-br from-amber-500 to-orange-600',
-                    )}>
+                    <span
+                      className={cn(
+                        'flex h-3.5 w-3.5 items-center justify-center rounded-full text-[7px] font-bold text-white',
+                        m.type === 'teacher'
+                          ? 'bg-emerald-600/90'
+                          : 'bg-amber-500/90',
+                      )}
+                    >
                       {m.avatar}
                     </span>
                     <span className="font-medium">{m.name}</span>
@@ -691,6 +621,7 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
                       type="button"
                       onClick={() => toggleMember(m.ref)}
                       className="text-muted-foreground hover:text-rose-500"
+                      aria-label={`Remove ${m.name}`}
                     >
                       <X className="h-2.5 w-2.5" />
                     </button>
@@ -704,11 +635,11 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
 
           {/* Member picker — search + checkbox list */}
           <div className="space-y-1">
-            <Label className="text-[11px] flex items-center gap-1.5">
+            <Label className="flex items-center gap-1.5 text-[11px]">
               <UserPlus className="h-3 w-3" /> Add Members
             </Label>
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={memberSearch}
                 onChange={(e) => setMemberSearch(e.target.value)}
@@ -716,7 +647,7 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
                 className="h-9 pl-8 text-xs"
               />
             </div>
-            <div className="max-h-44 overflow-y-auto rounded-md border border-border divide-y divide-border/30">
+            <div className="custom-scrollbar max-h-44 divide-y divide-border/30 overflow-y-auto rounded-md border border-border">
               {filteredPool.slice(0, 60).map((p) => {
                 const selected = selectedSet.has(p.ref)
                 return (
@@ -725,31 +656,33 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
                     type="button"
                     onClick={() => toggleMember(p.ref)}
                     className={cn(
-                      'w-full px-2.5 py-1.5 flex items-center gap-2 text-left transition-colors',
+                      'flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors',
                       selected ? 'bg-emerald-500/[0.06] dark:bg-emerald-500/[0.08]' : 'hover:bg-muted/40',
                     )}
                   >
                     <div className={cn(
-                      'h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0',
-                      selected ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-border',
+                      'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border',
+                      selected ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-border',
                     )}>
                       {selected && <Check className="h-2.5 w-2.5" />}
                     </div>
-                    <div className={cn(
-                      'h-6 w-6 shrink-0 rounded-full text-white text-[8px] font-bold flex items-center justify-center',
-                      p.type === 'teacher'
-                        ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
-                        : 'bg-gradient-to-br from-amber-500 to-orange-600',
-                    )}>
+                    <div
+                      className={cn(
+                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[8px] font-bold text-white',
+                        p.type === 'teacher' ? 'bg-emerald-600/90' : 'bg-amber-500/90',
+                      )}
+                    >
                       {p.avatar}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium truncate">{p.name}</p>
-                      <p className="text-[9px] text-muted-foreground truncate">{p.role}</p>
+                      <p className="truncate text-[11px] font-medium">{p.name}</p>
+                      <p className="truncate text-[9px] text-muted-foreground">{p.role}</p>
                     </div>
                     <span className={cn(
-                      'text-[8px] font-semibold px-1 py-0.5 rounded',
-                      p.type === 'teacher' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                      'shrink-0 rounded px-1 py-0.5 text-[8px] font-semibold',
+                      p.type === 'teacher'
+                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
                     )}>
                       {p.type === 'teacher' ? 'Staff' : 'Parent'}
                     </span>
@@ -757,7 +690,7 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
                 )
               })}
               {filteredPool.length === 0 && (
-                <p className="px-3 py-4 text-[10px] text-muted-foreground text-center">No matches.</p>
+                <p className="px-3 py-4 text-center text-[10px] text-muted-foreground">No matches.</p>
               )}
             </div>
           </div>
@@ -768,7 +701,7 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
           <Button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
+            className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
           >
             <Plus className="h-3.5 w-3.5" /> Create Group
           </Button>
@@ -778,12 +711,12 @@ function CreateGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange
   )
 }
 
-// ─── ManageMembersDialog ─────────────────────────────────────────────
+// ─── ManageMembersDialog ──────────────────────────────────────────────
 
-function ManageMembersDialog({
-  group, onOpenChange,
+export function ManageMembersDialog({
+  groupId, onOpenChange,
 }: {
-  group: Group | null
+  groupId: string | null
   onOpenChange: (open: boolean) => void
 }) {
   const addMember = useMessagingStore((s) => s.addMember)
@@ -793,9 +726,9 @@ function ManageMembersDialog({
 
   // Always read the latest group state from the store so member add/remove
   // updates show without remounting.
-  const liveGroup = group ? groups.find((g) => g.id === group.id) : null
+  const liveGroup = groupId ? groups.find((g) => g.id === groupId) : null
   const members = useMemo(
-    () => liveGroup ? resolveMemberRefs(liveGroup.memberRefs) : [],
+    () => (liveGroup ? resolveMemberRefs(liveGroup.memberRefs) : []),
     [liveGroup],
   )
 
@@ -810,7 +743,7 @@ function ManageMembersDialog({
 
   useEffect(() => {
     setAddRef('')
-  }, [group?.id])
+  }, [groupId])
 
   const handleAdd = () => {
     if (!liveGroup || !addRef) return
@@ -835,41 +768,45 @@ function ManageMembersDialog({
     })
   }
 
-  if (!group) return null
+  if (!groupId) return null
 
   return (
-    <Dialog open={!!group} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+    <Dialog open={!!groupId} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-white text-[10px] font-semibold">
-              {avatarFromName(group.name)}
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-600/90 text-[10px] font-semibold text-white">
+              {liveGroup ? avatarFromName(liveGroup.name) : 'G'}
             </div>
-            {group.name}
+            {liveGroup?.name ?? 'Group'}
           </DialogTitle>
-          <DialogDescription className="text-xs flex items-center gap-1.5">
-            <span className={cn(
-              'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
-              TYPE_PILL[group.type],
-            )}>
-              {TYPE_ICON[group.type]}
-              {group.type}
-            </span>
-            <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground tabular-nums">
-              <Users className="h-2.5 w-2.5" />
-              {members.length} member{members.length === 1 ? '' : 's'}
-            </span>
+          <DialogDescription className="flex items-center gap-1.5 text-xs">
+            {liveGroup && (
+              <>
+                <span className={cn(
+                  'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
+                  TYPE_PILL[liveGroup.type],
+                )}>
+                  {TYPE_ICON[liveGroup.type]}
+                  {liveGroup.type}
+                </span>
+                <span className="inline-flex items-center gap-0.5 tabular-nums text-[10px] text-muted-foreground">
+                  <Users className="h-2.5 w-2.5" />
+                  {members.length} member{members.length === 1 ? '' : 's'}
+                </span>
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           {/* Add member */}
           <div className="space-y-1">
-            <Label className="text-[11px] flex items-center gap-1.5">
+            <Label className="flex items-center gap-1.5 text-[11px]">
               <UserPlus className="h-3 w-3" /> Add a Member
             </Label>
             <div className="flex items-end gap-1.5">
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 <SearchableSelect
                   selectedId={addRef}
                   onSelect={setAddRef}
@@ -883,13 +820,13 @@ function ManageMembersDialog({
                 size="sm"
                 onClick={handleAdd}
                 disabled={!addRef}
-                className="h-9 gap-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
+                className="h-9 gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
               >
                 <Plus className="h-3.5 w-3.5" /> Add
               </Button>
             </div>
             {addable.length === 0 && (
-              <p className="text-[10px] text-muted-foreground mt-1">
+              <p className="mt-1 text-[10px] text-muted-foreground">
                 Everyone is already a member of this group.
               </p>
             )}
@@ -897,37 +834,36 @@ function ManageMembersDialog({
 
           {/* Current members */}
           <div className="space-y-1">
-            <Label className="text-[11px] flex items-center justify-between">
-              <span>Current Members ({members.length})</span>
-            </Label>
-            <div className="max-h-64 overflow-y-auto rounded-md border border-border divide-y divide-border/30">
+            <Label className="text-[11px]">Current Members ({members.length})</Label>
+            <div className="custom-scrollbar max-h-64 divide-y divide-border/30 overflow-y-auto rounded-md border border-border">
               {members.length > 0 ? (
                 members.map((m) => (
-                  <div key={m.ref} className="px-2.5 py-1.5 flex items-center gap-2 hover:bg-muted/30">
-                    <div className={cn(
-                      'h-7 w-7 shrink-0 rounded-full text-white text-[9px] font-bold flex items-center justify-center',
-                      m.type === 'teacher'
-                        ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
-                        : 'bg-gradient-to-br from-amber-500 to-orange-600',
-                    )}>
+                  <div key={m.ref} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted/30">
+                    <div
+                      className={cn(
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white',
+                        m.type === 'teacher' ? 'bg-emerald-600/90' : 'bg-amber-500/90',
+                      )}
+                    >
                       {m.avatar}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium truncate">{m.name}</p>
-                      <p className="text-[9px] text-muted-foreground truncate">{m.role}</p>
+                      <p className="truncate text-[11px] font-medium">{m.name}</p>
+                      <p className="truncate text-[9px] text-muted-foreground">{m.role}</p>
                     </div>
                     <button
                       onClick={() => handleRemove(m.ref)}
-                      className="p-1 text-muted-foreground hover:text-rose-500 rounded hover:bg-muted"
+                      className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-rose-500"
                       title="Remove from group"
+                      aria-label={`Remove ${m.name}`}
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 ))
               ) : (
-                <p className="px-3 py-4 text-[10px] text-muted-foreground text-center">
-                  No members yet. Add some above.
+                <p className="px-3 py-4 text-center text-[10px] text-muted-foreground">
+                  No members yet — add some above.
                 </p>
               )}
             </div>

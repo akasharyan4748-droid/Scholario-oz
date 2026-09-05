@@ -196,6 +196,44 @@ function formatTimeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
 }
 
+/** Compact relative time for conversation rows: now · 5m · 3h · Yesterday · Tue · 12 Aug */
+function formatListTime(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const diff = now.getTime() - d.getTime()
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return 'now'
+  if (min < 60) return `${min}m`
+  const hr = Math.floor(min / 60)
+  if (hr < 24 && d.toDateString() === now.toDateString()) return `${hr}h`
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  if (diff < 7 * 24 * 3600 * 1000) return d.toLocaleDateString('en-IN', { weekday: 'short' })
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+}
+
+/** Day label for chat date dividers: Today · Yesterday · Tuesday · 12 Aug 2025 */
+function formatDayLabel(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  if (d.toDateString() === now.toDateString()) return 'Today'
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  const sameYear = d.getFullYear() === now.getFullYear()
+  return d.toLocaleDateString('en-IN', {
+    weekday: diff7(d, now) ? 'long' : undefined,
+    day: '2-digit',
+    month: 'short',
+    year: sameYear ? undefined : 'numeric',
+  })
+}
+
+function diff7(a: Date, b: Date): boolean {
+  return Math.abs(b.getTime() - a.getTime()) < 7 * 24 * 3600 * 1000
+}
+
 function formatMessageTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
@@ -351,6 +389,7 @@ interface MessagingState {
   archiveConversation: (id: string) => void
   unarchiveConversation: (id: string) => void
   markUrgent: (id: string) => void
+  markUnread: (id: string) => void
   saveDraft: (conversationId: string, text: string) => void
   saveNewDraft: (recipientName: string, text: string) => void
   deleteDraft: (id: string) => void
@@ -506,6 +545,13 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
     const state = get()
     set({
       conversations: state.conversations.map((c) => c.id === id ? { ...c, urgent: !c.urgent } : c),
+    })
+  },
+
+  markUnread: (id) => {
+    const state = get()
+    set({
+      conversations: state.conversations.map((c) => c.id === id && c.unread === 0 ? { ...c, unread: 1 } : c),
     })
   },
 
@@ -817,13 +863,28 @@ export function getRecipientOptions(): RecipientOption[] {
       avatar: t.avatar,
     }))
 
-  // Some parents (based on students)
-  const parents: RecipientOption[] = activeStudents.slice(0, 8).map((s) => ({
-    name: s.fatherName,
-    role: `Parent · ${s.name}`,
-    type: 'parent' as ConversationType,
-    avatar: s.fatherName.split(' ').map((n) => n[0]).slice(0, 2).join(''),
-  }))
+  // Parents — deduped by guardian name (one entry per parent; siblings
+  // are collapsed into a single row so recipient keys stay unique).
+  const parents: RecipientOption[] = []
+  const seenParent = new Set<string>()
+  for (const s of activeStudents) {
+    if (seenParent.has(s.fatherName)) continue
+    seenParent.add(s.fatherName)
+    const wards = activeStudents.filter((x) => x.fatherName === s.fatherName).map((x) => x.name)
+    const wardLabel =
+      wards.length === 1
+        ? wards[0]
+        : wards.length === 2
+          ? wards.join(' & ')
+          : `${wards[0]} +${wards.length - 1} more`
+    parents.push({
+      name: s.fatherName,
+      role: `Parent · ${wardLabel}`,
+      type: 'parent' as ConversationType,
+      avatar: s.fatherName.split(' ').map((n) => n[0]).slice(0, 2).join(''),
+    })
+    if (parents.length >= 12) break
+  }
 
   // Groups — pulled from the live store so newly-created groups appear automatically
   const groups: RecipientOption[] = useMessagingStore.getState().groups.map((g) => ({
@@ -858,4 +919,4 @@ export function getGroupOptions(): GroupOption[] {
 
 // ─── Format helpers ──────────────────────────────────────────────────
 
-export { formatTimeAgo, formatMessageTime }
+export { formatTimeAgo, formatMessageTime, formatListTime, formatDayLabel }

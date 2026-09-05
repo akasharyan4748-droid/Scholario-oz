@@ -1,31 +1,41 @@
 'use client'
 
 /**
- * ComposeModal — recipient picker + message composer.
+ * ComposeModal — the primary "New Message" action.
  *
- * - Searchable recipient picker (teachers/parents/groups from canonical data)
- * - Message text area
- * - Send button creates a new conversation OR opens an existing one (incl. groups)
- * - Supports `preselectedRecipient` so callers (GroupsPanel) can pre-fill the
- *   recipient — the user still sees the selected chip and can change it.
+ * Progressive reveal, one step at a time:
+ *   1. Recipient — searchable, grouped (Staff / Parents / Groups), with
+ *      keyboard navigation (↑ ↓ Enter)
+ *   2. Message   — recipient chip (replaceable) + auto-growing textarea
+ *   3. Send · Save draft
+ *
+ * Responsive: centered dialog on desktop, bottom sheet on mobile
+ * (rounded top, safe-area aware, full width).
  */
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Send, X, Users } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { useMessagingStore, getRecipientOptions, type ConversationType } from '@/lib/store/messaging-store'
+import { Search, Send, X, Users, PenSquare, ArrowLeft } from 'lucide-react'
+import { useIsMobile } from '@/hooks/use-mobile'
+import { useMessagingStore, getRecipientOptions } from '@/lib/store/messaging-store'
+import { ConversationAvatar } from './shared'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+
+export interface ComposePrefill {
+  recipient?: string | null
+  text?: string
+}
 
 interface Props {
   open: boolean
   onClose: () => void
-  /** Optional recipient name to pre-fill the picker with. */
-  preselectedRecipient?: string | null
+  /** Pre-fill the recipient and/or message text (deep-links, drafts). */
+  prefill?: ComposePrefill | null
 }
 
-export function ComposeModal({ open, onClose, preselectedRecipient }: Props) {
+export function ComposeModal({ open, onClose, prefill }: Props) {
+  const isMobile = useIsMobile()
   const composeNew = useMessagingStore((s) => s.composeNew)
   const sendMessage = useMessagingStore((s) => s.sendMessage)
   const conversations = useMessagingStore((s) => s.conversations)
@@ -33,60 +43,120 @@ export function ComposeModal({ open, onClose, preselectedRecipient }: Props) {
   const openConversation = useMessagingStore((s) => s.openConversation)
   const setActiveFolder = useMessagingStore((s) => s.setActiveFolder)
   const saveNewDraft = useMessagingStore((s) => s.saveNewDraft)
-  const [search, setSearch] = useState('')
-  const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null)
-  const [text, setText] = useState('')
 
-  // Recompute recipients whenever groups change (so new groups appear)
+  const [search, setSearch] = useState('')
+  const [recipient, setRecipient] = useState<string | null>(null)
+  const [text, setText] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
+  const listRef = useRef<HTMLDivElement>(null)
+
   const recipients = useMemo(() => getRecipientOptions(), [groups])
 
   const filtered = useMemo(() => {
-    if (!search) return recipients.slice(0, 10)
+    if (!search.trim()) return recipients
     const q = search.toLowerCase()
-    return recipients.filter((r) => r.name.toLowerCase().includes(q) || r.role.toLowerCase().includes(q)).slice(0, 15)
+    return recipients.filter(
+      (r) => r.name.toLowerCase().includes(q) || r.role.toLowerCase().includes(q),
+    )
   }, [recipients, search])
 
+  // Sectioned list: Staff / Parents / Groups with their filtered subsets
+  const sections = useMemo(() => {
+    const staff = filtered.filter((r) => r.type === 'staff')
+    const parents = filtered.filter((r) => r.type === 'parent')
+    const grp = filtered.filter((r) => r.type === 'group')
+    return [
+      { id: 'staff', label: 'Staff', items: staff },
+      { id: 'parents', label: 'Parents', items: parents },
+      { id: 'groups', label: 'Groups', items: grp },
+    ].filter((s) => s.items.length > 0)
+  }, [filtered])
+
+  // Reset on open (apply prefill if provided)
   useEffect(() => {
     if (open) {
       setSearch('')
-      setText('')
-      setSelectedRecipient(preselectedRecipient ?? null)
+      setText(prefill?.text ?? '')
+      setRecipient(prefill?.recipient ?? null)
+      setActiveIndex(0)
     }
-  }, [open, preselectedRecipient])
+  }, [open, prefill])
+
+  // ESC closes (treated as save-draft-if-text)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        // Same semantics as the header X / overlay click
+        if (text.trim()) {
+          saveNewDraft(recipient ?? '(no recipient)', text)
+          toast.info('Draft saved')
+        }
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, text, recipient])
+
+  // Keep the highlighted row in view
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${activeIndex}"]`)
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex])
+
+  const recipientData = recipients.find((r) => r.name === recipient)
+  const isGroupRecipient = recipientData?.type === 'group'
+
+  const handleClose = () => {
+    // Closing with typed text quietly preserves it as a draft so it can be
+    // finished later from the Drafts folder.
+    if (text.trim()) {
+      saveNewDraft(recipient ?? '(no recipient)', text)
+      toast.info('Draft saved')
+    }
+    onClose()
+  }
 
   const handleSend = () => {
-    if (!selectedRecipient) { toast.error('Select a recipient'); return }
-    if (!text.trim()) { toast.error('Write a message'); return }
+    if (!recipient) { toast.error('Select a recipient first'); return }
+    if (!text.trim()) { toast.error('Write a message first'); return }
 
-    // If a conversation already exists for this recipient, send directly to it
-    // (covers existing group conversations and seeded staff/parent threads).
-    const existing = conversations.find((c) => c.name === selectedRecipient && !c.archived)
+    const existing = conversations.find((c) => c.name === recipient && !c.archived)
     if (existing) {
       sendMessage(existing.id, text)
       openConversation(existing.id)
-      // If the existing conversation is a group, jump to the Groups folder
       if (existing.type === 'group') setActiveFolder('groups')
       else setActiveFolder('inbox')
-      toast.success('Message sent', { description: `To ${selectedRecipient}` })
-      onClose()
-      return
+    } else {
+      composeNew(recipient, text)
     }
-
-    // Otherwise compose a new conversation
-    composeNew(selectedRecipient, text)
-    toast.success('Message sent', { description: `To ${selectedRecipient}` })
+    toast.success('Message sent', { description: `To ${recipient}` })
     onClose()
   }
 
   const handleSaveDraft = () => {
     if (!text.trim()) { onClose(); return }
-    saveNewDraft(selectedRecipient ?? '(no recipient)', text)
-    toast.success('Draft saved')
+    saveNewDraft(recipient ?? '(no recipient)', text)
+    toast.success('Draft saved', { description: 'Find it in the Drafts folder' })
     onClose()
   }
 
-  const selectedRecipientData = recipients.find((r) => r.name === selectedRecipient)
-  const isGroupRecipient = selectedRecipientData?.type === 'group'
+  // Keyboard navigation on the recipient list
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex((i) => Math.min(i + 1, filtered.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const r = filtered[activeIndex]
+      if (r) { setRecipient(r.name); setText(prefill?.text ?? '') }
+    }
+  }
 
   return (
     <AnimatePresence>
@@ -95,126 +165,188 @@ export function ComposeModal({ open, onClose, preselectedRecipient }: Props) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={handleSaveDraft}
+          transition={{ duration: 0.15 }}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-[2px] sm:items-center sm:p-4"
+          onClick={handleClose}
+          role="dialog"
+          aria-modal="true"
+          aria-label="New message"
         >
           <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            className="bg-card border border-border rounded-xl shadow-2xl max-w-md w-full max-h-[85vh] overflow-hidden flex flex-col"
+            initial={isMobile ? { y: '100%' } : { scale: 0.97, opacity: 0 }}
+            animate={isMobile ? { y: 0 } : { scale: 1, opacity: 1 }}
+            exit={isMobile ? { y: '100%' } : { scale: 0.97, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+            className={cn(
+              'flex max-h-[92dvh] w-full flex-col overflow-hidden border border-border bg-card shadow-2xl',
+              'sm:max-h-[85vh] sm:w-[26rem] sm:rounded-2xl',
+              isMobile ? 'rounded-t-2xl' : '',
+            )}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <h3 className="text-sm font-bold">New Message</h3>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={handleSaveDraft}>
+            <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+              {recipient && (
+                <button
+                  onClick={() => setRecipient(null)}
+                  aria-label="Change recipient"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:hidden"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              )}
+              <h3 className="flex-1 text-[13px] font-semibold text-foreground">
+                {recipient ? 'New message' : 'Select recipient'}
+              </h3>
+              <button
+                onClick={handleClose}
+                aria-label="Close composer"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
                 <X className="h-4 w-4" />
-              </Button>
+              </button>
             </div>
 
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {/* Recipient search */}
-              {!selectedRecipient ? (
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 block">To</label>
+            {/* Step 1 — recipient search */}
+            {!recipient ? (
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="shrink-0 border-b border-border/60 px-3 py-2.5">
                   <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                     <input
                       autoFocus
                       value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      onChange={(e) => { setSearch(e.target.value); setActiveIndex(0) }}
+                      onKeyDown={handleSearchKeyDown}
                       placeholder="Search teachers, parents, or groups…"
-                      className="w-full h-9 pl-8 pr-3 text-xs rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      aria-label="Search recipients"
+                      className="h-9 w-full rounded-lg border border-border bg-card pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
                     />
-                  </div>
-                  <div className="mt-2 space-y-1 max-h-[280px] overflow-y-auto">
-                    {filtered.map((r) => (
-                      <button
-                        key={`${r.type}-${r.name}`}
-                        onClick={() => setSelectedRecipient(r.name)}
-                        className="w-full flex items-center gap-2.5 rounded-md border border-border/40 hover:border-primary/40 hover:bg-muted/30 px-2.5 py-2 transition-colors text-left"
-                      >
-                        <div className={cn(
-                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-[10px] font-semibold',
-                          r.type === 'staff' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
-                          r.type === 'parent' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
-                          'bg-gradient-to-br from-violet-500 to-purple-600',
-                        )}>
-                          {r.avatar}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium truncate">{r.name}</p>
-                          <p className="text-[9px] text-muted-foreground truncate">{r.role}</p>
-                        </div>
-                        {r.type === 'group' && <Users className="h-3 w-3 text-muted-foreground shrink-0" />}
-                      </button>
-                    ))}
-                    {filtered.length === 0 && (
-                      <p className="text-center text-[10px] text-muted-foreground py-4">No recipients found</p>
-                    )}
                   </div>
                 </div>
-              ) : (
-                <>
-                  {/* Selected recipient */}
-                  <div className="flex items-center gap-2.5 rounded-md bg-muted/30 px-2.5 py-2">
-                    <div className={cn(
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-[10px] font-semibold',
-                      selectedRecipientData?.type === 'staff' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
-                      selectedRecipientData?.type === 'parent' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
-                      'bg-gradient-to-br from-violet-500 to-purple-600',
-                    )}>
-                      {selectedRecipientData?.avatar ?? '?'}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium truncate">{selectedRecipient}</p>
-                      <p className="text-[9px] text-muted-foreground truncate">{selectedRecipientData?.role}</p>
-                    </div>
-                    <button
-                      onClick={() => setSelectedRecipient(null)}
-                      className="p-1 text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
 
-                  {isGroupRecipient && (
-                    <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                      <Users className="h-3 w-3" /> Sending to the whole group — every member will see your message.
-                    </p>
+                <div ref={listRef} className="custom-scrollbar min-h-0 flex-1 overflow-y-auto py-1.5">
+                  {sections.map((section) => (
+                    <div key={section.id}>
+                      <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                        {section.label} · {section.items.length}
+                      </p>
+                      {section.items.map((r) => {
+                        const idx = filtered.indexOf(r)
+                        const active = activeIndex === idx
+                        return (
+                          <button
+                            key={`${r.type}-${r.name}`}
+                            data-idx={idx}
+                            onClick={() => setRecipient(r.name)}
+                            onMouseEnter={() => setActiveIndex(idx)}
+                            className={cn(
+                              'flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors',
+                              active ? 'bg-primary/[0.08]' : 'hover:bg-muted/40',
+                            )}
+                          >
+                            <ConversationAvatar avatar={r.avatar} type={r.type} size="sm" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[13px] font-medium text-foreground">{r.name}</p>
+                              <p className="truncate text-[11px] text-muted-foreground">{r.role}</p>
+                            </div>
+                            {r.type === 'group' && (
+                              <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))}
+
+                  {filtered.length === 0 && (
+                    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+                      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-muted/50 text-muted-foreground/50">
+                        <Search className="h-4.5 w-4.5" />
+                      </div>
+                      <p className="text-xs font-medium text-muted-foreground">No recipients match “{search}”</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground/70">
+                        Try a name, role, or group name.
+                      </p>
+                    </div>
                   )}
+                </div>
 
-                  {/* Message */}
-                  <div>
-                    <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 block">Message</label>
-                    <textarea
-                      autoFocus
-                      value={text}
-                      onChange={(e) => setText(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSend() }}
-                      placeholder="Write your message…"
-                      rows={4}
-                      className="w-full text-xs rounded-md border border-border bg-card px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+                <div className="shrink-0 border-t border-border/60 px-3 py-2">
+                  <p className="text-[10px] text-muted-foreground/60">
+                    ↑↓ to browse · Enter to select
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* Step 2 — message */
+              <div className="flex min-h-0 flex-1 flex-col">
+                {/* Recipient chip */}
+                <div className="flex shrink-0 items-center gap-2.5 border-b border-border/60 px-3 py-2.5">
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <ConversationAvatar
+                      avatar={recipientData?.avatar ?? '?'}
+                      type={recipientData?.type ?? 'staff'}
+                      size="sm"
                     />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-foreground">{recipient}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">{recipientData?.role}</p>
+                    </div>
                   </div>
-                </>
-              )}
-            </div>
+                  <button
+                    onClick={() => setRecipient(null)}
+                    className="hidden h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:inline-flex"
+                  >
+                    <PenSquare className="h-3 w-3" /> Change
+                  </button>
+                  <button
+                    onClick={() => setRecipient(null)}
+                    aria-label="Change recipient"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:hidden"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
 
-            {/* Footer */}
-            <div className="px-4 py-3 border-t border-border flex items-center justify-between gap-2">
-              <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleSaveDraft}>Save as Draft</Button>
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={handleSend}
-                disabled={!selectedRecipient || !text.trim()}
-              >
-                <Send className="h-3.5 w-3.5" /> Send
-              </Button>
-            </div>
+                {isGroupRecipient && (
+                  <p className="flex shrink-0 items-center gap-1.5 px-3 pt-2 text-[11px] text-muted-foreground">
+                    <Users className="h-3 w-3 text-violet-500" />
+                    Everyone in this group will receive your message.
+                  </p>
+                )}
+
+                {/* Message */}
+                <div className="flex min-h-0 flex-1 flex-col px-3 py-2.5">
+                  <textarea
+                    autoFocus
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSend() }}
+                    placeholder="Write your message…"
+                    aria-label="Message"
+                    className="custom-scrollbar min-h-24 flex-1 resize-none rounded-lg border border-border bg-card px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
+                  />
+                </div>
+
+                {/* Footer */}
+                <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-t border-border px-3">
+                  <button
+                    onClick={handleSaveDraft}
+                    className="h-9 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    Save draft
+                  </button>
+                  <button
+                    onClick={handleSend}
+                    disabled={!text.trim()}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-xs transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Send className="h-3.5 w-3.5" /> Send
+                  </button>
+                </div>
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}
