@@ -415,3 +415,27 @@ Stage Summary:
 - Fixed three latent functional bugs: invisible new-message drafts in the Drafts folder, duplicate React keys for shared-guardian parents, and the module-displacing auto-scroll.
 - All previous functionality preserved (send/star/archive/restore/unread/urgent/labels/search incl. message-content/drafts auto-save/groups create-manage-delete/member smart-fill/parent deep-link from command palette).
 - Remaining risks / next-phase recommendations: (1) the teacher-side Parent Connect and student/parent surfaces were intentionally untouched (spec scoped to the Messages module) — a follow-up could align their visual language with the new design; (2) conversation search input could gain an incremental recent-contacts section in Compose; (3) a print/export transcript action could be added to the chat "…" menu if requested; (4) dev-server watchdog: duplicate `bun run dev` instances were observed spawning EADDRINUSE loops — cron webDevReview should keep confirming a single healthy instance.
+
+---
+Task ID: calendar-redesign-1
+Agent: main agent (Z.ai Code)
+Task: Upgrade the existing Calendar module into a premium, production-ready Scholario-OS calendar (UI/UX/responsiveness/interaction overhaul, preserving functionality + data model + role permissions).
+
+Work Log:
+- Explored existing calendar: principal module (src/components/principal/modules/calendar/*, 7 files), student module (hardcoded Dec 2024, static), data layer (calendar-store.ts getUnifiedEvents + school-calendar.ts holidays + exams store).
+- Added optional `description?: string` to CalendarEvent in calendar-store (backward compatible; powers Add-Event notes + detail view).
+- Built ONE shared premium workspace at src/components/shared/calendar/ (no duplicate calendar systems):
+  - data.ts — type visual tokens (rose/emerald/amber/violet/cyan/fuchsia/neutral, Cultural moved off blue), month matrix with clickable adjacent-month days, canonical-today anchor (TODAY_STR 2025-12-10 = app timeline), formatting helpers.
+  - month-grid.tsx — hairline 6×7 grid in one flat card, event chips (≤2 + "+N") on sm+, dots on phones, today = filled primary circle, selected = inset ring, weekend shading, direction-aware month slide, valid a11y nesting (div[role=button] + real chip buttons, keyboard Enter/Space).
+  - type-filters.tsx — compact pill chips doubling as legend, live counts, active/inactive states, "Show all" reset, horizontal scroll on phones.
+  - primitives.tsx — TypeBadge, SourcePill, EventRow (upcoming/day variants), CalendarEmptyState.
+  - side-panels.tsx — UpcomingContent + DayContent (reused by desktop rail AND mobile sheet).
+  - event-detail-dialog.tsx — clean detail modal (type badge, source, date/time/location/notes rows, Remove for user events).
+  - add-event-dialog.tsx — polished form: title (inline validation), type pill-picker, DatePicker, All-day switch + time, location, notes; after add → navigates to event month + selects day + enables its type filter.
+  - calendar-workspace.tsx — orchestrator: month nav + Today (subtle primary tint when away), rolling event window (visible month + today + 2 forward, deduped → cross-month Upcoming incl. Feb 2026 exams), lg two-column grid+rail with equal heights, <lg single column + bottom day sheet + mobile upcoming card, empty-filter inline notice, reduced-motion styles.
+- Rewrote principal/modules/calendar/index.tsx and student/modules/calendar.tsx as thin role wrappers (canCreate true/false; student keeps SectionHeading). Deleted 7 obsolete principal calendar files.
+- Fixed Sheet a11y (sr-only SheetTitle/SheetDescription) after Radix console error; raised adjacent-day opacity 40→55.
+
+Stage Summary:
+- Browser-verified end-to-end (principal + student, light + dark, desktop 1920/1440, iPad landscape 1024, iPad portrait 768, phone 390): month nav, Today, adjacent-day navigation, filters (affect grid + upcoming consistently, counts, reset), day select (desktop rail / mobile sheet), event detail, Add Event (validation, All-day, type pills, auto-navigate), user-event Remove, empty states, no horizontal overflow (scrollWidth == clientWidth at 390/768/1024), grid/rail heights equal (592px), tsc + lint clean, no runtime errors in dev.log.
+- Calendar now anchors to the canonical Dec 2025 timeline (matches Attendance/dashboards) instead of an empty real-clock month.

@@ -44,6 +44,8 @@ export interface CalendarEvent {
   time: string
   /** Optional location display (defaults to 'School Campus' in UI). */
   location?: string
+  /** Optional notes/description (Add Event form, detail view). */
+  description?: string
   source: CalendarEventSource
 }
 
