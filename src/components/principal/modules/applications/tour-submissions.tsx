@@ -58,6 +58,7 @@ import { useFeeStore } from '@/lib/store/fee-store'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 import {
   TourFormDocument, useFitA4Zoom, printTourDocument,
 } from './tour-form-document'
@@ -951,6 +952,8 @@ function SubmissionDrawer({ sub, app, onClose, onPay, onVerify, onReceived }: {
   onVerify: (s: ApplicationSubmission) => void
   onReceived: (s: ApplicationSubmission) => void
 }) {
+  // Escape closes the drawer (backdrop click already does).
+  useDismissOnEscape(onClose, !!sub)
   const [ref, zoom] = useFitA4Zoom<HTMLDivElement>()
   const pay = sub ? deriveSubmissionPayment(app, sub) : null
   return (
@@ -964,6 +967,7 @@ function SubmissionDrawer({ sub, app, onClose, onPay, onVerify, onReceived }: {
           className="fixed inset-0 z-50 bg-black/40"
           onClick={onClose}
           role="dialog"
+          aria-modal="true"
           aria-label={`Completed form — ${sub.studentName}`}
         >
           <motion.div

@@ -19,6 +19,18 @@
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+// Connected seed — history records reference REAL roster students so every
+// preview / regeneration / download is traceable to the same student the
+// rest of the school modules use (single connected dataset).
+import { SS } from './students-store/seed-data'
+import {
+  migrateLegacyScopedStore, createTenantScopedStorage,
+} from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+import { getSchoolProfile } from '@/lib/school-profile'
+
+migrateLegacyScopedStore('scholario-certificates-v1', DEFAULT_TENANT_ID)
 
 // ─── Document types ───────────────────────────────────────────────────
 
@@ -189,48 +201,122 @@ const DEFAULT_TEMPLATES: DocumentTemplate[] = [
 ]
 
 // ─── Seed generated documents (small starter log) ─────────────────────
-// These give the History tab something to show on first load. All
-// numbers continue from this starting count when new docs are generated.
+// Every record references a REAL student from the roster store (STU-1 …)
+// with their real name / admission no / class, so previews render the full
+// document and every record stays traceable. idx 17 (DSO2024018) keeps the
+// student-role "my certificates" view connected (it matches by admission
+// number).
+
+/** Snapshot marksheet for a roster student — derived from their academic record. */
+function snapshotMarksheet(stu: (typeof SS)[number], examName: string): Record<string, any> {
+  const rows = stu.academics.subjects.map((subj) => ({
+    subject: subj.name,
+    max: 100,
+    pass: 33,
+    obtained: Math.round(subj.percent),
+  }))
+  const totalMax = rows.length * 100
+  const totalObtained = rows.reduce((s, r) => s + r.obtained, 0)
+  const percentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0
+  return {
+    examName,
+    className: stu.className,
+    section: stu.section,
+    session: getSchoolProfile().academicYear,
+    rows,
+    totalMax,
+    totalObtained,
+    percentage,
+    grade: percentage >= 90 ? 'A1' : percentage >= 80 ? 'A2' : percentage >= 70 ? 'B1' : percentage >= 60 ? 'B2' : percentage >= 50 ? 'C1' : percentage >= 33 ? 'C2' : 'E',
+    result: percentage >= 33 ? 'PASS' : 'FAIL',
+    remarks: 'Conduct: Excellent. Regularity: Satisfactory.',
+  }
+}
+
+/** Snapshot fee transaction for a roster student (self-contained receipt data). */
+function snapshotReceipt(stu: (typeof SS)[number], date: string): Record<string, any> {
+  const heads = ['Tuition Fee', 'Transport Fee', 'Activity Fee', 'Exam Fee']
+  const head = heads[stu.id.length % heads.length] ?? 'Tuition Fee'
+  return {
+    id: `seed-txn-${stu.id}`,
+    receiptNo: `RCPT-${date.slice(0, 10).replace(/-/g, '')}-${stu.admissionNo.slice(-3)}`,
+    studentId: stu.id,
+    studentName: stu.name,
+    admissionNo: stu.admissionNo,
+    className: stu.className,
+    classId: stu.classId,
+    amount: 12500,
+    mode: stu.feeStatus === 'Paid' ? 'Online' : 'Cash',
+    status: 'SUCCESS',
+    date,
+    purpose: `${head} — Term II`,
+    feeHead: head,
+    collectedBy: 'Accounts Office',
+    verifiedBy: 'Accounts Office',
+    referenceNo: `REF${stu.admissionNo.slice(-4)}${date.slice(5, 7)}`,
+  }
+}
 
 function seedDocs(): GeneratedDocument[] {
-  const base = [
-    { type: 'Bonafide' as DocType, name: 'Aarav Sharma', adm: 'DSO2024001', cls: 'Class 9', daysAgo: 2, status: 'Issued' as DocStatus },
-    // Session student (Aarav Sharma, STU-2024-018, Class 2) — their own
-    // certificate records so the student role view has real data from this
-    // same store (no second source).
-    { type: 'Bonafide' as DocType, name: 'Aarav Sharma', adm: 'DSO2024018', cls: 'Class 2-A', daysAgo: 12, status: 'Issued' as DocStatus, studentId: 'STU-2024-018' },
-    { type: 'Character' as DocType, name: 'Aarav Sharma', adm: 'DSO2024018', cls: 'Class 2-A', daysAgo: 34, status: 'Downloaded' as DocStatus, studentId: 'STU-2024-018' },
-    { type: 'Transfer' as DocType, name: 'Diya Patel', adm: 'DSO2024002', cls: 'Class 9', daysAgo: 5, status: 'Downloaded' as DocStatus },
-    { type: 'Character' as DocType, name: 'Vivaan Reddy', adm: 'DSO2024003', cls: 'Class 9', daysAgo: 7, status: 'Printed' as DocStatus },
-    { type: 'ID Card' as DocType, name: 'Ananya Singh', adm: 'DSO2024004', cls: 'Class 9', daysAgo: 11, status: 'Issued' as DocStatus },
-    { type: 'Marksheet' as DocType, name: 'Reyansh Kumar', adm: 'DSO2024005', cls: 'Class 9', daysAgo: 14, status: 'Issued' as DocStatus },
-    { type: 'Fee Receipt' as DocType, name: 'Saanvi Verma', adm: 'DSO2024006', cls: 'Class 10', daysAgo: 17, status: 'Printed' as DocStatus },
-    { type: 'Migration' as DocType, name: 'Arjun Nair', adm: 'DSO2024007', cls: 'Class 12', daysAgo: 21, status: 'Downloaded' as DocStatus },
-    { type: 'Bonafide' as DocType, name: 'Myra Gupta', adm: 'DSO2024008', cls: 'Class 10', daysAgo: 28, status: 'Issued' as DocStatus },
+  const plan: {
+    type: DocType
+    idx: number
+    status: DocStatus
+    daysAgo: number
+    purpose?: string
+  }[] = [
+    { type: 'Bonafide', idx: 0, status: 'Issued', daysAgo: 2, purpose: 'Bank Account Opening' },
+    // idx 17 → admission no DSO2024018 (student-role twin — stays connected).
+    { type: 'Bonafide', idx: 17, status: 'Issued', daysAgo: 12, purpose: 'Passport Application' },
+    { type: 'Character', idx: 17, status: 'Downloaded', daysAgo: 34, purpose: 'Scholarship Application' },
+    { type: 'Transfer', idx: 1, status: 'Downloaded', daysAgo: 5 },
+    { type: 'Character', idx: 2, status: 'Printed', daysAgo: 7, purpose: 'Visa Documentation' },
+    { type: 'ID Card', idx: 3, status: 'Issued', daysAgo: 11 },
+    { type: 'Marksheet', idx: 4, status: 'Issued', daysAgo: 14 },
+    { type: 'Fee Receipt', idx: 5, status: 'Printed', daysAgo: 17 },
+    { type: 'Migration', idx: 6, status: 'Downloaded', daysAgo: 21 },
+    { type: 'Bonafide', idx: 7, status: 'Issued', daysAgo: 28, purpose: 'Metro Concession Card' },
   ]
   // Counters per type for seed numbering
   const counters: Record<string, number> = {}
-  return base.map((b, i) => {
+  return plan.map((b, i) => {
+    const stu = SS[b.idx] ?? SS[i % SS.length]
     const prefix = DOC_PREFIX[b.type]
     counters[prefix] = (counters[prefix] ?? 0) + 1
     const seq = counters[prefix].toString().padStart(5, '0')
     const docNumber = `${prefix}/${CERT_YEAR}/${seq}`
     const date = new Date(Date.now() - b.daysAgo * 86400_000).toISOString()
     const tmpl = DEFAULT_TEMPLATES.find((t) => t.docType === b.type && t.isDefault)!
+    let data: Record<string, any>
+    if (b.type === 'Marksheet') {
+      data = { examName: 'Terminal Examination', marksheet: snapshotMarksheet(stu, 'Terminal Examination') }
+    } else if (b.type === 'Fee Receipt') {
+      const txn = snapshotReceipt(stu, date)
+      data = {
+        transactionId: txn.id,
+        receiptNo: txn.receiptNo,
+        amount: txn.amount,
+        mode: txn.mode,
+        purpose: txn.purpose,
+        transaction: txn,
+      }
+    } else {
+      data = { purpose: b.purpose ?? '—' }
+    }
     return {
       id: `doc-seed-${i + 1}`,
       docType: b.type,
       docNumber,
-      studentId: b.studentId,
-      studentName: b.name,
-      admissionNo: b.adm,
-      class: b.cls,
+      studentId: stu.id,
+      studentName: stu.name,
+      admissionNo: stu.admissionNo,
+      class: `${stu.className}-${stu.section}`,
       templateId: tmpl.id,
       templateName: tmpl.name,
-      generatedBy: 'Dr. Sarah Jenkins',
+      generatedBy: getSchoolProfile().principal,
       generatedAt: date,
       status: b.status,
-      data: { purpose: b.type === 'Bonafide' ? 'Bank Account Opening' : '—' },
+      data,
     }
   })
 }
@@ -309,7 +395,9 @@ for (const d of SEED_DOCS) {
   }
 }
 
-export const useCertificatesStore = create<CertificatesState>((set, get) => ({
+export const useCertificatesStore = create<CertificatesState>()(
+  persist(
+    (set, get) => ({
   templates: DEFAULT_TEMPLATES,
   documents: SEED_DOCS,
   counters: SEED_COUNTERS,
@@ -377,7 +465,9 @@ export const useCertificatesStore = create<CertificatesState>((set, get) => ({
       class: cls,
       templateId: input.templateId,
       templateName: tmpl?.name ?? input.docType,
-      generatedBy: input.generatedBy ?? 'Dr. Sarah Jenkins',
+      // Signatory from the school identity (Settings → General), not a
+      // hardcoded name.
+      generatedBy: input.generatedBy ?? getSchoolProfile().principal,
       generatedAt: new Date().toISOString(),
       status: 'Generated',
       data: input.data,
@@ -447,4 +537,20 @@ export const useCertificatesStore = create<CertificatesState>((set, get) => ({
       documents: s.documents.filter((d) => d.id !== docId),
     }))
   },
-}))
+    }),
+    {
+      // TENANT-SCOPED persistence — generated documents + template
+      // customizations survive reloads and stay isolated per school
+      // namespace (see lib/tenant/tenant-storage.ts). Only DATA slices
+      // persist; actions live on the store instance.
+      name: 'scholario-certificates-v1',
+      storage: createTenantScopedStorage('scholario-certificates-v1'),
+      version: 1,
+      partialize: (s) => ({
+        templates: s.templates,
+        documents: s.documents,
+        counters: s.counters,
+      }),
+    },
+  ),
+)

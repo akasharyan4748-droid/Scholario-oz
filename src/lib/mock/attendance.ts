@@ -304,26 +304,28 @@ export interface StaffAttendanceRecord {
 }
 
 export const STAFF_DEFS: Omit<StaffAttendanceRecord, 'status' | 'checkIn'>[] = [
-  { id: 'T-014', name: 'Rohan Mehta',       role: 'Teacher',        department: 'Mathematics' },
-  { id: 'T-003', name: 'Priya Nair',         role: 'Teacher',        department: 'Languages' },
-  { id: 'T-002', name: 'Pooja Bhatt',        role: 'Teacher',        department: 'Science' },
-  { id: 'T-001', name: 'Arjun Kapoor',       role: 'Teacher',        department: 'Computer Science' },
-  { id: 'T-005', name: 'Sunita Sharma',      role: 'Teacher',        department: 'Hindi' },
-  { id: 'T-007', name: 'Vikram Singh',       role: 'Teacher',        department: 'Physical Education' },
-  { id: 'T-008', name: 'Meera Deshmukh',     role: 'Teacher',        department: 'Arts' },
-  { id: 'T-009', name: 'Suresh Nair',        role: 'Coordinator',    department: 'Academics' },
-  { id: 'T-010', name: 'Ananya Iyer',        role: 'Coordinator',    department: 'Primary Wing' },
-  { id: 'T-011', name: 'Kavita Joshi',       role: 'Teacher',        department: 'Science' },
-  { id: 'T-012', name: 'Rahul Verma',        role: 'Lab Assistant',  department: 'Physics Lab' },
-  { id: 'T-013', name: 'Sneha Pillai',      role: 'Librarian',      department: 'Library' },
-  { id: 'T-015', name: 'Imran Khan',         role: 'Admin Staff',    department: 'Administration' },
-  { id: 'T-016', name: 'Lakshmi Rao',        role: 'Teacher',        department: 'Social Studies' },
-  { id: 'T-017', name: 'Deepak Menon',       role: 'Teacher',        department: 'Commerce' },
-  { id: 'T-018', name: 'Priyanka Bose',      role: 'Teacher',        department: 'English' },
-  { id: 'T-019', name: 'Sanjay Gupta',       role: 'Admin Staff',    department: 'Front Office' },
-  { id: 'T-020', name: 'Anjali Desai',       role: 'Teacher',        department: 'Mathematics' },
-  { id: 'T-021', name: 'Vikas Agarwal',      role: 'Lab Assistant',  department: 'Chemistry Lab' },
-  { id: 'T-022', name: 'Ritika Iyer',        role: 'Teacher',        department: 'Biology' },
+  // Rebuilt from the canonical teacher roster (src/lib/mock/teachers.ts) —
+  // ids, names and departments all resolve to real staff members.
+  { id: 'T-001', name: 'Dr. Ananya Iyer',  role: 'Admin Staff',   department: 'Administration' },
+  { id: 'T-002', name: 'Priya Nair',       role: 'Teacher',       department: 'Languages' },
+  { id: 'T-005', name: 'Meera Krishnan',   role: 'Teacher',       department: 'Languages' },
+  { id: 'T-008', name: 'Sunita Rao',       role: 'Teacher',       department: 'Mathematics' },
+  { id: 'T-011', name: 'Kavita Joshi',     role: 'Teacher',       department: 'Science' },
+  { id: 'T-014', name: 'Rohan Mehta',      role: 'Teacher',       department: 'Mathematics' },
+  { id: 'T-017', name: 'Amit Verma',       role: 'Teacher',       department: 'Science' },
+  { id: 'T-020', name: 'Deepa Menon',      role: 'Teacher',       department: 'Languages' },
+  { id: 'T-023', name: 'Vikram Singh',     role: 'Teacher',       department: 'Social Sciences' },
+  { id: 'T-026', name: 'Neha Gupta',       role: 'Teacher',       department: 'Science' },
+  { id: 'T-029', name: 'Suresh Pillai',    role: 'Teacher',       department: 'Social Sciences' },
+  { id: 'T-032', name: 'Anjali Desai',     role: 'Teacher',       department: 'Mathematics' },
+  { id: 'T-035', name: 'Rajesh Khanna',    role: 'Teacher',       department: 'Mathematics' },
+  { id: 'T-038', name: 'Pooja Bhatt',      role: 'Teacher',       department: 'Science' },
+  { id: 'T-041', name: 'Arjun Kapoor',     role: 'Teacher',       department: 'Computer Science' },
+  { id: 'T-044', name: 'Shalini Agarwal',  role: 'Teacher',       department: 'Commerce' },
+  { id: 'T-047', name: 'Sanjay Reddy',     role: 'Teacher',       department: 'Arts & Sports' },
+  { id: 'T-050', name: 'Lakshmi Venkat',   role: 'Teacher',       department: 'Arts & Sports' },
+  { id: 'T-053', name: 'Faisal Ahmed',     role: 'Teacher',       department: 'Arts & Sports' },
+  { id: 'T-056', name: 'Geeta Sharma',     role: 'Librarian',     department: 'Library' },
 ]
 
 /** Build today's staff attendance deterministically. */

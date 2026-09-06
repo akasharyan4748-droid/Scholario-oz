@@ -37,6 +37,7 @@ import { VersionStatusPill } from './fees-structures-shared'
 // display only — the purge itself is a future server-side job
 // (lib/tenant/archive-retention.ts; no client timers).
 import { getArchiveRetentionState } from '@/lib/tenant/archive-retention'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 export interface HistoryDialogProps {
   open: boolean
@@ -49,6 +50,9 @@ export interface HistoryDialogProps {
 export function FeesStructuresHistoryDialog({ open, structure, onClose, onRevert, onArchive }: HistoryDialogProps) {
   const versions = useFeeStore((s) => s.versions)
   const changeLog = useFeeStore((s) => s.changeLog)
+
+  // Escape closes the history dialog (backdrop click already does).
+  useDismissOnEscape(onClose, open)
 
   const [selected, setSelected] = useState<string[]>([])
   const [showCompare, setShowCompare] = useState(false)
@@ -95,6 +99,9 @@ export function FeesStructuresHistoryDialog({ open, structure, onClose, onRevert
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Version history — ${structure.className}`}
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={onClose}
         >
@@ -132,7 +139,7 @@ export function FeesStructuresHistoryDialog({ open, structure, onClose, onRevert
                     <GitCompareArrows className="h-3.5 w-3.5" />
                     {showCompare ? 'Hide Compare' : `Compare (${selected.length}/2)`}
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose} aria-label="Close version history">
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>

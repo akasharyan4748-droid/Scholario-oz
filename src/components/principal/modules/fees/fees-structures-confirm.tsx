@@ -37,6 +37,7 @@ import { computeHeadsTotal } from '@/lib/store/fee-store'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 export interface ConfirmChangesProps {
   open: boolean
@@ -55,6 +56,8 @@ const HIGH_IMPACT_PCT_THRESHOLD = 10 // % total amount increase
 export function FeesStructuresConfirmDialog({
   open, structure, oldHeads, newHeads, effectiveFrom: initialEffectiveFrom, mode, onConfirm, onClose,
 }: ConfirmChangesProps) {
+  // Escape closes the confirm dialog (backdrop click already does).
+  useDismissOnEscape(onClose, open)
   const [step, setStep] = useState<1 | 2>(1)
   const [reason, setReason] = useState('')
   const [effectiveFrom, setEffectiveFrom] = useState(initialEffectiveFrom)
@@ -139,6 +142,9 @@ export function FeesStructuresConfirmDialog({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Confirm ${mode === 'revision' ? 'revision' : 'new version'} — ${structure.className}`}
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={onClose}
         >
@@ -169,7 +175,7 @@ export function FeesStructuresConfirmDialog({
                     </p>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose} aria-label="Close confirm dialog">
                   <X className="h-3.5 w-3.5" />
                 </Button>
               </div>

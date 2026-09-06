@@ -53,6 +53,7 @@ import { FilterToolbar } from '../shared/filter-toolbar'
 import { FeePanel, FeeEmptyState, ModeIcon, modeAccent, FeeStatusBadge, TxnDateTime, SourceChip, txnSourceKey } from './fees-shared'
 import { FeeReceiptA5Preview, printReceiptA5, downloadReceiptA5 } from './fee-receipt-a5'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 // ─── Financial type badge (Core Fee / Examination Fee / Additional) ────
 
@@ -120,6 +121,9 @@ export function FeesTransactionsSection({ data }: Props) {
   // Class Teacher / Student self-service. Gateway is a channel, not a source.
   const [sourceFilter, setSourceFilter] = useState('all')
   const [viewReceipt, setViewReceipt] = useState<FeeTransaction | null>(null)
+
+  // Escape closes the receipt preview modal (backdrop click already does).
+  useDismissOnEscape(() => setViewReceipt(null), !!viewReceipt)
 
   // Canonical A5/A4 receipt engine only (thermal consolidated away).
   const doPrint = (t: FeeTransaction) => {
@@ -367,6 +371,9 @@ export function FeesTransactionsSection({ data }: Props) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Receipt ${viewReceipt.receiptNo} preview`}
             className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={() => setViewReceipt(null)}
           >

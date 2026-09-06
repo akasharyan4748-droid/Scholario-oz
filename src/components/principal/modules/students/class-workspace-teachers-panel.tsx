@@ -3,10 +3,11 @@
 import { UserCheck } from 'lucide-react'
 import { GradientAvatar } from '@/components/shared/ui'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { getTeacherById } from '@/lib/mock/teachers'
 import { type ClassRecord } from '@/lib/store/students-store'
-import { toast } from 'sonner'
+
+// QA-FIX-A: the dead "Replace" / "Temporary" toast-only buttons were
+// removed — teacher assignment flows live in Class details → Teachers tab.
 
 export function TeachersPanel({
   classRecord, teacher,
@@ -27,10 +28,6 @@ export function TeachersPanel({
               <p className="text-[11px] text-muted-foreground mt-0.5">{teacher.experience} years · {teacher.qualification}</p>
             </div>
             <Badge variant="secondary" className="text-[10px]">Since 2024</Badge>
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => toast.info('Replace class teacher')}>Replace</Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => toast.info('Temporary assignment')}>Temporary</Button>
           </div>
         </div>
       )}

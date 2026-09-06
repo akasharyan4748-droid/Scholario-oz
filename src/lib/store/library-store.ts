@@ -3,12 +3,23 @@
  *
  * Borrowers come from canonical Students store + Teachers mock data.
  * Book catalog, issue/return, overdue, fines all derive from this store.
+ *
+ * QA-FIX-B — TENANT-SCOPED PERSISTENCE: books + issues + reservations
+ * survive reload (per-school namespace via createTenantScopedStorage).
+ * Search/filter state is ephemeral UI state and is NOT persisted.
+ * sendReminder stamps reminderSentAt on the loan record (real action,
+ * no more toast-only stub in the module UI).
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { useMemo } from 'react'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { teachers } from '@/lib/mock/teachers'
+import { migrateLegacyScopedStore, createTenantScopedStorage } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+migrateLegacyScopedStore('scholario-library-v1', DEFAULT_TENANT_ID)
 
 export type BookCategory = 'Fiction' | 'Reference' | 'Textbooks' | 'Story Books' | 'Biography' | 'Magazines' | 'Science'
 export type BookStatus = 'Available' | 'Low Stock' | 'Out of Stock'
@@ -40,6 +51,8 @@ export interface IssueRecord {
   issueDate: string
   dueDate: string
   returnDate?: string
+  /** ISO timestamp of the last overdue reminder sent (set by sendReminder). */
+  reminderSentAt?: string
   status: IssueStatus
   fine: number
   fineStatus: FineStatus
@@ -85,25 +98,27 @@ function getTeacher(id: string) {
 }
 
 // Build initial issues using canonical students
+// (borrowers resolve against the students-store roster: STU-1…STU-42 →
+// DSO2024001…DSO2024042 — names/classes below match that roster exactly).
 const SEED_ISSUES: IssueRecord[] = [
-  { id: 'ISS001', bookId: 'BK001', bookTitle: 'Wings of Fire', borrowerId: 'STU-1', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024001', class: 'Class 9', issueDate: '2025-11-12', dueDate: '2025-11-26', status: 'Overdue', fine: 20, fineStatus: 'Pending' },
-  { id: 'ISS002', bookId: 'BK002', bookTitle: 'The Jungle Book', borrowerId: 'STU-2', borrowerName: 'Diya Patel', borrowerType: 'student', admissionNo: 'DSO2024002', class: 'Class 9', issueDate: '2025-11-18', dueDate: '2025-12-02', status: 'Issued', fine: 0, fineStatus: 'Pending' },
-  { id: 'ISS003', bookId: 'BK003', bookTitle: 'Panchatantra Tales', borrowerId: 'STU-10', borrowerName: 'Aadhya Menon', borrowerType: 'student', admissionNo: 'DSO2024010', class: 'Class 10', issueDate: '2025-11-20', dueDate: '2025-12-04', status: 'Issued', fine: 0, fineStatus: 'Pending' },
-  { id: 'ISS004', bookId: 'BK007', bookTitle: 'Encyclopedia of Science', borrowerId: 'STU-12', borrowerName: 'Anika Kumar', borrowerType: 'student', admissionNo: 'DSO2024012', class: 'Class 11', issueDate: '2025-11-05', dueDate: '2025-11-19', status: 'Overdue', fine: 40, fineStatus: 'Pending' },
-  { id: 'ISS005', bookId: 'BK006', bookTitle: 'Akbar and Birbal', borrowerId: 'STU-7', borrowerName: 'Kiara Rao', borrowerType: 'student', admissionNo: 'DSO2024007', class: 'Class 10', issueDate: '2025-11-22', dueDate: '2025-12-06', status: 'Issued', fine: 0, fineStatus: 'Pending' },
+  { id: 'ISS001', bookId: 'BK001', bookTitle: 'Wings of Fire', borrowerId: 'STU-20', borrowerName: 'Aarav Reddy', borrowerType: 'student', admissionNo: 'DSO2024020', class: 'Class 6-A', issueDate: '2025-11-12', dueDate: '2025-11-26', status: 'Overdue', fine: 20, fineStatus: 'Pending' },
+  { id: 'ISS002', bookId: 'BK002', bookTitle: 'The Jungle Book', borrowerId: 'STU-2', borrowerName: 'Pari Kumar', borrowerType: 'student', admissionNo: 'DSO2024002', class: 'Pre-Nursery-A', issueDate: '2025-11-18', dueDate: '2025-12-02', status: 'Issued', fine: 0, fineStatus: 'Pending' },
+  { id: 'ISS003', bookId: 'BK003', bookTitle: 'Panchatantra Tales', borrowerId: 'STU-10', borrowerName: 'Karan Singh', borrowerType: 'student', admissionNo: 'DSO2024010', class: 'Class 2-A', issueDate: '2025-11-20', dueDate: '2025-12-04', status: 'Issued', fine: 0, fineStatus: 'Pending' },
+  { id: 'ISS004', bookId: 'BK007', bookTitle: 'Encyclopedia of Science', borrowerId: 'STU-29', borrowerName: 'Riya Gupta', borrowerType: 'student', admissionNo: 'DSO2024029', class: 'Class 9-B', issueDate: '2025-11-05', dueDate: '2025-11-19', status: 'Overdue', fine: 40, fineStatus: 'Pending' },
+  { id: 'ISS005', bookId: 'BK006', bookTitle: 'Akbar and Birbal', borrowerId: 'STU-7', borrowerName: 'Aarav Desai', borrowerType: 'student', admissionNo: 'DSO2024007', class: 'KG-B', issueDate: '2025-11-22', dueDate: '2025-12-06', status: 'Issued', fine: 0, fineStatus: 'Pending' },
   { id: 'ISS006', bookId: 'BK009', bookTitle: 'A Brief History of Time', borrowerId: 'T-038', borrowerName: 'Pooja Bhatt', borrowerType: 'teacher', issueDate: '2025-11-15', dueDate: '2025-11-29', status: 'Overdue', fine: 15, fineStatus: 'Pending' },
   { id: 'ISS007', bookId: 'BK011', bookTitle: 'The Wonder That Was India', borrowerId: 'T-035', borrowerName: 'Rajesh Khanna', borrowerType: 'teacher', issueDate: '2025-11-10', dueDate: '2025-11-24', status: 'Overdue', fine: 35, fineStatus: 'Pending' },
-  { id: 'ISS008', bookId: 'BK012', bookTitle: 'Physics for Class 10', borrowerId: 'STU-5', borrowerName: 'Reyansh Kumar', borrowerType: 'student', admissionNo: 'DSO2024005', class: 'Class 9', issueDate: '2025-11-25', dueDate: '2025-12-09', status: 'Issued', fine: 0, fineStatus: 'Pending' },
-  { id: 'ISS009', bookId: 'BK015', bookTitle: 'Chemistry Lab Manual', borrowerId: 'STU-17', borrowerName: 'Riya Iyer', borrowerType: 'student', admissionNo: 'DSO2024017', class: 'Class 7', issueDate: '2025-11-23', dueDate: '2025-12-07', status: 'Issued', fine: 0, fineStatus: 'Pending' },
+  { id: 'ISS008', bookId: 'BK012', bookTitle: 'Physics for Class 10', borrowerId: 'STU-31', borrowerName: 'Sai Agarwal', borrowerType: 'student', admissionNo: 'DSO2024031', class: 'Class 10-A', issueDate: '2025-11-25', dueDate: '2025-12-09', status: 'Issued', fine: 0, fineStatus: 'Pending' },
+  { id: 'ISS009', bookId: 'BK015', bookTitle: 'Chemistry Lab Manual', borrowerId: 'STU-28', borrowerName: 'Anika Reddy', borrowerType: 'student', admissionNo: 'DSO2024028', class: 'Class 9-A', issueDate: '2025-11-23', dueDate: '2025-12-07', status: 'Issued', fine: 0, fineStatus: 'Pending' },
   { id: 'ISS010', bookId: 'BK014', bookTitle: 'The Discovery of India', borrowerId: 'T-020', borrowerName: 'Deepa Menon', borrowerType: 'teacher', issueDate: '2025-11-28', dueDate: '2025-12-12', status: 'Issued', fine: 0, fineStatus: 'Pending' },
 ]
 
 const SEED_RESERVATIONS: Reservation[] = [
-  { id: 'RES001', bookId: 'BK011', bookTitle: 'The Wonder That Was India', borrowerId: 'STU-15', borrowerName: 'Pari Khanna', date: '2025-11-20', status: 'Waiting' },
+  { id: 'RES001', bookId: 'BK011', bookTitle: 'The Wonder That Was India', borrowerId: 'STU-27', borrowerName: 'Myra Patel', date: '2025-11-20', status: 'Waiting' },
 ]
 
 // Current-session borrower records — the logged-in student (Aarav Sharma,
-// STU-2024-018, Class 2) and teacher (Rohit Mehta, T-014) so their role
+// STU-2024-018, Class 2) and teacher (Rohan Mehta, T-014) so their role
 // views show REAL circulation data from this same store (no second source).
 // Dates are relative to "today" so overdue/status computations stay honest.
 function rel(days: number): string {
@@ -113,8 +128,8 @@ const SESSION_BORROWER_ISSUES: IssueRecord[] = [
   { id: 'ISS101', bookId: 'BK003', bookTitle: 'Panchatantra Tales', borrowerId: 'STU-2024-018', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024018', class: 'Class 2-A', issueDate: rel(6), dueDate: rel(-8), status: 'Issued', fine: 0, fineStatus: 'Pending' },
   { id: 'ISS102', bookId: 'BK004', bookTitle: 'Mathematics for Class 2', borrowerId: 'STU-2024-018', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024018', class: 'Class 2-A', issueDate: rel(20), dueDate: rel(-2), status: 'Overdue', fine: 10, fineStatus: 'Pending' },
   { id: 'ISS103', bookId: 'BK008', bookTitle: 'Tenali Raman Stories', borrowerId: 'STU-2024-018', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024018', class: 'Class 2-A', issueDate: rel(40), dueDate: rel(26), returnDate: rel(25), status: 'Returned', fine: 0, fineStatus: 'Paid' },
-  { id: 'ISS104', bookId: 'BK012', bookTitle: 'Physics for Class 10', borrowerId: 'T-014', borrowerName: 'Rohit Mehta', borrowerType: 'teacher', issueDate: rel(9), dueDate: rel(-5), status: 'Issued', fine: 0, fineStatus: 'Pending' },
-  { id: 'ISS105', bookId: 'BK001', bookTitle: 'Wings of Fire', borrowerId: 'T-014', borrowerName: 'Rohit Mehta', borrowerType: 'teacher', issueDate: rel(35), dueDate: rel(33), returnDate: rel(30), status: 'Returned', fine: 0, fineStatus: 'Paid' },
+  { id: 'ISS104', bookId: 'BK012', bookTitle: 'Physics for Class 10', borrowerId: 'T-014', borrowerName: 'Rohan Mehta', borrowerType: 'teacher', issueDate: rel(9), dueDate: rel(-5), status: 'Issued', fine: 0, fineStatus: 'Pending' },
+  { id: 'ISS105', bookId: 'BK001', bookTitle: 'Wings of Fire', borrowerId: 'T-014', borrowerName: 'Rohan Mehta', borrowerType: 'teacher', issueDate: rel(35), dueDate: rel(33), returnDate: rel(30), status: 'Returned', fine: 0, fineStatus: 'Paid' },
 ]
 
 interface LibraryState {
@@ -130,6 +145,7 @@ interface LibraryState {
   setAvailabilityFilter: (a: string) => void
   issueBook: (bookId: string, borrowerId: string, borrowerType: 'student' | 'teacher') => { success: boolean; error?: string }
   returnBook: (issueId: string) => void
+  sendReminder: (loanId: string) => void
   addBook: (book: Omit<Book, 'id' | 'issued' | 'available' | 'status'>) => void
   payFine: (issueId: string) => void
   waiveFine: (issueId: string) => void
@@ -137,7 +153,9 @@ interface LibraryState {
   getBorrowerOptions: () => Array<{ id: string; name: string; type: 'student' | 'teacher'; detail: string }>
 }
 
-export const useLibraryStore = create<LibraryState>((set, get) => ({
+export const useLibraryStore = create<LibraryState>()(
+  persist(
+    (set, get) => ({
   books: SEED_BOOKS,
   issues: [...SESSION_BORROWER_ISSUES, ...SEED_ISSUES],
   reservations: SEED_RESERVATIONS,
@@ -220,6 +238,17 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     })
   },
 
+  sendReminder: (loanId) => {
+    const state = get()
+    const issue = state.issues.find((i) => i.id === loanId)
+    if (!issue || issue.status === 'Returned') return
+    set({
+      issues: state.issues.map((i) => i.id === loanId
+        ? { ...i, reminderSentAt: new Date().toISOString() }
+        : i),
+    })
+  },
+
   addBook: (book) => {
     const state = get()
     const id = `BK${String(state.books.length + 1).padStart(3, '0')}${Date.now().toString(36)}`
@@ -279,7 +308,19 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     }))
     return [...studentOptions, ...teacherOptions]
   },
-}))
+    }),
+    {
+      name: 'scholario-library-v1',
+      storage: createTenantScopedStorage('scholario-library-v1'),
+      // v2 — borrowers re-pointed to the canonical students-store roster
+      // (names/classes/admission numbers now cross-module consistent).
+      // Version bump discards stale v1 seed state once and re-seeds.
+      version: 2,
+      // DATA slices only — search/filters are UI state, actions are functions.
+      partialize: (s) => ({ books: s.books, issues: s.issues, reservations: s.reservations }),
+    },
+  ),
+)
 
 // ─── Hook: Library Analytics ─────────────────────────────────────────
 

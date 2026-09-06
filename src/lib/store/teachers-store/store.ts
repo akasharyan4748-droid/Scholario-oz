@@ -32,6 +32,10 @@ export const useTeachersStore = create<TeachersStoreState>()(
     {
       name: TENANT_SCOPED_BASES.teachers,
       storage: createTenantScopedStorage(TENANT_SCOPED_BASES.teachers),
+      // v2 — faculty list now derives the full 20-member canonical roster
+      // (was 2 detailed records). Version bump discards the stale 2-teacher
+      // persisted state once and re-seeds the full faculty.
+      version: 2,
     }
   )
 )

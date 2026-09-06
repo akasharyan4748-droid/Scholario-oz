@@ -31,6 +31,7 @@ import {
   SourceBadge, CategoryPill,
   DownloadsEmptyState, docDescriptionLabel,
 } from './downloads-shared'
+import { useDownloadsActions } from './downloads-actions'
 import {
   DocumentThumbnail, FileTypeBadge,
 } from '@/components/shared/document-primitives'
@@ -42,25 +43,25 @@ interface DocumentListProps {
 
 export function DocumentList({ onSelectDoc }: DocumentListProps) {
   const getFilteredDocuments = useDownloadsStore((s) => s.getFilteredDocuments)
-  const download = useDownloadsStore((s) => s.download)
   const recordPreview = useDownloadsStore((s) => s.recordPreview)
   const resetFilters = useDownloadsStore((s) => s.resetFilters)
   const query = useDownloadsStore((s) => s.query)
   const categoryFilter = useDownloadsStore((s) => s.categoryFilter)
   const categoryTab = useDownloadsStore((s) => s.categoryTab)
   const sortBy = useDownloadsStore((s) => s.sortBy)
+  // Shared REAL action implementations (download produces a file, print
+  // opens a document window, share uses the Web Share API, pin persists).
+  const { handleDownload, handlePrint, handleShare, handleFavourite, handleRegenerate } =
+    useDownloadsActions()
 
   const docs = useMemo(
     () => getFilteredDocuments(),
     [getFilteredDocuments, query, categoryFilter, categoryTab, sortBy],
   )
 
-  function handleDownload(doc: DownloadDocument, e?: React.MouseEvent) {
+  function onDownload(doc: DownloadDocument, e?: React.MouseEvent) {
     e?.stopPropagation()
-    const filename = download(doc)
-    toast.success('Download started', {
-      description: `${filename} · ${doc.format}`,
-    })
+    handleDownload(doc)
   }
 
   function handlePreview(doc: DownloadDocument, e?: React.MouseEvent) {
@@ -69,30 +70,24 @@ export function DocumentList({ onSelectDoc }: DocumentListProps) {
     onSelectDoc(doc)
   }
 
-  function handlePrint(doc: DownloadDocument, e?: React.MouseEvent) {
+  function onPrint(doc: DownloadDocument, e?: React.MouseEvent) {
     e?.stopPropagation()
-    if (doc.docNumber) {
-      toast.info('Opening print view…', { description: doc.docNumber })
-    } else {
-      toast.info('Opening print view…', { description: doc.name })
-    }
-    // Surface a printable stub via the detail drawer for generated docs
-    onSelectDoc(doc)
+    handlePrint(doc)
   }
 
-  function handleShare(doc: DownloadDocument, e?: React.MouseEvent) {
+  function onShare(doc: DownloadDocument, e?: React.MouseEvent) {
     e?.stopPropagation()
-    toast.success('Link copied', { description: `${doc.name} share link ready` })
+    void handleShare(doc)
   }
 
-  function handlePin(doc: DownloadDocument, e?: React.MouseEvent) {
+  function onPin(doc: DownloadDocument, e?: React.MouseEvent) {
     e?.stopPropagation()
-    toast.success('Added to favourites', { description: doc.name })
+    handleFavourite(doc)
   }
 
-  function handleRegenerate(doc: DownloadDocument, e?: React.MouseEvent) {
+  function onRegenerate(doc: DownloadDocument, e?: React.MouseEvent) {
     e?.stopPropagation()
-    toast.info('Regenerating document…', { description: doc.docNumber ?? doc.name })
+    handleRegenerate(doc)
   }
 
   if (docs.length === 0) {
@@ -201,11 +196,11 @@ export function DocumentList({ onSelectDoc }: DocumentListProps) {
                       isGenerated={isGenerated}
                       onSelectDoc={onSelectDoc}
                       onPreview={handlePreview}
-                      onDownload={handleDownload}
-                      onPrint={handlePrint}
-                      onShare={handleShare}
-                      onPin={handlePin}
-                      onRegenerate={handleRegenerate}
+                      onDownload={onDownload}
+                      onPrint={onPrint}
+                      onShare={onShare}
+                      onPin={onPin}
+                      onRegenerate={onRegenerate}
                     />
                   </td>
                 </motion.tr>
@@ -254,11 +249,11 @@ export function DocumentList({ onSelectDoc }: DocumentListProps) {
                     isGenerated={isGenerated}
                     onSelectDoc={onSelectDoc}
                     onPreview={handlePreview}
-                    onDownload={handleDownload}
-                    onPrint={handlePrint}
-                    onShare={handleShare}
-                    onPin={handlePin}
-                    onRegenerate={handleRegenerate}
+                    onDownload={onDownload}
+                    onPrint={onPrint}
+                    onShare={onShare}
+                    onPin={onPin}
+                    onRegenerate={onRegenerate}
                   />
                 </div>
               </div>

@@ -18,12 +18,14 @@
 import { useState, useCallback } from 'react'
 import { PageTransition } from '@/components/shared/ui'
 import { toast } from 'sonner'
-import { formatNumber } from '@/lib/format'
-import { attendanceOverview, buildAttendanceExportFilename } from '@/lib/mock/attendance'
+import { attendanceOverview, classSections } from '@/lib/mock/attendance'
+import { downloadCSVFile, safeFileName } from '@/lib/download-file'
+import { toCsv } from '@/lib/csv'
 import { AttendanceTabs, type AttendanceTab } from './attendance-tabs'
 import { StudentWorkspace } from './student-workspace'
 import { StaffAttendanceTab } from './staff-tab'
 import { AttendanceHistoryTab } from './history-tab'
+import { classTotalForIndex } from './data'
 
 export function AttendanceModule() {
   const [activeTab, setActiveTab] = useState<AttendanceTab>('overview')
@@ -33,15 +35,45 @@ export function AttendanceModule() {
   const [historyInitialDate, setHistoryInitialDate] = useState<string | undefined>(undefined)
   const [historyInitialClassId, setHistoryInitialClassId] = useState<string | undefined>(undefined)
 
-  // Brief §18: Export respects current tab + filter context
+  // Brief §18: Export respects current tab + filter context.
+  // QA-FIX-A: REAL CSV download of the Overview's class-wise summary table
+  // (the exact rows ClassReport renders), respecting the class filter.
   const handleExport = useCallback(() => {
-    const today = '2025-12-10'
-    const filename = buildAttendanceExportFilename(today, classFilter)
-    const totalStudents = classFilter === 'all'
-      ? attendanceOverview.today.total
-      : 18 // Per-class section size — placeholder for export description
+    // Mirror ClassReport's row derivation (class-report.tsx).
+    const statusFor = (pct: number) =>
+      pct >= 95 ? 'Excellent' : pct >= 90 ? 'Good' : pct >= 85 ? 'Average' : 'Needs Attention'
+    const rows: (string | number)[][] = []
+    if (classFilter === 'all') {
+      attendanceOverview.byClass.slice(0, 10).forEach((r, i) => {
+        const total = classTotalForIndex(i)
+        const present = Math.round((total * r.rate) / 100)
+        const late = 2
+        const absent = Math.max(0, total - present - late)
+        const leave = Math.max(0, Math.round(total * 0.005))
+        rows.push([r.class, total, present, absent, late, leave, r.rate, statusFor(Math.round(r.rate))])
+      })
+    } else {
+      const section = classSections.find((c) => c.id === classFilter)
+      if (section) {
+        rows.push([
+          section.name, section.total, section.present, section.absent,
+          section.late, section.leave, section.rate, statusFor(Math.round(section.rate)),
+        ])
+      }
+    }
+    const filename = safeFileName(
+      `attendance-overview${classFilter === 'all' ? '' : `-${classFilter}`}`,
+      'csv',
+    )
+    downloadCSVFile(
+      toCsv(['Class', 'Total', 'Present', 'Absent', 'Late', 'Leave', 'Rate (%)', 'Status'], rows),
+      filename,
+    )
+    const scope = classFilter === 'all'
+      ? 'All Classes'
+      : classSections.find((c) => c.id === classFilter)?.name ?? classFilter
     toast.success('Attendance report exported', {
-      description: `${filename}.csv · ${formatNumber(totalStudents)} ${classFilter === 'all' ? 'students' : 'students in class'}`,
+      description: `${filename} · ${rows.length} class summar${rows.length === 1 ? 'y' : 'ies'} · ${scope}`,
     })
   }, [classFilter])
 

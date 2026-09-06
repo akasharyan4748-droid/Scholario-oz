@@ -40,11 +40,12 @@ import {
 } from './cert-shared'
 import type { MarksheetData } from './previews'
 import { DocPreviewSwitch } from './generate-tab'
+import { resolvePreviewStudent, resolvePreviewTransaction, buildDocumentHTML } from './cert-resolvers'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
+import { downloadHTMLFile, safeFileName } from '@/lib/download-file'
 import { DocumentIcon } from '@/components/shared/document-primitives'
 import { useStudentsStore } from '@/lib/store/students-store'
-import type { StudentRecord } from '@/lib/store/students-store'
 import { useFeeStore } from '@/lib/store/fee-store'
-import type { FeeTransaction } from '@/lib/store/fee-store'
 
 /** Academic session derived from the doc number year (e.g. BON/2026/00001 → 2026–27). */
 function sessionOf(doc: GeneratedDocument): string {
@@ -59,7 +60,10 @@ export function HistoryTab({ onGoGenerate }: { onGoGenerate?: () => void }) {
   const [search, setSearch] = useState('')
   const [docType, setDocType] = useState<DocType | 'all'>('all')
   const [status, setStatus] = useState<DocStatus | 'all'>('all')
-  const [previewDoc, setPreviewDoc] = useState<GeneratedDocument | null>(null)
+  // Store the ID (not a snapshot object) so the modal always re-resolves the
+  // LIVE record — regenerating / updating status while the modal is open, or
+  // reopening later, never shows a stale document.
+  const [previewDocId, setPreviewDocId] = useState<string | null>(null)
 
   const documents = useCertificatesStore((s) => s.documents)
   const getDocumentHistory = useCertificatesStore((s) => s.getDocumentHistory)
@@ -83,21 +87,17 @@ export function HistoryTab({ onGoGenerate }: { onGoGenerate?: () => void }) {
   const downloadedCount = filtered.filter((d) => d.status === 'Downloaded').length
 
   function handlePrint(doc: GeneratedDocument) {
-    setPreviewDoc(doc)
+    setPreviewDocId(doc.id)
     // Defer to allow modal to render before print
     setTimeout(() => window.print(), 250)
   }
   function handleDownload(doc: GeneratedDocument) {
     updateDocStatus(doc.id, 'Downloaded')
-    const blob = new Blob([buildDownloadHTML(doc)], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${doc.docNumber.replace(/[\/\\]/g, '-')}.html`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // Real file — a branded, standalone printable document.
+    downloadHTMLFile(
+      buildDocumentHTML(doc),
+      safeFileName(doc.docNumber.replace(/[\/\\]/g, '-'), 'html'),
+    )
     toast.success('Document downloaded', { description: `${doc.docNumber}.html` })
   }
   function handleRegenerate(doc: GeneratedDocument) {
@@ -275,7 +275,7 @@ export function HistoryTab({ onGoGenerate }: { onGoGenerate?: () => void }) {
                         <td className="px-3 py-2.5">
                           <RowActions
                             doc={doc}
-                            onPreview={() => setPreviewDoc(doc)}
+                            onPreview={() => setPreviewDocId(doc.id)}
                             onPrint={() => handlePrint(doc)}
                             onDownload={() => handleDownload(doc)}
                             onRegenerate={() => handleRegenerate(doc)}
@@ -321,7 +321,7 @@ export function HistoryTab({ onGoGenerate }: { onGoGenerate?: () => void }) {
                     </div>
                     <RowActions
                       doc={doc}
-                      onPreview={() => setPreviewDoc(doc)}
+                      onPreview={() => setPreviewDocId(doc.id)}
                       onPrint={() => handlePrint(doc)}
                       onDownload={() => handleDownload(doc)}
                       onRegenerate={() => handleRegenerate(doc)}
@@ -338,8 +338,8 @@ export function HistoryTab({ onGoGenerate }: { onGoGenerate?: () => void }) {
 
       {/* Preview modal */}
       <AnimatePresence>
-        {previewDoc && (
-          <PreviewModal doc={previewDoc} onClose={() => setPreviewDoc(null)} />
+        {previewDocId && (
+          <PreviewModal docId={previewDocId} onClose={() => setPreviewDocId(null)} />
         )}
       </AnimatePresence>
     </div>
@@ -422,19 +422,30 @@ function RowActions({
 
 // ─── Preview modal ───────────────────────────────────────────────────
 
-function PreviewModal({ doc, onClose }: { doc: GeneratedDocument; onClose: () => void }) {
+function PreviewModal({ docId, onClose }: { docId: string; onClose: () => void }) {
+  useDismissOnEscape(onClose)
   const templates = useCertificatesStore((s) => s.templates)
+  const documents = useCertificatesStore((s) => s.documents)
   const students = useStudentsStore((s) => s.students)
   const transactions = useFeeStore((s) => s.transactions)
-  const template = templates.find((t) => t.id === doc.templateId) as DocumentTemplate | undefined
-  const student = students.find((s) => s.id === doc.studentId) as StudentRecord | undefined
-  const txn = transactions.find((t) => t.id === doc.data?.transactionId) as FeeTransaction | undefined
+  // Live re-resolution — the doc, template, student and transaction are
+  // looked up from the CURRENT store state on every render.
+  const doc = documents.find((d) => d.id === docId)
+  const template = templates.find((t) => t.id === doc?.templateId) as DocumentTemplate | undefined
+  // Snapshot-first resolution: live roster by id → by admission number →
+  // the stored document snapshot. Seed + generated docs ALWAYS render.
+  const student = doc ? resolvePreviewStudent(doc, students) : undefined
+  const txn = doc ? resolvePreviewTransaction(doc, transactions) : undefined
 
+  if (!doc || !template) return null
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Document preview"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -452,7 +463,7 @@ function PreviewModal({ doc, onClose }: { doc: GeneratedDocument; onClose: () =>
               {doc.studentName} · {doc.templateName} · {formatDate(doc.generatedAt)}
             </p>
           </div>
-          <Button size="sm" variant="ghost" onClick={onClose} className="h-7 w-7 p-0">
+          <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close preview" className="h-7 w-7 p-0">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -474,46 +485,4 @@ function PreviewModal({ doc, onClose }: { doc: GeneratedDocument; onClose: () =>
       </motion.div>
     </motion.div>
   )
-}
-
-// ─── Download HTML builder ───────────────────────────────────────────
-
-function buildDownloadHTML(doc: GeneratedDocument): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<title>${doc.docNumber} — ${doc.docType}</title>
-<style>
-  body { font-family: -apple-system, system-ui, sans-serif; margin: 24px; color: #0f172a; }
-  h1 { color: #0d9488; }
-  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
-  td, th { border: 1px solid #cbd5e1; padding: 8px; font-size: 12px; }
-  th { background: #f1f5f9; }
-  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0d9488; padding-bottom: 12px; margin-bottom: 16px; }
-  .doc-number { font-family: monospace; font-weight: 700; }
-</style>
-</head>
-<body>
-  <div class="header">
-    <div>
-      <h2>${doc.docType}</h2>
-      <p>${doc.studentName} · ${doc.admissionNo ?? ''} · ${doc.class ?? ''}</p>
-    </div>
-    <div>
-      <p class="doc-number">${doc.docNumber}</p>
-      <p>${formatDate(doc.generatedAt)}</p>
-    </div>
-  </div>
-  <h3>Template</h3>
-  <p>${doc.templateName}</p>
-  <h3>Document Data</h3>
-  <table>
-    ${Object.entries(doc.data ?? {}).map(([k, v]) => `<tr><th>${k}</th><td>${typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)}</td></tr>`).join('\n')}
-  </table>
-  <p style="font-size: 11px; color: #64748b; margin-top: 24px;">
-    Generated by ${doc.generatedBy} on ${formatDate(doc.generatedAt)}. Status: ${doc.status}.
-  </p>
-</body>
-</html>`
 }

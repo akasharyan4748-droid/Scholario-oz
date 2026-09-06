@@ -100,7 +100,12 @@ export function ExportPreview({ preview, onClose }: ExportPreviewProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-sm flex flex-col">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${preview.title} export preview`}
+      className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-sm flex flex-col"
+    >
       {/* Top bar — minimal, premium */}
       <header className="shrink-0 border-b border-border bg-card/80 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3">

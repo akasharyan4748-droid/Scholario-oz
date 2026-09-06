@@ -42,7 +42,10 @@ import {
 } from './previews'
 import type { StudentRecord } from '@/lib/store/students-store'
 import { useStudentsStore } from '@/lib/store/students-store'
+import { useFeeStore } from '@/lib/store/fee-store'
+import { sampleMarksheetData, sampleTransaction } from './cert-resolvers'
 import { DocumentThumbnail } from '@/components/shared/document-primitives'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 export function TemplatesTab() {
   const templates = useCertificatesStore((s) => s.templates)
@@ -431,17 +434,34 @@ function MiniPreview({ template }: { template: DocumentTemplate }) {
 // ─── Preview modal (uses real preview with sample student) ──────────
 
 function PreviewModal({ template, onClose }: { template: DocumentTemplate; onClose: () => void }) {
+  useDismissOnEscape(onClose)
   const students = useStudentsStore((s) => s.students)
-  // Try to find a student that matches the doc type's needs
+  const transactions = useFeeStore((s) => s.transactions)
+  // Sample student powering the live preview — a REAL roster student, so
+  // every template preview renders actual document content.
   const sampleStudent: StudentRecord | undefined = useMemo(() => {
     return students[0]
   }, [students])
+  // Sample marksheet (derived from the sample student's academic record)
+  // + sample fee transaction — so Marksheet & Fee Receipt template previews
+  // render the full document instead of an empty placeholder.
+  const sampleData = useMemo(
+    () => (sampleStudent ? sampleMarksheetData(sampleStudent) : undefined),
+    [sampleStudent],
+  )
+  const sampleTxn = useMemo(
+    () => sampleTransaction(sampleStudent, transactions),
+    [sampleStudent, transactions],
+  )
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${template.name} preview`}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -459,32 +479,39 @@ function PreviewModal({ template, onClose }: { template: DocumentTemplate; onClo
               {template.docType} · {template.style} · {school.shortName}
             </p>
           </div>
-          <Button size="sm" variant="ghost" onClick={onClose} className="h-7 w-7 p-0">
+          <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close preview" className="h-7 w-7 p-0">
             <X className="h-4 w-4" />
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto bg-slate-100 p-4">
-          <ModalPreview template={template} student={sampleStudent} />
+          <ModalPreview template={template} student={sampleStudent} sampleMarksheet={sampleData} sampleTxn={sampleTxn} />
         </div>
       </motion.div>
     </motion.div>
   )
 }
 
-function ModalPreview({ template, student }: { template: DocumentTemplate; student?: StudentRecord }) {
+function ModalPreview({
+  template, student, sampleMarksheet, sampleTxn,
+}: {
+  template: DocumentTemplate
+  student?: StudentRecord
+  sampleMarksheet?: ReturnType<typeof sampleMarksheetData>
+  sampleTxn?: ReturnType<typeof sampleTransaction>
+}) {
   const t = template
   const dt = t.docType
   if (dt === 'Bonafide' || dt === 'Transfer' || dt === 'Character' || dt === 'Migration') {
     return <CertificatePreview docType={dt} template={t} student={student} />
   }
   if (dt === 'Marksheet') {
-    return <MarksheetPreview template={t} student={student} data={undefined} />
+    return <MarksheetPreview template={t} student={student} data={sampleMarksheet} />
   }
   if (dt === 'ID Card') {
     return <IDCardPreview template={t} student={student} />
   }
   if (dt === 'Fee Receipt') {
-    return <FeeReceiptPreview template={t} transaction={undefined} />
+    return <FeeReceiptPreview template={t} transaction={sampleTxn} />
   }
   return null
 }

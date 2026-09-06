@@ -75,9 +75,16 @@ export function ThreadView({ onBack, onManageGroup, onContactMember }: Props) {
   // Keep the newest message in view — scroll ONLY the messages pane.
   // (scrollIntoView would also scroll the app-shell page container and
   // shift the whole module out of place.)
+  // Deferred one frame so the newest message's full height (and any day
+  // separators) are measured before scrolling — otherwise the tail can
+  // land partially behind the composer.
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTo({ top: el.scrollHeight })
+    if (!el) return
+    const raf = requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight })
+    })
+    return () => cancelAnimationFrame(raf)
   }, [thread.length, activeId])
 
   // Quiet draft auto-save (debounced)

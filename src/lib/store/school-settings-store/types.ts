@@ -322,6 +322,7 @@ export interface SchoolSettingsState {
   updateTimetable: (data: Partial<SchoolSettingsState['timetable']>) => void
   updateFees: (data: Partial<SchoolSettingsState['fees']>) => void
   updatePayroll: (data: Partial<SchoolSettingsState['payroll']>) => void
+  updateLibrary: (data: Partial<SchoolSettingsState['library']>) => void
   addBook: (book: Omit<BookItem, 'id'>) => void
   removeBook: (id: string) => void
   addUniformItem: (item: Omit<UniformItem, 'id'>) => void

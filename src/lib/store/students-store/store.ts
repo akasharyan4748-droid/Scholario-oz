@@ -1,10 +1,18 @@
 'use client'
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { StudentsState, StudentStatus } from './types'
 import { HOUSE_DEFS, SEED_SUBJECTS } from './constants'
 import { SS, SC } from './seed-data'
+import { SUBJECTS_BY_LEVEL } from './constants'
 import { idForCustomSubject, codeForName, type SubjectDef } from '@/lib/mock/academic'
+import {
+  migrateLegacyScopedStore, createTenantScopedStorage,
+} from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+migrateLegacyScopedStore('scholario-students-v1', DEFAULT_TENANT_ID)
 
 /**
  * Helper — keep a ClassRecord's legacy `subjects: string[]` array in sync
@@ -21,7 +29,9 @@ function syncSubjectNames(
   return { ...cls, subjects }
 }
 
-export const useStudentsStore = create<StudentsState>()((set, get) => ({
+export const useStudentsStore = create<StudentsState>()(
+  persist(
+    (set, get) => ({
   students: SS,
   classes: SC,
   houses: HOUSE_DEFS,
@@ -241,4 +251,157 @@ export const useStudentsStore = create<StudentsState>()((set, get) => ({
   getStudentById: (id) => get().students.find((s) => s.id === id),
   getClassById: (id) => get().classes.find((c) => c.id === id),
   getClassStudents: (classId) => get().students.filter((s) => s.classId === classId && s.status === 'Active'),
-}))
+
+  // ─── Class creation (Add Class page — real, persisted) ────────────
+  createClass: (input) => {
+    const state = get()
+    const name = input.name.trim()
+    // Derive a stable, unique id from the class name.
+    let id = 'C-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    while (state.classes.some((c) => c.id === id)) id += '-x'
+    // Grade + level from the class name (e.g. "Class 6" → grade 6).
+    const gradeMatch = name.match(/(\d+)/)
+    const grade = gradeMatch ? parseInt(gradeMatch[1], 10) : 1
+    const level: import('./types').ClassRecord['level'] =
+      grade <= 2 ? 'Pre-Primary' : grade <= 5 ? 'Primary' : grade <= 8 ? 'Middle' : grade <= 10 ? 'Secondary' : 'Senior Secondary'
+    // Default subjects for the level (canonical ids from the registry).
+    const subjectIds = (SUBJECTS_BY_LEVEL[level] || [])
+      .map((n) => state.academicSubjects.find((s) => s.name === n)?.id)
+      .filter((sid): sid is string => Boolean(sid))
+    const subjects = subjectIds
+      .map((sid) => state.academicSubjects.find((s) => s.id === sid)?.name)
+      .filter((n): n is string => Boolean(n))
+    const capacity = input.sections.reduce((s, x) => s + (x.capacity || 0), 0) || input.capacity
+    const record: import('./types').ClassRecord = {
+      id, name, grade, level,
+      sections: input.sections.map((s) => ({
+        id: `${id}-${s.name.trim() || 'A'}`,
+        name: s.name.trim() || 'A',
+        classId: id,
+        capacity: s.capacity || input.capacity,
+        classTeacherId: input.classTeacherId,
+        assistantTeacherId: input.assistantTeacherId,
+        room: s.room || input.room,
+      })),
+      capacity: capacity || 40,
+      classTeacherId: input.classTeacherId ?? '',
+      assistantTeacherId: input.assistantTeacherId,
+      subjectIds,
+      subjects,
+      archivedSubjects: [],
+      subjectTeachers: {},
+      stream: null,
+      room: input.room,
+      status: 'Active' as const,
+    }
+    set((s) => ({ classes: [...s.classes, record] }))
+    return record
+  },
+
+  // ─── Student enrolment (Admissions → Complete & Enrol) ───────────
+  addStudent: (input) => {
+    const state = get()
+    const cls = state.classes.find((c) => c.id === input.classId)
+    const section = input.section ?? cls?.sections[0]?.name ?? 'A'
+    // Next admission number continues the roster sequence (DSO2024001…).
+    const maxAdm = state.students.reduce((m, s) => {
+      const n = parseInt(s.admissionNo.replace(/\D/g, ''), 10)
+      return Number.isNaN(n) ? m : Math.max(m, n)
+    }, 2024000)
+    const admissionNo = `DSO${maxAdm + 1}`
+    // Next roster id + roll number within the class/section.
+    const maxId = state.students.reduce((m, s) => {
+      const n = parseInt(s.id.replace(/\D/g, ''), 10)
+      return Number.isNaN(n) ? m : Math.max(m, n)
+    }, 0)
+    const id = `STU-${maxId + 1}`
+    const sectionMates = state.students.filter(
+      (s) => s.classId === input.classId && s.section === section,
+    )
+    const rollNo = String(sectionMates.length + 1).padStart(2, '0')
+    const house = HOUSE_DEFS[maxId % HOUSE_DEFS.length]
+    const now = new Date().toISOString()
+    const initials = input.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+    const subjectIds = cls?.subjectIds ?? []
+    const academics = {
+      overallGrade: '—',
+      overallPercent: 0,
+      rankInClass: sectionMates.length + 1,
+      subjects: subjectIds.map((sid) => ({
+        name: state.academicSubjects.find((s) => s.id === sid)?.name ?? sid,
+        grade: '—',
+        percent: 0,
+        teacher: '—',
+      })),
+    }
+    const record: import('./types').StudentRecord = {
+      id,
+      admissionNo,
+      rollNo,
+      name: input.name.trim(),
+      avatar: initials,
+      gender: input.gender,
+      classId: input.classId,
+      className: cls?.name ?? '—',
+      section,
+      dob: input.dob,
+      bloodGroup: input.bloodGroup ?? '—',
+      category: input.category ?? 'General',
+      fatherName: input.fatherName,
+      motherName: input.motherName,
+      guardianName: input.fatherName,
+      guardianPhone: input.guardianPhone,
+      guardianEmail: input.guardianEmail ?? '',
+      address: input.address ?? '',
+      city: 'Gurugram',
+      state: 'Haryana',
+      admissionDate: input.admissionDate ?? now.slice(0, 10),
+      previousSchool: input.previousSchool ?? '',
+      status: 'Active' as const,
+      attendance: 0,
+      feeStatus: 'Pending' as const,
+      feePaid: 0,
+      feeTotal: 0,
+      transport: false,
+      hostel: false,
+      scholarship: 0,
+      houseId: house.id,
+      houseName: house.name,
+      medical: 'No known allergies',
+      academics,
+      attendanceTrend: [],
+      disciplinePoints: 0,
+      disciplineRecords: [],
+      documents: [],
+      achievements: [],
+      timeline: [{
+        id: `tl-${Date.now()}`,
+        type: 'admission' as const,
+        title: 'Admission Confirmed',
+        description: `Admitted to ${cls?.name ?? input.classId} - Sec ${section}`,
+        date: now.slice(0, 10),
+        by: 'Admissions Office',
+      }],
+    }
+    set((s) => ({ students: [record, ...s.students] }))
+    return record
+  },
+    }),
+    {
+      // TENANT-SCOPED persistence — the roster, classes, houses and subject
+      // registry survive reloads (Create Class / admissions enrolment /
+      // archive / transfers persist), isolated per school namespace.
+      name: 'scholario-students-v1',
+      storage: createTenantScopedStorage('scholario-students-v1'),
+      version: 1,
+      partialize: (s) => ({
+        students: s.students,
+        classes: s.classes,
+        houses: s.houses,
+        promotions: s.promotions,
+        transfers: s.transfers,
+        academicSubjects: s.academicSubjects,
+      }),
+    },
+  ),
+)

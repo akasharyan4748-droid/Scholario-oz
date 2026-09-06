@@ -1,0 +1,179 @@
+
+════ 1. CANONICAL ROSTER (students-store) ════
+roster length: 42 (SS.length=42)
+id range: STU-1 … STU-42
+admissionNo range: DSO2024001 … DSO2024042
+per-section counts: {"Pre-Nursery-A":2,"Pre-Nursery-B":2,"KG-A":2,"KG-B":2,"Class 2-A":2,"Class 2-B":2,"Class 2-C":2,"Class 4-A":2,"Class 4-B":2,"Class 6-A":2,"Class 6-B":2,"Class 8-A":2,"Class 8-B":2,"Class 9-A":2,"Class 9-B":2,"Class 10-A":2,"Class 10-B":2,"Class 11-A":4,"Class 12-A":4}
+STU-18 (student-role twin): id=STU-18 adm=DSO2024018 name="Kabir Reddy" class=Class 4-B feeTotal=3500 feePaid=1750
+STU-1: name="Riya Agarwal" class=Pre-Nursery-A
+full roster:
+  STU-1|DSO2024001|Riya Agarwal|Pre-Nursery-A|father=Sriram Iyer
+  STU-2|DSO2024002|Pari Kumar|Pre-Nursery-A|father=Rahul Sharma
+  STU-3|DSO2024003|Nisha Sharma|Pre-Nursery-B|father=Arvind Singh
+  STU-4|DSO2024004|Vivaan Rao|Pre-Nursery-B|father=Rajesh Gupta
+  STU-5|DSO2024005|Riya Iyer|KG-A|father=Nikhil Patel
+  STU-6|DSO2024006|Myra Agarwal|KG-A|father=Nikhil Patel
+  STU-7|DSO2024007|Aarav Desai|KG-B|father=Rajesh Gupta
+  STU-8|DSO2024008|Vihaan Gupta|KG-B|father=Rajesh Gupta
+  STU-9|DSO2024009|Saanvi Khanna|Class 2-A|father=Sandeep Kumar
+  STU-10|DSO2024010|Karan Singh|Class 2-A|father=Sriram Iyer
+  STU-11|DSO2024011|Reyansh Kumar|Class 2-B|father=Manish Verma
+  STU-12|DSO2024012|Kiara Sharma|Class 2-B|father=Manish Verma
+  STU-13|DSO2024013|Ananya Sharma|Class 2-C|father=Manish Verma
+  STU-14|DSO2024014|Aadhya Mehta|Class 2-C|father=Arvind Singh
+  STU-15|DSO2024015|Arjun Desai|Class 4-A|father=Tarun Mehta
+  STU-16|DSO2024016|Ananya Desai|Class 4-A|father=Rahul Sharma
+  STU-17|DSO2024017|Vihaan Sharma|Class 4-B|father=Manish Verma
+  STU-18|DSO2024018|Kabir Reddy|Class 4-B|father=Sandeep Kumar
+  STU-19|DSO2024019|Arjun Joshi|Class 6-A|father=Arvind Singh
+  STU-20|DSO2024020|Aarav Reddy|Class 6-A|father=Manish Verma
+  STU-21|DSO2024021|Ananya Verma|Class 6-B|father=Sriram Iyer
+  STU-22|DSO2024022|Rohan Patel|Class 6-B|father=Tarun Mehta
+  STU-23|DSO2024023|Aarav Singh|Class 8-A|father=Nikhil Patel
+  STU-24|DSO2024024|Vihaan Rao|Class 8-A|father=Rahul Sharma
+  STU-25|DSO2024025|Saanvi Sharma|Class 8-B|father=Arvind Singh
+  STU-26|DSO2024026|Kiara Joshi|Class 8-B|father=Tarun Mehta
+  STU-27|DSO2024027|Myra Patel|Class 9-A|father=Sriram Iyer
+  STU-28|DSO2024028|Anika Reddy|Class 9-A|father=Tarun Mehta
+  STU-29|DSO2024029|Riya Gupta|Class 9-B|father=Rahul Sharma
+  STU-30|DSO2024030|Anika Sharma|Class 9-B|father=Sriram Iyer
+  STU-31|DSO2024031|Sai Agarwal|Class 10-A|father=Karthik Reddy
+  STU-32|DSO2024032|Arjun Agarwal|Class 10-A|father=Rahul Sharma
+  STU-33|DSO2024033|Diya Agarwal|Class 10-B|father=Arvind Singh
+  STU-34|DSO2024034|Arjun Iyer|Class 10-B|father=Tarun Mehta
+  STU-35|DSO2024035|Anika Gupta|Class 11-A|father=Sandeep Kumar
+  STU-36|DSO2024036|Reyansh Agarwal|Class 11-A|father=Rahul Sharma
+  STU-37|DSO2024037|Sai Gupta|Class 11-A|father=Tarun Mehta
+  STU-38|DSO2024038|Riya Mehta|Class 11-A|father=Manish Verma
+  STU-39|DSO2024039|Sai Reddy|Class 12-A|father=Tarun Mehta
+  STU-40|DSO2024040|Reyansh Reddy|Class 12-A|father=Sandeep Kumar
+  STU-41|DSO2024041|Pari Verma|Class 12-A|father=Sandeep Kumar
+  STU-42|DSO2024042|Nisha Joshi|Class 12-A|father=Nikhil Patel
+
+════ 2. CLASS UNIVERSE COMPARISON ════
+students-store classes: C01=Pre-Nursery [[object Object]/[object Object]], C03=KG [[object Object]/[object Object]], C05=Class 2 [[object Object]/[object Object]/[object Object]], C07=Class 4 [[object Object]/[object Object]], C09=Class 6 [[object Object]/[object Object]], C11=Class 8 [[object Object]/[object Object]], C12=Class 9 [[object Object]/[object Object]], C13=Class 10 [[object Object]/[object Object]], C14-PCM=Class 11 [[object Object]], C14-PCB=Class 11 [[object Object]], C15-PCM=Class 12 [[object Object]], C15-PCB=Class 12 [[object Object]]
+timetable CLASSES: Class 2-A, Class 2-B, Class 9-A, Class 10-A, Class 12-Sci-A
+attendance SECTION_DEFS: Class 2-A (Rohan Mehta, total 18), Class 2-B (Priya Nair, total 22), Class 9-A (Pooja Bhatt, total 42), Class 10-A (Sunita Sharma, total 38), Class 12-Sci-A (Rajesh Khanna, total 30)
+>> timetable sections NOT in catalog: Class 12-Sci-A
+>> attendance sections NOT in catalog: Class 12-Sci-A
+>> catalog sections NOT in attendance: Pre-Nursery-A, Pre-Nursery-B, KG-A, KG-B, Class 2-C, Class 4-A, Class 4-B, Class 6-A, Class 6-B, Class 8-A, Class 8-B, Class 9-B, Class 10-B, Class 11-A, Class 11-A, Class 12-A, Class 12-A
+>> section classTeacherId orphans: none
+>> attendance class-teacher MISMATCH: Class 2-B shows "Priya Nair" but catalog assigns "Kavita Joshi" (T-011)
+>> attendance class-teacher MISMATCH: Class 9-A shows "Pooja Bhatt" but catalog assigns "Rajesh Khanna" (T-035)
+>> attendance class-teacher MISMATCH: Class 10-A shows "Sunita Sharma" but catalog assigns "Pooja Bhatt" (T-038)
+>> attendance section "Class 12-Sci-A" has no catalog counterpart; teacher "Rajesh Khanna" exists in roster: true
+
+════ 3. TEACHER UNIVERSE ════
+mock/teachers count: 20 — ids: T-001, T-002, T-005, T-008, T-011, T-014, T-017, T-020, T-023, T-026, T-029, T-032, T-035, T-038, T-041, T-044, T-047, T-050, T-053, T-056
+teachers-store SEED_TEACHERS count: 2 — T-001 Dr. Ananya Iyer; T-014 Rohan Mehta
+school-profile principal: "Dr. Ananya Iyer" vs mock/school.principal: "Dr. Sarah Jenkins" vs T-001: "Dr. Ananya Iyer"
+
+════ 4. SALARY ↔ TEACHERS ════
+>> SEED_EMPLOYEES teacher ids not in roster: none
+>> teachers missing from payroll: none
+>> employee/teacher name mismatches: none
+
+════ 5. FEES ↔ STUDENTS ════
+>> fee transactions with studentId NOT in roster: none
+>> fee txn name/class mismatches: none
+>> cash requests orphans: none
+>> classes without fee structure: none
+>> fee structures for non-existent classes: none
+AC AC-01 "Educational Tour — Jaipur" targets classId C11 = catalog "Class 8" (grade 8)
+AC AC-02 "Robotics Workshop" targets classId C12 = catalog "Class 9" (grade 9)
+AC AC-03 "School Development Fund" targets classId C11 = catalog "Class 8" (grade 8)
+AC AC-03 "School Development Fund" targets classId C12 = catalog "Class 9" (grade 9)
+AC AC-04 "Educational Tour — Mysuru" targets classId C07 = catalog "Class 4" (grade 4)
+>> DSO2024018 financial identity: canonical STU-18 feeTotal=3500 feePaid=1750 | legacy mock STU-2024-018 feeTotal=86000 feePaid=64000
+
+════ 6. CERTIFICATES ════
+documents: 10, templates: 24
+  BON/2026/00001 Bonafide stu=STU-1 tmpl=tpl-bon-classic → OK
+  BON/2026/00002 Bonafide stu=STU-18 tmpl=tpl-bon-classic → OK
+  CHR/2026/00001 Character stu=STU-18 tmpl=tpl-chr-classic → OK
+  TC/2026/00001 Transfer stu=STU-2 tmpl=tpl-tc-classic → OK
+  CHR/2026/00002 Character stu=STU-3 tmpl=tpl-chr-classic → OK
+  ID/2026/00001 ID Card stu=STU-4 tmpl=tpl-id-classic → OK
+  MS/2026/00001 Marksheet stu=STU-5 tmpl=tpl-ms-standard → OK
+  FEE/2026/00001 Fee Receipt stu=STU-6 tmpl=tpl-fee-standard → OK
+  MIG/2026/00001 Migration stu=STU-7 tmpl=tpl-mig-classic → OK
+  BON/2026/00003 Bonafide stu=STU-8 tmpl=tpl-bon-classic → OK
+counter BON: seqs 1,2,3
+counter CHR: seqs 1,2
+counter TC: seqs 1
+counter ID: seqs 1
+counter MS: seqs 1
+counter FEE: seqs 1
+counter MIG: seqs 1
+>> marksheet examName: "Terminal Examination" — exists in exams store? false
+
+════ 7. LIBRARY ↔ STUDENTS ════
+issues: 15
+  ISS101 Panchatantra Tales: borrowerId STU-2024-018 NOT IN CANONICAL ROSTER (legacy mock: Aarav Sharma Class 2-A) — says "Aarav Sharma" class "Class 2-A" adm DSO2024018
+  ISS102 Mathematics for Class 2: borrowerId STU-2024-018 NOT IN CANONICAL ROSTER (legacy mock: Aarav Sharma Class 2-A) — says "Aarav Sharma" class "Class 2-A" adm DSO2024018
+  ISS103 Tenali Raman Stories: borrowerId STU-2024-018 NOT IN CANONICAL ROSTER (legacy mock: Aarav Sharma Class 2-A) — says "Aarav Sharma" class "Class 2-A" adm DSO2024018
+  ISS104 Physics for Class 10: teacher T-014 roster name "Rohan Mehta" ≠ "Rohit Mehta"
+  ISS105 Wings of Fire: teacher T-014 roster name "Rohan Mehta" ≠ "Rohit Mehta"
+  ISS001 Wings of Fire: canonical STU-1="Riya Agarwal/Pre-Nursery-A/DSO2024001" but record says "Aarav Sharma/Class 9/DSO2024001"
+  ISS002 The Jungle Book: canonical STU-2="Pari Kumar/Pre-Nursery-A/DSO2024002" but record says "Diya Patel/Class 9/DSO2024002"
+  ISS003 Panchatantra Tales: canonical STU-10="Karan Singh/Class 2-A/DSO2024010" but record says "Aadhya Menon/Class 10/DSO2024010"
+  ISS004 Encyclopedia of Science: canonical STU-12="Kiara Sharma/Class 2-B/DSO2024012" but record says "Anika Kumar/Class 11/DSO2024012"
+  ISS005 Akbar and Birbal: canonical STU-7="Aarav Desai/KG-B/DSO2024007" but record says "Kiara Rao/Class 10/DSO2024007"
+  ISS006: OK (teacher Pooja Bhatt)
+  ISS007: OK (teacher Rajesh Khanna)
+  ISS008 Physics for Class 10: canonical STU-5="Riya Iyer/KG-A/DSO2024005" but record says "Reyansh Kumar/Class 9/DSO2024005"
+  ISS009 Chemistry Lab Manual: canonical STU-17="Vihaan Sharma/Class 4-B/DSO2024017" but record says "Riya Iyer/Class 7/DSO2024017"
+  ISS010: OK (teacher Deepa Menon)
+  RES RES001 "The Wonder That Was India": borrower STU-15 ("Pari Khanna") → canonical roster: "Arjun Desai" (Class 4-A)
+
+════ 8. TRANSPORT ↔ STUDENTS ════
+roster transport-opted students: 28; seeded assignments: 28
+>> assignments with orphan studentId: none
+>> transport-opted students with no assignment (by design only first 30 seeded): 0
+>> route enrolled total=232 vs assignments=28
+>> student.transportRoute sample values: Route B-2, Route C-3, Route E-5, Route F-6, Route B-8, Route C-9
+>> transport-store route names: Route 1 — DLF Phase 1–5 | Route 2 — Sushant Lok & Sector 56 | Route 3 — Palam Vihar & Sector 23 | Route 4 — Sohna Road & Sector 49 | Route 5 — Sector 14 & 15 | Route 6 — Sector 40 & 42
+
+════ 9. MESSAGING ↔ STUDENTS/PARENTS ════
+  C04 "Vikram Sharma" (Parent · Aarav Sharma, Class 9-A): canonical roster match: NONE | legacy mock match: "Aarav Sharma" Class 2-A
+  C07 "Nikhil Patel" (Parent · Diya Patel, Class 9-A): canonical roster match: "Riya Iyer" KG-A | legacy mock match: "Diya Patel" Class 2-A
+  group G01 "Class 2-A Parents": 6 refs → 6 resolved, 0 dangling
+     member p:STU-9 → Sandeep Kumar (Parent · Saanvi Khanna (Class 2-A))
+     member p:STU-10 → Sriram Iyer (Parent · Karan Singh (Class 2-A))
+     member p:STU-11 → Manish Verma (Parent · Reyansh Kumar (Class 2-B))
+     member p:STU-12 → Manish Verma (Parent · Kiara Sharma (Class 2-B))
+     member p:STU-13 → Manish Verma (Parent · Ananya Sharma (Class 2-C))
+     member p:STU-14 → Arvind Singh (Parent · Aadhya Mehta (Class 2-C))
+  group G02 "Science Department": 6 refs → 6 resolved, 0 dangling
+  group G03 "Class 10 Teachers": 8 refs → 8 resolved, 0 dangling
+  staff conv C01 "Rohan Mehta" teacherId=T-014 → roster: Rohan Mehta ✓
+  staff conv C03 "Pooja Bhatt" teacherId=T-038 → roster: Pooja Bhatt ✓
+  staff conv C05 "Rajesh Khanna" teacherId=T-035 → roster: Rajesh Khanna ✓
+  staff conv C06 "Suresh Pillai" teacherId=T-029 → roster: Suresh Pillai ✓
+  staff conv C11 "Deepa Menon" teacherId=T-020 → roster: Deepa Menon ✓
+
+════ 10. EXAMS SEED (tenant-scoped ids) ════
+  exam-dsg-001-1: "Unit Test 2" 2025-2026 2025-10-10→2025-10-15 classes=0 subjects=0 schedule=0 status=Scheduled
+     >> EMPTY classes/subjects/schedule — SEED_CLASS_DEFS keys are exam-seed-1,exam-seed-2,exam-seed-3 (id mismatch!)
+  exam-dsg-001-2: "Final Examination" 2025-2026 2026-02-10→2026-02-20 classes=0 subjects=0 schedule=0 status=Scheduled
+     >> EMPTY classes/subjects/schedule — SEED_CLASS_DEFS keys are exam-seed-1,exam-seed-2,exam-seed-3 (id mismatch!)
+  exam-dsg-001-3: "Mid-Term Examination" 2025-2026 2025-09-15→2025-09-25 classes=0 subjects=0 schedule=0 status=Completed
+     >> EMPTY classes/subjects/schedule — SEED_CLASS_DEFS keys are exam-seed-1,exam-seed-2,exam-seed-3 (id mismatch!)
+
+════ 11. APPLICATIONS + ADMISSIONS ════
+application submissions: 6
+  SUB-SEED-JP-1: stu=STU-23 "Aarav Singh" class=Class 8-A → roster: "Aarav Singh" Class 8-A
+  SUB-SEED-JP-2: stu=STU-24 "Vihaan Rao" class=Class 8-A → roster: "Vihaan Rao" Class 8-A
+  SUB-SEED-JP-3: stu=STU-25 "Saanvi Sharma" class=Class 8-B → roster: "Saanvi Sharma" Class 8-B
+  SUB-SEED-JP-4: stu=STU-26 "Kiara Joshi" class=Class 8-B → roster: "Kiara Joshi" Class 8-B
+  SUB-SEED-MY-1: stu=STU-15 "Arjun Desai" class=Class 4-A → roster: "Arjun Desai" Class 4-A
+  SUB-SEED-MY-2: stu=STU-16 "Ananya Desai" class=Class 4-A → roster: "Ananya Desai" Class 4-A
+  app APP-JAIPUR-2026 "Educational Tour — Jaipur" targets C11 → catalog "Class 8" (grade 8)
+  app APP-MYSURU-2026 "Educational Tour — Mysuru" targets C07 → catalog "Class 4" (grade 4)
+admission (portal) applications class names: Class 2-A, Grade 9-A, Class 1-B, Class 3-A, Grade 10-A, Class 2-A, Nursery-A
+>> catalog class names: Pre-Nursery, KG, Class 2, Class 4, Class 6, Class 8, Class 9, Class 10, Class 11, Class 12
+
+════ 12. LEGACY MOCK SNAPSHOT ════
+mock/operations.issuedBooks: Aarav Sharma(DSO2025018), Diya Patel(DSO2025002), Myra Iyer(DSO2025010), Anika Desai(DSO2025014), Kiara Rao(DSO2025012)
+  >> admission numbers use DSO2025xxx year prefix; canonical is DSO2024xxx; found in canonical roster: NOT-FOUND,NOT-FOUND,NOT-FOUND,NOT-FOUND,NOT-FOUND
+mock/ptm parents match legacy roster: true,true,true,true

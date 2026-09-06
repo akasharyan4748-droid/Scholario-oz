@@ -103,6 +103,7 @@ import {
   AmountBadge,
 } from './fees-catalogue-shared'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 type Frequency = FeeHead['frequency']
 const FREQUENCIES: Frequency[] = ['Annual', 'Half-Yearly', 'Quarterly', 'Monthly', 'Per Term', 'One-Time']
@@ -231,6 +232,14 @@ function DetailDrawerInner({
   // Dialogs
   const [confirmMode, setConfirmMode] = useState<'publish' | 'schedule' | 'revision' | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+
+  // Escape closes the drawer (backdrop click already does), but never
+  // while a nested overlay is open — the add-head / add-exam-fee forms and
+  // the confirm / history dialogs stay in charge of their own dismissal.
+  useDismissOnEscape(() => {
+    if (showAddHead || showAddExamFee || confirmMode !== null || historyOpen) return
+    onClose()
+  })
 
   // FEE-PER-CLASS — create-mode form state. Only used when
   // `isCreateMode=true`. The drawer opens with a blank template; the
@@ -770,6 +779,9 @@ function DetailDrawerInner({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={isCreateMode ? 'Create fee structure' : `Fee structure — ${structure.className}`}
         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-stretch justify-end"
         onClick={onClose}
       >

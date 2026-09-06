@@ -56,19 +56,27 @@ export function amountInWordsINR(amount: number): string {
   return `Rupees ${parts.join(' ')} Only`
 }
 
+const INVALID = '—'
+
 export const formatDate = (date: string | Date): string => {
+  if (date === null || date === undefined || date === '') return INVALID
   const d = typeof date === 'string' ? new Date(date) : date
+  if (Number.isNaN(d.getTime())) return INVALID
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 export const formatTime = (date: string | Date): string => {
+  if (date === null || date === undefined || date === '') return INVALID
   const d = typeof date === 'string' ? new Date(date) : date
+  if (Number.isNaN(d.getTime())) return INVALID
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
 /** Relative time like "5m ago", "2h ago", "3d ago" — used in activity feeds. */
 export const formatRelativeTime = (date: string | Date): string => {
+  if (date === null || date === undefined || date === '') return INVALID
   const d = typeof date === 'string' ? new Date(date) : date
+  if (Number.isNaN(d.getTime())) return INVALID
   const diffMs = Date.now() - d.getTime()
   const sec = Math.floor(diffMs / 1000)
   if (sec < 60) return 'just now'

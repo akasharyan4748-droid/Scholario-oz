@@ -1,0 +1,725 @@
+     1→'use client'
+     2→
+     3→/**
+     4→ * comm-compose — unified composer for announcements.
+     5→ *
+     6→ * - Template picker (small practical set)
+     7→ * - Audience selector (school-wide + DB-backed class roster) with live recipient count
+     8→ * - Title + message (with character count for SMS)
+     9→ * - Category picker
+    10→ * - Channel selector (Push / SMS / Email checkboxes)
+    11→ * - Live preview (updates based on selected channels)
+    12→ * - Schedule option (now or future)
+    13→ * - Confirmation modal before send
+    14→ * - REAL platform broadcast: "Send Now" additionally POSTs to
+    15→ *   /api/announcements — the row lands in the school DB and the live event
+    16→ *   stream pushes it to every connected dashboard within seconds.
+    17→ *
+    18→ * No separate SMS/Email/Push tabs — channels live inside composer.
+    19→ */
+    20→
+    21→import { useState, useMemo, useEffect } from 'react'
+    22→import { motion, AnimatePresence } from 'framer-motion'
+    23→import {
+    24→  Smartphone, MessageSquare, Mail, Send, Clock, FileText, X, Check,
+    25→  Calendar, AlertCircle, ChevronDown, Users, Loader2, RadioTower,
+    26→} from 'lucide-react'
+    27→import { Button } from '@/components/ui/button'
+    28→import { Input } from '@/components/ui/input'
+    29→import {
+    30→  useCommunicationStore,
+    31→  getAudienceOptions,
+    32→  TEMPLATES,
+    33→  type AnnouncementCategory,
+    34→  type Channel,
+    35→  type Audience,
+    36→} from '@/lib/store/communication-store'
+    37→import { school } from '@/lib/mock/school'
+    38→import { cn } from '@/lib/utils'
+    39→import { CategoryBadge } from './comm-shared'
+    40→import { toast } from 'sonner'
+    41→
+    42→const CATEGORIES: AnnouncementCategory[] = ['Academic', 'Event', 'Holiday', 'General', 'Emergency', 'Parents', 'Transport', 'Examination']
+    43→
+    44→const CATEGORY_ACCENTS: Record<AnnouncementCategory, string> = {
+    45→  Academic: 'bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30',
+    46→  Event: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
+    47→  Holiday: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30',
+    48→  General: 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30',
+    49→  Emergency: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30',
+    50→  Parents: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
+    51→  Transport: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-500/30',
+    52→  Examination: 'bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30',
+    53→}
+    54→
+    55→interface DbClass { id: string; name: string; section: string | null; students: number }
+    56→
+    57→type BroadcastState = 'idle' | 'sending' | 'sent' | 'failed'
+    58→
+    59→export function ComposeSection() {
+    60→  const createAnnouncement = useCommunicationStore((s) => s.createAnnouncement)
+    61→  const sendAnnouncement = useCommunicationStore((s) => s.sendAnnouncement)
+    62→  const scheduleAnnouncement = useCommunicationStore((s) => s.scheduleAnnouncement)
+    63→  const markSynced = useCommunicationStore((s) => s.markSynced)
+    64→
+    65→  const audienceOptions = useMemo(() => getAudienceOptions(), [])
+    66→
+    67→  // Real class roster from the school DB — used for class-targeted audiences
+    68→  // so feed filtering (`CLASS:<name>`) matches actual enrollment.
+    69→  const [dbClasses, setDbClasses] = useState<DbClass[]>([])
+    70→  const [classesLoaded, setClassesLoaded] = useState(false)
+    71→  const [broadcastState, setBroadcastState] = useState<BroadcastState>('idle')
+    72→
+    73→  useEffect(() => {
+    74→    let cancelled = false
+    75→    fetch('/api/classes?counts=1', { cache: 'no-store' })
+    76→      .then((r) => (r.ok ? r.json() : null))
+    77→      .then((j) => {
+    78→        if (cancelled) return
+    79→        const rows = j && typeof j === 'object' && 'data' in j ? (j as { data?: unknown }).data : j
+    80→        if (Array.isArray(rows)) {
+    81→          setDbClasses(
+    82→            rows.map((c: { id: string; name: string; section?: string | null; _count?: { students?: number } }) => ({
+    83→              id: c.id,
+    84→              name: c.name,
+    85→              section: c.section ?? null,
+    86→              students: c._count?.students ?? 0,
+    87→            }))
+    88→          )
+    89→        }
+    90→        setClassesLoaded(true)
+    91→      })
+    92→      .catch(() => { if (!cancelled) setClassesLoaded(true) })
+    93→    return () => { cancelled = true }
+    94→  }, [])
+    95→
+    96→  const [title, setTitle] = useState('')
+    97→  const [message, setMessage] = useState('')
+    98→  const [category, setCategory] = useState<AnnouncementCategory>('General')
+    99→  const [audience, setAudience] = useState<Audience>('All Parents')
+   100→  const [channels, setChannels] = useState<Channel[]>(['Push'])
+   101→  const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now')
+   102→  const [scheduledFor, setScheduledFor] = useState('')
+   103→  const [showConfirm, setShowConfirm] = useState(false)
+   104→  const [showTemplates, setShowTemplates] = useState(false)
+   105→
+   106→  // Audience selector expanded state
+   107→  const [audienceExpanded, setAudienceExpanded] = useState<'global' | 'classes'>('global')
+   108→
+   109→  // Compute recipient count — DB counts for real classes, canonical estimates
+   110→  // for school-wide audiences.
+   111→  const recipientCount = useMemo(() => {
+   112→    if (audience === 'All Parents') return audienceOptions.global[0].count
+   113→    if (audience === 'All Students') return audienceOptions.global[1].count
+   114→    if (audience === 'All Teachers') return audienceOptions.global[2].count
+   115→    if (audience === 'All Staff') return audienceOptions.global[3].count
+   116→    const dbClass = dbClasses.find((c) => c.name === audience)
+   117→    if (dbClass) return dbClass.students
+   118→    const cls = audienceOptions.classes.find((c) => c.value === audience)
+   119→    if (cls) return cls.count
+   120→    const sec = audienceOptions.sections.find((s) => s.value === audience)
+   121→    if (sec) return sec.count
+   122→    return 0
+   123→  }, [audience, audienceOptions, dbClasses])
+   124→
+   125→  const smsSegments = useMemo(() => {
+   126→    if (!channels.includes('SMS')) return 0
+   127→    const totalChars = (title.length + message.length + 20) // school name sig
+   128→    return Math.max(1, Math.ceil(totalChars / 160))
+   129→  }, [channels, title, message])
+   130→
+   131→  const isEmergency = category === 'Emergency'
+   132→
+   133→  const toggleChannel = (c: Channel) => {
+   134→    setChannels((prev) => prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c])
+   135→  }
+   136→
+   137→  const applyTemplate = (template: typeof TEMPLATES[0]) => {
+   138→    setTitle(template.name)
+   139→    setMessage(template.body)
+   140→    setCategory(template.category)
+   141→    setShowTemplates(false)
+   142→    toast.success('Template applied', { description: template.name })
+   143→  }
+   144→
+   145→  const handleSend = async () => {
+   146→    if (!title.trim()) { toast.error('Title required', { description: 'Please enter a title.' }); return }
+   147→    if (!message.trim()) { toast.error('Message required', { description: 'Please enter a message.' }); return }
+   148→    if (channels.length === 0) { toast.error('Select at least one channel', { description: 'Push, SMS or Email.' }); return }
+   149→    if (scheduleMode === 'later' && !scheduledFor) { toast.error('Schedule date required', { description: 'Pick a date and time.' }); return }
+   150→
+   151→    const localId = createAnnouncement({
+   152→      title,
+   153→      message,
+   154→      category,
+   155→      audience,
+   156→      channels,
+   157→      author: 'Principal',
+   158→      recipientCount,
+   159→    })
+   160→
+   161→    if (scheduleMode === 'now') {
+   162→      sendAnnouncement(localId)
+   163→      setBroadcastState('sending')
+   164→
+   165→      // REAL platform broadcast — persist to the school DB; the live event
+   166→      // stream picks the row up (~4s) and pushes a toast to every dashboard.
+   167→      let delivered = false
+   168→      let deliveryNote = ''
+   169→      try {
+   170→        const r = await fetch('/api/announcements', {
+   171→          method: 'POST',
+   172→          headers: { 'Content-Type': 'application/json' },
+   173→          body: JSON.stringify({ title: title.trim(), message: message.trim(), audience, category }),
+   174→        })
+   175→        const j = await r.json().catch(() => null)
+   176→        const payload = j && typeof j === 'object' && 'data' in j ? (j as { data?: { id?: string; estimatedRecipients?: number | null } }).data : j as { id?: string } | null
+   177→        if (r.ok && payload?.id) {
+   178→          markSynced(localId, payload.id)
+   179→          delivered = true
+   180→        } else {
+   181→          deliveryNote = (j as { error?: string })?.error === 'FORBIDDEN'
+   182→            ? 'Platform broadcasts require the Principal role.'
+   183→            : 'Platform broadcast service unavailable — announcement kept in this session.'
+   184→        }
+   185→      } catch {
+   186→        deliveryNote = 'Platform broadcast unreachable — announcement kept in this session.'
+   187→      }
+   188→
+   189→      if (delivered) {
+   190→        setBroadcastState('sent')
+   191→        toast.success('Announcement broadcast live', {
+   192→          description: `${recipientCount.toLocaleString('en-IN')} recipients via ${channels.join(' + ')} · pushed to every connected dashboard in real time`,
+   193→          icon: <RadioTower className="h-4 w-4 text-emerald-500" />,
+   194→        })
+   195→      } else {
+   196→        setBroadcastState('failed')
+   197→        toast.warning('Announcement sent (demo mode)', { description: deliveryNote || 'Delivery not confirmed.' })
+   198→      }
+   199→      setTimeout(() => setBroadcastState('idle'), 3200)
+   200→    } else {
+   201→      scheduleAnnouncement(localId, new Date(scheduledFor).toISOString())
+   202→      toast.success('Announcement scheduled', {
+   203→        description: `${formatScheduledDate(scheduledFor)} · ${recipientCount.toLocaleString('en-IN')} recipients`,
+   204→      })
+   205→    }
+   206→
+   207→    // Reset form
+   208→    setTitle('')
+   209→    setMessage('')
+   210→    setChannels(['Push'])
+   211→    setScheduleMode('now')
+   212→    setScheduledFor('')
+   213→    setShowConfirm(false)
+   214→  }
+   215→
+   216→  const openConfirm = () => {
+   217→    if (!title.trim()) { toast.error('Title required'); return }
+   218→    if (!message.trim()) { toast.error('Message required'); return }
+   219→    if (channels.length === 0) { toast.error('Select a channel'); return }
+   220→    if (scheduleMode === 'later' && !scheduledFor) { toast.error('Schedule date required'); return }
+   221→    setShowConfirm(true)
+   222→  }
+   223→
+   224→  return (
+   225→    <div className="max-w-7xl mx-auto">
+   226→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+   227→        {/* Composer (left) */}
+   228→        <div className="space-y-3">
+   229→          {/* Template picker */}
+   230→          <div className="flex items-center gap-2">
+   231→            <Button
+   232→              variant="outline"
+   233→              size="sm"
+   234→              className="h-8 text-xs gap-1.5"
+   235→              onClick={() => setShowTemplates(!showTemplates)}
+   236→            >
+   237→              <FileText className="h-3.5 w-3.5" /> Templates
+   238→              <ChevronDown className={cn('h-3 w-3 transition-transform', showTemplates && 'rotate-180')} />
+   239→            </Button>
+   240→            <span className="text-[10px] text-muted-foreground">Start from a pre-filled template</span>
+   241→          </div>
+   242→          <AnimatePresence>
+   243→            {showTemplates && (
+   244→              <motion.div
+   245→                initial={{ opacity: 0, height: 0 }}
+   246→                animate={{ opacity: 1, height: 'auto' }}
+   247→                exit={{ opacity: 0, height: 0 }}
+   248→                className="overflow-hidden"
+   249→              >
+   250→                <div className="grid grid-cols-2 gap-1.5">
+   251→                  {TEMPLATES.map((t) => (
+   252→                    <button
+   253→                      key={t.id}
+   254→                      onClick={() => applyTemplate(t)}
+   255→                      className="text-left rounded-md border border-border bg-card px-2.5 py-2 hover:border-primary/40 transition-colors"
+   256→                    >
+   257→                      <p className="text-[11px] font-semibold">{t.name}</p>
+   258→                      <p className="text-[9px] text-muted-foreground line-clamp-1">{t.body}</p>
+   259→                    </button>
+   260→                  ))}
+   261→                </div>
+   262→              </motion.div>
+   263→            )}
+   264→          </AnimatePresence>
+   265→
+   266→          {/* Title */}
+   267→          <div>
+   268→            <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 block">Title</label>
+   269→            <Input
+   270→              value={title}
+   271→              onChange={(e) => setTitle(e.target.value)}
+   272→              placeholder="e.g. Annual Sports Day — 15 December"
+   273→              className="h-9 text-sm"
+   274→            />
+   275→          </div>
+   276→
+   277→          {/* Message */}
+   278→          <div>
+   279→            <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 block">
+   280→              Message
+   281→              {channels.includes('SMS') && (
+   282→                <span className="ml-2 text-muted-foreground/70 normal-case">
+   283→                  {(title.length + message.length + 20)} chars · {smsSegments} SMS segment{smsSegments > 1 ? 's' : ''}
+   284→                </span>
+   285→              )}
+   286→            </label>
+   287→            <textarea
+   288→              value={message}
+   289→              onChange={(e) => setMessage(e.target.value)}
+   290→              placeholder="Write your announcement message…"
+   291→              rows={5}
+   292→              className="w-full text-xs rounded-md border border-border bg-card px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+   293→            />
+   294→          </div>
+   295→
+   296→          {/* Category */}
+   297→          <div>
+   298→            <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 block">Category</label>
+   299→            <div className="flex items-center gap-1.5 flex-wrap">
+   300→              {CATEGORIES.map((c) => (
+   301→                <button
+   302→                  key={c}
+   303→                  onClick={() => setCategory(c)}
+   304→                  className={cn(
+   305→                    'inline-flex items-center px-2 py-1 rounded-md text-[10px] font-medium border transition-all',
+   306→                    category === c ? CATEGORY_ACCENTS[c] : 'border-border bg-card text-muted-foreground hover:text-foreground',
+   307→                  )}
+   308→                >
+   309→                  {c === 'Emergency' && <AlertCircle className="h-2.5 w-2.5 mr-1" />}
+   310→                  {c}
+   311→                </button>
+   312→              ))}
+   313→            </div>
+   314→          </div>
+   315→
+   316→          {/* Audience */}
+   317→          <div>
+   318→            <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 block">
+   319→              Audience · <span className="text-emerald-600 normal-case">{recipientCount.toLocaleString('en-IN')} recipients</span>
+   320→            </label>
+   321→            <div className="flex items-center gap-1 mb-1.5">
+   322→              <button
+   323→                onClick={() => setAudienceExpanded('global')}
+   324→                className={cn(
+   325→                  'px-2 py-1 text-[10px] font-medium rounded transition-colors',
+   326→                  audienceExpanded === 'global' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground',
+   327→                )}
+   328→              >
+   329→                School-wide
+   330→              </button>
+   331→              <button
+   332→                onClick={() => setAudienceExpanded('classes')}
+   333→                className={cn(
+   334→                  'px-2 py-1 text-[10px] font-medium rounded transition-colors',
+   335→                  audienceExpanded === 'classes' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground',
+   336→                )}
+   337→              >
+   338→                Classes
+   339→                {classesLoaded && dbClasses.length > 0 && (
+   340→                  <span className={cn('ml-1 px-1 rounded text-[8px]', audienceExpanded === 'classes' ? 'bg-primary-foreground/20' : 'bg-emerald-500/15 text-emerald-600')}>DB</span>
+   341→                )}
+   342→              </button>
+   343→            </div>
+   344→            <select
+   345→              value={audience}
+   346→              onChange={(e) => setAudience(e.target.value as Audience)}
+   347→              className="w-full h-8 text-xs rounded-md border border-border bg-background px-2"
+   348→            >
+   349→              {audienceExpanded === 'global' && (
+   350→                <>
+   351→                  <optgroup label="School-wide audiences">
+   352→                    {audienceOptions.global.map((a) => (
+   353→                      <option key={a.value} value={a.value}>{a.label} ({a.count.toLocaleString('en-IN')})</option>
+   354→                    ))}
+   355→                  </optgroup>
+   356→                  {audienceOptions.classes.length > 0 && (
+   357→                    <optgroup label="Demo roster classes (local only)">
+   358→                      {audienceOptions.classes.slice(0, 4).map((c) => (
+   359→                        <option key={c.value} value={c.value}>{c.label}</option>
+   360→                      ))}
+   361→                    </optgroup>
+   362→                  )}
+   363→                </>
+   364→              )}
+   365→              {audienceExpanded === 'classes' && (
+   366→                <optgroup label={classesLoaded && dbClasses.length > 0 ? 'Classes — school database' : 'Classes (loading…)'}>
+   367→                  {dbClasses.map((c) => (
+   368→                    <option key={c.id} value={c.name}>
+   369→                      {c.name} · {c.students} enrolled
+   370→                    </option>
+   371→                  ))}
+   372→                  {classesLoaded && dbClasses.length === 0 && audienceOptions.classes.map((c) => (
+   373→                    <option key={c.value} value={c.value}>{c.label} ({c.count.toLocaleString('en-IN')} students)</option>
+   374→                  ))}
+   375→                </optgroup>
+   376→              )}
+   377→            </select>
+   378→          </div>
+   379→
+   380→          {/* Channels */}
+   381→          <div>
+   382→            <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 block">Send via</label>
+   383→            <div className="grid grid-cols-3 gap-1.5">
+   384→              {([
+   385→                { id: 'Push', label: 'Push', desc: 'App notification', icon: <Smartphone className="h-4 w-4" /> },
+   386→                { id: 'SMS', label: 'SMS', desc: 'Text message', icon: <MessageSquare className="h-4 w-4" /> },
+   387→                { id: 'Email', label: 'Email', desc: 'Email message', icon: <Mail className="h-4 w-4" /> },
+   388→              ] as const).map((c) => (
+   389→                <button
+   390→                  key={c.id}
+   391→                  onClick={() => toggleChannel(c.id)}
+   392→                  className={cn(
+   393→                    'relative flex flex-col items-center gap-1 rounded-lg border p-2.5 transition-all',
+   394→                    channels.includes(c.id) ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border hover:border-primary/40',
+   395→                  )}
+   396→                >
+   397→                  {channels.includes(c.id) && (
+   398→                    <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+   399→                      <Check className="h-2.5 w-2.5" />
+   400→                    </span>
+   401→                  )}
+   402→                  <span className={cn('flex h-8 w-8 items-center justify-center rounded-md',
+   403→                    channels.includes(c.id) ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>
+   404→                    {c.icon}
+   405→                  </span>
+   406→                  <p className="text-[11px] font-medium">{c.label}</p>
+   407→                  <p className="text-[9px] text-muted-foreground">{c.desc}</p>
+   408→                </button>
+   409→              ))}
+   410→            </div>
+   411→          </div>
+   412→
+   413→          {/* Schedule */}
+   414→          <div>
+   415→            <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 block">Schedule</label>
+   416→            <div className="flex items-center gap-1 mb-1.5">
+   417→              <button
+   418→                onClick={() => setScheduleMode('now')}
+   419→                className={cn('px-2.5 py-1 text-[11px] font-medium rounded transition-colors',
+   420→                  scheduleMode === 'now' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground')}
+   421→              >
+   422→                Send Now
+   423→              </button>
+   424→              <button
+   425→                onClick={() => setScheduleMode('later')}
+   426→                className={cn('px-2.5 py-1 text-[11px] font-medium rounded transition-colors',
+   427→                  scheduleMode === 'later' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground')}
+   428→              >
+   429→                Schedule for Later
+   430→              </button>
+   431→            </div>
+   432→            {scheduleMode === 'later' && (
+   433→              <Input
+   434→                type="datetime-local"
+   435→                value={scheduledFor}
+   436→                onChange={(e) => setScheduledFor(e.target.value)}
+   437→                className="h-8 text-xs"
+   438→              />
+   439→            )}
+   440→          </div>
+   441→
+   442→          {/* Send button */}
+   443→          <Button
+   444→            size="lg"
+   445→            disabled={broadcastState === 'sending'}
+   446→            className={cn(
+   447→              'w-full h-10 text-sm gap-2 transition-all',
+   448→              isEmergency
+   449→                ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white'
+   450→                : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white',
+   451→              broadcastState === 'sent' && 'from-emerald-500 to-teal-500',
+   452→              broadcastState === 'sending' && 'opacity-80 cursor-wait',
+   453→            )}
+   454→            onClick={openConfirm}
+   455→          >
+   456→            {broadcastState === 'sending' ? (
+   457→              <>
+   458→                <Loader2 className="h-4 w-4 animate-spin" /> Broadcasting…
+   459→              </>
+   460→            ) : broadcastState === 'sent' ? (
+   461→              <>
+   462→                <RadioTower className="h-4 w-4" /> Broadcast delivered
+   463→              </>
+   464→            ) : (
+   465→              <>
+   466→                <Send className="h-4 w-4" />
+   467→                {scheduleMode === 'now' ? (isEmergency ? 'Send Emergency Alert' : 'Send Announcement') : 'Schedule Announcement'}
+   468→              </>
+   469→            )}
+   470→          </Button>
+   471→
+   472→          {/* Broadcast status strip */}
+   473→          <AnimatePresence>
+   474→            {(broadcastState === 'sent' || broadcastState === 'failed') && (
+   475→              <motion.div
+   476→                initial={{ opacity: 0, y: -4 }}
+   477→                animate={{ opacity: 1, y: 0 }}
+   478→                exit={{ opacity: 0, y: -4 }}
+   479→                className={cn(
+   480→                  'flex items-center gap-2 rounded-lg border px-3 py-2 text-[11px]',
+   481→                  broadcastState === 'sent'
+   482→                    ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300'
+   483→                    : 'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300',
+   484→                )}
+   485→              >
+   486→                {broadcastState === 'sent' ? (
+   487→                  <>
+   488→                    <span className="relative flex h-2 w-2 shrink-0">
+   489→                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+   490→                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+   491→                    </span>
+   492→                    Live broadcast confirmed — platform delivery succeeded. Connected dashboards received the push.
+   493→                  </>
+   494→                ) : (
+   495→                  <>
+   496→                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+   497→                    Kept in demo session — platform broadcast was not confirmed.
+   498→                  </>
+   499→                )}
+   500→              </motion.div>
+   501→            )}
+   502→          </AnimatePresence>
+   503→        </div>
+   504→
+   505→        {/* Live Preview (right) */}
+   506→        <div className="space-y-3">
+   507→          <div className="flex items-center justify-between">
+   508→            <p className="text-xs font-semibold">Live Preview</p>
+   509→            <CategoryBadge category={category} />
+   510→          </div>
+   511→
+   512→          {channels.includes('Push') && (
+   513→            <PushPreview title={title || 'Your title here'} message={message || 'Your message will appear here.'} audience={audience} />
+   514→          )}
+   515→          {channels.includes('SMS') && (
+   516→            <SmsPreview title={title} message={message || 'Your message will appear here.'} segments={smsSegments} audience={audience} recipientCount={recipientCount} />
+   517→          )}
+   518→          {channels.includes('Email') && (
+   519→            <EmailPreview title={title || 'Your subject here'} message={message || 'Your message will appear here.'} audience={audience} />
+   520→          )}
+   521→          {channels.length === 0 && (
+   522→            <div className="rounded-xl border-2 border-dashed border-border bg-muted/20 p-8 text-center">
+   523→              <Mail className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+   524→              <p className="text-xs text-muted-foreground">Select a channel to see preview</p>
+   525→            </div>
+   526→          )}
+   527→        </div>
+   528→      </div>
+   529→
+   530→      {/* Confirmation modal */}
+   531→      <AnimatePresence>
+   532→        {showConfirm && (
+   533→          <ConfirmModal
+   534→            title={title}
+   535→            audience={audience}
+   536→            recipientCount={recipientCount}
+   537→            channels={channels}
+   538→            scheduleMode={scheduleMode}
+   539→            scheduledFor={scheduledFor}
+   540→            isEmergency={isEmergency}
+   541→            onCancel={() => setShowConfirm(false)}
+   542→            onConfirm={handleSend}
+   543→          />
+   544→        )}
+   545→      </AnimatePresence>
+   546→    </div>
+   547→  )
+   548→}
+   549→
+   550→// ─── Push Preview ────────────────────────────────────────────────────
+   551→
+   552→function PushPreview({ title, message, audience }: { title: string; message: string; audience: string }) {
+   553→  return (
+   554→    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border bg-gradient-to-br from-sky-50 to-white dark:from-sky-950/20 dark:to-card p-3">
+   555→      <div className="flex items-start gap-2">
+   556→        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-xs font-bold">
+   557→          {school.logo}
+   558→        </div>
+   559→        <div className="min-w-0 flex-1">
+   560→          <div className="flex items-center justify-between">
+   561→            <p className="text-xs font-semibold">{school.shortName}</p>
+   562→            <span className="text-[9px] text-muted-foreground">now</span>
+   563→          </div>
+   564→          <p className="text-xs font-semibold mt-0.5 line-clamp-1">{title}</p>
+   565→          <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{message}</p>
+   566→        </div>
+   567→      </div>
+   568→      <p className="text-[9px] text-muted-foreground mt-2 pt-2 border-t border-border/40 flex items-center gap-1">
+   569→        <Smartphone className="h-2.5 w-2.5" /> Push notification preview · {audience}
+   570→      </p>
+   571→    </motion.div>
+   572→  )
+   573→}
+   574→
+   575→// ─── SMS Preview ─────────────────────────────────────────────────────
+   576→
+   577→function SmsPreview({ title, message, segments, audience, recipientCount }: { title: string; message: string; segments: number; audience: string; recipientCount: number }) {
+   578→  const smsText = `${title ? title + ': ' : ''}${message} — ${school.name}`
+   579→  return (
+   580→    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/20 dark:to-card p-3">
+   581→      <div className="flex items-start gap-2">
+   582→        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white">
+   583→          <MessageSquare className="h-4 w-4" />
+   584→        </div>
+   585→        <div className="min-w-0 flex-1">
+   586→          <div className="flex items-center justify-between">
+   587→            <p className="text-xs font-semibold">SMS Preview</p>
+   588→            <span className="text-[9px] text-muted-foreground">{smsText.length} chars</span>
+   589→          </div>
+   590→          <div className="mt-1.5 rounded-lg bg-white dark:bg-card border border-border p-2.5">
+   591→            <p className="text-[11px] text-foreground whitespace-pre-wrap">{smsText}</p>
+   592→          </div>
+   593→          <div className="flex items-center justify-between mt-1.5 text-[9px] text-muted-foreground">
+   594→            <span>{segments} SMS segment{segments > 1 ? 's' : ''}</span>
+   595→            <span>{recipientCount.toLocaleString('en-IN')} recipients</span>
+   596→          </div>
+   597→        </div>
+   598→      </div>
+   599→    </motion.div>
+   600→  )
+   601→}
+   602→
+   603→// ─── Email Preview ──────────────────────────────────────────────────
+   604→
+   605→function EmailPreview({ title, message, audience }: { title: string; message: string; audience: string }) {
+   606→  return (
+   607→    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/20 dark:to-card p-3">
+   608→      <div className="flex items-start gap-2">
+   609→        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white">
+   610→          <Mail className="h-4 w-4" />
+   611→        </div>
+   612→        <div className="min-w-0 flex-1">
+   613→          <div className="flex items-center justify-between">
+   614→            <p className="text-xs font-semibold">Email Preview</p>
+   615→            <span className="text-[9px] text-muted-foreground">{audience}</span>
+   616→          </div>
+   617→          <div className="mt-1.5 rounded-lg bg-white dark:bg-card border border-border overflow-hidden">
+   618→            <div className="px-2.5 py-1.5 border-b border-border/60 bg-muted/20">
+   619→              <p className="text-[10px] text-muted-foreground">From: {school.email}</p>
+   620→              <p className="text-[11px] font-semibold mt-0.5">{title}</p>
+   621→            </div>
+   622→            <div className="p-2.5">
+   623→              <p className="text-[11px] text-foreground whitespace-pre-wrap line-clamp-6">{message}</p>
+   624→              <p className="text-[10px] text-muted-foreground mt-2 pt-2 border-t border-border/40">— {school.principal}<br />{school.name}</p>
+   625→            </div>
+   626→          </div>
+   627→        </div>
+   628→      </div>
+   629→    </motion.div>
+   630→  )
+   631→}
+   632→
+   633→// ─── Confirm Modal ───────────────────────────────────────────────────
+   634→
+   635→function ConfirmModal({ title, audience, recipientCount, channels, scheduleMode, scheduledFor, isEmergency, onCancel, onConfirm }: {
+   636→  title: string
+   637→  audience: string
+   638→  recipientCount: number
+   639→  channels: Channel[]
+   640→  scheduleMode: 'now' | 'later'
+   641→  scheduledFor: string
+   642→  isEmergency: boolean
+   643→  onCancel: () => void
+   644→  onConfirm: () => void
+   645→}) {
+   646→  return (
+   647→    <motion.div
+   648→      initial={{ opacity: 0 }}
+   649→      animate={{ opacity: 1 }}
+   650→      exit={{ opacity: 0 }}
+   651→      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+   652→      onClick={onCancel}
+   653→    >
+   654→      <motion.div
+   655→        initial={{ scale: 0.95, opacity: 0 }}
+   656→        animate={{ scale: 1, opacity: 1 }}
+   657→        exit={{ scale: 0.95, opacity: 0 }}
+   658→        className="bg-card border border-border rounded-xl shadow-2xl max-w-sm w-full p-5"
+   659→        onClick={(e) => e.stopPropagation()}
+   660→      >
+   661→        <h3 className="text-sm font-bold mb-1">
+   662→          {isEmergency ? 'Confirm Emergency Alert' : 'Confirm Announcement'}
+   663→        </h3>
+   664→        <p className="text-[11px] text-muted-foreground mb-3 line-clamp-1">{title}</p>
+   665→
+   666→        <div className="space-y-1.5 rounded-lg bg-muted/30 p-2.5 text-[11px]">
+   667→          <div className="flex justify-between">
+   668→            <span className="text-muted-foreground">Audience</span>
+   669→            <span className="font-medium">{audience}</span>
+   670→          </div>
+   671→          <div className="flex justify-between">
+   672→            <span className="text-muted-foreground">Recipients</span>
+   673→            <span className="font-bold tabular-nums">{recipientCount.toLocaleString('en-IN')}</span>
+   674→          </div>
+   675→          <div className="flex justify-between">
+   676→            <span className="text-muted-foreground">Channels</span>
+   677→            <span className="font-medium">{channels.join(' + ')}</span>
+   678→          </div>
+   679→          <div className="flex justify-between">
+   680→            <span className="text-muted-foreground">Schedule</span>
+   681→            <span className="font-medium">{scheduleMode === 'now' ? 'Send now' : formatScheduledDate(scheduledFor)}</span>
+   682→          </div>
+   683→        </div>
+   684→
+   685→        {scheduleMode === 'now' && (
+   686→          <div className="mt-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 p-2 flex items-start gap-1.5">
+   687→            <RadioTower className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+   688→            <div>
+   689→              <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Live platform broadcast</p>
+   690→              <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">The notice is persisted to the school database and pushed in real time to every connected dashboard.</p>
+   691→            </div>
+   692→          </div>
+   693→        )}
+   694→
+   695→        {isEmergency && (
+   696→          <div className="mt-2 rounded-md bg-rose-500/10 border border-rose-500/30 p-2 flex items-start gap-1.5">
+   697→            <AlertCircle className="h-3.5 w-3.5 text-rose-600 shrink-0 mt-0.5" />
+   698→            <p className="text-[10px] text-rose-700 dark:text-rose-300">Emergency alerts send immediately to all selected channels.</p>
+   699→          </div>
+   700→        )}
+   701→
+   702→        <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-border">
+   703→          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onCancel}>Cancel</Button>
+   704→          <Button
+   705→            size="sm"
+   706→            className={cn(
+   707→              'h-8 text-xs gap-1.5',
+   708→              isEmergency ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white',
+   709→            )}
+   710→            onClick={onConfirm}
+   711→          >
+   712→            <Send className="h-3.5 w-3.5" /> {scheduleMode === 'now' ? 'Send' : 'Schedule'}
+   713→          </Button>
+   714→        </div>
+   715→      </motion.div>
+   716→    </motion.div>
+   717→  )
+   718→}
+   719→
+   720→function formatScheduledDate(dateStr: string): string {
+   721→  if (!dateStr) return 'Not set'
+   722→  const d = new Date(dateStr)
+   723→  return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+   724→}
+   725→

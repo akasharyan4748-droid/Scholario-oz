@@ -40,7 +40,7 @@ import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs } from '../shared/segmented-tabs'
 import { useDownloadsStore, type DownloadDocument, type CategoryTab } from '@/lib/store/downloads-store'
 import { useCertificatesStore } from '@/lib/store/certificates-store'
-import { toast } from 'sonner'
+import { useDownloadsActions } from './downloads-actions'
 import {
   SORT_OPTIONS, CATEGORY_OPTIONS,
   DOWNLOADS_GLOBAL_STYLES,
@@ -62,7 +62,11 @@ const TABS = [
 ]
 
 export function DownloadsModule() {
-  const [selectedDoc, setSelectedDoc] = useState<DownloadDocument | null>(null)
+  // Selected document ID — the drawer re-resolves the LIVE record from the
+  // store, so regenerated / updated / re-opened documents never go stale.
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
+  // Shared REAL action implementations (download produces a real file).
+  const { handleDownload } = useDownloadsActions()
 
   // Subscribe to store
   const query = useDownloadsStore((s) => s.query)
@@ -77,19 +81,19 @@ export function DownloadsModule() {
   const getFilteredDocuments = useDownloadsStore((s) => s.getFilteredDocuments)
   const getCountsByTab = useDownloadsStore((s) => s.getCountsByTab)
   const getQuickAccess = useDownloadsStore((s) => s.getQuickAccess)
-  const download = useDownloadsStore((s) => s.download)
 
-  // Subscribe to cert store so generated counts update live
-  const certDocsCount = useCertificatesStore((s) => s.documents.length)
+  // Subscribe to cert store so generated documents update live
+  const certDocs = useCertificatesStore((s) => s.documents)
 
-  // Re-derive counts whenever cert docs change
-  const counts = useMemo(() => getCountsByTab(), [getCountsByTab, certDocsCount])
-  // Re-derive filtered list whenever any filter or the cert doc count changes
+  // Re-derive counts whenever cert docs change (array identity — catches
+  // delete+add sequences that keep the count equal).
+  const counts = useMemo(() => getCountsByTab(), [getCountsByTab, certDocs])
+  // Re-derive filtered list whenever any filter or the cert docs change
   const filtered = useMemo(
     () => getFilteredDocuments(),
-    [getFilteredDocuments, certDocsCount, query, categoryFilter, categoryTab, sortBy],
+    [getFilteredDocuments, certDocs, query, categoryFilter, categoryTab, sortBy],
   )
-  const quickAccess = useMemo(() => getQuickAccess(), [getQuickAccess, certDocsCount])
+  const quickAccess = useMemo(() => getQuickAccess(), [getQuickAccess, certDocs])
 
   // Keyboard shortcut: "/" focuses search
   useEffect(() => {
@@ -108,8 +112,8 @@ export function DownloadsModule() {
   }, [])
 
   function handleQuickDownload(doc: DownloadDocument) {
-    const filename = download(doc)
-    toast.success('Download started', { description: `${filename} · ${doc.format}` })
+    // Real file download (shared implementation with row + drawer actions).
+    handleDownload(doc)
   }
 
   const hasActiveFilters = query.trim().length > 0 || categoryFilter !== 'All' || categoryTab !== 'All'
@@ -199,7 +203,7 @@ export function DownloadsModule() {
 
       {/* Quick Access section — only when there are quick-access docs. */}
       {quickAccess.length > 0 && (
-        <QuickAccess docs={quickAccess} onOpen={setSelectedDoc} onDownload={handleQuickDownload} />
+        <QuickAccess docs={quickAccess} onOpen={(doc) => setSelectedDocId(doc.id)} onDownload={handleQuickDownload} />
       )}
 
       {/* Document list — section header + the table. */}
@@ -225,16 +229,16 @@ export function DownloadsModule() {
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
           >
-            <DocumentList onSelectDoc={setSelectedDoc} />
+            <DocumentList onSelectDoc={(doc) => setSelectedDocId(doc.id)} />
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* Detail drawer — slide-from-right. */}
+      {/* Detail drawer — slide-from-right (resolves the live record). */}
       <DocumentDetail
-        doc={selectedDoc}
-        open={!!selectedDoc}
-        onClose={() => setSelectedDoc(null)}
+        docId={selectedDocId}
+        open={!!selectedDocId}
+        onClose={() => setSelectedDocId(null)}
       />
     </PageTransition>
   )

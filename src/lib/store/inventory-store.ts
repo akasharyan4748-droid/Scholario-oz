@@ -3,10 +3,19 @@
  *
  * Items, stock movements, low stock alerts, locations.
  * Assignments connect to teachers/departments.
+ *
+ * QA-FIX-B — TENANT-SCOPED PERSISTENCE: items + movements survive reload
+ * (per-school namespace via createTenantScopedStorage). Search/filter state
+ * is ephemeral UI state and is intentionally NOT persisted.
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { useMemo } from 'react'
+import { migrateLegacyScopedStore, createTenantScopedStorage } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+migrateLegacyScopedStore('scholario-inventory-v1', DEFAULT_TENANT_ID)
 
 export type ItemCategory = 'Furniture' | 'Stationery' | 'Lab Equipment' | 'Sports' | 'Electronics' | 'Cleaning' | 'IT Equipment'
 export type ItemStatus = 'In Stock' | 'Low Stock' | 'Out of Stock'
@@ -97,7 +106,9 @@ function calcStatus(qty: number, min: number): ItemStatus {
   return 'In Stock'
 }
 
-export const useInventoryStore = create<InventoryState>((set, get) => ({
+export const useInventoryStore = create<InventoryState>()(
+  persist(
+    (set, get) => ({
   items: SEED_ITEMS,
   movements: SEED_MOVEMENTS,
   search: '',
@@ -206,7 +217,16 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       }, ...state.movements],
     })
   },
-}))
+    }),
+    {
+      name: 'scholario-inventory-v1',
+      storage: createTenantScopedStorage('scholario-inventory-v1'),
+      version: 1,
+      // DATA slices only — search/filters are UI state, actions are functions.
+      partialize: (s) => ({ items: s.items, movements: s.movements }),
+    },
+  ),
+)
 
 export function useInventoryData() {
   const items = useInventoryStore((s) => s.items)

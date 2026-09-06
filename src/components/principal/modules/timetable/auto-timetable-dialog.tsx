@@ -50,9 +50,9 @@ const SUBJECT_TEACHERS: Record<string, string[]> = {
   'Computer Science': ['T-041'],
   'Social Studies': ['T-023'],
   'Physical Education': ['T-047'],
-  'Physics': ['T-035'],
+  'Physics': ['T-038'],
   'Chemistry': ['T-026'],
-  'Biology': ['T-017'],
+  'Biology': ['T-026'],
   'Art & Craft': ['T-053'],
   'Music': ['T-050'],
 }

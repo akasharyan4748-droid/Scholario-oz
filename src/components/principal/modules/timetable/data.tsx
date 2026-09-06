@@ -82,22 +82,22 @@ export interface TimetableConflictInfo {
 
 export const INITIAL_SLOTS: TimetableSlot[] = [
   { id: 'tt-101', day: 'Monday', period: 1, time: '08:30 AM - 09:15 AM', className: 'Class 2-A', subject: 'Mathematics', teacherId: 'T-014', teacherName: 'Rohan Mehta', room: 'Room 102', type: 'Lecture' },
-  { id: 'tt-102', day: 'Monday', period: 2, time: '09:15 AM - 10:00 AM', className: 'Class 2-A', subject: 'English', teacherId: 'T-003', teacherName: 'Priya Nair', room: 'Room 102', type: 'Lecture' },
-  { id: 'tt-103', day: 'Monday', period: 3, time: '10:00 AM - 10:45 AM', className: 'Class 2-A', subject: 'Science', teacherId: 'T-002', teacherName: 'Pooja Bhatt', room: 'Physics Lab', type: 'Lab' },
-  { id: 'tt-105', day: 'Monday', period: 5, time: '11:00 AM - 11:45 AM', className: 'Class 2-A', subject: 'Computer Science', teacherId: 'T-001', teacherName: 'Arjun Kapoor', room: 'Computer Lab 1', type: 'Lab' },
-  { id: 'tt-106', day: 'Monday', period: 6, time: '11:45 AM - 12:30 PM', className: 'Class 2-A', subject: 'Social Studies', teacherId: 'T-005', teacherName: 'Rajesh Khanna', room: 'Room 102', type: 'Lecture' },
+  { id: 'tt-102', day: 'Monday', period: 2, time: '09:15 AM - 10:00 AM', className: 'Class 2-A', subject: 'English', teacherId: 'T-002', teacherName: 'Priya Nair', room: 'Room 102', type: 'Lecture' },
+  { id: 'tt-103', day: 'Monday', period: 3, time: '10:00 AM - 10:45 AM', className: 'Class 2-A', subject: 'Science', teacherId: 'T-011', teacherName: 'Kavita Joshi', room: 'Physics Lab', type: 'Lab' },
+  { id: 'tt-105', day: 'Monday', period: 5, time: '11:00 AM - 11:45 AM', className: 'Class 2-A', subject: 'Computer Science', teacherId: 'T-014', teacherName: 'Rohan Mehta', room: 'Computer Lab 1', type: 'Lab' },
+  { id: 'tt-106', day: 'Monday', period: 6, time: '11:45 AM - 12:30 PM', className: 'Class 2-A', subject: 'Social Studies', teacherId: 'T-023', teacherName: 'Vikram Singh', room: 'Room 102', type: 'Lecture' },
 
-  { id: 'tt-201', day: 'Tuesday', period: 1, time: '08:30 AM - 09:15 AM', className: 'Class 2-A', subject: 'English', teacherId: 'T-003', teacherName: 'Priya Nair', room: 'Room 102', type: 'Lecture' },
+  { id: 'tt-201', day: 'Tuesday', period: 1, time: '08:30 AM - 09:15 AM', className: 'Class 2-A', subject: 'English', teacherId: 'T-002', teacherName: 'Priya Nair', room: 'Room 102', type: 'Lecture' },
   { id: 'tt-202', day: 'Tuesday', period: 2, time: '09:15 AM - 10:00 AM', className: 'Class 2-A', subject: 'Mathematics', teacherId: 'T-014', teacherName: 'Rohan Mehta', room: 'Room 102', type: 'Lecture' },
-  { id: 'tt-203', day: 'Tuesday', period: 3, time: '10:00 AM - 10:45 AM', className: 'Class 2-A', subject: 'Physical Education', teacherId: 'T-007', teacherName: 'Vikram Singh', room: 'Sports Complex', type: 'Sports' },
+  { id: 'tt-203', day: 'Tuesday', period: 3, time: '10:00 AM - 10:45 AM', className: 'Class 2-A', subject: 'Physical Education', teacherId: 'T-047', teacherName: 'Sanjay Reddy', room: 'Sports Complex', type: 'Sports' },
 
   { id: 'tt-301', day: 'Wednesday', period: 1, time: '08:30 AM - 09:15 AM', className: 'Class 2-A', subject: 'Mathematics', teacherId: 'T-014', teacherName: 'Rohan Mehta', room: 'Room 102', type: 'Lecture' },
-  { id: 'tt-302', day: 'Wednesday', period: 2, time: '09:15 AM - 10:00 AM', className: 'Class 2-A', subject: 'Science', teacherId: 'T-002', teacherName: 'Pooja Bhatt', room: 'Room 102', type: 'Lecture' },
-  { id: 'tt-303', day: 'Wednesday', period: 3, time: '10:00 AM - 10:45 AM', className: 'Class 2-A', subject: 'Art & Craft', teacherId: 'T-008', teacherName: 'Meera Deshmukh', room: 'Room 102', type: 'Lecture' },
+  { id: 'tt-302', day: 'Wednesday', period: 2, time: '09:15 AM - 10:00 AM', className: 'Class 2-A', subject: 'Science', teacherId: 'T-011', teacherName: 'Kavita Joshi', room: 'Room 102', type: 'Lecture' },
+  { id: 'tt-303', day: 'Wednesday', period: 3, time: '10:00 AM - 10:45 AM', className: 'Class 2-A', subject: 'Art & Craft', teacherId: 'T-053', teacherName: 'Faisal Ahmed', room: 'Room 102', type: 'Lecture' },
 
-  { id: 'tt-401', day: 'Thursday', period: 1, time: '08:30 AM - 09:15 AM', className: 'Class 10-A', subject: 'Mathematics', teacherId: 'T-014', teacherName: 'Rohan Mehta', room: 'Room 304', type: 'Lecture' },
-  { id: 'tt-402', day: 'Thursday', period: 2, time: '09:15 AM - 10:00 AM', className: 'Class 10-A', subject: 'Physics', teacherId: 'T-002', teacherName: 'Pooja Bhatt', room: 'Physics Lab', type: 'Lab' },
+  { id: 'tt-401', day: 'Thursday', period: 1, time: '08:30 AM - 09:15 AM', className: 'Class 10-A', subject: 'Mathematics', teacherId: 'T-035', teacherName: 'Rajesh Khanna', room: 'Room 304', type: 'Lecture' },
+  { id: 'tt-402', day: 'Thursday', period: 2, time: '09:15 AM - 10:00 AM', className: 'Class 10-A', subject: 'Physics', teacherId: 'T-038', teacherName: 'Pooja Bhatt', room: 'Physics Lab', type: 'Lab' },
 
-  { id: 'tt-501', day: 'Friday', period: 1, time: '08:30 AM - 09:15 AM', className: 'Class 2-A', subject: 'Hindi', teacherId: 'T-006', teacherName: 'Sunita Sharma', room: 'Room 102', type: 'Lecture' },
+  { id: 'tt-501', day: 'Friday', period: 1, time: '08:30 AM - 09:15 AM', className: 'Class 2-A', subject: 'Hindi', teacherId: 'T-005', teacherName: 'Meera Krishnan', room: 'Room 102', type: 'Lecture' },
   { id: 'tt-502', day: 'Friday', period: 2, time: '09:15 AM - 10:00 AM', className: 'Class 2-A', subject: 'Mathematics', teacherId: 'T-014', teacherName: 'Rohan Mehta', room: 'Room 102', type: 'Lecture' },
 ]

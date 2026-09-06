@@ -32,8 +32,10 @@ import { getActiveTenantSync } from '@/lib/tenant/active-tenant'
 const NOW = new Date().toISOString()
 
 // Build coherent seed data from the shared academic module.
-function buildSeedExam(examId: string, name: string, type: string, session: string, term: string, status: string, resultStatus: string, startDate: string, endDate: string, maxMarks: number = 50, papersPerDay: number = 2, markSummary?: any): ExamDTO {
-  const classDefs = SEED_CLASS_DEFS[examId] ?? []
+// seedIndex is POSITIONAL into SEED_CLASS_DEFS (exam ids are tenant-scoped
+// so they can't key the defs directly).
+function buildSeedExam(seedIndex: number, examId: string, name: string, type: string, session: string, term: string, status: string, resultStatus: string, startDate: string, endDate: string, maxMarks: number = 50, papersPerDay: number = 2, markSummary?: any): ExamDTO {
+  const classDefs = SEED_CLASS_DEFS[seedIndex] ?? []
   const { classes, subjects } = buildSeedClassesAndSubjects(classDefs)
   // Update examId on the generated DTOs.
   classes.forEach((c) => { c.examId = examId })
@@ -65,17 +67,17 @@ const SEED_EXAMS: ExamDTO[] = (() => {
   const tc = tenant.code.toLowerCase()
   return [
     buildSeedExam(
-      `exam-${tc}-1`, patternB ? 'Quarterly Examination' : 'Unit Test 2', patternB ? 'QUARTERLY' : 'UT2', '2025-2026', 'Term 1',
+      0, `exam-${tc}-1`, patternB ? 'Quarterly Examination' : 'Unit Test 2', patternB ? 'QUARTERLY' : 'UT2', '2025-2026', 'Term 1',
       'Scheduled', 'Not Started', '2025-10-10', '2025-10-15',
       50, 2,
     ),
     buildSeedExam(
-      `exam-${tc}-2`, 'Final Examination', 'ANNUAL', '2025-2026', 'Term 2',
+      1, `exam-${tc}-2`, 'Final Examination', 'ANNUAL', '2025-2026', 'Term 2',
       'Scheduled', 'Not Started', '2026-02-10', '2026-02-20',
       100, 1,
     ),
     buildSeedExam(
-      `exam-${tc}-3`, 'Mid-Term Examination', 'HALF_YEARLY', '2025-2026', 'Term 1',
+      2, `exam-${tc}-3`, 'Mid-Term Examination', 'HALF_YEARLY', '2025-2026', 'Term 1',
       'Completed', 'Result Declared', '2025-09-15', '2025-09-25',
       100, 1,
       { total: 24, entered: 24, locked: 24, submitted: 24, verified: 24, pct: 100 },

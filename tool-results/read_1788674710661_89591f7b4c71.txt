@@ -1,0 +1,252 @@
+     1→/home/z/my-project/src/components/principal/modules/procurement/vendor-modal.tsx:63:                <a href={`tel:${selectedVendor.phone}`} onClick={(e) => { e.preventDefault(); toast.info('Calling vendor') }} className="flex items-center gap-3 rounded-lg border border-border bg-card/40 p-2.5 hover:bg-accent transition-colors">
+     2→/home/z/my-project/src/components/principal/modules/procurement/vendor-modal.tsx:67:                <a href={`mailto:${selectedVendor.email}`} onClick={(e) => { e.preventDefault(); toast.info('Email client') }} className="flex items-center gap-3 rounded-lg border border-border bg-card/40 p-2.5 hover:bg-accent transition-colors">
+     3→/home/z/my-project/src/components/principal/modules/procurement/vendor-modal.tsx:93:                <button onClick={() => { toast.success('PO drafted', { description: `New PO for ${selectedVendor.name}` }); onClose() }} className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 py-2.5 text-sm font-semibold text-white shadow-md">
+     4→/home/z/my-project/src/components/principal/modules/procurement/vendor-modal.tsx:96:                <button onClick={() => toast.success('Payment processed')} className="flex items-center justify-center rounded-xl border border-border bg-card/50 px-4 py-2.5 text-sm font-medium hover:bg-accent transition-colors">
+     5→/home/z/my-project/src/components/principal/modules/procurement/index.tsx:37:            onClick={() => toast.success('PO created', { description: 'Draft purchase order saved' })}
+     6→/home/z/my-project/src/components/principal/modules/procurement/orders-tab.tsx:18:          <button onClick={() => toast.success('Export started')} className="flex items-center gap-1.5 rounded-lg border border-border bg-card/50 px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors">
+     7→/home/z/my-project/src/components/principal/modules/FeeStructureStep/useFeeCalculations.ts:180:      toast.error('Fill Applied By and Approval Authority')
+     8→/home/z/my-project/src/components/principal/modules/FeeStructureStep/useFeeCalculations.ts:191:    toast.success('Waiver applied & logged in audit trail')
+     9→/home/z/my-project/src/components/principal/modules/applications/applications-dashboard.tsx:134:      toast.success('Tour published', {
+    10→/home/z/my-project/src/components/principal/modules/applications/applications-dashboard.tsx:138:      toast.error('Could not publish', { description: res.error })
+    11→/home/z/my-project/src/components/principal/modules/applications/applications-dashboard.tsx:147:    toast.success('Tour taken down', {
+    12→/home/z/my-project/src/components/principal/modules/applications/applications-dashboard.tsx:154:    if (ok) toast.success('Blank form downloaded', { description: 'A4 consent form, ready to print and distribute.' })
+    13→/home/z/my-project/src/components/principal/modules/applications/applications-dashboard.tsx:155:    else toast.error('Could not generate the form')
+    14→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-overview.tsx:65:    else toast.info(`Navigate to ${label}`, { description: 'Open it from the sidebar' })
+    15→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-reports.tsx:83:        action={<Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={() => toast.success('Report exported', { description: `${report.label}.csv downloaded` })}>
+    16→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-shell.tsx:133:            onClick={() => toast.success('Financial summary exported', { description: `${data.period.label}-financial-summary.pdf` })}
+    17→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:235:                        toast.success(`${config.label} ${config.active ? 'disabled' : 'enabled'}`)
+    18→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:320:                        toast.success('Primary account updated', { description: `${b.bankName} ••••${b.accountNumber.slice(-4)} is now the primary settlement account.` })
+    19→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:332:                        toast.success('Account deactivated', { description: `${b.bankName} ••••${b.accountNumber.slice(-4)} deactivated.` })
+    20→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:365:              toast.success('Bank account added', { description: `${payload.bankName} ••••${payload.accountNumber.slice(-4)} added.` })
+    21→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:368:              toast.success('Bank account updated', { description: `${payload.bankName} ••••${payload.accountNumber.slice(-4)} updated.` })
+    22→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:399:              toast.success('Parent instructions updated')
+    23→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:581:                      toast.success(`UPI config ${newStatus === 'active' ? 'activated' : 'deactivated'}`, { description: c.name })
+    24→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:602:              toast.success('UPI config added', { description: `${payload.name} (${payload.upiId})` })
+    25→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:605:              toast.success('UPI config updated', { description: payload.name })
+    26→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:745:    toast.success('Webhook test fired', { description: 'A test webhook event was processed successfully.' })
+    27→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:767:              toast.success('Gateway connected', { description: `${provider} connected in ${environment} mode.` })
+    28→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:793:              toast.success('Gateway disconnected', { description: 'Online payment methods are now disabled.' })
+    29→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:861:              toast.success('Connection test passed', { description: `${gatewayConfig.provider} reachable. Webhook URL active.` })
+    30→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:880:                toast.success('Switched to LIVE mode', { description: 'Real payments will now be processed.' })
+    31→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings-payment.tsx:897:            toast.success('Gateway connected', { description: `${provider} connected in ${environment} mode.` })
+    32→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-settings.tsx:75:          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { updateReceiptSettings(local); toast.success('Receipt settings updated') }}>
+    33→/home/z/my-project/src/components/principal/modules/finance-dashboard/finance-statements.tsx:53:          onClick={() => toast.success('Statement exported', { description: `${tab}-statement.pdf` })}
+    34→/home/z/my-project/src/components/principal/modules/applications/tour-config.tsx:273:      toast.error('A few details are missing', { description: problems[0] })
+    35→/home/z/my-project/src/components/principal/modules/applications/tour-config.tsx:281:          toast.error('Could not save', { description: res.error })
+    36→/home/z/my-project/src/components/principal/modules/applications/tour-config.tsx:284:        toast.success('Session details saved')
+    37→/home/z/my-project/src/components/principal/modules/applications/tour-config.tsx:289:          toast.error('Could not save', { description: res.error })
+    38→/home/z/my-project/src/components/principal/modules/applications/tour-config.tsx:292:        toast.success('Draft saved — review the preview, then publish.', {
+    39→/home/z/my-project/src/components/principal/modules/applications/tour-config.tsx:308:      toast.success('Tour published — eligible students have been notified.', {
+    40→/home/z/my-project/src/components/principal/modules/applications/tour-config.tsx:313:      toast.error('Could not publish', { description: res.error })
+    41→/home/z/my-project/src/components/principal/modules/applications/tour-config.tsx:322:      toast.success('Sent to the Principal for approval', { description: 'You will publish it once approved.' })
+    42→/home/z/my-project/src/components/principal/modules/applications/tour-config.tsx:325:      toast.error('Could not send', { description: res.error })
+    43→/home/z/my-project/src/components/principal/modules/applications/tour-config.tsx:642:              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => { void downloadTourFormPDF(previewApp).then((ok) => { if (!ok) toast.error('Could not generate the form') }) }} disabled={problems.length > 0}>
+    44→/home/z/my-project/src/components/principal/modules/school-settings/uniforms-tab.tsx:38:      toast.error('Please enter uniform item name.')
+    45→/home/z/my-project/src/components/principal/modules/school-settings/uniforms-tab.tsx:48:    toast.success(`Uniform item "${newUniform.name}" added!`)
+    46→/home/z/my-project/src/components/principal/modules/school-settings/bookstore-tab.tsx:42:      toast.error('Please fill book name and publisher.')
+    47→/home/z/my-project/src/components/principal/modules/school-settings/bookstore-tab.tsx:50:    toast.success(`Book "${newBook.bookName}" added to Bookstore repository!`)
+    48→/home/z/my-project/src/components/principal/modules/school-settings/index.tsx:46:      toast.success('School Settings Updated', {
+    49→/home/z/my-project/src/components/principal/modules/school-settings/houses-tab.tsx:33:      toast.error('Please enter house name.')
+    50→/home/z/my-project/src/components/principal/modules/school-settings/houses-tab.tsx:42:    toast.success(`House "${newHouse.name}" created!`)
+    51→/home/z/my-project/src/components/principal/modules/school-settings/admission-tab.tsx:41:              toast.success(checked ? 'Hostel Facility Enabled for Admissions' : 'Hostel Facility Disabled for Admissions')
+    52→/home/z/my-project/src/components/principal/modules/school-settings/fees-tab.tsx:36:      toast.error('Please enter fee head name.')
+    53→/home/z/my-project/src/components/principal/modules/school-settings/fees-tab.tsx:45:    toast.success(`Fee Head "${newFeeHead.name}" added to master fee structure!`)
+    54→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:213:    toast.success('Tour taken down', {
+    55→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:220:    if (res.success) toast.success('Tour reopened for applications')
+    56→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:221:    else toast.error('Could not reopen', { description: res.error })
+    57→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:227:      toast.error('No linked collection — payment cannot be recorded here.')
+    58→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:243:      toast.error('Could not record the payment', { description: res.error })
+    59→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:260:    toast.success(`Payment recorded — receipt ${res.transaction.receiptNo}`, {
+    60→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:268:    if (res.success) toast.success('Marked received', { description: `${sub.studentName} — the signed printed form is on file.` })
+    61→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:269:    else toast.error(res.error ?? 'Could not mark received')
+    62→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:276:        toast.success('Verified', { description: `${sub.studentName}'s signed document verified.` })
+    63→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:279:      toast.error(res.error ?? 'Could not verify')
+    64→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:283:    if (res.success) toast.success('Submission verified', { description: `${sub.studentName} — ${sub.serialNo ?? ''}` })
+    65→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:284:    else toast.error('Could not verify', { description: res.error })
+    66→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:294:        toast.error('Nothing to download')
+    67→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:299:        toast.success(`${n} completed form${n === 1 ? '' : 's'} downloaded`, {
+    68→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:303:        toast.error('Could not generate the bundle')
+    69→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:776:              toast.success('Attendance list downloaded', { description: `${attendanceRows.length} rows · ${attendanceScopeLabel}` })
+    70→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:932:          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => { void downloadTourFormPDF(app).then((ok) => { if (!ok) toast.error('Could not generate the form') }) }}>
+    71→/home/z/my-project/src/components/principal/modules/applications/tour-submissions.tsx:1022:              <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => { void downloadTourFormPDF(app, sub, { payment: pay ?? undefined }).then((ok) => { if (!ok) toast.error('Could not generate the form') }) }}>
+    72→/home/z/my-project/src/components/principal/modules/timetable/index.tsx:299:    toast.success('Changes applied', {
+    73→/home/z/my-project/src/components/principal/modules/timetable/index.tsx:379:      toast.error('Resolve conflicts before publishing')
+    74→/home/z/my-project/src/components/principal/modules/timetable/index.tsx:384:      toast.success('Timetable published', {
+    75→/home/z/my-project/src/components/principal/modules/timetable/index.tsx:526:          toast.success('Slot duplicated')
+    76→/home/z/my-project/src/components/principal/modules/timetable/index.tsx:585:          toast.success('All changes cancelled — timetable restored to last published state')
+    77→/home/z/my-project/src/components/principal/modules/timetable/auto-timetable-dialog.tsx:229:      toast.success('Timetable generated', {
+    78→/home/z/my-project/src/components/principal/modules/communication/comm-history.tsx:174:                      <button onClick={() => { pinAnnouncement(a.id); toast.success(a.pinned ? 'Unpinned' : 'Pinned') }} className="hidden sm:inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title={a.pinned ? 'Unpin' : 'Pin'}>
+    79→/home/z/my-project/src/components/principal/modules/communication/comm-history.tsx:178:                    <button onClick={() => { archiveAnnouncement(a.id); toast.success(a.archived ? 'Restored' : 'Archived') }} className={cn('hidden sm:inline-flex items-center justify-center h-6 w-6 rounded transition-colors',
+    80→/home/z/my-project/src/components/principal/modules/students/class-workspace-teachers-panel.tsx:32:            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => toast.info('Replace class teacher')}>Replace</Button>
+    81→/home/z/my-project/src/components/principal/modules/students/class-workspace-teachers-panel.tsx:33:            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => toast.info('Temporary assignment')}>Temporary</Button>
+    82→/home/z/my-project/src/components/principal/modules/communication/comm-announcements.tsx:112:                onPin={() => { pinAnnouncement(a.id); toast.success(a.pinned ? 'Unpinned' : 'Pinned to Notice Board') }}
+    83→/home/z/my-project/src/components/principal/modules/communication/comm-announcements.tsx:113:                onDuplicate={() => { duplicateAnnouncement(a.id); toast.success('Announcement duplicated', { description: 'Saved as draft' }) }}
+    84→/home/z/my-project/src/components/principal/modules/communication/comm-announcements.tsx:114:                onArchive={() => { archiveAnnouncement(a.id); toast.success('Announcement archived') }}
+    85→/home/z/my-project/src/components/principal/modules/communication/comm-announcements.tsx:191:            onPin={() => { pinAnnouncement(viewing.id); toast.success(viewing.pinned ? 'Unpinned' : 'Pinned') }}
+    86→/home/z/my-project/src/components/principal/modules/communication/comm-announcements.tsx:192:            onArchive={() => { archiveAnnouncement(viewing.id); toast.success('Archived'); setViewing(null) }}
+    87→/home/z/my-project/src/components/principal/modules/communication/comm-circulars.tsx:90:            onArchive={() => { archiveCircular(c.id); toast.success(c.status === 'Active' ? 'Circular archived' : 'Circular restored') }}
+    88→/home/z/my-project/src/components/principal/modules/communication/comm-circulars.tsx:150:          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast.success('Circular downloaded', { description: `${circular.refNo}.pdf` })} title="Download">
+    89→/home/z/my-project/src/components/principal/modules/communication/comm-circulars.tsx:153:          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast.success('Share link copied', { description: circular.refNo })} title="Share">
+    90→/home/z/my-project/src/components/principal/modules/communication/comm-circulars.tsx:230:          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => toast.success('Share link copied', { description: circular.refNo })}>
+    91→/home/z/my-project/src/components/principal/modules/communication/comm-circulars.tsx:233:          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => toast.success('Circular downloaded', { description: `${circular.refNo}.pdf` })}>
+    92→/home/z/my-project/src/components/principal/modules/homework/sections/policy-section.tsx:46:      toast.success('Policy updated')
+    93→/home/z/my-project/src/components/principal/modules/homework/sections/policy-section.tsx:48:      toast.error('Failed to update', { description: e.message })
+    94→/home/z/my-project/src/components/principal/modules/homework/sections/policy-section.tsx:122:    if (!newDate) { toast.error('Select a date'); return }
+    95→/home/z/my-project/src/components/principal/modules/homework/sections/policy-section.tsx:127:      toast.success('Date blocked')
+    96→/home/z/my-project/src/components/principal/modules/homework/sections/policy-section.tsx:129:      toast.error('Failed to block date', { description: e.message })
+    97→/home/z/my-project/src/components/principal/modules/homework/sections/feedback-section.tsx:84:    if (!response.trim()) { toast.error('Response required'); return }
+    98→/home/z/my-project/src/components/principal/modules/homework/sections/feedback-section.tsx:89:      toast.success(status === 'resolved' ? 'Grievance resolved' : 'Grievance dismissed')
+    99→/home/z/my-project/src/components/principal/modules/homework/sections/feedback-section.tsx:91:      toast.error('Failed to resolve', { description: e.message })
+   100→/home/z/my-project/src/components/principal/modules/students-classes.tsx:63:      toast.success(`Opened ${match.name}'s profile`, { description: 'Deep-linked from global search' })
+   101→/home/z/my-project/src/components/principal/modules/students-classes.tsx:66:      toast.info(`${focus.title} — school directory`, {
+   102→/home/z/my-project/src/components/principal/modules/students-classes.tsx:75:    toast.success(`${archiveTarget.name} archived`)
+   103→/home/z/my-project/src/components/principal/modules/students-classes.tsx:80:    toast.success(`${st.name} restored`)
+   104→/home/z/my-project/src/components/principal/modules/students-classes.tsx:85:    if (!transferTarget || !transferToClass) { toast.error('Select target class'); return }
+   105→/home/z/my-project/src/components/principal/modules/students-classes.tsx:87:    toast.success(`${transferTarget.name} transferred`); setTransferTarget(null)
+   106→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:142:    toast.success('Template applied', { description: template.name })
+   107→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:146:    if (!title.trim()) { toast.error('Title required', { description: 'Please enter a title.' }); return }
+   108→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:147:    if (!message.trim()) { toast.error('Message required', { description: 'Please enter a message.' }); return }
+   109→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:148:    if (channels.length === 0) { toast.error('Select at least one channel', { description: 'Push, SMS or Email.' }); return }
+   110→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:149:    if (scheduleMode === 'later' && !scheduledFor) { toast.error('Schedule date required', { description: 'Pick a date and time.' }); return }
+   111→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:191:        toast.success('Announcement broadcast live', {
+   112→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:202:      toast.success('Announcement scheduled', {
+   113→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:217:    if (!title.trim()) { toast.error('Title required'); return }
+   114→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:218:    if (!message.trim()) { toast.error('Message required'); return }
+   115→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:219:    if (channels.length === 0) { toast.error('Select a channel'); return }
+   116→/home/z/my-project/src/components/principal/modules/communication/comm-compose.tsx:220:    if (scheduleMode === 'later' && !scheduledFor) { toast.error('Schedule date required'); return }
+   117→/home/z/my-project/src/components/principal/modules/dashboard/live-alerts.tsx:57:    toast.success('Alert resolved', { description: alert.title })
+   118→/home/z/my-project/src/components/principal/modules/dashboard/live-alerts.tsx:64:    toast.success(`${count} alerts resolved`, { description: 'All active alerts have been dismissed' })
+   119→/home/z/my-project/src/components/principal/modules/dashboard/live-alerts.tsx:73:    toast.info(`Snoozed for ${durLabel}`, { description: alert.title })
+   120→/home/z/my-project/src/components/principal/modules/dashboard/live-alerts.tsx:82:    toast.info(`${count} alerts snoozed for ${durLabel}`, { description: 'All active alerts have been snoozed' })
+   121→/home/z/my-project/src/components/principal/modules/dashboard/live-alerts.tsx:88:    toast.success('New alert received!', { description: newAlert.title })
+   122→/home/z/my-project/src/components/principal/modules/dashboard/live-alerts.tsx:97:    toast.success('Alert restored', { description: alert.title })
+   123→/home/z/my-project/src/components/principal/modules/dashboard/live-alerts.tsx:103:    toast.info('All alerts restored', { description: `${dismissed.length} alert${dismissed.length > 1 ? 's' : ''} brought back` })
+   124→/home/z/my-project/src/components/principal/modules/dashboard/live-alerts.tsx:110:      toast.info('Navigating…', { description: `Opening ${alert.navKey} module for: ${alert.title}` })
+   125→/home/z/my-project/src/components/principal/modules/dashboard/live-alerts.tsx:117:    toast.info('Alerts reset', { description: 'All alerts restored to initial state' })
+   126→/home/z/my-project/src/components/principal/modules/dashboard/live-alerts.tsx:133:          toast.success('New alert received!', { description: newAlert.title })
+   127→/home/z/my-project/src/components/principal/modules/communication/comm-platform-broadcasts.tsx:164:      toast.info(`${focusNotice.title}`, { description: 'No matching platform record yet — history is search-synced below.' })
+   128→/home/z/my-project/src/components/principal/modules/communication/comm-platform-broadcasts.tsx:637:                toast.success('Acknowledgement report downloaded', { description: `${reads?.length ?? 0} read receipts exported as CSV` })
+   129→/home/z/my-project/src/components/principal/modules/communication/comm-platform-broadcasts.tsx:639:                toast.error('Export failed', { description: 'The report could not be generated right now.' })
+   130→/home/z/my-project/src/components/principal/modules/salary/record-payment-dialog.tsx:207:      toast.success('Payment recorded', {
+   131→/home/z/my-project/src/components/principal/modules/salary/record-payment-dialog.tsx:215:      toast.error('Could not record payment', {
+   132→/home/z/my-project/src/components/principal/modules/salary/salary-employee-drawer.tsx:227:                    onClick={() => (allowed ? setEditOpen(true) : toast.error('Salary editing is locked', { description: 'Enable editing in Settings first.' }))}
+   133→/home/z/my-project/src/components/principal/modules/salary/salary-employee-drawer.tsx:233:                    onClick={() => (allowed ? setAdjustOpen(true) : toast.error('Salary editing is locked', { description: 'Enable editing in Settings first.' }))}
+   134→/home/z/my-project/src/components/principal/modules/salary/salary-employee-drawer.tsx:359:      toast.success('Salary change sent', { description: 'The employee needs to approve it.' })
+   135→/home/z/my-project/src/components/principal/modules/salary/salary-employee-drawer.tsx:363:      toast.error('Could not send', { description: err instanceof Error ? err.message : undefined })
+   136→/home/z/my-project/src/components/principal/modules/salary/salary-employee-drawer.tsx:445:      toast.success('Adjustment added', { description: `${label} · ${mode === '+' ? '+' : '−'}${moneyMy(Math.abs(amountNum))} · ${periodLabel(month)}` })
+   137→/home/z/my-project/src/components/principal/modules/salary/salary-employee-drawer.tsx:449:      toast.error('Could not add', { description: err instanceof Error ? err.message : undefined })
+   138→/home/z/my-project/src/components/principal/modules/salary/salary-payments.tsx:61:    toast.success('Follow-up noted', { description: `${p.employeeName} · ${moneyMy(p.amount)}` })
+   139→/home/z/my-project/src/components/principal/modules/salary/salary-settings.tsx:40:      toast.success('Editing enabled', { description: 'Salary changes can be sent to employees for the next 3 hours.' })
+   140→/home/z/my-project/src/components/principal/modules/salary/salary-settings.tsx:112:              toast.success('Default method updated', { description: v })
+   141→/home/z/my-project/src/components/principal/modules/salary/salary-settings.tsx:135:                  toast.success(`${m} reference ${checked ? 'required' : 'optional'}`)
+   142→/home/z/my-project/src/components/principal/modules/salary/salary-payroll-archive.tsx:312:    toast.success('Report downloaded', {
+   143→/home/z/my-project/src/components/principal/modules/salary/salary-structures.tsx:174:                    onClick={() => { duplicateStructure(s.id); toast.success('Structure duplicated', { description: `${s.name} (Copy)` }) }}
+   144→/home/z/my-project/src/components/principal/modules/salary/salary-structures.tsx:182:                      onClick={() => { setStructureStatus(s.id, 'Active'); toast.success('Structure restored', { description: s.name }) }}
+   145→/home/z/my-project/src/components/principal/modules/salary/salary-structures.tsx:189:                      onClick={() => { setStructureStatus(s.id, 'Archived'); toast.success('Structure archived', { description: `${s.name} — existing salaries unchanged` }) }}
+   146→/home/z/my-project/src/components/principal/modules/salary/salary-structures.tsx:261:    if (!state.name.trim()) { toast.error('Enter a name for this structure.'); return }
+   147→/home/z/my-project/src/components/principal/modules/salary/salary-structures.tsx:262:    if (base <= 0) { toast.error('Enter a valid base amount.'); return }
+   148→/home/z/my-project/src/components/principal/modules/salary/salary-structures.tsx:272:        toast.success('Structure updated', { description: state.name.trim() })
+   149→/home/z/my-project/src/components/principal/modules/salary/salary-structures.tsx:281:        toast.success('Structure created', { description: state.name.trim() })
+   150→/home/z/my-project/src/components/principal/modules/salary/salary-structures.tsx:285:      toast.error('Could not save', { description: err instanceof Error ? err.message : undefined })
+   151→/home/z/my-project/src/components/principal/modules/salary/payment-dialogs.tsx:107:            onClick={() => toast.success('Receipt sent to print', { description: receipt.receiptNo })}
+   152→/home/z/my-project/src/components/principal/modules/salary/salary-reports.tsx:60:    toast.success('Export ready', { description: `salary-payments-${month}.csv` })
+   153→/home/z/my-project/src/components/principal/modules/fees/fees-transactions.tsx:128:    toast.success('Print dialog opened')
+   154→/home/z/my-project/src/components/principal/modules/fees/fees-transactions.tsx:133:    toast.success('Receipt downloaded', { description: `${t.receiptNo}.html` })
+   155→/home/z/my-project/src/components/principal/modules/fees/fees-transactions.tsx:184:      toast.info('Nothing to export', { description: 'No transactions match the current filters.' })
+   156→/home/z/my-project/src/components/principal/modules/fees/fees-transactions.tsx:211:    toast.success('Export downloaded', { description: `${filtered.length} transaction(s) exported to CSV.` })
+   157→/home/z/my-project/src/components/principal/modules/classes/details/rename-subject-dialog.tsx:57:    toast.success(`Renamed "${subjectName}" → "${trimmed}"`, {
+   158→/home/z/my-project/src/components/principal/modules/classes/details/class-teachers.tsx:210:      toast.success(`${changeCount} change(s) saved${archiveNote}`)
+   159→/home/z/my-project/src/components/principal/modules/classes/details/archived-teachers-panel.tsx:48:        toast.success(`${item.name} restored to active pool`)
+   160→/home/z/my-project/src/components/principal/modules/classes/details/archived-teachers-panel.tsx:52:        toast.success(`${item.name} permanently deleted`)
+   161→/home/z/my-project/src/components/principal/modules/classes/details/class-subjects.tsx:49:      toast.error(`${subjectName} is already allocated`)
+   162→/home/z/my-project/src/components/principal/modules/classes/details/class-subjects.tsx:53:    toast.success(`${subjectName} added to ${liveClass.name}`)
+   163→/home/z/my-project/src/components/principal/modules/classes/details/class-subjects.tsx:60:      toast.success(`${name} created and added to ${liveClass.name}`)
+   164→/home/z/my-project/src/components/principal/modules/classes/details/class-subjects.tsx:73:    toast.success(`${archiveTarget} archived — recoverable from Archive`)
+   165→/home/z/my-project/src/components/principal/modules/classes/details/archived-subjects-panel.tsx:52:        toast.success(`${item.name} restored`)
+   166→/home/z/my-project/src/components/principal/modules/classes/details/archived-subjects-panel.tsx:56:        toast.success(`${item.name} permanently deleted`)
+   167→/home/z/my-project/src/components/principal/modules/classes/add-class-page.tsx:86:    if (!validate()) { toast.error('Please fix the errors before creating.'); return }
+   168→/home/z/my-project/src/components/principal/modules/classes/add-class-page.tsx:87:    toast.success(`Class ${form.name} created with ${sections.length} section(s)`)
+   169→/home/z/my-project/src/components/principal/modules/classes/add-class-page.tsx:93:      toast.error('This teacher is already assigned as a Class Teacher elsewhere.')
+   170→/home/z/my-project/src/components/principal/modules/fees/fees-collect-payment.tsx:239:        toast.success('Payment recorded', {
+   171→/home/z/my-project/src/components/principal/modules/fees/fees-collect-payment.tsx:303:            toast.info('Gateway order created', {
+   172→/home/z/my-project/src/components/principal/modules/fees/fees-collect-payment.tsx:689:                    onPrint={() => { printReceiptA5(recordedTxn, receiptSettings); useFeeStore.getState().markReceiptHandled(recordedTxn.id, 'Principal'); toast.success('Print dialog opened') }}
+   173→/home/z/my-project/src/components/principal/modules/fees/fees-collect-payment.tsx:690:                    onDownload={() => { downloadReceiptA5(recordedTxn, receiptSettings); useFeeStore.getState().markReceiptHandled(recordedTxn.id, 'Principal'); toast.success('Receipt downloaded', { description: `${recordedTxn.receiptNo}.html` }) }}
+   174→/home/z/my-project/src/components/principal/modules/certificates/generate-tab.tsx:209:    toast.success(`${docType} generated`, {
+   175→/home/z/my-project/src/components/principal/modules/certificates/templates-tab.tsx:128:                toast.success(`Default ${docType} template`, {
+   176→/home/z/my-project/src/components/principal/modules/certificates/templates-tab.tsx:135:                  toast.success('Template duplicated', { description: copy.name })
+   177→/home/z/my-project/src/components/principal/modules/certificates/templates-tab.tsx:140:                toast.success(`${t.active ? 'Deactivated' : 'Activated'} template`, {
+   178→/home/z/my-project/src/components/principal/modules/certificates/history-tab.tsx:101:    toast.success('Document downloaded', { description: `${doc.docNumber}.html` })
+   179→/home/z/my-project/src/components/principal/modules/certificates/history-tab.tsx:118:      toast.success('Regenerated', { description: newDoc.docNumber })
+   180→/home/z/my-project/src/components/principal/modules/certificates/history-tab.tsx:129:      toast.success('Regenerated', { description: newDoc.docNumber })
+   181→/home/z/my-project/src/components/principal/modules/certificates/history-tab.tsx:134:    toast.success('Marked as issued', { description: doc.docNumber })
+   182→/home/z/my-project/src/components/principal/modules/certificates/history-tab.tsx:138:    toast.success('Deleted', { description: doc.docNumber })
+   183→/home/z/my-project/src/components/principal/modules/fees/fees-structures.tsx:279:      toast.info(`${r.created} class structure${r.created === 1 ? '' : 's'} auto-created for ${CURRENT_ACADEMIC_YEAR}`, {
+   184→/home/z/my-project/src/components/principal/modules/fees/fees-structures.tsx:299:    if (newId) toast.success('Structure duplicated as draft', { description: `New structure ${newId} created.` })
+   185→/home/z/my-project/src/components/principal/modules/fees/fees-structures.tsx:322:      toast.info('No uncovered classes', {
+   186→/home/z/my-project/src/components/principal/modules/fees/fees-structures.tsx:349:      toast.success(`Applied to ${created.length} classes`, {
+   187→/home/z/my-project/src/components/principal/modules/fees/fees-structures.tsx:359:      toast.error('No current version to archive')
+   188→/home/z/my-project/src/components/principal/modules/fees/fees-structures.tsx:364:    toast.info('Version archived', { description: `v${current.version} of ${s.className} archived.` })
+   189→/home/z/my-project/src/components/principal/modules/fees/fees-structures.tsx:711:            toast.error('Reason is required (min 5 chars)')
+   190→/home/z/my-project/src/components/principal/modules/fees/fees-structures.tsx:716:            toast.success('Rolled back successfully', {
+   191→/home/z/my-project/src/components/principal/modules/fees/fees-structures.tsx:724:          toast.info('Version archived', { description: `Version archived from ${historyStructure?.className}.` })
+   192→/home/z/my-project/src/components/principal/modules/fees/fees-settings.tsx:108:          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { updateLateFeeRule(local); toast.success('Late fee rules updated') }}>
+   193→/home/z/my-project/src/components/principal/modules/fees/fees-settings.tsx:177:          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { updateConcessionRule(local); toast.success('Concession rules updated') }}>
+   194→/home/z/my-project/src/components/principal/modules/fees/fees-settings.tsx:314:    toast.success('Applicability updated', {
+   195→/home/z/my-project/src/components/principal/modules/fees/fees-settings.tsx:433:      toast.error('Select at least one class')
+   196→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:136:        toast.error(`Already assigned to ${owner?.name ?? 'another room'}`)
+   197→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:147:    if (rooms.length === 0) { toast.error('Add at least one room'); return }
+   198→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:148:    if (rooms.some((r) => r.eligibleClassIds.length === 0)) { toast.error('Each room needs at least one eligible class'); return }
+   199→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:151:    if (result.fits) toast.success(`${result.totalAssigned} students seated`)
+   200→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:156:    if (!plan) { toast.error('No seating plan to export'); return }
+   201→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:170:      toast.success('Seating plan PDF downloaded')
+   202→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:171:    } catch (e: any) { toast.error('Export failed', { description: e.message }) }
+   203→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:181:      toast.error('No seated students to generate admit cards for')
+   204→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:243:        toast.error('No students found in seating plan')
+   205→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:250:      toast.success(`Admit cards generated for ${allSeatedStudents.length} students`)
+   206→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:252:      toast.error('Failed to generate admit cards', { description: e.message })
+   207→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:450:      toast.error(`${teacher.name} is already assigned to another room for this slot`)
+   208→/home/z/my-project/src/components/principal/modules/exams/seating/seating-section.tsx:455:    if (currentCount >= 3) { toast.error('Maximum 3 invigilators per slot'); return }
+   209→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:132:    if (toVerify.length === 0) { toast.info('No submitted papers to verify in the current view'); return }
+   210→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:138:    toast.success(`Verified ${total} marks across ${toVerify.length} papers`)
+   211→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:145:    if (toLock.length === 0) { toast.info('No verified papers to lock in the current view'); return }
+   212→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:151:    toast.success(`Locked ${total} marks across ${toLock.length} papers`)
+   213→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:161:      if (action === 'submit') { const r = await submit(exam.id, filter); toast.success(`Submitted ${r.submitted} marks`) }
+   214→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:162:      else if (action === 'verify') { const r = await verify(exam.id, filter); toast.success(`Verified ${r.verified} marks`) }
+   215→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:163:      else if (action === 'lock') { const r = await lock(exam.id, filter); toast.success(`Locked ${r.locked} marks`) }
+   216→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:164:      else if (action === 'unlock') { const r = await unlock(exam.id, filter, 'Principal review'); toast.success(`Unlocked ${r.unlocked} marks for review`) }
+   217→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:165:      else if (action === 'declare') { await declare(exam.id, cid); toast.success(`${classReadiness.find((c) => c.classId === cid)?.className} results declared`) }
+   218→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:166:      else if (action === 'publish') { const r = await publish(exam.id, cid); toast.success(`Published · ${r.notificationsSent} students notified`) }
+   219→/home/z/my-project/src/components/principal/modules/exams/marks-section.tsx:168:    } catch (e: any) { toast.error('Action failed', { description: e.message }) }
+   220→/home/z/my-project/src/components/principal/modules/exams/exam-attendance-section.tsx:197:      toast.error(`${result.pendingCount} student${result.pendingCount === 1 ? '' : 's'} still unmarked`)
+   221→/home/z/my-project/src/components/principal/modules/exams/exam-attendance-section.tsx:200:    toast.success('Attendance submitted')
+   222→/home/z/my-project/src/components/principal/modules/exams/exam-attendance-section.tsx:205:    toast.success('Session marked as reviewed')
+   223→/home/z/my-project/src/components/principal/modules/exams/schedule-section.tsx:41:    try { generateSchedulePDF(exam, consolidated) } catch { toast.error('Failed to generate PDF') }
+   224→/home/z/my-project/src/components/principal/modules/exams/schedule-section.tsx:78:            <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setEditMode(false); toast.success('Schedule saved') }}>
+   225→/home/z/my-project/src/components/principal/modules/fees/fees-normalize-heads.tsx:221:        toast.success('Linked to catalogue', {
+   226→/home/z/my-project/src/components/principal/modules/fees/fees-normalize-heads.tsx:225:        toast.error('Failed to link', { description: result.error })
+   227→/home/z/my-project/src/components/principal/modules/fees/fees-normalize-heads.tsx:233:    toast.info('Unlinked', {
+   228→/home/z/my-project/src/components/principal/modules/fees/fees-normalize-heads.tsx:248:      toast.success('Bulk-linked', {
+   229→/home/z/my-project/src/components/principal/modules/exams/tabs/reports-tab.tsx:160:    if (!studentId) { toast.error('Select a student first'); return }
+   230→/home/z/my-project/src/components/principal/modules/exams/tabs/reports-tab.tsx:162:    if (!result) { toast.error('Student not found in results'); return }
+   231→/home/z/my-project/src/components/principal/modules/exams/tabs/reports-tab.tsx:166:      toast.success('Report card downloaded', { description: filename })
+   232→/home/z/my-project/src/components/principal/modules/exams/tabs/reports-tab.tsx:167:    } catch (e: any) { toast.error('Failed to generate report card', { description: e.message }) }
+   233→/home/z/my-project/src/components/principal/modules/exams/tabs/reports-tab.tsx:171:    if (studentResults.length === 0) { toast.error('No results to export'); return }
+   234→/home/z/my-project/src/components/principal/modules/exams/tabs/reports-tab.tsx:176:      toast.success('Grade sheet exported', { description: filename })
+   235→/home/z/my-project/src/components/principal/modules/exams/tabs/reports-tab.tsx:177:    } catch (e: any) { toast.error('Failed to export grade sheet', { description: e.message }) }
+   236→/home/z/my-project/src/components/principal/modules/exams/tabs/reports-tab.tsx:184:      toast.success('Result PDF downloaded')
+   237→/home/z/my-project/src/components/principal/modules/exams/tabs/reports-tab.tsx:185:    } catch (e: any) { toast.error('Failed to generate result PDF', { description: e.message }) }
+   238→/home/z/my-project/src/components/principal/modules/exams/tabs/reports-tab.tsx:265:                onClick={() => toast.info('Result verification preview', { description: 'Public result page coming soon' })}
+   239→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:162:    try { await save(local); toast.success('Settings saved'); setDirty(false) }
+   240→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:163:    catch (e: any) { toast.error('Failed to save', { description: e.message }) }
+   241→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:202:    try { await create({ name: newName.trim() }); setNewName(''); toast.success('Exam type added') }
+   242→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:203:    catch (e: any) { toast.error('Failed to add', { description: e.message }) }
+   243→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:342:      toast.success('Grade added')
+   244→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:343:    } catch (e: any) { toast.error('Failed to add', { description: e.message }) }
+   245→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:450:    try { await save(local); toast.success('Rules saved'); setDirty(false) }
+   246→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:451:    catch (e: any) { toast.error('Failed to save', { description: e.message }) }
+   247→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:547:    try { await save(local); toast.success('Admit card settings saved'); setDirty(false) }
+   248→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:548:    catch (e: any) { toast.error('Failed to save', { description: e.message }) }
+   249→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:590:    try { await save(local); toast.success('Report card settings saved'); setDirty(false) }
+   250→/home/z/my-project/src/components/principal/modules/exams/tabs/settings-tab.tsx:591:    catch (e: any) { toast.error('Failed to save', { description: e.message }) }
+   251→
+   252→[Showing results with pagination = limit: 250]

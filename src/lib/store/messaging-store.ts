@@ -12,6 +12,13 @@
  * Folders: Inbox · Starred · Sent · Groups · Drafts · Archive
  * Labels: Staff · Parents · Groups · Urgent (all functional filters)
  *
+ * QA-FIX-B — TENANT-SCOPED PERSISTENCE: conversations, messages, drafts +
+ * groups survive reload (per-school namespace via createTenantScopedStorage).
+ * activeConversationId / folder / label / searchQuery are ephemeral UI state
+ * and are NOT persisted. The simulated delivery/auto-reply timers live
+ * inside the sendMessage action (runtime-only) — nothing non-serializable
+ * ever enters state, so no sanitization is needed in partialize.
+ *
  * State mutations:
  *   - sendMessage (creates/replies to conversation; group replies use a random member name)
  *   - markRead (clears unread on open)
@@ -24,8 +31,13 @@
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { teachers } from '@/lib/mock/teachers'
 import { useStudentsStore } from '@/lib/store/students-store'
+import { migrateLegacyScopedStore, createTenantScopedStorage } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+migrateLegacyScopedStore('scholario-messaging-v1', DEFAULT_TENANT_ID)
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -410,7 +422,9 @@ interface MessagingState {
   getGroupByConversationId: (conversationId: string) => Group | undefined
 }
 
-export const useMessagingStore = create<MessagingState>((set, get) => ({
+export const useMessagingStore = create<MessagingState>()(
+  persist(
+    (set, get) => ({
   conversations: SEED_CONVERSATIONS,
   messages: SEED_MESSAGES,
   drafts: SEED_DRAFTS,
@@ -839,7 +853,22 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
 
   getGroupByConversationId: (conversationId) =>
     get().groups.find((g) => g.conversationId === conversationId),
-}))
+    }),
+    {
+      name: 'scholario-messaging-v1',
+      storage: createTenantScopedStorage('scholario-messaging-v1'),
+      version: 1,
+      // DATA slices only — plain JSON (arrays, records, strings). UI state
+      // (active folder/label/conversation, search) and actions excluded.
+      partialize: (s) => ({
+        conversations: s.conversations,
+        messages: s.messages,
+        drafts: s.drafts,
+        groups: s.groups,
+      }),
+    },
+  ),
+)
 
 // ─── Recipient options (for Compose) ────────────────────────────────
 

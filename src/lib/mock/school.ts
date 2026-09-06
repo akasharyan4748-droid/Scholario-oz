@@ -10,7 +10,9 @@ export const school = {
   phone: "+91 124 4567 800",
   email: "info@demoschool.edu",
   website: "www.demoschool.edu",
-  principal: "Dr. Sarah Jenkins",
+  // Signatory matches the tenant record + School Settings (Dr. Ananya Iyer) —
+  // certificates, letters and comms all render the same principal.
+  principal: "Dr. Ananya Iyer",
   vicePrincipal: "Mr. Suresh Nair",
   established: 2020,
   // SaaS-STAGE-1 — aligned with the active academic session (fee data is 2026-2027)

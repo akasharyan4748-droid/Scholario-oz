@@ -49,6 +49,7 @@ import { cn } from '@/lib/utils'
 import { FeePanel, FeeStat, FeeStatusBadge, FeeEmptyState, ModeIcon, modeAccent, statusAccent, FeePill } from './fees-shared'
 import { FeeReceiptA5Preview, printReceiptA5, downloadReceiptA5 } from './fee-receipt-a5'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 interface Props {
   data: ReturnType<typeof useFeeData>
@@ -331,6 +332,13 @@ function StudentFeeAccountDrawer({ account, onClose, onCollect }: { account: Stu
   const [ledgerOpen, setLedgerOpen] = useState(false)
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null)
 
+  // Escape dismisses the top-most layer: the receipt preview when one is
+  // open, otherwise the drawer itself (backdrop click already does both).
+  useDismissOnEscape(() => {
+    if (selectedReceiptId) setSelectedReceiptId(null)
+    else onClose()
+  })
+
   // Tab switch wrapper — the ledger sub-view lives under the Account tab
   // only; leaving Account always collapses it so a returning visit starts
   // at the position summary.
@@ -347,6 +355,9 @@ function StudentFeeAccountDrawer({ account, onClose, onCollect }: { account: Stu
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Fee account — ${account.studentName}`}
       className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-stretch justify-end"
       onClick={onClose}
     >
@@ -461,6 +472,9 @@ function StudentFeeAccountDrawer({ account, onClose, onCollect }: { account: Stu
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Receipt ${selectedReceipt.receiptNo} preview`}
               className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
               onClick={() => setSelectedReceiptId(null)}
             >

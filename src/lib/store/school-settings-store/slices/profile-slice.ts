@@ -13,6 +13,7 @@ export const createProfileSlice: StateCreator<
     | 'updateFees'
     | 'updatePayroll'
     | 'updateFacilities'
+    | 'updateLibrary'
   >
 > = (set) => ({
   updateGeneral: (data) =>
@@ -29,6 +30,9 @@ export const createProfileSlice: StateCreator<
 
   updatePayroll: (data) =>
     set((state) => ({ payroll: { ...state.payroll, ...data } })),
+
+  updateLibrary: (data) =>
+    set((state) => ({ library: { ...state.library, ...data } })),
 
   updateFacilities: (data) =>
     set((state) => ({

@@ -38,11 +38,20 @@ export function LiveAlerts({ onNavigate }: LiveAlertsProps) {
   const {
     alerts: storeAlerts, dismissed, snoozed, severityFilter,
     autoAlertsEnabled, toggleAutoAlerts, resolve, resolveAll, restore, reset,
-    snooze, snoozeAll, unsnooze, addAlert, clearNewFlag, setSeverityFilter,
+    snooze, snoozeAll, unsnooze, unsnoozeExpired, addAlert, clearNewFlag, setSeverityFilter,
   } = useLiveAlerts()
 
   const [snoozeMenuFor, setSnoozeMenuFor] = useState<string | null>(null)
   const [snoozeAllMenuOpen, setSnoozeAllMenuOpen] = useState(false)
+
+  // QA-FIX-A: real time-based snooze — sweep expired snoozes on mount and
+  // every 30s so alerts auto-return to the active list when their snooze
+  // window passes (the store's snoozedUntil map is the clock).
+  useEffect(() => {
+    unsnoozeExpired()
+    const interval = setInterval(() => { unsnoozeExpired() }, 30_000)
+    return () => clearInterval(interval)
+  }, [unsnoozeExpired])
 
   // Hydrate alert objects with icon JSX (store keeps them serializable)
   const alerts: LiveAlertWithIcon[] = storeAlerts.map((a) => ({

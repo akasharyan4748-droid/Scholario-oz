@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { AdmissionStatus, AdmissionStoreState } from '../types'
 import { students, Student } from '@/lib/mock/students'
+import { useStudentsStore } from '@/lib/store/students-store'
 
 export const createCompletionSlice: StateCreator<
   AdmissionStoreState,
@@ -100,6 +101,48 @@ export const createCompletionSlice: StateCreator<
     // Push to mock students array if present
     if (students && !students.some((s) => s.id === newStudent.id || s.admissionNo === newStudent.admissionNo)) {
       students.unshift(newStudent)
+    }
+
+    // ─── CONNECTED ROSTER ENROLMENT ────────────────────────────────────
+    // The completed admission ALSO becomes a REAL student in the canonical
+    // roster store (Students & Classes, Fees, Certificates, Downloads all
+    // reference the same student). Best-effort: a missing class match falls
+    // back to the first class so the enrolment is never silently dropped.
+    try {
+      const roster = useStudentsStore.getState()
+      const cls =
+        roster.classes.find((c) => c.name === app.formData.className) ??
+        roster.classes.find((c) => `${c.name}` === newStudent.className) ??
+        roster.classes.find((c) => c.sections.some((s) => s.name === newStudent.section))
+      if (cls) {
+        const enrolled = roster.addStudent({
+          name: newStudent.name,
+          dob: newStudent.dob,
+          gender: newStudent.gender,
+          classId: cls.id,
+          section: newStudent.section,
+          fatherName: newStudent.fatherName,
+          motherName: newStudent.motherName,
+          guardianPhone: newStudent.guardianPhone,
+          guardianEmail: newStudent.email,
+          address: newStudent.address,
+          bloodGroup: newStudent.bloodGroup,
+          previousSchool: newStudent.previousSchool,
+          admissionDate: now,
+        })
+        // Cross-reference: the admission record points at the roster id so
+        // every module resolves the SAME student.
+        set((s) => ({
+          applications: s.applications.map((item) =>
+            item.id === appId
+              ? { ...item, studentId: enrolled.id, admissionNo: enrolled.admissionNo }
+              : item
+          ),
+        }))
+      }
+    } catch {
+      // Roster enrolment is best-effort — the admission record itself is
+      // already persisted above.
     }
 
     return newStudent

@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { useMockMarksStore } from '@/lib/exams/mock-marks-data'
 import { DEFAULT_GRADE_BOUNDARIES, getGradeForPercentage, type ExamDTO } from '@/lib/exams/types'
 import { generateClassResultPDF, generateGradeAnalysisPDF, generateStudentResultPDF } from '@/lib/exams/result-pdf'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 import { CollapsibleSection } from './collapsible-section'
 import { Stat } from './workspace-shared'
 
@@ -136,6 +137,7 @@ function StudentDrillDownModal({ exam, studentId, allMarks, onClose }: {
   allMarks: any[]
   onClose: () => void
 }) {
+  useDismissOnEscape(onClose)
   const studentMarks = useMemo(
     () => allMarks.filter((m) => m.studentId === studentId),
     [allMarks, studentId],
@@ -180,7 +182,12 @@ function StudentDrillDownModal({ exam, studentId, allMarks, onClose }: {
   }, [subjects, studentMarks])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${studentName} — subject-wise marks`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}
+    >
       <div
         className="bg-card border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -205,6 +212,8 @@ function StudentDrillDownModal({ exam, studentId, allMarks, onClose }: {
             </div>
             <button
               onClick={onClose}
+              aria-label="Close student breakdown"
+              title="Close"
               className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
               <X className="h-4 w-4" />
@@ -376,6 +385,7 @@ function SubjectDrillDownModal({ exam, classId, subjectId, subjectName, classNam
   allMarks: any[]
   onClose: () => void
 }) {
+  useDismissOnEscape(onClose)
   const subjectConfig = exam.subjects.find((s: any) => s.classId === classId && s.subjectId === subjectId)
   const maxMarks = subjectConfig?.maxMarks ?? 100
   const passMarks = subjectConfig?.passMarks ?? 33
@@ -402,7 +412,12 @@ function SubjectDrillDownModal({ exam, classId, subjectId, subjectName, classNam
   }, [studentMarks, passMarks])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${subjectName} — student-wise marks`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}
+    >
       <div
         className="bg-card border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -427,6 +442,8 @@ function SubjectDrillDownModal({ exam, classId, subjectId, subjectName, classNam
             </div>
             <button
               onClick={onClose}
+              aria-label="Close subject breakdown"
+              title="Close"
               className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
               <X className="h-4 w-4" />

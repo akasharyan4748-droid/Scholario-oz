@@ -31,6 +31,9 @@ interface LiveAlertState {
   alerts: LiveAlert[]
   dismissed: LiveAlert[]
   snoozed: LiveAlert[]
+  /** QA-FIX-A: alertId → epoch ms when its snooze ends. Canonical snooze
+   * clock — read by `unsnoozeExpired` so expired snoozes auto-return. */
+  snoozedUntil: Record<string, number>
   severityFilter: SeverityFilter
   lastAddedId: string | null
   activityLog: ActivityEvent[]
@@ -39,6 +42,10 @@ interface LiveAlertState {
   resolveAll: () => void
   snooze: (id: string, minutes: number) => void
   snoozeAll: (minutes: number) => void
+  /** Snooze the given alerts for a real duration in milliseconds. */
+  snoozeAlerts: (ids: string[], durationMs: number) => void
+  /** Return expired snoozes to the active list (compute-on-read sweeper). */
+  unsnoozeExpired: (now?: number) => number
   restore: () => void
   unsnooze: (id: string) => void
   addAlert: (alert: LiveAlert) => void
@@ -100,6 +107,7 @@ export const useLiveAlerts = create<LiveAlertState>()(
       alerts: initialAlerts,
       dismissed: [],
       snoozed: [],
+      snoozedUntil: {},
       severityFilter: 'all',
       lastAddedId: null,
       activityLog: initialActivityLog,
@@ -138,41 +146,61 @@ export const useLiveAlerts = create<LiveAlertState>()(
           activityLog: log,
         })
       },
-      snooze: (id, minutes) => {
+      // QA-FIX-A: single real-duration snooze path. Minutes-based legacy
+      // actions below delegate here with minutes × 60 000 ms.
+      snoozeAlerts: (ids, durationMs) => {
         const state = get()
-        const alert = state.alerts.find((a) => a.id === id)
-        if (!alert) return
-        const snoozedUntil = Date.now() + minutes * 60 * 1000
+        const idSet = new Set(ids)
+        const moving = state.alerts.filter((a) => idSet.has(a.id))
+        if (moving.length === 0) return
+        const until = Date.now() + durationMs
+        const snoozedUntil = { ...state.snoozedUntil }
+        for (const a of moving) snoozedUntil[a.id] = until
         const log = [...state.activityLog]
         const nowIdx = log.length - 1
-        log[nowIdx] = { ...log[nowIdx], snoozed: log[nowIdx].snoozed + 1 }
+        log[nowIdx] = { ...log[nowIdx], snoozed: log[nowIdx].snoozed + moving.length }
         set({
-          alerts: state.alerts.filter((a) => a.id !== id),
-          snoozed: [...state.snoozed, { ...alert, snoozed: true, snoozedUntil }],
+          alerts: state.alerts.filter((a) => !idSet.has(a.id)),
+          snoozed: [...state.snoozed, ...moving.map((a) => ({ ...a, snoozed: true, snoozedUntil: until }))],
+          snoozedUntil,
           activityLog: log,
         })
       },
+      snooze: (id, minutes) => {
+        get().snoozeAlerts([id], minutes * 60_000)
+      },
       snoozeAll: (minutes) => {
+        get().snoozeAlerts(get().alerts.map((a) => a.id), minutes * 60_000)
+      },
+      // Auto-unsnooze: moves snoozed alerts whose time has passed back to
+      // the active list. Called on mount + a 30s interval by the panel so
+      // snoozes are honoured in real time (compute-on-read semantics).
+      unsnoozeExpired: (now) => {
+        const t = now ?? Date.now()
         const state = get()
-        if (state.alerts.length === 0) return
-        const count = state.alerts.length
-        const snoozedUntil = Date.now() + minutes * 60 * 1000
-        const log = [...state.activityLog]
-        const nowIdx = log.length - 1
-        log[nowIdx] = { ...log[nowIdx], snoozed: log[nowIdx].snoozed + count }
+        if (state.snoozed.length === 0) return 0
+        const expired = state.snoozed.filter((a) => !a.snoozedUntil || a.snoozedUntil <= t)
+        if (expired.length === 0) return 0
+        const expiredIds = new Set(expired.map((a) => a.id))
+        const snoozedUntil = { ...state.snoozedUntil }
+        for (const id of expiredIds) delete snoozedUntil[id]
         set({
-          alerts: [],
-          snoozed: [...state.snoozed, ...state.alerts.map((a) => ({ ...a, snoozed: true, snoozedUntil }))],
-          activityLog: log,
+          snoozed: state.snoozed.filter((a) => !expiredIds.has(a.id)),
+          alerts: [...state.alerts, ...expired.map((a) => ({ ...a, snoozed: false, snoozedUntil: undefined }))],
+          snoozedUntil,
         })
+        return expired.length
       },
       unsnooze: (id) => {
         const state = get()
         const alert = state.snoozed.find((a) => a.id === id)
         if (!alert) return
+        const snoozedUntil = { ...state.snoozedUntil }
+        delete snoozedUntil[id]
         set({
           snoozed: state.snoozed.filter((a) => a.id !== id),
           alerts: [...state.alerts, { ...alert, snoozed: false, snoozedUntil: undefined }],
+          snoozedUntil,
         })
       },
       restore: () => {
@@ -201,7 +229,7 @@ export const useLiveAlerts = create<LiveAlertState>()(
         })
       },
       toggleAutoAlerts: () => set((state) => ({ autoAlertsEnabled: !state.autoAlertsEnabled })),
-      reset: () => set({ alerts: initialAlerts, dismissed: [], snoozed: [], severityFilter: 'all', lastAddedId: null, activityLog: initialActivityLog, autoAlertsEnabled: false }),
+      reset: () => set({ alerts: initialAlerts, dismissed: [], snoozed: [], snoozedUntil: {}, severityFilter: 'all', lastAddedId: null, activityLog: initialActivityLog, autoAlertsEnabled: false }),
       setSeverityFilter: (filter) => set({ severityFilter: filter }),
       filteredAlerts: () => {
         const state = get()
@@ -217,6 +245,7 @@ export const useLiveAlerts = create<LiveAlertState>()(
         alerts: state.alerts.map((a) => ({ ...a, isNew: false })),
         dismissed: state.dismissed,
         snoozed: state.snoozed,
+        snoozedUntil: state.snoozedUntil,
         activityLog: state.activityLog,
       }),
     }

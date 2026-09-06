@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 import type { DuplicateMatch } from '../lib/admission-utils'
 
 export function PostSubmitDuplicateModal({
@@ -25,6 +26,8 @@ export function PostSubmitDuplicateModal({
   onCancel: () => void
   onContinueAnyway: () => void
 }) {
+  // Escape dismisses the duplicate warning the same way the Cancel button does.
+  useDismissOnEscape(onCancel, postSubmitDup !== null)
   return (
     <AnimatePresence>
       {postSubmitDup && (
@@ -32,6 +35,9 @@ export function PostSubmitDuplicateModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Duplicate record detected"
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
         >
           <motion.div

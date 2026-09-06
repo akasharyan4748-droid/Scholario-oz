@@ -54,6 +54,7 @@ import { cn } from '@/lib/utils'
 import { Panel } from '../shared/panel'
 import { FeeEmptyState, FeeStatusBadge, ModeIcon, modeAccent, paymentStatusLabel, TxnDateTime, DateTimeText, SourceChip } from './fees-shared'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 // Rejection reasons (structured list + "Other" with custom text) — catalog UNCHANGED.
 const REJECT_REASONS = [
@@ -515,12 +516,16 @@ function ApproveModal({ req, currentOutstanding, loading, onClose, onConfirm }: 
   onClose: () => void
   onConfirm: () => void
 }) {
+  useDismissOnEscape(onClose)
   const balanceAfter = Math.max(0, currentOutstanding - req.amount)
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Approve cash payment"
       className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
@@ -608,11 +613,15 @@ function RejectModal({ req, reason, setReason, note, setNote, loading, onClose, 
   onClose: () => void
   onConfirm: () => void
 }) {
+  useDismissOnEscape(onClose)
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Reject cash payment"
       className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
@@ -702,11 +711,15 @@ function ClarifyModal({ req, message, setMessage, loading, onClose, onConfirm }:
   onClose: () => void
   onConfirm: () => void
 }) {
+  useDismissOnEscape(onClose)
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Request clarification"
       className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >

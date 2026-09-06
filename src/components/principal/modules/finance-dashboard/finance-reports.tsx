@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFinanceData } from '@/lib/store/finance-store'
+import { downloadCSVFile, safeFileName } from '@/lib/download-file'
+import { toCsv } from '@/lib/csv'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FinancePanel, FinanceEmptyState } from './finance-shared'
@@ -51,6 +53,15 @@ export function FinanceReportsSection({ data }: { data: ReturnType<typeof useFin
   const [activeReport, setActiveReport] = useState<ReportType>('summary')
   const report = REPORTS.find((r) => r.id === activeReport)!
 
+  // QA-FIX-A: REAL CSV export — mirrors the ReportBody table for the active
+  // report with plain numbers (no ₹ in numeric cells).
+  const handleExportCsv = () => {
+    const { headers, rows } = buildReportCsv(activeReport, data)
+    const filename = safeFileName(`${activeReport}-report-${data.period.id}`, 'csv')
+    downloadCSVFile(toCsv(headers, rows), filename)
+    toast.success('Report exported', { description: filename })
+  }
+
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
       {/* Report picker */}
@@ -80,7 +91,7 @@ export function FinanceReportsSection({ data }: { data: ReturnType<typeof useFin
       <FinancePanel
         title={report.label}
         subtitle={report.description}
-        action={<Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={() => toast.success('Report exported', { description: `${report.label}.csv downloaded` })}>
+        action={<Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={handleExportCsv}>
           <Download className="h-3 w-3" /> Export CSV
         </Button>}
         bodyClassName="p-0"
@@ -89,6 +100,122 @@ export function FinanceReportsSection({ data }: { data: ReturnType<typeof useFin
       </FinancePanel>
     </div>
   )
+}
+
+function buildReportCsv(
+  type: ReportType,
+  data: ReturnType<typeof useFinanceData>,
+): { headers: string[]; rows: (string | number)[][] } {
+  // CSV twin of the ReportBody tables — same values the screen shows, but
+  // with raw numbers instead of formatted INR strings.
+  if (type === 'summary') {
+    return {
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Total Revenue', data.totalRevenue],
+        ['Total Expenses', data.totalExpenses],
+        ['Net Surplus', data.netSurplus],
+        ['Surplus Margin (%)', data.surplusMargin],
+        ['Cash Available', data.cashAvailable],
+        ['Total Assets', data.totalAssets],
+        ['Total Liabilities', data.totalLiabilities],
+        ['Net Worth', data.netWorth],
+        ['Reserve Coverage (months)', data.reserveCoverage],
+        ['Collection Rate (%)', data.feeCollectionRate],
+      ],
+    }
+  }
+  if (type === 'fee-revenue') {
+    return {
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Fee Revenue (Collected)', data.feeRevenue],
+        ['Fee Expected', data.feeExpected],
+        ['Outstanding Fees', data.feeOutstanding],
+        ['Collection Rate (%)', data.feeCollectionRate],
+        ['Students with Dues', data.receivableStudentCount],
+      ],
+    }
+  }
+  if (type === 'payroll-expense') {
+    return {
+      headers: ['Metric', 'Monthly', 'Annualized'],
+      rows: [
+        ['Monthly Payroll', data.monthlyPayroll, data.monthlyPayroll * 12],
+        ['Annualized Payroll', '', data.annualizedPayroll],
+        ['Pending Adjustments', data.alerts.find((a) => a.id === 'payroll-pending') ? 'Pending' : 0, ''],
+      ],
+    }
+  }
+  if (type === 'budget') {
+    return {
+      headers: ['Category', 'Budget', 'Actual', 'Variance', 'Utilization (%)'],
+      rows: [
+        ...data.budgetData.map((b) => [
+          b.category, b.budget, b.actual, b.budget - b.actual,
+          b.budget > 0 ? Math.round((b.actual / b.budget) * 100) : 0,
+        ]),
+        ['Total', data.totalBudget, data.totalActual, data.totalVariance, data.budgetUtilization],
+      ],
+    }
+  }
+  if (type === 'expense') {
+    return {
+      headers: ['Category', 'Amount (INR)', 'Share (%)'],
+      rows: [
+        ...data.expenseBreakdown.map((e) => [
+          e.name, e.value, data.totalExpenses > 0 ? +((e.value / data.totalExpenses) * 100).toFixed(1) : 0,
+        ]),
+        ['Total', data.totalExpenses, 100],
+      ],
+    }
+  }
+  if (type === 'income') {
+    return {
+      headers: ['Category', 'Account', 'Amount (INR)', 'YoY Change (%)'],
+      rows: [
+        ...data.pnlData.filter((p) => p.type === 'income').map((i) => [i.category, i.account, i.amount, i.yoyChange]),
+        ['Total Revenue', '', data.totalRevenue, ''],
+      ],
+    }
+  }
+  if (type === 'receivables') {
+    return {
+      headers: ['Type', 'Amount (INR)', 'Count'],
+      rows: [
+        ['Outstanding Fees', data.feeOutstanding, data.receivableStudentCount],
+        ['Other Receivables', data.otherReceivables, ''],
+        ['Total Receivables', data.totalReceivables, ''],
+      ],
+    }
+  }
+  if (type === 'payables') {
+    return {
+      headers: ['Type', 'Amount (INR)', 'Notes'],
+      rows: [
+        ['Payroll Payable', data.payrollPayable, 'Monthly salary'],
+        ['Vendor Payables', data.vendorPayables, 'Outstanding invoices'],
+        ['Loan (Annual)', data.longTermLiabilities, 'Long-term'],
+        ['Loan (Monthly)', Math.round(data.longTermLiabilities / 12), 'Monthly portion'],
+        ['Total Payables', data.totalPayables, ''],
+      ],
+    }
+  }
+  if (type === 'tax') {
+    const tds = Math.round(data.annualizedPayroll * 0.05)
+    const pf = Math.round(data.annualizedPayroll * 0.5 * 0.12)
+    const professionalTax = 28 * 12 * 200
+    return {
+      headers: ['Tax Type', 'Estimated Annual (INR)', 'Notes'],
+      rows: [
+        ['TDS (Income Tax)', tds, '~5% of payroll'],
+        ['Provident Fund (PF)', pf, '12% of Basic'],
+        ['Professional Tax', professionalTax, '200 per employee per month'],
+        ['Total Tax Liability', tds + Math.round(data.annualizedPayroll * 0.06) + professionalTax, ''],
+      ],
+    }
+  }
+  return { headers: ['Report'], rows: [['Not available']] }
 }
 
 function ReportBody({ type, data }: { type: ReportType; data: ReturnType<typeof useFinanceData> }) {

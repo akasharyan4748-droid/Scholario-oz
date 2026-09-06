@@ -1,4 +1,5 @@
 import type { TeacherRecord } from './types'
+import { teachers as MOCK_ROSTER } from '@/lib/mock/teachers'
 
 // Seed teachers list
 export const SEED_TEACHERS: TeacherRecord[] = [
@@ -155,6 +156,154 @@ export const SEED_TEACHERS: TeacherRecord[] = [
     loginCredentials: { username: 'rohan.mehta@greenwood.edu.in', tempPassword: 'GWS#Teacher2025', passwordResetRequired: false, createdDate: '2015-06-01' },
   },
 ]
+
+// ─── Derived roster records ────────────────────────────────────────────
+// The two records above (T-001, T-014) are fully-detailed primaries. Every
+// OTHER teacher in the canonical mock roster is derived here so the
+// Teachers module lists the same 20-member faculty that Timetable,
+// Library, Messaging, Attendance and Payroll reference — one school, one
+// roster, no phantom staff.
+const DETAILED_IDS = new Set(['T-001', 'T-014'])
+
+function pad(n: number, width = 3): string {
+  return String(n).padStart(width, '0')
+}
+
+function numFromSeed(seed: string, min: number, max: number): number {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return min + (h % Math.max(1, max - min + 1))
+}
+
+function salaryBreakdown(gross: number) {
+  const basic = Math.round(gross * 0.5)
+  const hra = Math.round(gross * 0.2)
+  const da = Math.round(gross * 0.15)
+  const specialAllowance = gross - basic - hra - da
+  const pfDeduction = Math.round(gross * 0.05)
+  return { basic, hra, da, specialAllowance, pfDeduction, netPay: gross - pfDeduction }
+}
+
+const BANKS = [
+  { bankName: 'HDFC Bank', ifscCode: 'HDFC0000240' },
+  { bankName: 'ICICI Bank', ifscCode: 'ICIC0000021' },
+  { bankName: 'State Bank of India', ifscCode: 'SBIN0001234' },
+  { bankName: 'Axis Bank', ifscCode: 'UTIB0000456' },
+  { bankName: 'Kotak Mahindra Bank', ifscCode: 'KKBK0000789' },
+]
+
+const RELIGIONS = ['Hindu', 'Hindu', 'Hindu', 'Muslim', 'Christian', 'Hindu', 'Sikh', 'Hindu']
+const CATEGORY = ['General', 'General', 'OBC', 'General', 'SC', 'General', 'General', 'EWS']
+
+function deriveTeacherRecord(mt: (typeof MOCK_ROSTER)[number], idx: number): TeacherRecord {
+  const gross = mt.salary
+  const bank = BANKS[idx % BANKS.length]
+  const empNo = Number(mt.employeeId.replace(/\D/g, '')) || idx + 2
+  const birthYear = 2025 - 25 - mt.experience
+  return {
+    id: mt.id,
+    employeeId: mt.employeeId,
+    teacherId: `TCH-2025-${pad(empNo)}`,
+    name: mt.name,
+    avatar: mt.avatar,
+    gender: mt.gender,
+    dob: `${birthYear}-${pad(numFromSeed(mt.id + 'm', 1, 12), 2)}-${pad(numFromSeed(mt.id + 'd', 1, 28), 2)}`,
+    bloodGroup: mt.bloodGroup,
+    aadhaarNo: `${numFromSeed(mt.id + 'a1', 1000, 9999)} ${numFromSeed(mt.id + 'a2', 1000, 9999)} ${numFromSeed(mt.id + 'a3', 1000, 9999)}`,
+    nationality: 'Indian',
+    religion: RELIGIONS[idx % RELIGIONS.length],
+    category: CATEGORY[idx % CATEGORY.length],
+    email: mt.email,
+    phone: mt.phone,
+    emergencyContact: {
+      name: `${mt.name.split(' ').slice(-1)[0]} (Family)`,
+      relation: 'Spouse',
+      phone: `+91 98${pad(numFromSeed(mt.id + 'p', 100, 999))}0 ${pad(numFromSeed(mt.id + 'q', 10000, 99999), 5)}`,
+    },
+    currentAddress: mt.address,
+    permAddress: mt.address,
+    sameAddress: true,
+    district: 'Gurugram',
+    state: 'Haryana',
+    pincode: String(numFromSeed(mt.id + 'pin', 122001, 122060)),
+    educationalQualifications: [
+      {
+        degree: mt.qualification.split(',')[0].trim(),
+        specialization: mt.subjects[0] ?? 'General',
+        institution: 'Delhi University',
+        year: String(birthYear + 22),
+        score: `${numFromSeed(mt.id + 's', 70, 92)}.${numFromSeed(mt.id + 't', 0, 9)}%`,
+      },
+    ],
+    professionalQualifications: ['B.Ed'],
+    totalExperience: mt.experience,
+    previousEmployment: {
+      organization: 'Prior Institution, NCR',
+      designation: 'Teacher',
+      lastSalary: Math.round(gross * 0.75),
+      duration: `${2005 + (idx % 5)}–${2010 + (idx % 5)}`,
+    },
+    joiningDate: mt.joiningDate,
+    employmentType: 'Full Time',
+    department: mt.department,
+    designation: mt.designation,
+    status: mt.status === 'On Leave' ? 'On Leave' : 'Active',
+    attendance: mt.attendance,
+    salary: gross,
+    salaryBreakdown: salaryBreakdown(gross),
+    bankDetails: {
+      bankName: bank.bankName,
+      accountNo: String(numFromSeed(mt.id + 'acc', 100000000, 999999999)),
+      ifscCode: bank.ifscCode,
+      branchName: 'Gurugram',
+    },
+    subjects: mt.subjects,
+    classes: mt.classes,
+    examResponsibilities: mt.classes.length ? [`Invigilator — ${mt.subjects[0]}`] : [],
+    positions: mt.classes.slice(0, 1).map((c, i) => ({
+      id: `pa-${mt.id}-${i}`,
+      positionId: 'pos-class-teacher',
+      positionTitle: 'Class Teacher',
+      classAssigned: c,
+      assignedDate: mt.joiningDate,
+      assignedBy: 'Dr. Ananya Iyer',
+      status: 'Active',
+      effectiveDate: mt.joiningDate,
+    })),
+    documents: [
+      {
+        id: `doc-${mt.id}-1`,
+        title: 'Degree Certificate',
+        category: 'Qualification',
+        fileName: `Degree_${mt.name.replace(/\s+/g, '_')}.pdf`,
+        uploadDate: mt.joiningDate,
+        status: 'Verified',
+      },
+      {
+        id: `doc-${mt.id}-2`,
+        title: 'Aadhaar Card',
+        category: 'ID Proof',
+        fileName: `Aadhaar_${mt.name.replace(/\s+/g, '_')}.pdf`,
+        uploadDate: mt.joiningDate,
+        status: 'Verified',
+      },
+    ],
+    loginCredentials: {
+      username: mt.email,
+      tempPassword: 'GWS#Teacher2025',
+      passwordResetRequired: false,
+      createdDate: mt.joiningDate,
+    },
+  }
+}
+
+// Append the derived roster (skipping the two detailed primaries) so the
+// module opens with the full faculty.
+for (const [idx, mt] of MOCK_ROSTER.entries()) {
+  if (DETAILED_IDS.has(mt.id)) continue
+  if (mt.archived) continue
+  SEED_TEACHERS.push(deriveTeacherRecord(mt, idx))
+}
 
 // Initial audit log entries seeded into the store on first load.
 export const INITIAL_AUDIT_LOGS = [

@@ -54,6 +54,7 @@ import {
   type FeeHeadCategory,
 } from '@/lib/store/fee-store'
 import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 // PHASE 6 — shared catalogue UI (same chips/badges as the Master
 // Catalogue drawer + the new Add-Head picker).
 import {
@@ -177,6 +178,8 @@ export function FeesNormalizeHeadsDrawer({
   onClose: () => void
   feeStructures: FeeStructureConfig[]
 }) {
+  // Escape closes the drawer (backdrop click already does).
+  useDismissOnEscape(onClose, open)
   const feeHeads = useSchoolSettingsStore((s) => s.fees.feeHeads)
   const linkHeadToCatalogue = useFeeStore((s) => s.linkHeadToCatalogue)
   const bulkLinkHeadsByName = useFeeStore((s) => s.bulkLinkHeadsByName)
@@ -274,6 +277,9 @@ export function FeesNormalizeHeadsDrawer({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', stiffness: 360, damping: 36 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Normalize uncatalogued fee heads"
             className="fixed top-0 right-0 z-50 h-full w-full sm:w-[520px] bg-card border-l border-border shadow-2xl flex flex-col"
           >
             {/* Header */}
@@ -289,7 +295,7 @@ export function FeesNormalizeHeadsDrawer({
                   </p>
                 </div>
               </div>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={onClose}>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={onClose} aria-label="Close normalize heads">
                 <X className="h-4 w-4" />
               </Button>
             </div>

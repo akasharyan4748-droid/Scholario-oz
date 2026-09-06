@@ -33,6 +33,7 @@ import {
 import { useLibraryStore, useLibraryData } from '@/lib/store/library-store'
 import type { FineStatus } from '@/lib/store/library-store'
 import { formatINR, formatDate, initials } from '@/lib/format'
+import { downloadCSVFile, safeFileName } from '@/lib/download-file'
 import { cn } from '@/lib/utils'
 import { GradientAvatar } from '@/components/shared/ui'
 import { toast } from 'sonner'
@@ -73,9 +74,39 @@ export function FinesSummary() {
     })
   }
 
+  // QA-FIX-B — REAL CSV export of the fines table currently shown (the
+  // filtered rows, same data as the table): borrower, admission no, book,
+  // dates, days overdue, fine amount and status per row. Replaces the old
+  // toast-only stub with a genuine downloadCSVFile Blob download.
   const handleDownloadReport = () => {
-    toast.success('Fines report generated', {
-      description: `${pendingCount} pending · ${formatINR(outstanding)} outstanding · ${formatINR(collected)} collected`,
+    const escapeCsv = (value: string) =>
+      /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+
+    const header = [
+      'Student', 'Admission No', 'Book', 'Issue Date', 'Due Date',
+      'Days Overdue', 'Fine Amount (INR)', 'Status',
+    ]
+    const rows = filtered.map((r) => {
+      const daysOverdue = Math.max(
+        0,
+        Math.ceil((Date.now() - new Date(r.dueDate).getTime()) / (1000 * 60 * 60 * 24)),
+      )
+      return [
+        r.borrowerName,
+        r.admissionNo ?? '',
+        r.bookTitle,
+        r.issueDate,
+        r.dueDate,
+        String(daysOverdue),
+        String(r.fine),
+        r.fineStatus,
+      ].map(escapeCsv)
+    })
+
+    const csv = [header, ...rows].map((cells) => cells.join(',')).join('\n')
+    downloadCSVFile(csv, safeFileName('library-fines-report', 'csv'))
+    toast.success('Fines report downloaded', {
+      description: `${filtered.length} fine record${filtered.length === 1 ? '' : 's'} · ${formatINR(outstanding)} outstanding · ${formatINR(collected)} collected`,
     })
   }
 

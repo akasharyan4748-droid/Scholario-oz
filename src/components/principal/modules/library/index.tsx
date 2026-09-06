@@ -39,18 +39,19 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   BookOpen, AlertTriangle, IndianRupee, Plus, BookMarked, CheckCircle2,
-  FileBarChart2, Library, BookCopy,
+  FileBarChart2, Library, BookCopy, BookPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs } from '../shared/segmented-tabs'
 import { useLibraryStore, useLibraryData } from '@/lib/store/library-store'
-import { formatINR } from '@/lib/format'
+import { formatINR, formatDate } from '@/lib/format'
 import { toast } from 'sonner'
-import type { Book } from '@/lib/store/library-store'
+import type { Book, IssueRecord } from '@/lib/store/library-store'
 import { LIB_GLOBAL_STYLES, LibPill, LibKpiCard, type LibTab } from './library-shared'
 import { BooksCatalogue, IssuedBooksTable } from './books-tables'
 import { IssueBookDialog } from './issue-book-dialog'
+import { AddBookDialog } from './add-book-dialog'
 import { FinesSummary, LibraryReports } from './fines-summary'
 
 const TABS: Array<{ value: LibTab; label: string; icon: React.ReactNode; badge?: number }> = [
@@ -64,9 +65,11 @@ const TABS: Array<{ value: LibTab; label: string; icon: React.ReactNode; badge?:
 export function LibraryModule() {
   const [tab, setTab] = useState<LibTab>('catalogue')
   const [issueOpen, setIssueOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
   const [preselectBook, setPreselectBook] = useState<Book | null>(null)
 
   const returnBook = useLibraryStore((s) => s.returnBook)
+  const sendReminder = useLibraryStore((s) => s.sendReminder)
   const issues = useLibraryStore((s) => s.issues)
   const data = useLibraryData()
   const { analytics } = data
@@ -116,9 +119,12 @@ export function LibraryModule() {
     })
   }
 
-  const handleSendReminder = (issue: { id: string; borrowerName: string; bookTitle: string; dueDate: string }) => {
-    toast.success('Reminder sent', {
-      description: `Overdue reminder sent to ${issue.borrowerName} for "${issue.bookTitle}"`,
+  // QA-FIX-B — real store mutation: stamps reminderSentAt on the loan
+  // record (persisted), then confirms to the user.
+  const handleSendReminder = (issue: IssueRecord) => {
+    sendReminder(issue.id)
+    toast.success(`Reminder sent to ${issue.borrowerName}`, {
+      description: `Overdue reminder for "${issue.bookTitle}" · due ${formatDate(issue.dueDate)}`,
     })
   }
 
@@ -133,13 +139,23 @@ export function LibraryModule() {
           value={tab}
           onValueChange={(v) => setTab(v as LibTab)}
         />
-        <Button
-          size="sm"
-          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-          onClick={() => openIssueDialog()}
-        >
-          <Plus className="h-3.5 w-3.5" /> Issue Book
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+            onClick={() => setAddOpen(true)}
+          >
+            <BookPlus className="h-3.5 w-3.5" /> Add Book
+          </Button>
+          <Button
+            size="sm"
+            className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => openIssueDialog()}
+          >
+            <Plus className="h-3.5 w-3.5" /> Issue Book
+          </Button>
+        </div>
       </div>
 
       {/* KPI overview strip — compact summary above the tab content.
@@ -237,6 +253,11 @@ export function LibraryModule() {
         open={issueOpen}
         onOpenChange={setIssueOpen}
         preselectBook={preselectBook}
+      />
+
+      <AddBookDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
       />
       </PageTransition>
     </>

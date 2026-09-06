@@ -20,11 +20,20 @@
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import {
   useCertificatesStore,
   type GeneratedDocument as CertGeneratedDocument,
   type DocType as CertDocType,
 } from './certificates-store'
+import type { StaticDocContent } from './downloads-content'
+import { getStaticDocContent } from './downloads-content'
+import {
+  migrateLegacyScopedStore, createTenantScopedStorage,
+} from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+migrateLegacyScopedStore('scholario-downloads-v1', DEFAULT_TENANT_ID)
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -62,6 +71,9 @@ export interface DownloadDocument {
   studentId?: string
   studentName?: string
   docNumber?: string
+  // Renderable document body for static library documents (forms,
+  // templates, reports) — powers the real preview + real file download.
+  content?: StaticDocContent
   // For downloadable — URL or blob reference
   downloadUrl?: string
 }
@@ -76,6 +88,8 @@ interface DownloadsState {
   // Per-document usage tracking (for Quick Access + Recent)
   downloadsCount: Record<string, number>
   lastAccessedAt: Record<string, string>
+  // Pinned documents (favourites) — reflected by the star action.
+  favourites: Record<string, boolean>
 
   // Search + filter actions
   setQuery: (q: string) => void
@@ -95,6 +109,7 @@ interface DownloadsState {
   // Download (returns filename for toast)
   download: (doc: DownloadDocument) => string
   recordPreview: (doc: DownloadDocument) => void
+  toggleFavourite: (id: string) => boolean
 }
 
 // ─── Static document catalogue ────────────────────────────────────────
@@ -187,17 +202,21 @@ function byType(a: DownloadDocument, b: DownloadDocument): number {
 
 const STATIC_BY_ID: Record<string, DownloadDocument> = STATIC_DOCS.reduce(
   (acc, d) => {
-    acc[d.id] = d
+    // Attach the renderable document body so previews + downloads are real.
+    acc[d.id] = { ...d, content: getStaticDocContent(d.id) }
     return acc
   },
   {} as Record<string, DownloadDocument>,
 )
 
-export const useDownloadsStore = create<DownloadsState>((set, get) => ({
+export const useDownloadsStore = create<DownloadsState>()(
+  persist(
+    (set, get) => ({
   query: '',
   categoryFilter: 'All',
   categoryTab: 'All',
   sortBy: 'recent',
+  favourites: {},
   downloadsCount: {
     'doc-form-admission': 12,
     'doc-tpl-fee-receipt': 9,
@@ -223,16 +242,18 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
 
   getAllDocuments: () => {
     const certDocs = useCertificatesStore.getState().documents.map(certToDownloadDoc)
+    // Static docs carry their renderable content (attached in STATIC_BY_ID).
+    const staticWithContent = Object.values(STATIC_BY_ID)
     // Newest first by default
-    const all = [...STATIC_DOCS, ...certDocs]
+    const all = [...staticWithContent, ...certDocs]
     return all.sort(byDateDesc)
   },
 
   getCountsByTab: () => {
     const certDocs = useCertificatesStore.getState().documents.map(certToDownloadDoc)
-    const forms = STATIC_DOCS.filter((d) => d.source === 'Official Form').length
-    const templates = STATIC_DOCS.filter((d) => d.source === 'Template').length
-    const reports = STATIC_DOCS.filter((d) => d.source === 'Report').length
+    const forms = staticWithCount('Official Form')
+    const templates = staticWithCount('Template')
+    const reports = staticWithCount('Report')
     const generated = certDocs.length
     const all = STATIC_DOCS.length + generated
     return {
@@ -341,7 +362,32 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       },
     }))
   },
-}))
+
+  toggleFavourite: (id) => {
+    const next = !get().favourites[id]
+    set((s) => ({ favourites: { ...s.favourites, [id]: next } }))
+    return next
+  },
+    }),
+    {
+      // TENANT-SCOPED persistence — usage counters, favourites and access
+      // times survive reloads, isolated per school namespace.
+      name: 'scholario-downloads-v1',
+      storage: createTenantScopedStorage('scholario-downloads-v1'),
+      version: 1,
+      partialize: (s) => ({
+        downloadsCount: s.downloadsCount,
+        lastAccessedAt: s.lastAccessedAt,
+        favourites: s.favourites,
+      }),
+    },
+  ),
+)
+
+// Count helper over the static catalogue (kept private).
+function staticWithCount(source: DownloadDocument['source']): number {
+  return STATIC_DOCS.filter((d) => d.source === source).length
+}
 
 // Re-export for components that need the underlying cert record
 export { STATIC_BY_ID as STATIC_DOCS_BY_ID, STATIC_DOCS, certToDownloadDoc, CERT_CATEGORY }

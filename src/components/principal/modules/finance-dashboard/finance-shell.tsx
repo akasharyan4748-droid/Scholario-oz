@@ -28,11 +28,14 @@ import { PageTransition } from '@/components/shared/ui'
 import { SegmentedTabs, type SegmentedTab } from '../shared/segmented-tabs'
 import { useFocusStore } from '@/lib/store/focus-store'
 import { useFinanceData, useFinanceAttention, FINANCE_PERIODS } from '@/lib/store/finance-store'
+import { downloadCSVFile, safeFileName } from '@/lib/download-file'
+import { toCsv } from '@/lib/csv'
 import { FinanceOverviewSection } from './finance-overview'
 import { FinanceStatementsSection } from './finance-statements'
 import { FinanceReportsSection } from './finance-reports'
 import { FinanceSettingsSection } from './finance-settings'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 type FinanceTab = 'overview' | 'statements' | 'reports' | 'settings'
 
@@ -42,6 +45,9 @@ export function FinanceShell({ onModuleNavigate }: { onModuleNavigate?: (moduleK
   const [tab, setTab] = useState<FinanceTab>('overview')
   const [periodId, setPeriodId] = useState('fy25-26')
   const [periodOpen, setPeriodOpen] = useState(false)
+
+  // Escape closes the period-selector dropdown (click-catcher already does).
+  useDismissOnEscape(() => setPeriodOpen(false), periodOpen)
   const data = useFinanceData(periodId)
   const attention = useFinanceAttention()
 
@@ -83,6 +89,33 @@ export function FinanceShell({ onModuleNavigate }: { onModuleNavigate?: (moduleK
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [])
+
+  // QA-FIX-A: REAL CSV export — the financial KPI summary (the same store
+  // values the Overview panels display), numbers plain (no ₹ in cells).
+  const handleExportSummary = () => {
+    const rows: (string | number)[][] = [
+      ['Period', data.period.label],
+      ['Total Revenue', data.totalRevenue],
+      ['Total Expenses', data.totalExpenses],
+      ['Net Surplus', data.netSurplus],
+      ['Surplus Margin (%)', data.surplusMargin],
+      ['Cash Available', data.cashAvailable],
+      ['Reserve Coverage (months)', data.reserveCoverage],
+      ['Fee Revenue (Collected)', data.feeRevenue],
+      ['Fees Outstanding', data.feeOutstanding],
+      ['Fee Collection Rate (%)', data.feeCollectionRate],
+      ['Monthly Payroll', data.monthlyPayroll],
+      ['Annualized Payroll', data.annualizedPayroll],
+      ['Total Assets', data.totalAssets],
+      ['Total Liabilities', data.totalLiabilities],
+      ['Net Worth', data.netWorth],
+      ['Net Cash Change', data.netCashChange],
+      ['Closing Cash Balance', data.closingCash],
+    ]
+    const filename = safeFileName(`financial-summary-${data.period.id}`, 'csv')
+    downloadCSVFile(toCsv(['Metric', 'Value'], rows), filename)
+    toast.success('Financial summary exported', { description: filename })
+  }
 
   return (
     <PageTransition className="space-y-4">
@@ -130,7 +163,7 @@ export function FinanceShell({ onModuleNavigate }: { onModuleNavigate?: (moduleK
             variant="outline"
             size="sm"
             className="h-9 text-xs gap-1.5"
-            onClick={() => toast.success('Financial summary exported', { description: `${data.period.label}-financial-summary.pdf` })}
+            onClick={handleExportSummary}
           >
             <Download className="h-3.5 w-3.5" /> Export
           </Button>

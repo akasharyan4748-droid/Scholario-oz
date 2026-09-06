@@ -17,8 +17,11 @@ import { Button } from '@/components/ui/button'
 import { useCommunicationStore, type Circular } from '@/lib/store/communication-store'
 import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { downloadHTMLFile, safeFileName, shareText } from '@/lib/download-file'
+import { getSchoolProfile } from '@/lib/school-profile'
 import { CommPanel, CommEmptyState } from './comm-shared'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Examination': 'oklch(0.62 0.2 25)',
@@ -27,6 +30,88 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Event': 'oklch(0.65 0.16 75)',
   'Holiday': 'oklch(0.6 0.18 300)',
   'Parents': 'oklch(0.55 0.16 250)',
+}
+
+// ─── QA-FIX-A: REAL Download / Share actions ────────────────────────
+
+function esc(v: unknown): string {
+  return String(v ?? '—')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+/** Branded standalone HTML memo for one circular (school letterhead,
+ * title, ref/date/audience/category, principal signature). */
+function buildCircularHTML(circular: Circular): string {
+  const p = getSchoolProfile()
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>${esc(circular.title)} — ${esc(p.shortName)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Georgia, 'Times New Roman', serif; margin: 40px auto; max-width: 720px; color: #1e293b; }
+  .letterhead { text-align: center; border-bottom: 3px double #0f766e; padding-bottom: 14px; margin-bottom: 22px; }
+  .school { font-size: 22px; font-weight: bold; color: #0f172a; letter-spacing: 0.02em; }
+  .aff { font-size: 11px; color: #475569; margin-top: 4px; }
+  .contact { font-size: 10px; color: #64748b; margin-top: 2px; }
+  h1 { text-align: center; font-size: 15px; letter-spacing: 0.25em; margin: 18px 0 6px; color: #0f172a; }
+  .docmeta { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin: 0 0 16px; font-family: ui-monospace, monospace; }
+  table.meta { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  table.meta td, table.meta th { border: 1px solid #cbd5e1; padding: 7px 10px; font-size: 12px; }
+  table.meta th { background: #f8fafc; color: #475569; text-align: left; width: 34%; font-weight: 600; }
+  p.body { font-size: 13px; line-height: 1.75; margin: 14px 0; }
+  .sign { text-align: right; margin-top: 56px; font-size: 11px; color: #334155; }
+  .sign .line { border-top: 1px solid #64748b; display: inline-block; padding: 18px 24px 0; }
+  .foot { text-align: center; font-size: 9px; color: #94a3b8; margin-top: 26px; }
+</style>
+</head>
+<body>
+  <div class="letterhead">
+    <div class="school">${esc(p.name)}</div>
+    <div class="aff">${esc(p.affiliation)}</div>
+    <div class="contact">${esc(p.address)} · ${esc(p.phone)} · ${esc(p.email)}</div>
+  </div>
+  <h1>CIRCULAR</h1>
+  <div class="docmeta"><span>Ref: ${esc(circular.refNo)}</span><span>Date: ${esc(formatDate(circular.date))}</span></div>
+  <p class="body"><strong>${esc(circular.title)}</strong></p>
+  <p class="body">This circular is issued for the attention of <strong>${esc(circular.audience)}</strong> (${esc(circular.category)}). It is currently <strong>${esc(circular.status)}</strong>.</p>
+  <table class="meta">
+    <tr><th>Reference No</th><td>${esc(circular.refNo)}</td></tr>
+    <tr><th>Title</th><td>${esc(circular.title)}</td></tr>
+    <tr><th>Audience</th><td>${esc(circular.audience)}</td></tr>
+    <tr><th>Category</th><td>${esc(circular.category)}</td></tr>
+    <tr><th>Date</th><td>${esc(formatDate(circular.date))}</td></tr>
+    <tr><th>Status</th><td>${esc(circular.status)}</td></tr>
+  </table>
+  <div class="sign"><span class="line">${esc(p.principal)}<br />Principal</span></div>
+  <p class="foot">Issued by ${esc(p.name)} · ${esc(p.website)}</p>
+</body>
+</html>`
+}
+
+/** Download a branded HTML memo of the circular (QA-FIX-A). */
+function downloadCircular(circular: Circular) {
+  const filename = safeFileName(`circular-${circular.refNo}`, 'html')
+  downloadHTMLFile(buildCircularHTML(circular), filename)
+  toast.success('Circular downloaded', { description: filename })
+}
+
+/** Share the circular reference — Web Share API, else clipboard (QA-FIX-A). */
+async function shareCircular(circular: Circular) {
+  const p = getSchoolProfile()
+  const result = await shareText(
+    circular.title,
+    `${circular.title} — ${p.name} (Ref: ${circular.refNo})`,
+  )
+  if (result === 'copied') {
+    toast.success('Copied to clipboard', { description: `${circular.title} · ${p.shortName}` })
+  } else if (result === 'shared') {
+    toast.success('Circular shared', { description: circular.title })
+  }
+  // 'cancelled' — user dismissed the share sheet; no toast.
 }
 
 export function CircularsSection() {
@@ -147,10 +232,10 @@ function CircularCard({ circular, index, onView, onArchive }: {
           <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onView} title="View PDF">
             <Eye className="h-3.5 w-3.5" />
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast.success('Circular downloaded', { description: `${circular.refNo}.pdf` })} title="Download">
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => downloadCircular(circular)} title="Download">
             <Download className="h-3.5 w-3.5" />
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => toast.success('Share link copied', { description: circular.refNo })} title="Share">
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { void shareCircular(circular) }} title="Share">
             <Share2 className="h-3.5 w-3.5" />
           </Button>
           <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-amber-600" onClick={onArchive} title={circular.status === 'Active' ? 'Archive' : 'Restore'}>
@@ -163,11 +248,16 @@ function CircularCard({ circular, index, onView, onArchive }: {
 }
 
 function CircularViewModal({ circular, onClose }: { circular: Circular; onClose: () => void }) {
+  // Escape closes the circular view (backdrop click already does).
+  useDismissOnEscape(onClose)
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Circular — ${circular.title}`}
       className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
@@ -189,7 +279,7 @@ function CircularViewModal({ circular, onClose }: { circular: Circular; onClose:
               <p className="font-mono text-[10px] text-muted-foreground">{circular.refNo}</p>
             </div>
           </div>
-          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onClose}>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onClose} aria-label="Close circular">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -227,10 +317,10 @@ function CircularViewModal({ circular, onClose }: { circular: Circular; onClose:
 
         {/* Footer */}
         <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-end gap-1">
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => toast.success('Share link copied', { description: circular.refNo })}>
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => { void shareCircular(circular) }}>
             <Share2 className="h-3.5 w-3.5" /> Share
           </Button>
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => toast.success('Circular downloaded', { description: `${circular.refNo}.pdf` })}>
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => downloadCircular(circular)}>
             <Download className="h-3.5 w-3.5" /> Download PDF
           </Button>
         </div>

@@ -25,6 +25,7 @@ import {
 } from './comm-shared'
 import { PlatformBroadcasts } from './comm-platform-broadcasts'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 type FilterType = 'all' | 'push' | 'sms' | 'email' | 'scheduled' | 'sent' | 'failed' | 'archived'
 
@@ -200,11 +201,16 @@ export function HistorySection({ focusNotice, onNoticeConsumed }: {
 }
 
 function HistoryViewModal({ announcement: a, onClose }: { announcement: Announcement; onClose: () => void }) {
+  // Escape closes the history view (backdrop click already does).
+  useDismissOnEscape(onClose)
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Announcement — ${a.title}`}
       className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >

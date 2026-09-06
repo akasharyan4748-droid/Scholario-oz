@@ -24,13 +24,12 @@ import {
   QrCode, Stamp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { school } from '@/lib/mock/school'
+import { useSchoolProfile } from '@/lib/school-profile'
 import { formatINR, formatDate } from '@/lib/format'
 import type {
   DocType, DocumentTemplate,
 } from '@/lib/store/certificates-store'
-import type { StudentRecord } from '@/lib/store/students-store'
-import type { FeeTransaction } from '@/lib/store/fee-store'
+import type { PreviewStudent, PreviewTransaction } from './cert-resolvers'
 
 // ─── Shared marksheet row type ───────────────────────────────────────
 
@@ -58,14 +57,16 @@ export interface MarksheetData {
 
 // ─── School header component ────────────────────────────────────────
 
-function SchoolCrest({ accent, label = school.shortName }: { accent: string; label?: string }) {
+function SchoolCrest({ accent, label }: { accent: string; label?: string }) {
+  const school = useSchoolProfile()
+  const text = label ?? school.shortName
   return (
     <div
       className="flex flex-col items-center justify-center h-14 w-14 rounded-full text-white shadow-sm shrink-0"
       style={{ background: accent, boxShadow: `0 0 0 3px ${accent}20` }}
     >
       <GraduationCap className="h-5 w-5" />
-      <span className="text-[7px] font-bold mt-0.5 tracking-wider uppercase">{label.slice(0, 8)}</span>
+      <span className="text-[7px] font-bold mt-0.5 tracking-wider uppercase">{text.slice(0, 8)}</span>
     </div>
   )
 }
@@ -77,6 +78,8 @@ function SchoolHeader({
   style: 'Classic' | 'Modern' | 'Formal' | 'Minimal'
   docType: DocType
 }) {
+  // Branding source of truth: School Settings → General (with safe fallbacks).
+  const school = useSchoolProfile()
   if (style === 'Modern') {
     return (
       <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-300">
@@ -163,10 +166,11 @@ export function CertificatePreview({
 }: {
   docType: DocType
   template: DocumentTemplate
-  student?: StudentRecord
+  student?: PreviewStudent
   docNumber?: string
   purpose?: string
 }) {
+  const school = useSchoolProfile()
   if (!student) {
     return (
       <div className="print-area text-center py-12 text-xs text-muted-foreground">
@@ -230,7 +234,7 @@ export function CertificatePreview({
             <TCRow label="Last fee month paid" value="March 2026" serif={isSerif} />
             <TCRow label="Conduct" value="Excellent" serif={isSerif} />
             <TCRow label="Result" value="Promoted" serif={isSerif} />
-            <TCRow label="Category" value={student.category} serif={isSerif} />
+            <TCRow label="Category" value={student.category ?? '—'} serif={isSerif} />
           </tbody>
         </table>
         <p className={cn('text-[10px] sm:text-[11px] text-slate-600 italic', isSerif && 'font-serif')}>
@@ -356,10 +360,11 @@ export function MarksheetPreview({
   template, student, data, docNumber,
 }: {
   template: DocumentTemplate
-  student?: StudentRecord
+  student?: PreviewStudent
   data?: MarksheetData
   docNumber?: string
 }) {
+  const school = useSchoolProfile()
   if (!student || !data) {
     return (
       <div className="print-area text-center py-12 text-xs text-muted-foreground">
@@ -518,8 +523,9 @@ export function IDCardPreview({
   template, student,
 }: {
   template: DocumentTemplate
-  student?: StudentRecord
+  student?: PreviewStudent
 }) {
+  const school = useSchoolProfile()
   if (!student) {
     return (
       <div className="print-area text-center py-12 text-xs text-muted-foreground">
@@ -535,7 +541,7 @@ export function IDCardPreview({
   const Card = (
     <div
       className={cn(
-        'bg-white shadow-md overflow-hidden',
+        'bg-white shadow-md overflow-hidden relative flex flex-col',
         isLandscape
           ? 'w-[420px] h-[260px] rounded-lg'
           : isCompact
@@ -577,8 +583,8 @@ export function IDCardPreview({
           <div className={cn('mt-2 space-y-0.5 text-[9px] text-slate-700', isLandscape && 'grid grid-cols-2 gap-x-2')}>
             <p><span className="text-slate-500">Adm No:</span> <strong>{student.admissionNo}</strong></p>
             <p><span className="text-slate-500">Roll:</span> <strong>{student.rollNo}</strong></p>
-            <p><span className="text-slate-500">DOB:</span> {formatDate(student.dob)}</p>
-            <p><span className="text-slate-500">Blood:</span> {student.bloodGroup}</p>
+            <p><span className="text-slate-500">DOB:</span> {student.dob ? formatDate(student.dob) : '—'}</p>
+            <p><span className="text-slate-500">Blood:</span> {student.bloodGroup ?? '—'}</p>
             <p><span className="text-slate-500">House:</span> {student.houseName ?? '—'}</p>
           </div>
           <p className="text-[8px] text-slate-500 mt-1.5 truncate">{school.address}</p>
@@ -625,9 +631,10 @@ export function FeeReceiptPreview({
   template, transaction, docNumber,
 }: {
   template: DocumentTemplate
-  transaction?: FeeTransaction
+  transaction?: PreviewTransaction
   docNumber?: string
 }) {
+  const school = useSchoolProfile()
   if (!transaction) {
     return (
       <div className="print-area text-center py-12 text-xs text-muted-foreground">
@@ -714,8 +721,8 @@ export function FeeReceiptPreview({
           <KV label="Date" value={formatDate(transaction.date)} />
           <KV label="Mode" value={transaction.mode} />
           <KV label="Reference" value={transaction.referenceNo ?? '—'} />
-          <KV label="Academic Year" value={transaction.academicYear} />
-          <KV label="Status" value={transaction.status} />
+          <KV label="Academic Year" value={transaction.academicYear ?? school.academicYear} />
+          <KV label="Status" value={transaction.status ?? 'Paid'} />
         </div>
 
         {/* Itemized table */}
@@ -749,7 +756,7 @@ export function FeeReceiptPreview({
         {/* Footer */}
         <div className="mt-4 flex items-end justify-between">
           <div className="text-[10px] text-slate-600">
-            <p>Collected by: <strong className="text-slate-800">{transaction.collectedBy}</strong></p>
+            <p>Collected by: <strong className="text-slate-800">{transaction.collectedBy ?? '—'}</strong></p>
             <p>Verified by: <strong className="text-slate-800">{transaction.verifiedBy ?? '—'}</strong></p>
           </div>
           <div className="text-center">

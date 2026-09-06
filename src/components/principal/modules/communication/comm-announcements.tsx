@@ -37,6 +37,7 @@ import {
 } from './comm-shared'
 import type { CommTab } from './comm-shared'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 interface Props {
   onNavigate: (tab: CommTab) => void
@@ -209,6 +210,8 @@ function AnnouncementCard({ announcement: a, onPin, onDuplicate, onArchive, onVi
   setMoreMenuOpen: (open: boolean) => void
   index: number
 }) {
+  // Escape closes the card's "more" dropdown (click-catcher already does).
+  useDismissOnEscape(() => setMoreMenuOpen(false), moreMenuOpen)
   const acc = categoryAccent(a.category)
   return (
     <motion.div
@@ -312,12 +315,17 @@ function ViewAnnouncementModal({ announcement: a, onClose, onPin, onArchive }: {
   onPin: () => void
   onArchive: () => void
 }) {
+  // Escape closes the announcement view (backdrop click already does).
+  useDismissOnEscape(onClose)
   const acc = categoryAccent(a.category)
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Announcement — ${a.title}`}
       className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >

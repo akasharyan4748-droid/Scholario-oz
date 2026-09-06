@@ -72,6 +72,7 @@ import { VersionStatusPill, StructureStatusBadge } from './fees-structures-share
 import { FeesCatalogueView } from './fees-catalogue-view'
 import { useAcademicSession } from '@/lib/academic-session'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 // TASK 2-c — flattened to chip tones only (the old `bar`/`dot` fields
 // were legacy-seed helpers that no renderer consumed anymore).
@@ -155,6 +156,13 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
   // target classId/applicableClassIds so it's a true per-class binding.
   const [bulkApplyOpen, setBulkApplyOpen] = useState<FeeStructureConfig | null>(null)
   const [bulkApplySubmitting, setBulkApplySubmitting] = useState(false)
+
+  // Escape closes the bulk-apply confirmation (backdrop click already does,
+  // guarded while submitting).
+  useDismissOnEscape(
+    () => { if (!bulkApplySubmitting) setBulkApplyOpen(null) },
+    !!bulkApplyOpen,
+  )
 
   // PHASE 5 — listen for `fee-open-structure` events from the Coverage
   // Matrix (which uses CustomEvent to ask this parent to open a
@@ -740,6 +748,9 @@ export function FeesStructuresSection({ data, onNavigate }: { data: ReturnType<t
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Bulk apply to ${bulkApplyOpen.classLevel} level`}
               className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
               onClick={() => !bulkApplySubmitting && setBulkApplyOpen(null)}
             >

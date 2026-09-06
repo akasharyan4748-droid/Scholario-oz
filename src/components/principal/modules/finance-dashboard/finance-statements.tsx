@@ -14,6 +14,8 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFinanceData } from '@/lib/store/finance-store'
+import { downloadCSVFile, safeFileName } from '@/lib/download-file'
+import { toCsv } from '@/lib/csv'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FinancePanel } from './finance-shared'
@@ -23,6 +25,47 @@ type StatementTab = 'pnl' | 'balance' | 'cashflow'
 
 export function FinanceStatementsSection({ data }: { data: ReturnType<typeof useFinanceData> }) {
   const [tab, setTab] = useState<StatementTab>('pnl')
+
+  // QA-FIX-A: REAL CSV export of the ACTIVE statement tab — the exact rows
+  // the statement renders, with plain numbers (no ₹ in numeric cells).
+  const handleExport = () => {
+    let headers: string[] = []
+    let rows: (string | number)[][] = []
+    if (tab === 'pnl') {
+      headers = ['Section', 'Category', 'Account', 'Amount (INR)', 'YoY Change (%)']
+      rows = data.pnlData.map((p) => [
+        p.type === 'income' ? 'Revenue' : 'Expenses', p.category, p.account, p.amount, p.yoyChange,
+      ])
+      rows.push(
+        ['Summary', 'Total Revenue', '', data.totalRevenue, ''],
+        ['Summary', 'Total Expenses', '', data.totalExpenses, ''],
+        ['Summary', 'Net Surplus', '', data.netSurplus, data.surplusMargin],
+      )
+    } else if (tab === 'balance') {
+      headers = ['Type', 'Category', 'Account', 'Amount (INR)']
+      rows = data.balanceSheet.map((b) => [b.type, b.category, b.account, b.amount])
+      rows.push(
+        ['Summary', 'Assets', 'Total Assets', data.totalAssets],
+        ['Summary', 'Liabilities', 'Total Liabilities', data.totalLiabilities],
+        ['Summary', 'Equity', 'Total Equity', data.totalEquity],
+        ['Summary', '', 'Net Worth', data.netWorth],
+      )
+    } else {
+      headers = ['Activity', 'Description', 'Inflow (INR)', 'Outflow (INR)']
+      rows = data.cashflow.map((c) => [c.activity, c.description, c.inflow, c.outflow])
+      rows.push(
+        ['Summary', 'Operating Activities Net', data.operatingNet, ''],
+        ['Summary', 'Investing Activities Net', data.investingNet, ''],
+        ['Summary', 'Financing Activities Net', data.financingNet, ''],
+        ['Summary', 'Net Cash Change', data.netCashChange, ''],
+        ['Summary', 'Opening Cash Balance', data.openingCash, ''],
+        ['Summary', 'Closing Cash Balance', data.closingCash, ''],
+      )
+    }
+    const filename = safeFileName(`${tab}-statement-${data.period.id}`, 'csv')
+    downloadCSVFile(toCsv(headers, rows), filename)
+    toast.success('Statement exported', { description: filename })
+  }
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
@@ -50,7 +93,7 @@ export function FinanceStatementsSection({ data }: { data: ReturnType<typeof use
           variant="ghost"
           size="sm"
           className="h-8 text-xs gap-1 ml-2"
-          onClick={() => toast.success('Statement exported', { description: `${tab}-statement.pdf` })}
+          onClick={handleExport}
         >
           <Download className="h-3.5 w-3.5" /> Export
         </Button>

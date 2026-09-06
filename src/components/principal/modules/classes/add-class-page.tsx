@@ -10,6 +10,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useTeachersStore } from '@/lib/store/teachers-store'
+import { useStudentsStore } from '@/lib/store/students-store'
 import { toast } from 'sonner'
 import { StepHeader } from '../admission/components/StepShared'
 
@@ -22,6 +23,7 @@ interface SectionEntry {
 export function AddClassPage({ onBack, onCreated }: { onBack: () => void; onCreated: () => void }) {
   const teachersStore = useTeachersStore()
   const allTeachers = teachersStore.teachers
+  const createClass = useStudentsStore((s) => s.createClass)
 
   const [form, setForm] = useState({
     name: '', academicYear: '2025-2026', medium: 'English',
@@ -84,7 +86,23 @@ export function AddClassPage({ onBack, onCreated }: { onBack: () => void; onCrea
 
   const handleCreate = () => {
     if (!validate()) { toast.error('Please fix the errors before creating.'); return }
-    toast.success(`Class ${form.name} created with ${sections.length} section(s)`)
+    // REAL creation — persists to the students store (tenant-scoped), so
+    // the class appears in Students & Classes, pickers and exports.
+    const record = createClass({
+      name: form.name,
+      sections: sections.map((s) => ({
+        name: s.name,
+        capacity: s.capacity,
+        room: s.room || form.room,
+      })),
+      capacity: form.capacity,
+      room: [form.building, form.floor, form.room].filter(Boolean).join(' · '),
+      classTeacherId: classTeacherId || undefined,
+      assistantTeacherId: assistantTeacherId || undefined,
+    })
+    toast.success(`Class ${record.name} created`, {
+      description: `${record.sections.length} section${record.sections.length > 1 ? 's' : ''} · ${record.level}`,
+    })
     onCreated()
   }
 

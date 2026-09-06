@@ -25,7 +25,7 @@ export function ModalTopBar({ onPrint, onClose }: { onPrint: () => void; onClose
         >
           <Printer className="h-4 w-4 mr-1.5" /> Print / Save as PDF (A4)
         </Button>
-        <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted">
+        <button onClick={onClose} aria-label="Close application form" title="Close" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted">
           <X className="h-5 w-5" />
         </button>
       </div>

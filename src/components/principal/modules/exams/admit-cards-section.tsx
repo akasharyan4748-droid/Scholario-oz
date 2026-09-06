@@ -11,8 +11,8 @@
 
 import { useState, useMemo } from 'react'
 import {
-  Ticket, Download, Eye, Printer, Users, Layers, CheckCircle2,
-  AlertTriangle, FileText, Send,
+  Ticket, Download, Eye, Users, Layers,
+  AlertTriangle, FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
@@ -33,7 +33,6 @@ export function AdmitCardsSection({ exam }: Props) {
   const [classId, setClassId] = useState<string>('all')
   const [studentId, setStudentId] = useState<string>('')
   const [layout, setLayout] = useState<'1' | '2'>('1')
-  const [published, setPublished] = useState(false)
 
   const allStudents = useStudentsStore((s) => s.students)
   const { data: schoolCtx } = useSchoolContext()
@@ -127,10 +126,9 @@ export function AdmitCardsSection({ exam }: Props) {
     }
   }
 
-  const handlePublish = () => {
-    setPublished(true)
-    toast.success('Admit cards published', { description: `${examStudents.length} students can now view their admit cards in the Student Portal.` })
-  }
+  // QA-FIX-A: the "Publish" button was REMOVED — the exams data layer
+  // (ExamDTO / DB / API) has no admit-card publish status field to wire it
+  // to, so it was a dead action. Generate (Preview + Download) remains.
 
   function fallbackSchool(): SchoolContextDTO {
     return {
@@ -151,7 +149,7 @@ export function AdmitCardsSection({ exam }: Props) {
   return (
     <div className="space-y-4">
       {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <div className="rounded-md bg-muted/30 border border-border/40 px-2.5 py-1.5">
           <p className="text-[8px] uppercase tracking-wider text-muted-foreground">Total Students</p>
           <p className="text-[11px] font-semibold tabular-nums">{examStudents.length}</p>
@@ -163,12 +161,6 @@ export function AdmitCardsSection({ exam }: Props) {
         <div className="rounded-md bg-muted/30 border border-border/40 px-2.5 py-1.5">
           <p className="text-[8px] uppercase tracking-wider text-muted-foreground">Papers</p>
           <p className="text-[11px] font-semibold tabular-nums">{exam.schedule.length}</p>
-        </div>
-        <div className="rounded-md bg-muted/30 border border-border/40 px-2.5 py-1.5">
-          <p className="text-[8px] uppercase tracking-wider text-muted-foreground">Published</p>
-          <p className={cn('text-[11px] font-semibold', published ? 'text-emerald-600' : 'text-muted-foreground')}>
-            {published ? 'Yes' : 'Not Published'}
-          </p>
         </div>
       </div>
 
@@ -225,9 +217,6 @@ export function AdmitCardsSection({ exam }: Props) {
           <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleGenerate('single')} disabled={!studentId || !isReady}>
             <Eye className="h-3 w-3" /> Preview
           </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handlePublish()} disabled={!isReady || published}>
-            <Send className="h-3 w-3" /> {published ? 'Published' : 'Publish'}
-          </Button>
         </div>
       </div>
 
@@ -282,17 +271,6 @@ export function AdmitCardsSection({ exam }: Props) {
           </div>
         </div>
       </div>
-
-      {/* Published status */}
-      {published && (
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-          <div>
-            <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">Admit Cards Published</p>
-            <p className="text-[10px] text-emerald-700/70 dark:text-emerald-300/70">Students can now view their admit cards in Student Portal → Examination → Admit Card.</p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

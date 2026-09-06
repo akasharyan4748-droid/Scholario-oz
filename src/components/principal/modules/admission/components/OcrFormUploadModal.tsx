@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 import type { FormData } from '../constants'
 
 export function OcrFormUploadModal({
@@ -90,10 +91,16 @@ export function OcrFormUploadModal({
     })
   }
 
+  useDismissOnEscape(onClose, open)
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Upload filled form (AI OCR assisted)"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -110,7 +117,7 @@ export function OcrFormUploadModal({
               <p className="text-xs text-muted-foreground">Scan physical handwritten filled forms & auto-populate admission wizard</p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted">
+          <button onClick={onClose} aria-label="Close upload form" title="Close" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted">
             <X className="h-4 w-4" />
           </button>
         </div>

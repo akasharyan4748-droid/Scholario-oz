@@ -3,11 +3,24 @@
 /**
  * document-detail — slide-from-right detail drawer.
  *
- * Shows the full document record: icon + name + meta + preview placeholder
- * + actions (Download / Print). For generated documents, surfaces the
- * linked student + doc number.
+ * THE PREVIEW FIX, Downloads side:
+ *   · Resolves the document LIVE from the store by id (never a stale object).
+ *   · Generated cert documents → renders the actual certificate /
+ *     marksheet / ID card / fee receipt via the certificates renderers,
+ *     with snapshot-first student/transaction resolution.
+ *   · Static library documents (forms, templates, reports) → renders the
+ *     real A4 institutional document (StaticDocPreview) — school
+ *     letterhead, fields, tables, signatures. Never a bare logo.
+ *
+ * Every action is real:
+ *   · Download → a genuine branded HTML document file (blob).
+ *   · Print → opens a printable document window.
+ *   · Share → Web Share API (clipboard fallback).
+ *   · Favourite → persisted pin (star reflects state).
+ *   · Regenerate → re-issues the generated document with a new number.
  */
 
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   Download, Printer, X, FileText, Calendar, Hash, User, HardDrive,
@@ -20,78 +33,149 @@ import {
 import { toast } from 'sonner'
 import { formatDate, formatRelativeTime } from '@/lib/format'
 import { useDownloadsStore, type DownloadDocument } from '@/lib/store/downloads-store'
-import { useCertificatesStore, type DocumentTemplate, type GeneratedDocument } from '@/lib/store/certificates-store'
+import {
+  useCertificatesStore, type DocumentTemplate, type GeneratedDocument,
+} from '@/lib/store/certificates-store'
 import { useStudentsStore } from '@/lib/store/students-store'
-import type { StudentRecord } from '@/lib/store/students-store'
 import { useFeeStore } from '@/lib/store/fee-store'
-import type { FeeTransaction } from '@/lib/store/fee-store'
 import { DocIcon, FormatBadge, SourceBadge, CategoryPill } from './downloads-shared'
-import { DocumentThumbnail } from '@/components/shared/document-primitives'
-import type { DocFormat } from '@/components/shared/document-primitives'
 import { Avatar } from '@/components/shared/avatar'
 import {
+  resolvePreviewStudent, resolvePreviewTransaction, buildDocumentHTML,
+} from '../certificates/cert-resolvers'
+import type { MarksheetData } from '../certificates/previews'
+import {
   CertificatePreview, MarksheetPreview, IDCardPreview, FeeReceiptPreview,
-  type MarksheetData,
 } from '../certificates/previews'
+import { StaticDocPreview, buildStaticDocHTML } from './static-doc-preview'
+import { useSchoolProfile } from '@/lib/school-profile'
+import {
+  downloadHTMLFile, openPrintWindow, shareText, safeFileName,
+} from '@/lib/download-file'
 
 interface DocumentDetailProps {
-  doc: DownloadDocument | null
+  /** Document id — resolved LIVE inside the drawer (never stale). */
+  docId: string | null
   open: boolean
   onClose: () => void
 }
 
-export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
+export function DocumentDetail({ docId, open, onClose }: DocumentDetailProps) {
   const download = useDownloadsStore((s) => s.download)
+  const toggleFavourite = useDownloadsStore((s) => s.toggleFavourite)
   const downloadsCount = useDownloadsStore((s) => s.downloadsCount)
+  const favourites = useDownloadsStore((s) => s.favourites)
+  const generateDocument = useCertificatesStore((s) => s.generateDocument)
   const certDocs = useCertificatesStore((s) => s.documents)
   const certTemplates = useCertificatesStore((s) => s.templates)
   const students = useStudentsStore((s) => s.students)
   const transactions = useFeeStore((s) => s.transactions)
+  const school = useSchoolProfile()
 
-  if (!doc) return null
+  // Live resolution — re-resolves whenever the underlying stores change
+  // (regenerated docs, status updates, deletions reflect instantly).
+  const doc = useMemo(() => {
+    if (!docId) return undefined
+    return useDownloadsStore.getState().getDocumentById(docId)
+  }, [docId, certDocs, downloadsCount, favourites])
+
+  // ─── Cert bridge: resolve the underlying generated certificate doc ──
+  const certDoc: GeneratedDocument | undefined =
+    doc ? certDocs.find((c) => `doc-gen-${c.id}` === doc.id) : undefined
+  const certTemplate: DocumentTemplate | undefined =
+    certDoc ? certTemplates.find((t) => t.id === certDoc.templateId) : undefined
+  // Snapshot-first resolution: live roster by id → by admission no → the
+  // stored document snapshot. Seed + generated docs ALWAYS render.
+  const certStudent = certDoc ? resolvePreviewStudent(certDoc, students) : undefined
+  const certTxn = certDoc ? resolvePreviewTransaction(certDoc, transactions) : undefined
+  const certMarksheet: MarksheetData | undefined =
+    certDoc ? certDoc.data?.marksheet as MarksheetData | undefined : undefined
+
+  const count = doc ? (downloadsCount[doc.id] ?? 0) : 0
+  const isFavourite = doc ? !!favourites[doc.id] : false
+
+  if (!doc) {
+    return (
+      <Drawer open={open} onOpenChange={(v) => { if (!v) onClose() }} direction="right">
+        <DrawerContent className="sm:max-w-md w-full" aria-label="Document details">
+          <div className="p-6 text-center text-xs text-muted-foreground">
+            Document no longer available.
+          </div>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
+
+  // ─── Real document HTML (download / print) ──────────────────────────
+  function documentHTML(d: DownloadDocument): string | null {
+    const cert = certDocs.find((c) => `doc-gen-${c.id}` === d.id)
+    if (cert) return buildDocumentHTML(cert)
+    if (d.content) return buildStaticDocHTML(d.content, school)
+    return null
+  }
 
   function handleDownload(d: DownloadDocument) {
-    const filename = download(d)
-    toast.success('Download started', { description: `${filename} · ${d.format}` })
+    const html = documentHTML(d)
+    if (!html) {
+      toast.error('Document file unavailable', { description: d.name })
+      return
+    }
+    const filename = download(d) // tracks usage + returns safe filename
+    downloadHTMLFile(html, safeFileName(filename.replace(/\.[a-z]+$/i, ''), 'html'))
+    toast.success('Document downloaded', { description: `${d.name} · ${d.format}` })
   }
 
   function handlePrint(d: DownloadDocument) {
-    toast.info('Opening print view…', { description: d.docNumber ?? d.name })
+    const html = documentHTML(d)
+    if (!html) {
+      toast.error('Print preview unavailable', { description: d.name })
+      return
+    }
+    const w = openPrintWindow(html, d.name)
+    if (!w) {
+      toast.error('Print blocked', {
+        description: 'Allow pop-ups for this site to print documents.',
+      })
+    }
   }
 
-  function handleShare(d: DownloadDocument) {
-    toast.success('Link copied', { description: `${d.name} share link ready` })
+  async function handleShare(d: DownloadDocument) {
+    const text = `${d.name}${d.docNumber ? ` (${d.docNumber})` : ''} — ${school.name}`
+    const result = await shareText(d.name, text)
+    if (result === 'copied') {
+      toast.success('Copied to clipboard', { description: d.name })
+    } else if (result === 'cancelled') {
+      // dismissed / failed — no toast spam
+    } else {
+      toast.success('Shared', { description: d.name })
+    }
   }
 
   function handleFavourite(d: DownloadDocument) {
-    toast.success('Added to favourites', { description: d.name })
+    const next = toggleFavourite(d.id)
+    toast.success(
+      next ? 'Pinned to favourites' : 'Removed from favourites',
+      { description: d.name },
+    )
   }
 
   function handleRegenerate(d: DownloadDocument) {
     const cert = certDocs.find((c) => `doc-gen-${c.id}` === d.id)
-    if (cert) {
-      toast.info('Regenerating document…', { description: cert.docNumber })
-    } else {
-      toast.info('Regenerating document…', { description: d.name })
-    }
+    if (!cert) return
+    const newDoc = generateDocument({
+      docType: cert.docType,
+      templateId: cert.templateId,
+      student: cert.studentId
+        ? undefined
+        : undefined,
+      studentId: cert.studentId,
+      studentName: cert.studentName,
+      admissionNo: cert.admissionNo,
+      class: cert.class,
+      data: cert.data,
+    })
+    toast.success('Document regenerated', { description: newDoc.docNumber })
   }
-
-  // ─── Cert bridge: resolve the underlying generated certificate doc ──
-  // so we can render the actual preview (CertificatePreview / MarksheetPreview
-  // / IDCardPreview / FeeReceiptPreview) instead of a generic placeholder.
-  const certDoc: GeneratedDocument | undefined =
-    certDocs.find((c) => `doc-gen-${c.id}` === doc.id)
-  const certTemplate: DocumentTemplate | undefined =
-    certDoc ? certTemplates.find((t) => t.id === certDoc.templateId) : undefined
-  const certStudent: StudentRecord | undefined =
-    certDoc ? students.find((s) => s.id === certDoc.studentId) : undefined
-  const certTxn: FeeTransaction | undefined =
-    certDoc && certDoc.data?.transactionId
-      ? transactions.find((t) => t.id === certDoc.data?.transactionId)
-      : undefined
-  const certMarksheet: MarksheetData | undefined =
-    certDoc ? certDoc.data?.marksheet as MarksheetData | undefined : undefined
-  const count = downloadsCount[doc.id] ?? 0
 
   return (
     <Drawer
@@ -131,14 +215,11 @@ export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
 
         {/* Body — scrollable */}
         <div className="flex-1 overflow-y-auto downloads-list-scroll">
-          {/* Preview area — actual document preview.
-              · Generated cert docs → render the real CertificatePreview /
-                MarksheetPreview / IDCardPreview / FeeReceiptPreview (uses
-                the underlying cert doc's template + student + data).
-              · Non-generated docs (forms, templates, reports) → a refined
-                document placeholder with DocumentThumbnail size xl + the
-                format-specific edge stripe (PDF=rose, XLSX=emerald, …),
-                NOT a generic FileText icon. */}
+          {/* Preview area — THE ACTUAL DOCUMENT.
+              · Generated cert docs → the real certificate / marksheet /
+                ID card / fee receipt renderers.
+              · Static forms / templates / reports → the real A4
+                institutional document sheet. */}
           <div className="p-4">
             {certDoc && certTemplate ? (
               <DrawerCertPreview
@@ -149,46 +230,16 @@ export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
                 txn={certTxn}
                 marksheet={certMarksheet}
               />
+            ) : doc.content ? (
+              <StaticDocPreview content={doc.content} />
             ) : (
-              <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22 }}
-                className="rounded-xl border border-border bg-muted/30 p-6 aspect-[3/4] flex flex-col"
-              >
-                {/* Top row — format badge right-aligned (the xl thumbnail
-                    in the center already carries the full format identity:
-                    edge stripe + glyph + dog-ear fold). */}
-                <div className="flex items-center justify-end gap-2">
-                  <FormatBadge format={doc.format} />
-                </div>
-
-                <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-                  <DocumentThumbnail
-                    format={doc.format as DocFormat}
-                    size="xl"
-                    className="relative"
-                  />
-                  <p className="mt-4 text-sm font-semibold leading-tight max-w-[220px]">
-                    {doc.name}
-                  </p>
-                  {doc.docNumber && (
-                    <p className="mt-1 text-[10px] text-muted-foreground font-mono">
-                      {doc.docNumber}
-                    </p>
-                  )}
-                  <p className="mt-2 text-[10px] text-muted-foreground/70 max-w-[240px] leading-snug">
-                    {doc.studentName
-                      ? `Issued to ${doc.studentName}`
-                      : doc.description}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between text-[9px] text-muted-foreground/70 pt-3 border-t border-border/40">
-                  <span>Document preview</span>
-                  <span className="tabular-nums">{formatDate(doc.updatedDate)}</span>
-                </div>
-              </motion.div>
+              <div className="rounded-xl border border-border bg-muted/30 p-6 aspect-[3/4] flex flex-col items-center justify-center text-center">
+                <FileText className="h-8 w-8 text-muted-foreground/40" />
+                <p className="mt-3 text-sm font-semibold">{doc.name}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground/70 max-w-[240px] leading-snug">
+                  {doc.studentName ? `Issued to ${doc.studentName}` : doc.description}
+                </p>
+              </div>
             )}
           </div>
 
@@ -213,16 +264,18 @@ export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
               className="h-8 w-8 p-0"
               onClick={() => handleShare(doc)}
               aria-label="Share"
+              title="Share"
             >
               <Share2 className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="outline" size="sm"
-              className="h-8 w-8 p-0"
+              className={isFavourite ? 'h-8 w-8 p-0 border-amber-400/60' : 'h-8 w-8 p-0'}
               onClick={() => handleFavourite(doc)}
-              aria-label="Add to favourites"
+              aria-label={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
+              title={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
             >
-              <Star className="h-3.5 w-3.5" />
+              <Star className={isFavourite ? 'h-3.5 w-3.5 fill-amber-400 text-amber-400' : 'h-3.5 w-3.5'} />
             </Button>
           </div>
 
@@ -287,17 +340,23 @@ export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
                 <Download className="h-2.5 w-2.5" />
                 <span className="tabular-nums font-semibold">{count}</span> downloads
               </span>
-              {certDoc && (
+              {isFavourite && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300 border border-amber-500/20">
-                  <CheckCircle2 className="h-2.5 w-2.5" />
-                  {certDoc.status}
+                  <Star className="h-2.5 w-2.5 fill-current" />
+                  Pinned
                 </span>
               )}
               {certDoc && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-muted text-muted-foreground border border-border">
-                  <Info className="h-2.5 w-2.5" />
-                  {certDoc.templateName}
-                </span>
+                <>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300 border border-amber-500/20">
+                    <CheckCircle2 className="h-2.5 w-2.5" />
+                    {certDoc.status}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-muted text-muted-foreground border border-border">
+                    <Info className="h-2.5 w-2.5" />
+                    {certDoc.templateName}
+                  </span>
+                </>
               )}
             </div>
             {certDoc && (
@@ -352,10 +411,9 @@ function MetaRow({
 // ─── DrawerCertPreview ────────────────────────────────────────────────
 //
 // Renders the ACTUAL document preview (CertificatePreview / MarksheetPreview
-// / IDCardPreview / FeeReceiptPreview) for a generated cert doc that has been
-// bridged into the Downloads library. Uses the cert doc's stored template +
-// student + (marksheet | transaction) data — the same data the Cert module's
-// history tab modal uses.
+// / IDCardPreview / FeeReceiptPreview) for a generated cert doc bridged
+// into the Downloads library — snapshot-first resolution means every doc
+// renders, even seeds without live roster records.
 
 function DrawerCertPreview({
   doc, certDoc, template, student, txn, marksheet,
@@ -363,8 +421,8 @@ function DrawerCertPreview({
   doc: DownloadDocument
   certDoc: GeneratedDocument
   template: DocumentTemplate
-  student?: StudentRecord
-  txn?: FeeTransaction
+  student?: ReturnType<typeof resolvePreviewStudent>
+  txn?: ReturnType<typeof resolvePreviewTransaction>
   marksheet?: MarksheetData
 }) {
   const dt = certDoc.docType

@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import { getSchoolSettings } from '@/lib/school-settings'
 import { school } from '@/lib/mock/school'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 import { ApplicationFormPrintStyles } from './AdmissionApplicationFormModal/PrintStyles'
 import { ModalTopBar } from './AdmissionApplicationFormModal/ModalTopBar'
 import { ApplicationFormPage1 } from './AdmissionApplicationFormModal/Page1'
@@ -10,6 +11,7 @@ import { ApplicationFormPage2 } from './AdmissionApplicationFormModal/Page2'
 import type { AdmissionApplicationFormModalProps } from './AdmissionApplicationFormModal/types'
 
 export function AdmissionApplicationFormModal({ open, onClose }: AdmissionApplicationFormModalProps) {
+  useDismissOnEscape(onClose, open)
   if (!open) return null
 
   const schoolSettings = getSchoolSettings()
@@ -20,7 +22,12 @@ export function AdmissionApplicationFormModal({ open, onClose }: AdmissionApplic
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-md overflow-y-auto print:p-0 print:bg-white print:static print:z-auto">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Admission application form"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-md overflow-y-auto print:p-0 print:bg-white print:static print:z-auto"
+    >
       {/* Print Specific CSS to isolate A4 pages during browser print */}
       <ApplicationFormPrintStyles />
 

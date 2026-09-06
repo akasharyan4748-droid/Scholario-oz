@@ -4,11 +4,20 @@
  * Students come from canonical Students store.
  * Drivers connect to existing staff model.
  * Routes, vehicles, assignments, maintenance all derive from this store.
+ *
+ * QA-FIX-B — TENANT-SCOPED PERSISTENCE: vehicles, routes, drivers,
+ * assignments + maintenance survive reload (per-school namespace via
+ * createTenantScopedStorage). Search is ephemeral UI state — not persisted.
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { useMemo } from 'react'
 import { useStudentsStore } from '@/lib/store/students-store'
+import { migrateLegacyScopedStore, createTenantScopedStorage } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+migrateLegacyScopedStore('scholario-transport-v1', DEFAULT_TENANT_ID)
 
 export type VehicleType = 'Bus' | 'Mini Bus' | 'Van'
 export type VehicleStatus = 'Active' | 'Maintenance' | 'Inactive'
@@ -156,7 +165,9 @@ interface TransportState {
   completeMaintenance: (maintenanceId: string) => void
 }
 
-export const useTransportStore = create<TransportState>((set, get) => ({
+export const useTransportStore = create<TransportState>()(
+  persist(
+    (set, get) => ({
   vehicles: SEED_VEHICLES,
   routes: SEED_ROUTES,
   drivers: SEED_DRIVERS,
@@ -248,7 +259,22 @@ export const useTransportStore = create<TransportState>((set, get) => ({
         : r),
     })
   },
-}))
+    }),
+    {
+      name: 'scholario-transport-v1',
+      storage: createTenantScopedStorage('scholario-transport-v1'),
+      version: 1,
+      // DATA slices only — search is UI state, actions are functions.
+      partialize: (s) => ({
+        vehicles: s.vehicles,
+        routes: s.routes,
+        drivers: s.drivers,
+        assignments: s.assignments,
+        maintenance: s.maintenance,
+      }),
+    },
+  ),
+)
 
 export function useTransportData() {
   const vehicles = useTransportStore((s) => s.vehicles)

@@ -38,6 +38,7 @@ import { school } from '@/lib/mock/school'
 import { cn } from '@/lib/utils'
 import { CategoryBadge } from './comm-shared'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 const CATEGORIES: AnnouncementCategory[] = ['Academic', 'Event', 'Holiday', 'General', 'Emergency', 'Parents', 'Transport', 'Examination']
 
@@ -643,11 +644,16 @@ function ConfirmModal({ title, audience, recipientCount, channels, scheduleMode,
   onCancel: () => void
   onConfirm: () => void
 }) {
+  // Escape cancels the confirm modal (backdrop click already does).
+  useDismissOnEscape(onCancel)
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={isEmergency ? 'Confirm emergency alert' : 'Confirm announcement'}
       className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onCancel}
     >

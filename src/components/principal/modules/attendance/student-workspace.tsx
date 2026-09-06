@@ -7,16 +7,19 @@
  * shown when a specific class is selected.
  *
  * Brief PART 3: All Classes filter is compact (size="sm" to match h-8 rhythm).
- * Brief PART 4 + PART 26: Export button REMOVED from Overview — export lives
- *   in Attendance → History only.
+ * Brief PART 4 + PART 26 (superseded by QA-FIX-A): the Overview Export
+ *   button is live again — it now performs a REAL CSV download of the
+ *   class-wise summary table (handler lives in attendance/index.tsx).
+ *   Monthly PDF exports remain in Attendance → History.
  *
  * Brief §11: Live Class Snapshot behavior is context-aware — handled in
  * AttendanceInsights.
  */
 
 import { useState, useMemo } from 'react'
-import { Filter, CalendarCheck, UserCheck, UserX, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { Filter, CalendarCheck, UserCheck, UserX, Clock, ArrowUpRight, ArrowDownRight, Download } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
+import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import {
   classSections,
@@ -35,12 +38,12 @@ import { AttendanceInsights } from './insights'
 interface StudentWorkspaceProps {
   classFilter: string
   setClassFilter: (v: string) => void
-  onExport: () => void  // kept for API compatibility but not rendered
+  onExport: () => void  // QA-FIX-A: REAL CSV export of the summary table
   onViewFullAttendance: (dateStr: string) => void
 }
 
 export function StudentWorkspace({
-  classFilter, setClassFilter, onViewFullAttendance,
+  classFilter, setClassFilter, onExport, onViewFullAttendance,
 }: StudentWorkspaceProps) {
   const [selectedDay, setSelectedDay] = useState<number | null>(10)
 
@@ -82,11 +85,21 @@ export function StudentWorkspace({
 
   return (
     <PageTransition className="space-y-4">
-      {/* Brief PART 3: compact All Classes filter; PART 4: no Export button */}
+      {/* Brief PART 3: compact All Classes filter; QA-FIX-A: real CSV Export */}
       <ModuleHeader
         meta={[`December 2025`, isAllClasses ? 'All Classes' : (section?.name ?? '')]}
         actions={
-          <Select value={classFilter} onValueChange={setClassFilter}>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={onExport}
+              title="Export the class-wise summary table as CSV"
+            >
+              <Download className="h-3.5 w-3.5" /> Export
+            </Button>
+            <Select value={classFilter} onValueChange={setClassFilter}>
             <SelectTrigger size="sm" className="w-[150px] text-xs hidden sm:flex rounded-lg">
               <Filter className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
               <SelectValue />
@@ -98,6 +111,7 @@ export function StudentWorkspace({
               ))}
             </SelectContent>
           </Select>
+          </div>
         }
       />
 

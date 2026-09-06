@@ -3,31 +3,48 @@
 import { useRef } from 'react'
 import { toast } from 'sonner'
 import { school } from '@/lib/mock/school'
+import { useSchoolProfile } from '@/lib/school-profile'
+import { downloadHTMLFile, safeFileName } from '@/lib/download-file'
 import { TopActionBar } from './OfficialAdmissionLetter/TopActionBar'
 import { Watermark, SchoolHeader } from './OfficialAdmissionLetter/SchoolHeader'
 import { StudentProfileGrid } from './OfficialAdmissionLetter/StudentProfileGrid'
 import { FeeBreakdownTable } from './OfficialAdmissionLetter/FeeBreakdownTable'
 import { PortalCredentialsCard } from './OfficialAdmissionLetter/PortalCredentialsCard'
 import { DigitalVerification, StatutoryDeclaration, Signatures } from './OfficialAdmissionLetter/DigitalVerification'
+import { buildAdmissionLetterHTML } from './OfficialAdmissionLetter/letter-html'
 import type { OfficialAdmissionLetterProps as Props } from './OfficialAdmissionLetter/types'
 
 export type { AdmissionLetterData } from './OfficialAdmissionLetter/types'
 
 export function OfficialAdmissionLetter({ data, onClose }: Props) {
   const printRef = useRef<HTMLDivElement>(null)
+  const profile = useSchoolProfile()
 
   const handlePrint = () => {
     window.print()
   }
 
+  const fullName = `${data.student.firstName} ${data.student.lastName}`
+
+  // QA-FIX-A: REAL download — a standalone branded HTML letter mirroring
+  // the preview (letterhead from school profile, student profile grid, fee
+  // summary, verification block, statutory declaration, signatures).
   const handleDownloadPdf = () => {
-    toast.success('Admission Letter PDF Generated', {
-      description: `Saved as Admission_Letter_${data.admissionNo}.pdf`,
-    })
+    try {
+      const html = buildAdmissionLetterHTML(data, profile)
+      const filename = safeFileName(`admission-letter-${fullName}`, 'html')
+      downloadHTMLFile(html, filename)
+      toast.success('Admission Letter downloaded', {
+        description: filename,
+      })
+    } catch {
+      toast.error('Unable to generate letter', {
+        description: 'Please try again.',
+      })
+    }
   }
 
-  const fullName = `${data.student.firstName} ${data.student.lastName}`
-  const principalName = school.principal || 'Principal'
+  const principalName = profile.principal || school.principal || 'Principal'
 
   return (
     <div className="space-y-6">

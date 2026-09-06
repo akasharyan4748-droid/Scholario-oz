@@ -140,9 +140,14 @@ export function buildSeedSchedule(
   return schedule
 }
 
-/** Class definitions for the seed exams. */
-export const SEED_CLASS_DEFS: Record<string, SeedClassDef[]> = {
-  'exam-seed-1': [
+/**
+ * Class definitions for the seed exams — an ORDERED ARRAY: index 0 powers
+ * the first seed exam (Unit Test 2 / Quarterly), index 1 the Final
+ * Examination, index 2 the Mid-Term. Positional by design — exam ids are
+ * tenant-scoped (`exam-<tenantcode>-N`) so keying by id would never match.
+ */
+export const SEED_CLASS_DEFS: SeedClassDef[][] = [
+  [
     { classId: 'C09', className: 'Class 6', gradeLevel: '6', stream: null, studentCount: 4, subjectIds: NURSERY_TO_10_SUBJECT_IDS },
     { classId: 'C11', className: 'Class 8', gradeLevel: '8', stream: null, studentCount: 4, subjectIds: NURSERY_TO_10_SUBJECT_IDS },
     { classId: 'C12', className: 'Class 9', gradeLevel: '9', stream: null, studentCount: 4, subjectIds: NURSERY_TO_10_SUBJECT_IDS },
@@ -152,13 +157,13 @@ export const SEED_CLASS_DEFS: Record<string, SeedClassDef[]> = {
     { classId: 'C15-PCM', className: 'Class 12', gradeLevel: '12', stream: 'Science-PCM', studentCount: 4, subjectIds: SCIENCE_PCM_SUBJECT_IDS },
     { classId: 'C15-PCB', className: 'Class 12', gradeLevel: '12', stream: 'Science-PCB', studentCount: 4, subjectIds: SCIENCE_PCB_SUBJECT_IDS },
   ],
-  'exam-seed-2': [
+  [
     { classId: 'C12', className: 'Class 9', gradeLevel: '9', stream: null, studentCount: 4, subjectIds: NURSERY_TO_10_SUBJECT_IDS },
     { classId: 'C13', className: 'Class 10', gradeLevel: '10', stream: null, studentCount: 4, subjectIds: NURSERY_TO_10_SUBJECT_IDS },
     { classId: 'C14-PCM', className: 'Class 11', gradeLevel: '11', stream: 'Science-PCM', studentCount: 4, subjectIds: SCIENCE_PCM_SUBJECT_IDS },
     { classId: 'C15-PCM', className: 'Class 12', gradeLevel: '12', stream: 'Science-PCM', studentCount: 4, subjectIds: SCIENCE_PCM_SUBJECT_IDS },
   ],
-  'exam-seed-3': [
+  [
     { classId: 'C12', className: 'Class 9', gradeLevel: '9', stream: null, studentCount: 4, subjectIds: NURSERY_TO_10_SUBJECT_IDS },
     { classId: 'C13', className: 'Class 10', gradeLevel: '10', stream: null, studentCount: 4, subjectIds: NURSERY_TO_10_SUBJECT_IDS },
     { classId: 'C14-PCM', className: 'Class 11', gradeLevel: '11', stream: 'Science-PCM', studentCount: 4, subjectIds: SCIENCE_PCM_SUBJECT_IDS },
@@ -166,4 +171,4 @@ export const SEED_CLASS_DEFS: Record<string, SeedClassDef[]> = {
     { classId: 'C15-PCM', className: 'Class 12', gradeLevel: '12', stream: 'Science-PCM', studentCount: 4, subjectIds: SCIENCE_PCM_SUBJECT_IDS },
     { classId: 'C15-PCB', className: 'Class 12', gradeLevel: '12', stream: 'Science-PCB', studentCount: 4, subjectIds: SCIENCE_PCB_SUBJECT_IDS },
   ],
-}
+]

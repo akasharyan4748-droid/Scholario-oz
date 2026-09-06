@@ -16,7 +16,13 @@
  *   3. Exams           — `useMockExamsStore` schedule items + per-exam
  *                        "Begins" / "Ends" markers on startDate/endDate.
  *   4. User events     — added at runtime via `addEvent` mutation (these
- *                        persist for the browser session).
+ *                        now persist across reloads, tenant-scoped).
+ *
+ * QA-FIX-B — TENANT-SCOPED PERSISTENCE: ONLY the user-events slice is
+ * persisted (per-school namespace) so added/removed events survive reload.
+ * School events / holidays / exams are DERIVED from their canonical sources
+ * on every render — persisting them would freeze derived data, so they are
+ * deliberately excluded from partialize.
  *
  * No circular deps: this file imports `useMockExamsStore` (a Zustand store,
  * not a hook call) only to read its `.getState()` snapshot inside the pure
@@ -25,9 +31,14 @@
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { calendarEvents } from '@/lib/mock/operations'
 import { getHoliday } from '@/lib/mock/school-calendar'
 import type { ExamDTO } from '@/lib/exams/types'
+import { migrateLegacyScopedStore, createTenantScopedStorage } from '@/lib/tenant/tenant-storage'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+
+migrateLegacyScopedStore('scholario-calendar-v1', DEFAULT_TENANT_ID)
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -232,17 +243,30 @@ export function formatISODate(d: Date): string {
 
 // ─── Zustand store ────────────────────────────────────────────────────
 
-export const useCalendarStore = create<CalendarStoreState>((set) => ({
-  userEvents: [],
-  addEvent: (input) => {
-    const event: CalendarEvent = {
-      ...input,
-      id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      source: 'user',
-    }
-    set((s) => ({ userEvents: [...s.userEvents, event] }))
-    return event
-  },
-  removeEvent: (id) => set((s) => ({ userEvents: s.userEvents.filter((e) => e.id !== id) })),
-  clearUserEvents: () => set({ userEvents: [] }),
-}))
+export const useCalendarStore = create<CalendarStoreState>()(
+  persist(
+    (set) => ({
+      userEvents: [],
+      addEvent: (input) => {
+        const event: CalendarEvent = {
+          ...input,
+          id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          source: 'user',
+        }
+        set((s) => ({ userEvents: [...s.userEvents, event] }))
+        return event
+      },
+      removeEvent: (id) => set((s) => ({ userEvents: s.userEvents.filter((e) => e.id !== id) })),
+      clearUserEvents: () => set({ userEvents: [] }),
+    }),
+    {
+      name: 'scholario-calendar-v1',
+      storage: createTenantScopedStorage('scholario-calendar-v1'),
+      version: 1,
+      // QA-FIX-B — ONLY user-created events are persisted; school/holiday/
+      // exam events are derived from canonical sources at render time and
+      // must not be frozen by persistence.
+      partialize: (s) => ({ userEvents: s.userEvents }),
+    },
+  ),
+)

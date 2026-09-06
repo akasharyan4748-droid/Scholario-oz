@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Clock, Megaphone } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 import {
   snoozeOptions, alertColorMap, type LiveAlertWithIcon,
 } from './data'
@@ -36,6 +37,9 @@ export function LiveAlertsList({
   alerts, filtered, severityFilter, dismissedCount, snoozeMenuFor,
   setSnoozeMenuFor, onResolve, onSnooze, onRestore, onAlertClick, onClearFilter,
 }: LiveAlertsListProps) {
+  // Escape closes the open snooze dropdown (same dismissal UX as the
+  // click-catcher backdrop below).
+  useDismissOnEscape(() => setSnoozeMenuFor(null), snoozeMenuFor !== null)
   return (
     <div className="relative space-y-1 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
       {alerts.length === 0 ? (
@@ -109,6 +113,7 @@ export function LiveAlertsList({
                     snoozeMenuFor === alert.id ? 'opacity-100 bg-amber-500/15' : 'opacity-0 group-hover:opacity-100'
                   )}
                   title="Snooze alert"
+                  aria-label={`Snooze ${alert.title}`}
                 >
                   <Clock className="h-3.5 w-3.5" />
                 </button>
@@ -147,6 +152,7 @@ export function LiveAlertsList({
                   onClick={(e) => { e.stopPropagation(); onResolve(alert.id) }}
                   className="opacity-0 group-hover:opacity-100 transition-opacity flex h-6 w-6 items-center justify-center rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/15"
                   title="Mark as resolved"
+                  aria-label={`Mark ${alert.title} as resolved`}
                 >
                   <Check className="h-3.5 w-3.5" />
                 </button>

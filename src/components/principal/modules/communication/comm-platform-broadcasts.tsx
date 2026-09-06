@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button'
 import { formatRelativeTime, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 
 export interface PlatformAnnouncement {
   id: string
@@ -430,6 +431,8 @@ function RateRing({ ratePct, tone }: { ratePct: number; tone: { stroke: string }
 }
 
 function PlatformViewModal({ announcement: a, onClose }: { announcement: PlatformAnnouncement; onClose: () => void }) {
+  // Escape closes the modal (backdrop click already does).
+  useDismissOnEscape(onClose)
   // Acknowledgement feed — fetched once when the modal opens.
   const [reads, setReads] = useState<AckRead[] | null>(null)
   const [readsError, setReadsError] = useState(false)
@@ -475,6 +478,7 @@ function PlatformViewModal({ announcement: a, onClose }: { announcement: Platfor
         className="bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
+        aria-modal="true"
         aria-label={a.title}
       >
         <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3 bg-gradient-to-r from-emerald-500/[0.06] to-transparent">

@@ -41,6 +41,7 @@ interface SchoolSettingsActions {
   restoreFeeHead: SchoolSettingsState['restoreFeeHead']
   updateFees: SchoolSettingsState['updateFees']
   updatePayroll: SchoolSettingsState['updatePayroll']
+  updateLibrary: SchoolSettingsState['updateLibrary']
   addBook: SchoolSettingsState['addBook']
   removeBook: SchoolSettingsState['removeBook']
   addUniformItem: SchoolSettingsState['addUniformItem']

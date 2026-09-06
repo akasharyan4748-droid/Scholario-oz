@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { school } from '@/lib/mock/school'
+import { useSchoolProfile, getSchoolProfile } from '@/lib/school-profile'
 import { formatDate, formatINR } from '@/lib/format'
 import { useStudentsStore } from '@/lib/store/students-store'
 import type { StudentRecord } from '@/lib/store/students-store'
@@ -48,8 +48,11 @@ import {
   CertificatePreview, MarksheetPreview, IDCardPreview, FeeReceiptPreview,
   type MarksheetData, type MarksheetRow,
 } from './previews'
+import type { PreviewStudent, PreviewTransaction } from './cert-resolvers'
 
 export function GenerateTab() {
+  // School identity (Settings → General) drives document branding.
+  const school = useSchoolProfile()
   // Bonafide pre-selected — the preview pane shows a real document from
   // the first paint; the picker grid keeps the selection visible.
   const [docType, setDocType] = useState<DocType | null>('Bonafide')
@@ -189,6 +192,26 @@ export function GenerateTab() {
         amount: selectedTxn.amount,
         mode: selectedTxn.mode,
         purpose: selectedTxn.purpose,
+        // Full snapshot — the receipt can always be re-rendered even if the
+        // live transaction is later removed (preview resolvers fall back to this).
+        transaction: {
+          id: selectedTxn.id,
+          receiptNo: selectedTxn.receiptNo,
+          studentId: selectedTxn.studentId,
+          studentName: selectedTxn.studentName,
+          admissionNo: selectedTxn.admissionNo,
+          className: selectedTxn.className,
+          classId: selectedTxn.classId,
+          amount: selectedTxn.amount,
+          mode: selectedTxn.mode,
+          status: selectedTxn.status,
+          date: selectedTxn.date,
+          purpose: selectedTxn.purpose,
+          feeHead: selectedTxn.feeHead,
+          collectedBy: selectedTxn.collectedBy,
+          verifiedBy: selectedTxn.verifiedBy,
+          referenceNo: selectedTxn.referenceNo,
+        },
       }
       classInfo = selectedTxn.className
     } else {
@@ -627,8 +650,8 @@ export function DocPreviewSwitch({
 }: {
   docType: DocType
   template: DocumentTemplate
-  student?: StudentRecord
-  txn?: FeeTransaction
+  student?: PreviewStudent
+  txn?: PreviewTransaction
   marksheetData?: MarksheetData
   purpose?: string
   docNumber?: string
@@ -701,7 +724,7 @@ function computeMarksheet(
       examName: exam.name,
       className: student.className,
       section: student.section,
-      session: exam.session ?? school.academicYear,
+      session: exam.session ?? getSchoolProfile().academicYear,
       rows,
       totalMax,
       totalObtained,
@@ -725,7 +748,7 @@ function computeMarksheet(
     examName: 'Academic Performance Report',
     className: student.className,
     section: student.section,
-    session: school.academicYear,
+    session: getSchoolProfile().academicYear,
     rows,
     totalMax,
     totalObtained,

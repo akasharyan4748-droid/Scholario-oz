@@ -5,7 +5,7 @@ import {
   LayoutDashboard, UserPlus, GraduationCap, School, CalendarCheck, IndianRupee,
   Wallet, FileText, Megaphone, CalendarDays, ClipboardList,
   BookMarked, Bus, Package, Award, Settings, MessageSquare,
-  PieChart, Truck, Download, LayoutGrid, Users, Layers, Clock
+  PieChart, Download, LayoutGrid, Users, Layers, Clock
 } from 'lucide-react'
 import { AppShell, type NavGroup } from '@/components/shell/app-shell'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
@@ -42,7 +42,6 @@ import { CertificatesModule } from './modules/certificates'
 import { SchoolSettingsModule } from './modules/school-settings'
 import { MessagingModule } from './modules/messaging'
 import { FinanceDashboardModule } from './modules/finance-dashboard'
-import { ProcurementModule } from './modules/procurement'
 import { DownloadsModule } from './modules/downloads'
 
 const moduleRegistry: Record<string, React.ComponentType<any>> = {
@@ -69,7 +68,6 @@ const moduleRegistry: Record<string, React.ComponentType<any>> = {
   library: LibraryModule,
   transport: TransportModule,
   inventory: InventoryModule,
-  procurement: ProcurementModule,
   certificates: CertificatesModule,
   downloads: DownloadsModule,
   settings: SchoolSettingsModule,
@@ -113,7 +111,6 @@ const navGroups: NavGroup[] = [
       { key: 'library', label: 'Library', icon: <BookMarked className="h-4.5 w-4.5" /> },
       { key: 'transport', label: 'Transport', icon: <Bus className="h-4.5 w-4.5" /> },
       { key: 'inventory', label: 'Inventory', icon: <Package className="h-4.5 w-4.5" /> },
-      // { key: 'procurement', label: 'Procurement', icon: <Truck className="h-4.5 w-4.5" /> }, (Hidden from sidebar per specs)
       { key: 'certificates', label: 'Certificates', icon: <Award className="h-4.5 w-4.5" /> },
       { key: 'downloads', label: 'Downloads', icon: <Download className="h-4.5 w-4.5" /> },
     ],

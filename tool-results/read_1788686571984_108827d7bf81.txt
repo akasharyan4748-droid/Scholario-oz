@@ -1,0 +1,432 @@
+   480→  input: { gender?: string; classId?: string; className?: string },
+   481→): number {
+   482→  if (!policy.enabled) return 0
+   483→  const rule = policy.rules.find((r) => r.id === 'admission')
+   484→  if (!rule) return 0
+   485→  return entryFeeApplies(rule.applies, input) ? policy.admissionAmount : 0
+   486→}
+   487→
+   488→// ─── ADDITIONAL CHARGES seed ──────────────────────────────────────────
+   489→//
+   490→// Event-based / special collections that exist INDEPENDENTLY of the
+   491→// per-class annual fee structures. Payments against them carry
+   492→// category='ADDITIONAL' and never reduce core fee outstanding.
+   493→export const SEED_ADDITIONAL_CHARGES: AdditionalCharge[] = [
+   494→  {
+   495→    id: 'AC-01',
+   496→    name: 'Educational Tour — Jaipur',
+   497→    category: 'Tour',
+   498→    amount: 2500,
+   499→    academicYear: '2026-2027',
+   500→    applicableClassIds: ['C11'],
+   501→    dueDate: '2026-09-15',
+   502→    mandatory: false,
+   503→    description: 'Three-day educational tour to Jaipur (transport, stay, entry fees). Opt-out possible — inform the class teacher.',
+   504→    reference: 'Jaipur Educational Tour 2026',
+   505→    createdBy: 'Principal',
+   506→    createdAt: '2026-08-20T09:30:00Z',
+   507→    status: 'Active',
+   508→  },
+   509→  {
+   510→    id: 'AC-02',
+   511→    name: 'Robotics Workshop',
+   512→    category: 'Workshop',
+   513→    amount: 1000,
+   514→    academicYear: '2026-2027',
+   515→    applicableClassIds: ['C12'],
+   516→    dueDate: '2026-10-30',
+   517→    mandatory: true,
+   518→    description: 'Two-day robotics workshop conducted with an external partner. Kit included.',
+   519→    reference: 'Science Club — Autumn Workshop',
+   520→    createdBy: 'Principal',
+   521→    createdAt: '2026-08-21T11:00:00Z',
+   522→    status: 'Active',
+   523→  },
+   524→  // FIN-COLLECTION — standalone donation drive (no application needed).
+   525→  // Custom amounts: `amount` is only the suggested contribution; progress
+   526→  // reads against targetAmount instead of students × amount.
+   527→  {
+   528→    id: 'AC-03',
+   529→    name: 'School Development Fund',
+   530→    category: 'Donation',
+   531→    amount: 500,
+   532→    academicYear: '2026-2027',
+   533→    applicableClassIds: ['C11', 'C12'],
+   534→    dueDate: '2026-11-30',
+   535→    mandatory: false,
+   536→    allowCustomAmount: true,
+   537→    targetAmount: 100000,
+   538→    description: 'Voluntary contribution towards library expansion and smart-class upgrades. Every rupee is receipted — contribute any amount you wish.',
+   539→    reference: 'Development Fund 2026-27',
+   540→    createdBy: 'Principal',
+   541→    createdAt: '2026-08-24T10:15:00Z',
+   542→    status: 'Active',
+   543→  },
+   544→  // AF-TPL — the second seeded tour session (Scholario Modern A4 document).
+   545→  {
+   546→    id: 'AC-04',
+   547→    name: 'Educational Tour — Mysuru',
+   548→    category: 'Tour',
+   549→    amount: 1500,
+   550→    academicYear: '2026-2027',
+   551→    applicableClassIds: ['C07'],
+   552→    dueDate: '2026-12-20',
+   553→    mandatory: false,
+   554→    description: 'Two-day educational tour to Mysuru (transport, stay, entry fees). Digital consent — submit the form online, pay online or at the counter.',
+   555→    reference: 'Mysuru Educational Tour 2026-27',
+   556→    createdBy: 'Principal',
+   557→    createdAt: '2026-09-02T09:30:00Z',
+   558→    status: 'Active',
+   559→  },
+   560→]
+   561→
+   562→// ─── Concession seed (PART 11 — auditable concession records) ─────────
+   563→//
+   564→// Every register scholarship (`student.scholarship > 0`) becomes an
+   565→// APPROVED concession record so the account's concession total stays
+   566→// EXACTLY what it was (₹500 per scholarship student) while gaining type,
+   567→// approver, reason and audit provenance. computeAccount uses records when
+   568→// they exist and falls back to the register scalar only for legacy
+   569→// persisted namespaces without records — no data ever regresses.
+   570→export const SEED_CONCESSIONS: StudentConcession[] = SS
+   571→  .filter((s) => s.scholarship > 0 && s.status === 'Active')
+   572→  .map((s) => ({
+   573→    id: `CONC-${s.id}-SEED`,
+   574→    studentId: s.id,
+   575→    type: 'Scholarship' as const,
+   576→    basis: 'amount' as const,
+   577→    value: s.scholarship,
+   578→    appliesTo: 'core_all' as const,
+   579→    effectiveFrom: '2026-04-01',
+   580→    status: 'Approved' as const,
+   581→    reason: 'Register scholarship — seeded concession (sibling/scholarship policy)',
+   582→    requestedBy: 'Principal',
+   583→    requestedAt: '2026-04-01T09:00:00.000Z',
+   584→    approvedBy: 'Principal',
+   585→    approvedAt: '2026-04-01T09:05:00.000Z',
+   586→  }))
+   587→
+   588→// ─── Optional-head per-student opt-in seed (PART 9) ────────────────────
+   589→//
+   590→// Books & Uniform are optional structure heads. Opt-ins demonstrate the
+   591→// FULL applicability matrix on ONE class's roster (first class, first
+   592→// three students — deterministic ids):
+   593→//   student 1 → Books ✓ AND Uniform ✓
+   594→//   student 2 → Books ✓, Uniform ✗
+   595→//   student 3 → Books ✗, Uniform ✓
+   596→// Everyone else: neither (the default — optional ≠ automatic).
+   597→function buildOptionalHeadOptins(): Record<string, string[]> {
+   598→  const headIdFor = (structureClassId: string, name: string): string | undefined =>
+   599→    FEE_STRUCTURES.find((f) => f.classId === structureClassId)?.components.find((h) => h.name === name)?.id
+   600→  const classId = ACADEMIC_CLASSES[0]?.id
+   601→  if (!classId) return {}
+   602→  const booksId = headIdFor(classId, 'Books & Material')
+   603→  const uniformId = headIdFor(classId, 'Uniform & Sports Kit')
+   604→  const roster = SS.filter((s) => s.classId === classId).slice(0, 3)
+   605→  const map: Record<string, string[]> = {}
+   606→  const assign = (studentId: string | undefined, headId: string | undefined) => {
+   607→    if (!studentId || !headId) return
+   608→    map[studentId] = [...(map[studentId] ?? []), headId]
+   609→  }
+   610→  assign(roster[0]?.id, booksId)
+   611→  assign(roster[0]?.id, uniformId)
+   612→  assign(roster[1]?.id, booksId)
+   613→  assign(roster[2]?.id, uniformId)
+   614→  return map
+   615→}
+   616→export const SEED_OPTIONAL_HEAD_OPTINS: Record<string, string[]> = buildOptionalHeadOptins()
+   617→
+   618→// ─── Phase 3: seed version snapshots from FEE_STRUCTURES ────────────
+   619→// Derived so live structures and immutable history stay in lockstep.
+   620→export const SEED_VERSIONS: FeeStructureVersion[] = FEE_STRUCTURES.map((s) => ({
+   621→  id: `FSV-${s.id}-1`,
+   622→  structureId: s.id,
+   623→  version: 1,
+   624→  status: 'current' as const,
+   625→  heads: s.components.map((h) => ({ ...h })),
+   626→  totalAmount: computeStructureBaseTotal(s),
+   627→  effectiveFrom: s.effectiveFrom,
+   628→  createdBy: 'System',
+   629→  createdAt: '2026-04-01T10:00:00Z',
+   630→  changeReason: 'Fee policy revision — 2026-27 schedule',
+   631→  notes: 'Seeded from the canonical 2026-27 fee policy (tuition bands, session exam fees, conditional transport/practicals)',
+   632→  examFeeSchedule: s.examFeeSchedule?.map((e) => ({ ...e })),
+   633→}))
+   634→
+   635→
+   636→export const DEFAULT_PAYMENT_MODES: PaymentModeConfig[] = [
+   637→  { id: 'UPI', label: 'UPI', active: true, requiresReference: true },
+   638→  { id: 'Card', label: 'Card', active: true, requiresReference: true },
+   639→  { id: 'Net Banking', label: 'Net Banking', active: true, requiresReference: true },
+   640→  { id: 'Cash', label: 'Cash', active: true, requiresReference: false },
+   641→  // Cheque is DEPRECATED for new transactions (per product spec — supported
+   642→  // methods are UPI/Card/Net Banking online, Cash/Bank Transfer offline).
+   643→  { id: 'Cheque', label: 'Cheque', active: false, requiresReference: true, requiresBankName: true, requiresChequeDetails: true },
+   644→  { id: 'Bank Transfer', label: 'Bank Transfer', active: true, requiresReference: true },
+   645→]
+   646→
+   647→export const DEFAULT_LATE_FEE_RULE: LateFeeRule = {
+   648→  enabled: true,
+   649→  amountPerMonth: 50,
+   650→  gracePeriodDays: 7,
+   651→  maxLateFee: 500,
+   652→  appliesTo: 'mandatory_only',
+   653→}
+   654→
+   655→export const DEFAULT_CONCESSION_RULE: ConcessionRule = {
+   656→  enabled: true,
+   657→  siblingDiscountPct: 10,
+   658→  staffWardDiscountPct: 25,
+   659→  scholarshipDiscountPct: 50,
+   660→  requiresApproval: true,
+   661→}
+   662→
+   663→export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
+   664→  prefix: 'RCP-2026-',
+   665→  startNumber: 1042,
+   666→  footerMessage: 'Thank you for your payment.',
+   667→  showAuthorizedSignature: true,
+   668→  paperSize: 'A5',
+   669→}
+   670→
+   671→// ─── Payment Infrastructure seed (Phase 4) ───────────────────────────
+   672→// Gateway fees modeled at 2% + 18% GST on the fee (Razorpay standard
+   673→// domestic pricing); settlement aggregates are the exact sum of their
+   674→// member transactions (validated in-worklog QA script).
+   675→
+   676→export const SEED_GATEWAY_CONFIG: GatewayConfig = {
+   677→  id: 'GC-01',
+   678→  provider: 'razorpay',
+   679→  environment: 'test',
+   680→  status: 'test_mode',
+   681→  merchantId: 'rzp_test_DEMO1234',
+   682→  apiKeyId: 'key_DEMO1234',
+   683→  // webhookSecret is intentionally NOT seeded here — server-side only.
+   684→  webhookUrl: '/api/webhooks/razorpay',
+   685→  webhookStatus: 'healthy',
+   686→  lastWebhookAt: '2026-08-27T09:45:00Z',
+   687→  failedWebhookCount: 0,
+   688→  settlementAccountId: 'BA-01',
+   689→  connectedAt: '2026-08-15T10:00:00Z',
+   690→  connectedBy: 'Principal',
+   691→  testModePassed: true,
+   692→}
+   693→
+   694→export const SEED_BANK_ACCOUNTS: BankAccount[] = [
+   695→  {
+   696→    id: 'BA-01',
+   697→    holderName: 'Scholario Education Society',
+   698→    bankName: 'HDFC Bank',
+   699→    accountNumber: '50100123456789',
+   700→    ifsc: 'HDFC0001234',
+   701→    branch: 'MG Road, Bengaluru',
+   702→    accountType: 'current',
+   703→    status: 'active',
+   704→    isPrimary: true,
+   705→    addedAt: '2026-04-01T09:00:00Z',
+   706→    addedBy: 'Principal',
+   707→    parentDisplayInstructions: 'Use this account for NEFT/RTGS transfers. Email the transfer reference to accounts@scholario.edu for verification.',
+   708→  },
+   709→  {
+   710→    id: 'BA-02',
+   711→    holderName: 'Scholario Education Society',
+   712→    bankName: 'State Bank of India',
+   713→    accountNumber: '39876543210',
+   714→    ifsc: 'SBIN0007654',
+   715→    branch: 'Indiranagar, Bengaluru',
+   716→    accountType: 'savings',
+   717→    status: 'active',
+   718→    isPrimary: false,
+   719→    addedAt: '2026-06-15T11:00:00Z',
+   720→    addedBy: 'Principal',
+   721→    parentDisplayInstructions: 'Secondary account — use only if HDFC is unavailable. Confirm with the accounts office before transfer.',
+   722→  },
+   723→]
+   724→
+   725→export const SEED_UPI_QR_CONFIGS: UpiQrConfig[] = [
+   726→  {
+   727→    id: 'UQR-01',
+   728→    name: 'Main Counter UPI',
+   729→    upiId: 'scholario@hdfc',
+   730→    payeeName: 'Scholario Education Society',
+   731→    qrType: 'static',
+   732→    status: 'active',
+   733→    notes: 'Static QR displayed at the fee counter. Parents can scan to pay any amount.',
+   734→    addedAt: '2026-04-01T09:00:00Z',
+   735→    addedBy: 'Principal',
+   736→  },
+   737→]
+   738→
+   739→// ─── Seed Transactions (bound to the CANONICAL roster) ───────────────
+   740→//
+   741→// Every row derives studentName / admissionNo / className / classId from the
+   742→// deterministic students seed, so receipts can never contradict the Students
+   743→// module. Amounts follow the 2026-27 fee policy (small, realistic instalments).
+   744→//   gwFee = round(amount × 2%), taxOnFee = round(gwFee × 18%)
+   745→
+   746→const S = (id: string) => SS.find((s) => s.id === id)
+   747→const secLabel = (id: string) => {
+   748→  const st = S(id)
+   749→  return st ? `${st.className}-${st.section}` : '—'
+   750→}
+   751→const f = (n: number) => n.toLocaleString('en-IN')
+   752→
+   753→// Settlement aggregates derive from members so they stay additive & true.
+   754→const gwMembersSET1 = [1650, 1100, 700, 700]
+   755→const gwMembersSET2 = [2600, 2800]
+   756→const gwMembersSET3 = [2450, 2250, 900]
+   757→const agg = (amounts: number[]) => ({
+   758→  grossAmount: amounts.reduce((a, b) => a + b, 0),
+   759→  gatewayFee: amounts.reduce((a, x) => a + Math.round(x * 0.02), 0),
+   760→  taxOnFee: amounts.reduce((a, x) => a + Math.round(Math.round(x * 0.02) * 0.18), 0),
+   761→})
+   762→
+   763→type TxnSeed = Omit<FeeTransaction, 'studentName' | 'admissionNo' | 'className' | 'classId'> & Partial<Pick<FeeTransaction, 'className'>>
+   764→// Recipients are Pending/Partial students only (never overpay a cleared
+   765→// account); every seeded total stays within the student's outstanding gap.
+   766→const RAW_TXNS: TxnSeed[] = [
+   767→  { id: 'TXN001', receiptNo: 'RCP-2026-1042', studentId: 'STU-28', amount: 1650, mode: 'UPI', status: 'Success', date: '2026-04-10', recordedAt: '2026-04-10T05:05:00.000Z', purpose: 'Term 1 Tuition — Apr–Jun', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-04-10', referenceNo: 'UPI-9632587410', academicYear: '2026-2027', paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD001', gatewayOrderId: 'order_NJ7aBcD001', gatewayFee: 33, taxOnFee: 6, netAmount: 1611, settlementId: 'SET-01', settlementStatus: 'settled', utr: 'RZPSET0420260001', reconciliationStatus: 'reconciled' },
+   768→  { id: 'TXN002', receiptNo: 'RCP-2026-1043', studentId: 'STU-30', amount: 1100, mode: 'Card', status: 'Success', date: '2026-04-12', recordedAt: '2026-04-12T06:50:00.000Z', purpose: 'Apr tuition + May instalment', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-04-12', referenceNo: 'CARD-****4521', academicYear: '2026-2027', meta: { cardLast4: '4521' }, paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD002', gatewayOrderId: 'order_NJ7aBcD002', gatewayFee: 22, taxOnFee: 4, netAmount: 1074, settlementId: 'SET-01', settlementStatus: 'settled', utr: 'RZPSET0420260001', reconciliationStatus: 'reconciled' },
+   769→  { id: 'TXN003', receiptNo: 'RCP-2026-1044', studentId: 'STU-17', amount: 700, mode: 'Net Banking', status: 'Success', date: '2026-04-15', recordedAt: '2026-04-15T03:42:00.000Z', purpose: 'Term 1 Tuition — part', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-04-15', referenceNo: 'NB-NEFT-884120', academicYear: '2026-2027', meta: { neftUtr: 'NB-NEFT-884120' }, paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD003', gatewayOrderId: 'order_NJ7aBcD003', gatewayFee: 14, taxOnFee: 3, netAmount: 683, settlementId: 'SET-01', settlementStatus: 'settled', utr: 'RZPSET0420260001', reconciliationStatus: 'reconciled' },
+   770→  { id: 'TXN004', receiptNo: 'RCP-2026-1045', studentId: 'STU-12', amount: 700, mode: 'UPI', status: 'Success', date: '2026-04-18', recordedAt: '2026-04-18T09:17:00.000Z', purpose: 'Term 1 Tuition — part', feeHead: 'Tuition', collectedBy: 'Meera Nair', collectorRole: 'class_teacher', verifiedBy: 'Principal', verifiedAt: '2026-04-19', referenceNo: 'UPI-7845120369', academicYear: '2026-2027', paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD004', gatewayOrderId: 'order_NJ7aBcD004', gatewayFee: 14, taxOnFee: 3, netAmount: 683, settlementId: 'SET-01', settlementStatus: 'settled', utr: 'RZPSET0420260001', reconciliationStatus: 'reconciled' },
+   771→  { id: 'TXN005', receiptNo: 'RCP-2026-1046', studentId: 'STU-29', amount: 1500, mode: 'Cash', status: 'Under Verification', date: '2026-08-26', recordedAt: '2026-08-26T05:35:00.000Z', purpose: 'Term 2 Tuition — Jul–Sep', feeHead: 'Tuition', collectedBy: 'Rohan Mehta', collectorRole: 'teacher', verifiedBy: null, verifiedAt: null, referenceNo: null, academicYear: '2026-2027', paymentSource: 'offline' },
+   772→  { id: 'TXN006', receiptNo: 'RCP-2026-1047', studentId: 'STU-16', amount: 1600, mode: 'Cheque', status: 'Success', date: '2026-04-11', recordedAt: '2026-04-11T07:33:00.000Z', purpose: 'Transport Term 1 + April management fee', feeHead: 'Transport', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-04-14', referenceNo: 'CHQ-HDFC-258963', academicYear: '2026-2027', meta: { bankName: 'HDFC', chequeNumber: '258963', chequeDate: '2026-04-11' }, paymentSource: 'offline' },
+   773→  { id: 'TXN007', receiptNo: 'RCP-2026-1048', studentId: 'STU-39', amount: 2600, mode: 'UPI', status: 'Success', date: '2026-07-08', recordedAt: '2026-07-08T11:12:00.000Z', purpose: 'Term 2 Tuition — Jul–Sep', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-07-08', referenceNo: 'UPI-4569871230', academicYear: '2026-2027', paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD007', gatewayOrderId: 'order_NJ7aBcD007', gatewayFee: 52, taxOnFee: 9, netAmount: 2539, settlementId: 'SET-02', settlementStatus: 'settled', utr: 'RZPSET0720260002', reconciliationStatus: 'reconciled' },
+   774→  { id: 'TXN008', receiptNo: 'RCP-2026-1049', studentId: 'STU-33', amount: 2800, mode: 'Card', status: 'Success', date: '2026-07-09', recordedAt: '2026-07-09T04:56:00.000Z', purpose: 'Board Form Fee + Jul tuition', feeHead: 'Board Form Fee', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-07-09', referenceNo: 'CARD-****7890', academicYear: '2026-2027', meta: { cardLast4: '7890' }, paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD008', gatewayOrderId: 'order_NJ7aBcD008', gatewayFee: 56, taxOnFee: 10, netAmount: 2734, settlementId: 'SET-02', settlementStatus: 'settled', utr: 'RZPSET0720260002', reconciliationStatus: 'reconciled' },
+   775→  { id: 'TXN009', receiptNo: 'RCP-2026-1050', studentId: 'STU-34', amount: 1750, mode: 'Net Banking', status: 'Pending', date: '2026-08-26', recordedAt: '2026-08-26T09:48:00.000Z', purpose: 'Board form fee + Aug tuition', feeHead: 'Board Form Fee', collectedBy: 'Principal', verifiedBy: null, verifiedAt: null, referenceNo: 'NB-RTGS-556677', academicYear: '2026-2027', meta: { neftUtr: 'NB-RTGS-556677' }, paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD009', gatewayOrderId: 'order_NJ7aBcD009', reconciliationStatus: 'pending' },
+   776→  { id: 'TXN010', receiptNo: 'RCP-2026-1051', studentId: 'STU-42', amount: 2450, mode: 'UPI', status: 'Success', date: '2026-08-27', recordedAt: '2026-08-27T04:11:00.000Z', purpose: 'Aug tuition + chemistry practical', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-08-27', referenceNo: 'UPI-1234567890', academicYear: '2026-2027', paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD010', gatewayOrderId: 'order_NJ7aBcD010', gatewayFee: 49, taxOnFee: 9, netAmount: 2392, settlementId: 'SET-03', settlementStatus: 'pending', reconciliationStatus: 'pending' },
+   777→  { id: 'TXN011', receiptNo: 'RCP-2026-1052', studentId: 'STU-37', amount: 1750, mode: 'Cash', status: 'Under Verification', date: '2026-08-25', recordedAt: '2026-08-25T06:44:00.000Z', purpose: 'Term 2 Tuition — Aug instalment', feeHead: 'Tuition', collectedBy: 'Meera Nair', collectorRole: 'class_teacher', verifiedBy: null, verifiedAt: null, referenceNo: null, academicYear: '2026-2027', paymentSource: 'offline' },
+   778→  { id: 'TXN012', receiptNo: 'RCP-2026-1053', studentId: 'STU-32', amount: 1550, mode: 'Cheque', status: 'Success', date: '2026-07-20', recordedAt: '2026-07-20T06:02:00.000Z', purpose: 'Session examination fee (six exams)', feeHead: 'Examination Fee', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-07-22', referenceNo: 'CHQ-ICICI-145896', academicYear: '2026-2027', meta: { bankName: 'ICICI', chequeNumber: '145896', chequeDate: '2026-07-19' }, paymentSource: 'offline' },
+   779→  { id: 'TXN013', receiptNo: 'RCP-2026-1054', studentId: 'STU-41', amount: 2250, mode: 'UPI', status: 'Success', date: '2026-08-04', recordedAt: '2026-08-04T10:26:00.000Z', purpose: 'Term 2 Tuition + biology practical', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-08-04', referenceNo: 'UPI-7788990011', academicYear: '2026-2027', paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD013', gatewayOrderId: 'order_NJ7aBcD013', gatewayFee: 45, taxOnFee: 8, netAmount: 2197, settlementId: 'SET-03', settlementStatus: 'pending', reconciliationStatus: 'pending' },
+   780→  { id: 'TXN014', receiptNo: 'RCP-2026-1055', studentId: 'STU-23', amount: 900, mode: 'UPI', status: 'Success', date: '2026-08-14', recordedAt: '2026-08-14T04:38:00.000Z', purpose: 'Unit test fees + Aug tuition', feeHead: 'Examination Fee', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-08-14', referenceNo: 'UPI-9988776655', academicYear: '2026-2027', paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD014', gatewayOrderId: 'order_NJ7aBcD014', gatewayFee: 18, taxOnFee: 3, netAmount: 879, settlementId: 'SET-03', settlementStatus: 'pending', reconciliationStatus: 'pending' },
+   781→  { id: 'TXN015', receiptNo: 'RCP-2026-1056', studentId: 'STU-31', amount: 1400, mode: 'Cash', status: 'Under Verification', date: '2026-08-26', recordedAt: '2026-08-26T07:57:00.000Z', purpose: 'Jul + Aug tuition', feeHead: 'Tuition', collectedBy: 'Rohan Mehta', collectorRole: 'teacher', verifiedBy: null, verifiedAt: null, referenceNo: null, academicYear: '2026-2027', paymentSource: 'offline' },
+   782→  { id: 'TXN016', receiptNo: 'RCP-2026-1057', studentId: 'STU-22', amount: 1000, mode: 'Bank Transfer', status: 'Success', date: '2026-08-25', recordedAt: '2026-08-25T10:33:00.000Z', purpose: 'Term 2 NEFT — Jun–Jul portion', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-08-25', referenceNo: 'BT-NEFT-991234', academicYear: '2026-2027', meta: { neftUtr: 'BT-NEFT-991234' }, paymentSource: 'offline' },
+   783→  { id: 'TXN017', receiptNo: 'RCP-2026-1058', studentId: 'STU-40', amount: 2600, mode: 'UPI', status: 'Failed', date: '2026-08-15', recordedAt: '2026-08-15T07:19:00.000Z', purpose: 'Term 2 Tuition', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: null, verifiedAt: null, referenceNo: 'UPI-FAIL-558899', academicYear: '2026-2027', paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD017', gatewayOrderId: 'order_NJ7aBcD017', reconciliationStatus: 'exception', refundReason: 'Payment failed at gateway — insufficient funds in payer account' },
+   784→  { id: 'TXN018', receiptNo: 'RCP-2026-1059', studentId: 'STU-35', amount: 3100, mode: 'Card', status: 'Failed', date: '2026-08-06', recordedAt: '2026-08-06T11:51:00.000Z', purpose: 'Term 2 Tuition', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: null, verifiedAt: null, referenceNo: 'CARD-FAIL-9981', academicYear: '2026-2027', meta: { cardLast4: '9981' }, paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD018', gatewayOrderId: 'order_NJ7aBcD018', reconciliationStatus: 'exception', refundReason: 'Card declined by issuing bank — parent to retry with different card' },
+   785→  { id: 'TXN019', receiptNo: 'RCP-2026-1060', studentId: 'STU-41', amount: 1500, mode: 'Card', status: 'Refunded', date: '2026-08-15', recordedAt: '2026-08-15T04:27:00.000Z', purpose: 'Duplicate instalment — refunded to source', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-08-15', referenceNo: 'CARD-****2244', academicYear: '2026-2027', meta: { cardLast4: '2244' }, paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD019', gatewayOrderId: 'order_NJ7aBcD019', gatewayFee: 30, taxOnFee: 5, netAmount: 1465, reconciliationStatus: 'reconciled', refundedAmount: 1500, refundReason: 'Duplicate payment — parent requested refund for second transaction' },
+   786→]
+   787→
+   788→export const SEED_TRANSACTIONS: FeeTransaction[] = RAW_TXNS.map(({ className: _ignored, ...rest }) => {
+   789→  const st = S(rest.studentId)
+   790→  return {
+   791→    ...rest,
+   792→    studentName: st?.name ?? 'Unknown Student',
+   793→    admissionNo: st?.admissionNo ?? '—',
+   794→    className: st?.className ?? '—',
+   795→    classId: st?.classId ?? '—',
+   796→  }
+   797→})
+   798→
+   799→export const SEED_FEE_TRANSACTIONS = SEED_TRANSACTIONS
+   800→
+   801→// ─── Cash Request seed ───────────────────────────────────────────────
+   802→// Teacher-collected cash awaiting Principal verification. Amounts mirror the
+   803→// matching "Under Verification" transactions exactly.
+   804→
+   805→export const SEED_CASH_REQUESTS: CashRequest[] = [
+   806→  {
+   807→    id: 'PCR-01', studentId: 'STU-29', studentName: S('STU-29')?.name ?? '', admissionNo: S('STU-29')?.admissionNo ?? '',
+   808→    className: secLabel('STU-29'), amount: 1500, feeHead: 'Tuition',
+   809→    collectedBy: `Class Teacher · ${secLabel('STU-29')}`, collectedAt: '2026-08-26T03:10:00.000Z',
+   810→    submittedAt: '2026-08-26T03:40:00.000Z', status: 'Pending Principal Acceptance',
+   811→    notes: 'Cash received at morning assembly — ₹100 and ₹500 denominations, counted twice.',
+   812→    contextBalanceAtSubmission: 2400,
+   813→  },
+   814→  {
+   815→    id: 'PCR-02', studentId: 'STU-37', studentName: S('STU-37')?.name ?? '', admissionNo: S('STU-37')?.admissionNo ?? '',
+   816→    className: secLabel('STU-37'), amount: 1750, feeHead: 'Tuition',
+   817→    collectedBy: `Class Teacher · ${secLabel('STU-37')}`, collectedAt: '2026-08-25T03:50:00.000Z',
+   818→    submittedAt: '2026-08-25T04:05:00.000Z', status: 'Collected by Teacher',
+   819→    notes: 'Cash deposited at the school counter; deposit slip attached.',
+   820→    contextBalanceAtSubmission: 12750,
+   821→  },
+   822→  {
+   823→    id: 'PCR-03', studentId: 'STU-31', studentName: S('STU-31')?.name ?? '', admissionNo: S('STU-31')?.admissionNo ?? '',
+   824→    className: secLabel('STU-31'), amount: 1400, feeHead: 'Tuition',
+   825→    collectedBy: `Class Teacher · ${secLabel('STU-31')}`, collectedAt: '2026-08-26T07:10:00.000Z',
+   826→    submittedAt: '2026-08-26T07:25:00.000Z', status: 'Pending Principal Acceptance',
+   827→    notes: 'Parent requested a monthly instalment plan; paying two months together.',
+   828→    contextBalanceAtSubmission: 2300,
+   829→  },
+   830→]
+   831→
+   832→// ─── Settlements / reconciliations / webhooks ────────────────────────
+   833→const SET1 = agg(gwMembersSET1)
+   834→const SET2 = agg(gwMembersSET2)
+   835→const SET3 = agg(gwMembersSET3)
+   836→
+   837→export const SEED_SETTLEMENTS: Settlement[] = [
+   838→  {
+   839→    id: 'SET-01',
+   840→    gateway: 'razorpay',
+   841→    settlementDate: '2026-04-18',
+   842→    grossAmount: SET1.grossAmount,
+   843→    gatewayFee: SET1.gatewayFee,
+   844→    taxOnFee: SET1.taxOnFee,
+   845→    netAmount: SET1.grossAmount - SET1.gatewayFee - SET1.taxOnFee,
+   846→    bankAccountId: 'BA-01',
+   847→    utr: 'RZPSET0420260001',
+   848→    status: 'settled',
+   849→    transactionIds: ['TXN001', 'TXN002', 'TXN003', 'TXN004'],
+   850→    createdAt: '2026-04-18T08:00:00Z',
+   851→    reconciledAt: '2026-04-19T10:00:00Z',
+   852→    reconciledBy: 'Principal',
+   853→  },
+   854→  {
+   855→    id: 'SET-02',
+   856→    gateway: 'razorpay',
+   857→    settlementDate: '2026-07-15',
+   858→    grossAmount: SET2.grossAmount,
+   859→    gatewayFee: SET2.gatewayFee,
+   860→    taxOnFee: SET2.taxOnFee,
+   861→    netAmount: SET2.grossAmount - SET2.gatewayFee - SET2.taxOnFee,
+   862→    bankAccountId: 'BA-01',
+   863→    utr: 'RZPSET0720260002',
+   864→    status: 'settled',
+   865→    transactionIds: ['TXN007', 'TXN008'],
+   866→    createdAt: '2026-07-15T08:00:00Z',
+   867→    reconciledAt: '2026-07-16T10:00:00Z',
+   868→    reconciledBy: 'Principal',
+   869→  },
+   870→  {
+   871→    id: 'SET-03',
+   872→    gateway: 'razorpay',
+   873→    settlementDate: '2026-08-29',
+   874→    grossAmount: SET3.grossAmount,
+   875→    gatewayFee: SET3.gatewayFee,
+   876→    taxOnFee: SET3.taxOnFee,
+   877→    netAmount: SET3.grossAmount - SET3.gatewayFee - SET3.taxOnFee,
+   878→    bankAccountId: 'BA-01',
+   879→    status: 'pending',
+   880→    transactionIds: ['TXN010', 'TXN013', 'TXN014'],
+   881→    createdAt: '2026-08-27T08:00:00Z',
+   882→  },
+   883→]
+   884→
+   885→export const SEED_RECONCILIATION_RECORDS: ReconciliationRecord[] = [
+   886→  { id: 'REC-001', transactionId: 'TXN001', settlementId: 'SET-01', gatewayPaymentId: 'pay_NJ7aBcD001', gatewayOrderId: 'order_NJ7aBcD001', utr: 'RZPSET0420260001', reconciliationStatus: 'reconciled', reconciledBy: 'Principal', reconciledAt: '2026-04-19T10:00:00Z' },
+   887→  { id: 'REC-002', transactionId: 'TXN002', settlementId: 'SET-01', gatewayPaymentId: 'pay_NJ7aBcD002', gatewayOrderId: 'order_NJ7aBcD002', utr: 'RZPSET0420260001', reconciliationStatus: 'reconciled', reconciledBy: 'Principal', reconciledAt: '2026-04-19T10:00:00Z' },
+   888→  { id: 'REC-003', transactionId: 'TXN003', settlementId: 'SET-01', gatewayPaymentId: 'pay_NJ7aBcD003', gatewayOrderId: 'order_NJ7aBcD003', utr: 'RZPSET0420260001', reconciliationStatus: 'reconciled', reconciledBy: 'Principal', reconciledAt: '2026-04-19T10:00:00Z' },
+   889→  { id: 'REC-004', transactionId: 'TXN004', settlementId: 'SET-01', gatewayPaymentId: 'pay_NJ7aBcD004', gatewayOrderId: 'order_NJ7aBcD004', utr: 'RZPSET0420260001', reconciliationStatus: 'reconciled', reconciledBy: 'Principal', reconciledAt: '2026-04-19T10:00:00Z' },
+   890→  { id: 'REC-005', transactionId: 'TXN007', settlementId: 'SET-02', gatewayPaymentId: 'pay_NJ7aBcD007', gatewayOrderId: 'order_NJ7aBcD007', utr: 'RZPSET0720260002', reconciliationStatus: 'reconciled', reconciledBy: 'Principal', reconciledAt: '2026-07-16T10:00:00Z' },
+   891→  { id: 'REC-006', transactionId: 'TXN008', settlementId: 'SET-02', gatewayPaymentId: 'pay_NJ7aBcD008', gatewayOrderId: 'order_NJ7aBcD008', utr: 'RZPSET0720260002', reconciliationStatus: 'reconciled', reconciledBy: 'Principal', reconciledAt: '2026-07-16T10:00:00Z' },
+   892→]
+   893→
+   894→export const SEED_WEBHOOK_EVENTS: WebhookEvent[] = [
+   895→  { id: 'WH-001', provider: 'razorpay', eventId: 'evt_1abc234def', eventType: 'payment.success', receivedAt: '2026-04-12T11:35:00Z', processedAt: '2026-04-12T11:35:01Z', status: 'processed', transactionId: 'TXN001' },
+   896→  { id: 'WH-002', provider: 'razorpay', eventId: 'evt_2ghi567jkl', eventType: 'payment.success', receivedAt: '2026-04-12T11:36:00Z', processedAt: '2026-04-12T11:36:01Z', status: 'processed', transactionId: 'TXN002' },
+   897→  { id: 'WH-003', provider: 'razorpay', eventId: 'evt_3mno890pqr', eventType: 'payment.failed', receivedAt: '2026-08-15T10:20:00Z', processedAt: '2026-08-15T10:20:01Z', status: 'processed', transactionId: 'TXN017' },
+   898→  { id: 'WH-004', provider: 'razorpay', eventId: 'evt_4stu123vwx', eventType: 'payment.success', receivedAt: '2026-07-08T14:15:00Z', processedAt: '2026-07-08T14:15:01Z', status: 'processed', transactionId: 'TXN007' },
+   899→]
+   900→
+   901→// ─── Audit log seed ──────────────────────────────────────────────────
+   902→
+   903→export const SEED_AUDIT: AuditRecord[] = [
+   904→  { id: 'AUD-001', action: 'payment.recorded', actor: 'Principal', timestamp: '2026-08-27T10:05:00Z', entityId: 'TXN010', entityType: 'transaction', description: `Payment ₹${f(2450)} recorded for ${S('STU-42')?.name ?? ''} via UPI (RCP-2026-1051)` },
+   905→  { id: 'AUD-002', action: 'cash.submitted', actor: `Class Teacher · ${secLabel('STU-29')}`, timestamp: '2026-08-26T09:15:00Z', entityId: 'PCR-01', entityType: 'cash_request', description: `Cash ₹${f(1500)} submitted for ${S('STU-29')?.name ?? ''}` },
+   906→  { id: 'AUD-003', action: 'concession.granted', actor: 'Principal', timestamp: '2026-04-11T14:00:00Z', entityId: 'STU-40', entityType: 'concession', description: `Sibling concession (₹500) granted to ${S('STU-40')?.name ?? ''} per concession rule` },
+   907→  { id: 'AUD-004', action: 'fee_structure.changed', actor: 'Principal', timestamp: '2026-04-01T10:00:00Z', entityId: 'FS-C12', entityType: 'fee_structure', description: '2026-27 fee policy published — tuition ₹250/₹300/₹400 bands, session exam fees ₹700/₹900/₹1,000, transport ₹500/mo opt-in' },
+   908→  { id: 'AUD-005', action: 'receipt.reprinted', actor: 'Principal', timestamp: '2026-08-20T15:20:00Z', entityId: 'TXN007', entityType: 'receipt', description: 'Receipt RCP-2026-1048 reprinted (no second transaction created)' },
+   909→]
+
+[showing lines 480-909 of 910; use offset=910 with limit to continue reading]

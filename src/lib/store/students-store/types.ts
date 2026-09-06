@@ -229,4 +229,38 @@ export interface StudentsState {
   getStudentById: (id: string) => StudentRecord | undefined
   getClassById: (id: string) => ClassRecord | undefined
   getClassStudents: (classId: string) => StudentRecord[]
+  /**
+   * Create a new class (Add Class page). Derives id/grade/level from the
+   * name, builds sections with capacities/rooms, and assigns optional
+   * class/assistant teachers. Returns the created ClassRecord.
+   */
+  createClass: (input: {
+    name: string
+    sections: { name: string; capacity: number; room: string }[]
+    capacity: number
+    room: string
+    classTeacherId?: string
+    assistantTeacherId?: string
+  }) => ClassRecord
+  /**
+   * Enrol a NEW student into the roster (used by the Admissions →
+   * Complete & Enrol workflow). Auto-assigns admission no, roll no,
+   * house and class-level academics. Returns the created StudentRecord.
+   */
+  addStudent: (input: {
+    name: string
+    dob: string
+    gender: 'Male' | 'Female'
+    classId: string
+    section?: string
+    fatherName: string
+    motherName: string
+    guardianPhone: string
+    guardianEmail?: string
+    address?: string
+    category?: string
+    bloodGroup?: string
+    previousSchool?: string
+    admissionDate?: string
+  }) => StudentRecord
 }
