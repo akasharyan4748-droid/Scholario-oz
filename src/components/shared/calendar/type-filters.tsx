@@ -4,11 +4,11 @@
  * TypeFilters — the event-type filter row (Exam / Event / Holiday /
  * Meeting / Competition / Cultural / General).
  *
- * The chips double as the color legend (each carries its type dot), so
- * no separate legend is rendered anywhere. States are instantly
+ * The chips double as the colour legend (each carries its type dot),
+ * so no separate legend is rendered anywhere. States are instantly
  * readable:
- *   - active  → glass pill (frosted surface + hairline border + solid
- *               dot + live count)
+ *   - active  → white chip with a hairline border and subtle shadow,
+ *               solid dot + live count
  *   - inactive → fades back (transparent bg, dimmed dot, no count)
  * A compact "Show all" reset appears only while a partial/empty filter
  * is active. On phones the row scrolls horizontally (no wrap, no
@@ -16,7 +16,7 @@
  */
 
 import { cn } from '@/lib/utils'
-import { ALL_TYPES, TYPE_TOKENS, typeColor } from './data'
+import { ALL_TYPES, typeColor } from './data'
 
 export interface TypeFiltersProps {
   filterTypes: string[]
@@ -50,29 +50,23 @@ export function TypeFilters({ filterTypes, onToggle, counts, onShowAll }: TypeFi
             onClick={() => onToggle(t)}
             aria-pressed={active}
             className={cn(
-              'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97]',
+              'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               active
-                ? 'cal-glass-chip text-foreground'
-                : 'border border-transparent bg-transparent text-muted-foreground/55 hover:bg-foreground/[0.05] hover:text-muted-foreground',
+                ? 'border-border bg-card text-foreground shadow-2xs hover:bg-muted/60'
+                : 'border-transparent bg-transparent text-muted-foreground/60 hover:bg-muted/60 hover:text-muted-foreground',
             )}
           >
             <span
               className={cn(
                 'h-2 w-2 shrink-0 rounded-full transition-opacity',
-                !active && 'opacity-30',
+                !active && 'opacity-40',
               )}
               style={{ background: typeColor(t) }}
               aria-hidden
             />
             {t}
             {active && count > 0 && (
-              <span
-                className={cn(
-                  'ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold leading-none tabular-nums',
-                  (TYPE_TOKENS[t] ?? TYPE_TOKENS.General).badge,
-                  (TYPE_TOKENS[t] ?? TYPE_TOKENS.General).text,
-                )}
-              >
+              <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[9px] font-semibold leading-none tabular-nums text-muted-foreground">
                 {count}
               </span>
             )}
@@ -85,7 +79,7 @@ export function TypeFilters({ filterTypes, onToggle, counts, onShowAll }: TypeFi
         <button
           type="button"
           onClick={onShowAll}
-          className="h-7 shrink-0 whitespace-nowrap rounded-full px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="h-7 shrink-0 whitespace-nowrap rounded-full px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           Show all
         </button>

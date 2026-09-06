@@ -1,23 +1,23 @@
 'use client'
 
 /**
- * MonthGrid — the premium month view, rendered as iOS liquid glass.
+ * MonthGrid — the month view, rendered in the clean Scholario-OS
+ * enterprise language.
  *
  * Design notes:
- *   - The whole month floats on one `cal-glass` card (frosted surface
- *     over the workspace aurora) with etched hairline separators
- *     (`border-foreground/…` — auto light/dark) instead of hard grid
- *     borders. No per-cell cards.
+ *   - One white card with hairline cell separators (border-border) —
+ *     no per-cell cards, no coloured cell backgrounds, no tints on
+ *     rows/columns. Weekend columns get the faintest neutral shading.
  *   - Adjacent-month days render muted and clickable (navigate to
  *     that month) instead of blank spacers.
- *   - Today: filled primary circle with a soft glow behind the day
- *     number + faint primary wash on the cell. Selected: inset
- *     primary ring + tint. Restrained.
- *   - Event chips: type-tinted translucent pills with hairline
- *     borders (up to 2 + "+N more") on sm+; type dots on phones —
- *     comfortable touch targets, no horizontal overflow.
- *   - Month changes animate with an iOS-flavoured spring (direction
- *     aware).
+ *   - Today: a small filled primary circle behind the day number —
+ *     the single coloured marker in the grid. Selected: a subtle
+ *     primary ring + tint. Both are functional states, kept restrained.
+ *   - Event chips: neutral surfaces with a type-coloured dot and a
+ *     very subtle type tint (≤ ~7%) so the dot reads instantly; up to
+ *     2 chips + "+N more" on sm+, type dots on phones — comfortable
+ *     touch targets, no horizontal overflow.
+ *   - Month changes animate with a short, quiet slide (direction aware).
  *
  * a11y: each cell is a focusable div[role=button] (keyboard:
  * Enter/Space) containing real <button> chips for its events —
@@ -74,13 +74,13 @@ export const MonthGrid = memo(function MonthGrid({
   )
 
   return (
-    <div className="cal-glass overflow-hidden rounded-2xl">
-      {/* Week-day header — etched into the glass */}
-      <div className="grid grid-cols-7 border-b border-foreground/[0.08] bg-foreground/[0.035]">
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xs">
+      {/* Week-day header */}
+      <div className="grid grid-cols-7 border-b border-border bg-muted/50">
         {WEEK_DAYS.map((w) => (
           <div
             key={w}
-            className="py-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:py-2.5 sm:text-[11px]"
+            className="py-2 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:py-2.5 sm:text-[11px]"
           >
             <span className="hidden sm:inline">{w}</span>
             <span className="sm:hidden">{w.slice(0, 1)}</span>
@@ -88,17 +88,14 @@ export const MonthGrid = memo(function MonthGrid({
         ))}
       </div>
 
-      {/* Day cells — keyed by month so navigation springs */}
+      {/* Day cells — keyed by month so navigation slides */}
       <AnimatePresence initial={false} custom={navDirection} mode="popLayout">
         <motion.div
           key={`${year}-${month}`}
-          initial={{ opacity: 0, x: 26 * navDirection }}
+          initial={{ opacity: 0, x: 16 * navDirection }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -26 * navDirection }}
-          transition={{
-            x: { type: 'spring', stiffness: 420, damping: 40, mass: 0.9 },
-            opacity: { duration: 0.16, ease: 'easeOut' },
-          }}
+          exit={{ opacity: 0, x: -16 * navDirection }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
           className="grid grid-cols-7"
           aria-label={`${MONTH_NAMES[month]} ${year} calendar, ${monthTotal} events`}
         >
@@ -125,20 +122,18 @@ export const MonthGrid = memo(function MonthGrid({
                   }
                 }}
                 className={cn(
-                  // Base cell — etched hairline separators, comfortable heights
-                  'group relative flex min-h-[52px] flex-col p-1 text-left transition-colors duration-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 sm:min-h-[84px] sm:p-1.5 lg:min-h-[92px]',
+                  // Base cell — hairline separators, comfortable heights
+                  'group relative flex min-h-[52px] cursor-pointer flex-col p-1 text-left transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:min-h-[84px] sm:p-1.5 lg:min-h-[92px]',
                   // Hairline grid lines (skip first row / first column)
-                  i >= 7 && 'border-t border-foreground/[0.07]',
-                  i % 7 !== 0 && 'border-l border-foreground/[0.07]',
-                  // Weekend shading — translucent tint over the glass
-                  isWeekendCol && 'bg-foreground/[0.025]',
-                  // States
+                  i >= 7 && 'border-t border-border',
+                  i % 7 !== 0 && 'border-l border-border',
+                  // Weekend shading — faintest neutral tint
+                  isWeekendCol && 'bg-muted/30',
+                  // States — selection is functional colour, kept subtle
                   isSelected
-                    ? 'bg-primary/[0.09] shadow-[inset_0_0_0_1.5px] shadow-primary/55'
-                    : isToday
-                      ? 'bg-primary/[0.05] shadow-[inset_0_0_0_1.5px] shadow-primary/25'
-                      : 'hover:bg-foreground/[0.045]',
-                  !cell.inMonth && 'opacity-60 hover:opacity-90',
+                    ? 'bg-primary/[0.06] shadow-[inset_0_0_0_1.5px] shadow-primary/40'
+                    : 'hover:bg-muted/50',
+                  !cell.inMonth && 'opacity-55 hover:opacity-90',
                 )}
               >
                 {/* Day number */}
@@ -146,21 +141,21 @@ export const MonthGrid = memo(function MonthGrid({
                   className={cn(
                     'flex h-5 w-5 items-center justify-center text-xs tabular-nums leading-none sm:-ml-0.5 sm:-mt-0.5 sm:h-[22px] sm:w-[22px] sm:text-[13px]',
                     isToday
-                      ? 'rounded-full bg-primary font-semibold text-primary-foreground shadow-[0_2px_14px_-2px] shadow-primary/75 ring-1 ring-inset ring-white/25'
+                      ? 'rounded-full bg-primary font-semibold text-primary-foreground'
                       : cell.inMonth
                         ? cn(
-                          'font-medium text-foreground/80 group-hover:text-foreground',
+                          'font-medium text-foreground/75 group-hover:text-foreground',
                           isSelected && 'font-semibold text-primary',
                         )
-                        : 'font-medium text-muted-foreground/60',
+                        : 'font-medium text-muted-foreground/70',
                   )}
                 >
                   {cell.day}
                 </span>
 
-                {/* Event chips — sm and up (type-tinted glass pills) */}
+                {/* Event chips — sm and up (dot + subtle type tint) */}
                 {dayEvents.length > 0 && (
-                  <div className="mt-auto hidden w-full flex-col gap-1 sm:flex">
+                  <div className="mt-auto hidden w-full flex-col gap-[3px] sm:flex">
                     {dayEvents.slice(0, 2).map((e) => (
                       <button
                         key={e.id}
@@ -171,9 +166,8 @@ export const MonthGrid = memo(function MonthGrid({
                           onOpenEvent(e)
                         }}
                         className={cn(
-                          'flex h-[22px] items-center gap-1 rounded-[7px] border border-foreground/[0.08] px-1 text-[10px] font-medium leading-none truncate text-left backdrop-blur-[2px] transition-[filter,transform] duration-100 hover:brightness-105 active:scale-[0.98]',
-                          TYPE_TOKENS[e.type]?.chipBg ?? TYPE_TOKENS.General.chipBg,
-                          TYPE_TOKENS[e.type]?.text ?? TYPE_TOKENS.General.text,
+                          'flex h-[22px] items-center gap-1 rounded-md px-1 text-[10px] font-medium leading-none truncate text-left text-foreground/75 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          TYPE_TOKENS[e.type]?.chip ?? TYPE_TOKENS.General.chip,
                         )}
                       >
                         <span
@@ -185,7 +179,7 @@ export const MonthGrid = memo(function MonthGrid({
                       </button>
                     ))}
                     {dayEvents.length > 2 && (
-                      <span className="pl-1.5 text-[10px] leading-tight text-muted-foreground/80 tabular-nums">
+                      <span className="pl-1.5 text-[10px] leading-tight text-muted-foreground tabular-nums">
                         +{dayEvents.length - 2} more
                       </span>
                     )}
@@ -204,7 +198,7 @@ export const MonthGrid = memo(function MonthGrid({
                       />
                     ))}
                     {dayEvents.length > 4 && (
-                      <span className="text-[9px] leading-none text-muted-foreground/80 tabular-nums">
+                      <span className="text-[9px] leading-none text-muted-foreground tabular-nums">
                         +{dayEvents.length - 4}
                       </span>
                     )}

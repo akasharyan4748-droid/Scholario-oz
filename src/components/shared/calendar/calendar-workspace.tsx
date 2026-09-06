@@ -1,28 +1,24 @@
 'use client'
 
 /**
- * CalendarWorkspace — the shared premium calendar used by BOTH the
- * Principal panel (full management) and the Student panel (read-only).
+ * CalendarWorkspace — the shared calendar used by BOTH the Principal
+ * panel (full management) and the Student panel (read-only).
  *
- * iOS "liquid glass" visual language:
- *   - An ambient aurora (four soft drifting color fields) sits behind
- *     the whole workspace; every surface above it is translucent glass
- *     (backdrop blur + saturation + specular top edge + hairline
- *     border). The look degrades gracefully to solid cards where
- *     backdrop-filter is unsupported.
- *   - iOS-style header: a large display month title with the year,
- *     a glass segmented control (‹ · Today · ›) and one tinted
- *     primary "Add Event" pill.
- *   - Month navigation animates with spring physics (iOS easing) and
- *     the title cross-fades in the navigation direction.
+ * Visual language: the clean Scholario-OS enterprise system used by
+ * Finance / Messages — white card surfaces, hairline borders, subtle
+ * shadows and a restrained Scholario green as the only UI accent.
+ * Colour appears ONLY where it carries meaning: event-type dots and
+ * chips, the Today marker, selection state and the primary action.
+ * No gradients, no glass, no colour washes.
  *
- * UX (redesign spec — unchanged):
- *   - Calendar is the primary focus; Add Event is the single primary
- *     action. Progressive disclosure: chips/dots in the grid, day
- *     details in the rail (desktop) / bottom sheet (below lg), full
- *     context in the event detail dialog, creation in a focused form.
- *   - Filters are compact glass pills that double as the legend and
- *     filter the grid AND the upcoming list consistently.
+ * UX structure:
+ *   - The calendar is the primary focus; Add Event is the single
+ *     primary action.
+ *   - Progressive disclosure: chips/dots in the grid, day details in
+ *     the rail (desktop) / bottom sheet (below lg), full context in
+ *     the event detail dialog, creation in a focused form.
+ *   - Type filters double as the colour legend and filter the grid
+ *     AND the upcoming list consistently.
  *
  * Data: the SAME unified sources as before — `getUnifiedEvents`
  * (school events + canonical holidays + exam schedule) and
@@ -57,39 +53,6 @@ import { TypeFilters } from './type-filters'
 import { UpcomingContent, DayContent } from './side-panels'
 import { EventDetailDialog } from './event-detail-dialog'
 import { AddEventDialog } from './add-event-dialog'
-
-const REDUCED_MOTION_STYLES = `
-@media (prefers-reduced-motion: reduce) {
-  .calendar-shell * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-`
-
-/**
- * Runtime-injected glass blur. The dev CSS pipeline strips literal
- * `backdrop-filter` declarations from stylesheets (legacy targets),
- * while inline DOM <style> rules bypass that pipeline entirely — so
- * every frosted surface gets its blur here, side by side with the
- * `.cal-glass*` surface styles in globals.css (background, hairline
- * border, specular top edge, deep shadows, aurora, fallbacks).
- */
-const GLASS_FILTER_STYLES = `
-.cal-glass { backdrop-filter: blur(22px) saturate(1.7); -webkit-backdrop-filter: blur(22px) saturate(1.7); }
-.cal-glass-strong { backdrop-filter: blur(30px) saturate(1.8); -webkit-backdrop-filter: blur(30px) saturate(1.8); }
-.cal-glass-chip { backdrop-filter: blur(12px) saturate(1.6); -webkit-backdrop-filter: blur(12px) saturate(1.6); }
-body:has(> [data-slot="dialog-content"].cal-glass-dialog) > [data-slot="dialog-overlay"],
-body:has(> [data-slot="sheet-content"].cal-glass-sheet) > [data-slot="sheet-overlay"] {
-  backdrop-filter: blur(10px) saturate(1.15);
-  -webkit-backdrop-filter: blur(10px) saturate(1.15);
-  background: oklch(0.16 0.012 165 / 0.28) !important;
-}
-@media (prefers-reduced-motion: reduce) {
-  .cal-aurora span { animation: none !important; }
-}
-`
 
 export interface CalendarWorkspaceProps {
   /** Principal/teacher can create + remove events; students cannot. */
@@ -287,17 +250,7 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
   ) : null
 
   return (
-    <PageTransition className="calendar-shell relative isolate space-y-4 overflow-hidden sm:space-y-5">
-      <style dangerouslySetInnerHTML={{ __html: REDUCED_MOTION_STYLES + GLASS_FILTER_STYLES }} />
-
-      {/* Ambient aurora — the drifting color field the glass refracts. */}
-      <div className="cal-aurora" aria-hidden>
-        <span className="a1" />
-        <span className="a2" />
-        <span className="a3" />
-        <span className="a4" />
-      </div>
-
+    <PageTransition className="space-y-4 sm:space-y-5">
       {/* Module heading — student panels keep their heading pattern. */}
       {showHeading && (
         <SectionHeading
@@ -314,35 +267,34 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
         />
       )}
 
-      {/* iOS-style hero header — large display month title (left),
-          glass segmented navigation + primary action (right). */}
+      {/* Toolbar — month/year + event count (left), navigation and the
+          single primary action (right). Clean enterprise grouping. */}
       <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          {/* Title cross-fades with month navigation */}
+          {/* Title cross-fades subtly with month navigation */}
           <AnimatePresence mode="wait" initial={false} custom={navDirection}>
             <motion.div
               key={monthKey}
-              initial={{ opacity: 0, y: 6 * navDirection }}
+              initial={{ opacity: 0, y: 4 * navDirection }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 * navDirection }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-              className="flex flex-wrap items-baseline gap-x-2.5"
+              exit={{ opacity: 0, y: -4 * navDirection }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="flex flex-wrap items-baseline gap-x-2"
             >
               <h2
-                className="font-display text-[27px] font-bold leading-none tracking-tight text-foreground sm:text-[32px]"
+                className="font-display text-xl font-bold leading-none tracking-tight text-foreground sm:text-2xl"
                 aria-live="polite"
                 aria-atomic="true"
               >
                 {MONTH_NAMES[month]}
               </h2>
-              <span className="text-sm font-semibold tabular-nums text-muted-foreground sm:text-[15px]">
+              <span className="text-sm font-medium tabular-nums text-muted-foreground">
                 {year}
               </span>
             </motion.div>
           </AnimatePresence>
 
-          <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+          <p className="mt-1.5 text-xs text-muted-foreground">
             {monthTotal === 0
               ? 'No events this month'
               : `${monthTotal} event${monthTotal === 1 ? '' : 's'} this month`}
@@ -350,16 +302,16 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {/* Glass segmented control — ‹ · Today · › */}
+          {/* Segmented month navigation — ‹ · Today · › */}
           <nav
-            className="cal-glass-chip flex h-9 items-center gap-0.5 rounded-full p-0.5"
+            className="inline-flex items-center overflow-hidden rounded-lg border border-border bg-card shadow-2xs"
             aria-label="Month navigation"
           >
             <button
               type="button"
               onClick={() => shiftMonth(-1)}
               aria-label="Previous month"
-              className="flex h-8 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-foreground/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden />
             </button>
@@ -368,25 +320,19 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
               onClick={goToToday}
               aria-label="Jump to today"
               className={cn(
-                'flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                'flex h-9 items-center border-l border-border px-3.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                 isTodayMonth
-                  ? 'text-foreground/75 hover:bg-foreground/[0.06] hover:text-foreground'
-                  : 'bg-primary/[0.12] text-primary hover:bg-primary/[0.18]',
+                  ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  : 'text-foreground hover:bg-muted',
               )}
             >
-              {!isTodayMonth && (
-                <span
-                  className="h-1.5 w-1.5 rounded-full bg-primary"
-                  aria-hidden
-                />
-              )}
               Today
             </button>
             <button
               type="button"
               onClick={() => shiftMonth(1)}
               aria-label="Next month"
-              className="flex h-8 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-foreground/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="flex h-9 w-9 items-center justify-center border-l border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
@@ -395,7 +341,7 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
           {canCreate && (
             <Button
               size="sm"
-              className="h-9 shrink-0 gap-1.5 rounded-full border border-white/25 bg-primary px-4 text-[13px] font-semibold text-primary-foreground shadow-[0_8px_20px_-6px] shadow-primary/40 hover:bg-primary/95 active:scale-[0.97]"
+              className="h-9 shrink-0 gap-1.5"
               onClick={() => openAdd()}
             >
               <Plus className="h-4 w-4" aria-hidden />
@@ -405,7 +351,7 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
         </div>
       </header>
 
-      {/* Filters — glass pills that double as the type legend. */}
+      {/* Filters — toggle chips that double as the type legend. */}
       <TypeFilters
         filterTypes={filterTypes}
         onToggle={toggleType}
@@ -415,13 +361,13 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
 
       {/* All types hidden → slim inline notice instead of a dead grid. */}
       {filterTypes.length === 0 && (
-        <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-foreground/[0.14] bg-foreground/[0.03] py-2.5 text-xs text-muted-foreground backdrop-blur-sm">
+        <div className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/40 py-2.5 text-xs text-muted-foreground">
           <EyeOff className="h-3.5 w-3.5" aria-hidden />
           All event types are hidden.
           <button
             type="button"
             onClick={showAllTypes}
-            className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Show all
           </button>
@@ -430,7 +376,7 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
 
       {/* Calendar (primary) + rail. Below lg: single column, upcoming
           card under the grid, day details via bottom sheet. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_312px] lg:gap-5 lg:items-stretch">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-5 lg:items-stretch">
         <MonthGrid
           year={year}
           month={month}
@@ -444,14 +390,14 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
         />
 
         {/* Desktop rail — day details when a day is selected, else upcoming. */}
-        <div className="cal-glass hidden h-full min-h-0 flex-col overflow-hidden rounded-2xl lg:flex">
+        <div className="hidden h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xs lg:flex">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={selectedDateISO ?? 'upcoming'}
-              initial={{ opacity: 0, y: 6 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 45 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
               className="flex h-full min-h-0 flex-col"
             >
               {dayNode ?? upcomingNode}
@@ -460,19 +406,19 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
         </div>
 
         {/* Mobile/tablet rail — upcoming below the calendar. */}
-        <div className="cal-glass overflow-hidden rounded-2xl lg:hidden">
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xs lg:hidden">
           {upcomingNode}
         </div>
       </div>
 
-      {/* Mobile day sheet (below lg) — glass bottom sheet with the same
-          Day content as the rail. */}
+      {/* Mobile day sheet (below lg) — bottom sheet with the same Day
+          content as the desktop rail. */}
       <Sheet open={mobileDayOpen} onOpenChange={setMobileDayOpen}>
         <SheetContent
           side="bottom"
-          className="cal-glass-sheet cal-glass-strong flex max-h-[85dvh] flex-col gap-0 rounded-t-3xl bg-transparent px-0 pb-0 shadow-none"
+          className="flex max-h-[85dvh] flex-col gap-0 rounded-t-2xl px-0 pb-0"
         >
-          <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-foreground/25" aria-hidden />
+          <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
           <SheetTitle className="sr-only">
             {selectedDateISO ? `Events on ${selectedDateISO}` : 'Events'}
           </SheetTitle>
@@ -494,10 +440,10 @@ export function CalendarWorkspace({ canCreate, showHeading = false }: CalendarWo
             )}
           </div>
           {canCreate && selectedDateISO && (
-            <div className="border-t border-foreground/[0.08] p-3">
+            <div className="border-t border-border p-3">
               <Button
                 variant="outline"
-                className="w-full gap-1.5 rounded-xl border-foreground/[0.1] bg-foreground/[0.03]"
+                className="w-full gap-1.5"
                 onClick={() => {
                   setMobileDayOpen(false)
                   openAdd(selectedDateISO)

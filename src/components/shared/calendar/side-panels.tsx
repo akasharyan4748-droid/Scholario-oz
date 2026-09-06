@@ -3,9 +3,13 @@
 /**
  * calendar/side-panels — the two rail contents: the Upcoming list and
  * the selected-Day list. Both are container-agnostic: the desktop rail
- * renders them inside a flat card; the mobile day sheet renders the
- * same Day content inside a bottom sheet. One implementation, no
+ * renders them inside a flat white card; the mobile day sheet renders
+ * the same Day content inside a bottom sheet. One implementation, no
  * duplication.
+ *
+ * Visual language: clean enterprise — neutral surfaces, hairline
+ * borders, muted meta text, and colour only in the small event-type
+ * indicators.
  */
 
 import { AnimatePresence, motion } from 'framer-motion'
@@ -31,19 +35,23 @@ export function UpcomingContent({ events, emptyDueToFilter, onShowAll, onOpen }:
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between gap-2 px-4 pt-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-foreground/[0.07] bg-foreground/[0.04] text-primary shadow-[inset_0_1px_0_oklch(1_0_0/0.4)] dark:shadow-[inset_0_1px_0_oklch(1_0_0/0.07)]">
-            <CalendarClock className="h-3.5 w-3.5" aria-hidden />
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <CalendarClock className="h-4 w-4" aria-hidden />
           </span>
-          <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">Upcoming</h3>
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">
+              Upcoming Events
+            </h3>
+            <p className="text-[11px] leading-tight text-muted-foreground">From today onward</p>
+          </div>
         </div>
         {shown.length > 0 && (
-          <span className="shrink-0 rounded-full border border-foreground/[0.07] bg-foreground/[0.04] px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+          <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
             {shown.length}
           </span>
         )}
       </div>
-      <p className="px-4 pt-0.5 pl-12 text-[11px] text-muted-foreground">From today onward</p>
 
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         {shown.length === 0 ? (
@@ -113,7 +121,7 @@ export function DayContent({ dateISO, events, canCreate, onAdd, onOpen, onClear 
             type="button"
             onClick={onClear}
             aria-label="Clear day selection"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
           </button>

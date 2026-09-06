@@ -33,65 +33,64 @@ export function todayParts(): { year: number; month: number; day: number } {
 // ─── Event type tokens ────────────────────────────────────────────────
 
 /**
- * Per-type visual tokens — ONE restrained accent per event type:
- *   - `solid`  : oklch color for dots / date tiles (inline style)
- *   - `chipBg` : background for in-cell chips (type color @ ~12%,
- *                tuned to read as translucent glass over the frosted
- *                calendar card)
- *   - `badge`  : pill background for type badges
- *   - `text`   : chip/badge text color (light + dark)
- * NO indigo/blue. Same family as the previous module palette, with
- * Cultural nudged from blue-violet → fuchsia to stay out of blue.
+ * Per-type visual tokens. Colour is FUNCTIONAL ONLY — one restrained
+ * accent per event type, appearing exclusively as small indicators
+ * (dots, subtle chip tints, type badges). Never as large surfaces:
+ *   - `solid` : oklch colour for dots (inline style)
+ *   - `chip`  : ultra-subtle tint (~7%) for in-cell chips; the dot
+ *               carries the meaning, the tint just groups it
+ *   - `badge` : complete classes for the small type badge pill
+ *               (bg + text + border, light and dark)
+ * Matches the StatusBadge language used across Scholario-OS.
+ * Competition uses teal per the spec's "blue/teal" (no indigo).
  */
 export interface TypeToken {
   solid: string
-  chipBg: string
+  chip: string
   badge: string
-  text: string
 }
 
 export const TYPE_TOKENS: Record<string, TypeToken> = {
   Exam: {
-    solid: 'oklch(0.62 0.2 20)',
-    chipBg: 'bg-rose-500/[0.12]',
-    badge: 'bg-rose-500/10',
-    text: 'text-rose-700 dark:text-rose-300',
+    solid: 'oklch(0.58 0.19 20)',
+    chip: 'bg-rose-500/[0.07] dark:bg-rose-400/15',
+    badge:
+      'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:border-rose-400/30 dark:text-rose-300',
   },
   Event: {
     solid: 'oklch(0.55 0.14 162)',
-    chipBg: 'bg-emerald-500/[0.12]',
-    badge: 'bg-emerald-500/10',
-    text: 'text-emerald-700 dark:text-emerald-300',
+    chip: 'bg-emerald-500/[0.07] dark:bg-emerald-400/15',
+    badge:
+      'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/30 dark:text-emerald-300',
   },
   Holiday: {
-    solid: 'oklch(0.7 0.16 75)',
-    chipBg: 'bg-amber-500/[0.12]',
-    badge: 'bg-amber-500/10',
-    text: 'text-amber-700 dark:text-amber-300',
+    solid: 'oklch(0.68 0.15 75)',
+    chip: 'bg-amber-500/[0.09] dark:bg-amber-400/15',
+    badge:
+      'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-amber-400/30 dark:text-amber-300',
   },
   Meeting: {
-    solid: 'oklch(0.6 0.18 300)',
-    chipBg: 'bg-violet-500/[0.12]',
-    badge: 'bg-violet-500/10',
-    text: 'text-violet-700 dark:text-violet-300',
+    solid: 'oklch(0.55 0.19 300)',
+    chip: 'bg-purple-500/[0.07] dark:bg-purple-400/15',
+    badge:
+      'border-purple-500/25 bg-purple-500/10 text-purple-700 dark:border-purple-400/30 dark:text-purple-300',
   },
   Competition: {
-    solid: 'oklch(0.68 0.13 200)',
-    chipBg: 'bg-cyan-500/[0.12]',
-    badge: 'bg-cyan-500/10',
-    text: 'text-cyan-700 dark:text-cyan-300',
+    solid: 'oklch(0.6 0.11 187)',
+    chip: 'bg-teal-500/[0.07] dark:bg-teal-400/15',
+    badge:
+      'border-teal-500/25 bg-teal-500/10 text-teal-700 dark:border-teal-400/30 dark:text-teal-300',
   },
   Cultural: {
     solid: 'oklch(0.6 0.18 330)',
-    chipBg: 'bg-fuchsia-500/[0.12]',
-    badge: 'bg-fuchsia-500/10',
-    text: 'text-fuchsia-700 dark:text-fuchsia-300',
+    chip: 'bg-fuchsia-500/[0.07] dark:bg-fuchsia-400/15',
+    badge:
+      'border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-700 dark:border-fuchsia-400/30 dark:text-fuchsia-300',
   },
   General: {
     solid: 'oklch(0.55 0.02 160)',
-    chipBg: 'bg-foreground/[0.05]',
-    badge: 'bg-muted',
-    text: 'text-muted-foreground',
+    chip: 'bg-muted',
+    badge: 'border-border bg-muted text-muted-foreground',
   },
 }
 

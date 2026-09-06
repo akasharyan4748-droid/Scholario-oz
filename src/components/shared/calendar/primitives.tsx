@@ -3,9 +3,10 @@
 /**
  * calendar/primitives — small shared visual pieces for the Calendar
  * workspace: type badge, source pill, event rows (upcoming + day
- * variants) and the empty state. Surfaces continue the iOS liquid-
- * glass language: translucent type tints, etched hairline borders
- * and soft depth over the frosted rail card.
+ * variants) and the empty state. All surfaces follow the clean
+ * Scholario-OS enterprise language — white cards, hairline borders,
+ * muted neutrals, with colour reserved for the small functional
+ * type indicators.
  */
 
 import { motion } from 'framer-motion'
@@ -13,11 +14,9 @@ import { Clock, MapPin, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/store/calendar-store'
 import {
-  SOURCE_META,
   TYPE_TOKENS,
   formatDayMonth,
   formatTimeLabel,
-  typeColor,
 } from './data'
 
 // ─── TypeBadge ────────────────────────────────────────────────────────
@@ -27,9 +26,8 @@ export function TypeBadge({ type, className }: { type: string; className?: strin
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-[3px] text-[10px] font-semibold leading-none',
+        'inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-[3px] text-[10px] font-semibold leading-none',
         token.badge,
-        token.text,
         className,
       )}
     >
@@ -39,17 +37,6 @@ export function TypeBadge({ type, className }: { type: string; className?: strin
         aria-hidden
       />
       {type}
-    </span>
-  )
-}
-
-// ─── SourcePill ───────────────────────────────────────────────────────
-
-export function SourcePill({ source }: { source: CalendarEvent['source'] }) {
-  if (source === 'school') return null
-  return (
-    <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2 py-[3px] text-[10px] font-medium leading-none text-muted-foreground">
-      {SOURCE_META[source]?.label ?? source}
     </span>
   )
 }
@@ -74,7 +61,6 @@ export function EventRow({
   variant?: 'upcoming' | 'day'
   onOpen: (e: CalendarEvent) => void
 }) {
-  const token = TYPE_TOKENS[event.type] ?? TYPE_TOKENS.General
   const isAllDay = !event.time || event.time === '—'
   const timeLabel = isAllDay ? 'All day' : formatTimeLabel(event.time)
   const tile = formatDayMonth(event.date)
@@ -82,25 +68,22 @@ export function EventRow({
   return (
     <motion.button
       type="button"
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(index * 0.03, 0.15), duration: 0.2 }}
+      transition={{ delay: Math.min(index * 0.025, 0.12), duration: 0.16 }}
       onClick={() => onOpen(event)}
-      className="flex w-full items-center gap-3 rounded-xl border border-transparent p-2 text-left transition-colors hover:border-foreground/[0.07] hover:bg-foreground/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="flex w-full items-center gap-3 rounded-lg border border-transparent p-2 text-left transition-colors hover:border-border hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {variant === 'upcoming' ? (
-        /* Date tile — type-tinted glass tile */
+        /* Date tile — compact, neutral */
         <span
-          className={cn(
-            'flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl border border-foreground/[0.08] shadow-[inset_0_1px_0_oklch(1_0_0/0.35)] dark:shadow-[inset_0_1px_0_oklch(1_0_0/0.06)]',
-            token.chipBg,
-          )}
+          className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg border border-border bg-card"
           aria-hidden
         >
           <span className="text-sm font-semibold leading-none tabular-nums text-foreground">
             {tile.day}
           </span>
-          <span className={cn('mt-0.5 text-[9px] font-semibold uppercase leading-none tracking-wide', token.text)}>
+          <span className="mt-0.5 text-[9px] font-semibold uppercase leading-none tracking-wide text-muted-foreground">
             {tile.month}
           </span>
         </span>
@@ -144,11 +127,11 @@ export function EventRow({
         </span>
       </span>
 
-      {/* Type indicator — dot only keeps rows light; badge on sm+ */}
-      <span className="flex shrink-0 flex-col items-end gap-1.5 pr-0.5">
+      {/* Type indicator — dot on sm+, badge on phones */}
+      <span className="flex shrink-0 items-center pr-0.5">
         <span
-          className="hidden sm:inline-flex h-2 w-2 rounded-full"
-          style={{ background: token.solid }}
+          className="hidden h-2 w-2 rounded-full sm:block"
+          style={{ background: (TYPE_TOKENS[event.type] ?? TYPE_TOKENS.General).solid }}
           aria-hidden
         />
         <span className="sm:hidden">
@@ -174,7 +157,7 @@ export function CalendarEmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-foreground/[0.07] bg-foreground/[0.04] text-muted-foreground/75 shadow-[inset_0_1px_0_oklch(1_0_0/0.4)] dark:shadow-[inset_0_1px_0_oklch(1_0_0/0.07)]">
+      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground/80">
         <Icon className="h-5 w-5" aria-hidden />
       </div>
       <p className="text-[13px] font-medium text-muted-foreground">{title}</p>

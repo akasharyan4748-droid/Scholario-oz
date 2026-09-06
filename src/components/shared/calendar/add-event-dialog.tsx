@@ -1,14 +1,14 @@
 'use client'
 
 /**
- * AddEventDialog — focused, polished event creation, rendered as an
- * iOS glass card (strong frosted surface + blurred scrim).
+ * AddEventDialog — focused, polished event creation, using the
+ * standard Scholario dialog surface.
  *
  * Only useful fields (spec): title, type, date, time (with an All-day
  * switch), optional location and optional notes. No technical fields.
  *
- * The type picker is a wrap-row of single-select glass pills carrying
- * the type dot — it doubles as a color preview and stays touch-friendly
+ * The type picker is a wrap-row of single-select pills carrying the
+ * type dot — it doubles as a color preview and stays touch-friendly
  * on phones. Submitting goes through `useCalendarStore.addEvent` (the
  * same unified data source the grid reads), then the workspace
  * navigates to the event's month and selects the day so the new event
@@ -96,7 +96,7 @@ export function AddEventDialog({ open, onOpenChange, defaultDate, onAdded }: Add
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="cal-glass-dialog cal-glass-strong max-h-[92dvh] gap-0 overflow-y-auto rounded-2xl bg-transparent p-0 shadow-none sm:max-w-md">
+      <DialogContent className="max-h-[92dvh] gap-0 overflow-y-auto p-0 sm:max-w-md">
         <DialogHeader className="space-y-1.5 px-5 pt-5 text-left sm:px-6 sm:pt-6">
           <DialogTitle className="text-left">Add Event</DialogTitle>
           <DialogDescription>
@@ -139,10 +139,10 @@ export function AddEventDialog({ open, onOpenChange, defaultDate, onAdded }: Add
                     aria-checked={selected}
                     onClick={() => setType(t)}
                     className={cn(
-                      'flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97]',
+                      'flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                       selected
-                        ? cn(token.chipBg, token.text, 'cal-glass-chip')
-                        : 'border-foreground/[0.09] bg-foreground/[0.03] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground',
+                        ? cn('border-foreground/20 text-foreground', token.chip)
+                        : 'border-border text-muted-foreground hover:border-foreground/20 hover:bg-muted/60 hover:text-foreground',
                     )}
                   >
                     <span
@@ -166,7 +166,7 @@ export function AddEventDialog({ open, onOpenChange, defaultDate, onAdded }: Add
               <DatePicker value={date} onChange={setDate} placeholder="Select date" />
             </div>
             <div className="flex items-end gap-3">
-              <div className="flex h-9 items-center gap-2.5 rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-3 shadow-[inset_0_1px_0_oklch(1_0_0/0.35)] dark:shadow-[inset_0_1px_0_oklch(1_0_0/0.07)]">
+              <div className="flex h-9 items-center gap-2.5 rounded-lg border border-border bg-card px-3">
                 <Switch
                   id="all-day"
                   checked={allDay}
@@ -222,16 +222,11 @@ export function AddEventDialog({ open, onOpenChange, defaultDate, onAdded }: Add
           </div>
         </div>
 
-        <DialogFooter className="border-t border-foreground/[0.08] px-5 py-4 sm:px-6">
-          <Button variant="outline" className="rounded-full border-foreground/[0.1] bg-foreground/[0.03] hover:bg-foreground/[0.06]" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="border-t border-border px-5 py-4 sm:px-6">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            className="rounded-full bg-primary text-primary-foreground shadow-[0_8px_20px_-6px] shadow-primary/40 hover:bg-primary/90"
-          >
-            Add Event
-          </Button>
+          <Button onClick={handleSubmit}>Add Event</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
