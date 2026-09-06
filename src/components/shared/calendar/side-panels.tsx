@@ -32,16 +32,18 @@ export function UpcomingContent({ events, emptyDueToFilter, onShowAll, onOpen }:
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between gap-2 px-4 pt-4">
         <div className="flex items-center gap-2 min-w-0">
-          <CalendarClock className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-foreground/[0.07] bg-foreground/[0.04] text-primary shadow-[inset_0_1px_0_oklch(1_0_0/0.4)] dark:shadow-[inset_0_1px_0_oklch(1_0_0/0.07)]">
+            <CalendarClock className="h-3.5 w-3.5" aria-hidden />
+          </span>
           <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">Upcoming</h3>
         </div>
         {shown.length > 0 && (
-          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+          <span className="shrink-0 rounded-full border border-foreground/[0.07] bg-foreground/[0.04] px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
             {shown.length}
           </span>
         )}
       </div>
-      <p className="px-4 pt-0.5 text-[11px] text-muted-foreground">From today onward</p>
+      <p className="px-4 pt-0.5 pl-12 text-[11px] text-muted-foreground">From today onward</p>
 
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         {shown.length === 0 ? (

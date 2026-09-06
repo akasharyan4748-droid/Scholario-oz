@@ -7,11 +7,12 @@
  * The chips double as the color legend (each carries its type dot), so
  * no separate legend is rendered anywhere. States are instantly
  * readable:
- *   - active  → real surface + hairline border + solid dot + live count
+ *   - active  → glass pill (frosted surface + hairline border + solid
+ *               dot + live count)
  *   - inactive → fades back (transparent bg, dimmed dot, no count)
  * A compact "Show all" reset appears only while a partial/empty filter
  * is active. On phones the row scrolls horizontally (no wrap, no
- * overflow).
+ * overflow) with soft edge fades.
  */
 
 import { cn } from '@/lib/utils'
@@ -31,7 +32,11 @@ export function TypeFilters({ filterTypes, onToggle, counts, onShowAll }: TypeFi
 
   return (
     <div
-      className="flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-0.5 sm:mx-0 sm:px-0 sm:pb-0 sm:flex-wrap"
+      className={cn(
+        'flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-0.5 sm:mx-0 sm:px-0 sm:pb-0 sm:flex-wrap',
+        // Soft edge fades while the row scrolls on phones
+        'max-sm:[mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)]',
+      )}
       role="group"
       aria-label="Filter events by type"
     >
@@ -45,10 +50,10 @@ export function TypeFilters({ filterTypes, onToggle, counts, onShowAll }: TypeFi
             onClick={() => onToggle(t)}
             aria-pressed={active}
             className={cn(
-              'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+              'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97]',
               active
-                ? 'border-border/80 bg-card text-foreground shadow-xs'
-                : 'border-transparent bg-transparent text-muted-foreground/55 hover:text-muted-foreground hover:bg-muted/40',
+                ? 'cal-glass-chip text-foreground'
+                : 'border border-transparent bg-transparent text-muted-foreground/55 hover:bg-foreground/[0.05] hover:text-muted-foreground',
             )}
           >
             <span
@@ -80,7 +85,7 @@ export function TypeFilters({ filterTypes, onToggle, counts, onShowAll }: TypeFi
         <button
           type="button"
           onClick={onShowAll}
-          className="h-7 shrink-0 whitespace-nowrap rounded-md px-2 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="h-7 shrink-0 whitespace-nowrap rounded-full px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           Show all
         </button>

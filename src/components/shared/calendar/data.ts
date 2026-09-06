@@ -35,7 +35,9 @@ export function todayParts(): { year: number; month: number; day: number } {
 /**
  * Per-type visual tokens — ONE restrained accent per event type:
  *   - `solid`  : oklch color for dots / date tiles (inline style)
- *   - `chipBg` : background for in-cell chips (type color @ ~10%)
+ *   - `chipBg` : background for in-cell chips (type color @ ~12%,
+ *                tuned to read as translucent glass over the frosted
+ *                calendar card)
  *   - `badge`  : pill background for type badges
  *   - `text`   : chip/badge text color (light + dark)
  * NO indigo/blue. Same family as the previous module palette, with
@@ -51,43 +53,43 @@ export interface TypeToken {
 export const TYPE_TOKENS: Record<string, TypeToken> = {
   Exam: {
     solid: 'oklch(0.62 0.2 20)',
-    chipBg: 'bg-rose-500/[0.08]',
+    chipBg: 'bg-rose-500/[0.12]',
     badge: 'bg-rose-500/10',
     text: 'text-rose-700 dark:text-rose-300',
   },
   Event: {
     solid: 'oklch(0.55 0.14 162)',
-    chipBg: 'bg-emerald-500/[0.08]',
+    chipBg: 'bg-emerald-500/[0.12]',
     badge: 'bg-emerald-500/10',
     text: 'text-emerald-700 dark:text-emerald-300',
   },
   Holiday: {
     solid: 'oklch(0.7 0.16 75)',
-    chipBg: 'bg-amber-500/[0.08]',
+    chipBg: 'bg-amber-500/[0.12]',
     badge: 'bg-amber-500/10',
     text: 'text-amber-700 dark:text-amber-300',
   },
   Meeting: {
     solid: 'oklch(0.6 0.18 300)',
-    chipBg: 'bg-violet-500/[0.08]',
+    chipBg: 'bg-violet-500/[0.12]',
     badge: 'bg-violet-500/10',
     text: 'text-violet-700 dark:text-violet-300',
   },
   Competition: {
     solid: 'oklch(0.68 0.13 200)',
-    chipBg: 'bg-cyan-500/[0.08]',
+    chipBg: 'bg-cyan-500/[0.12]',
     badge: 'bg-cyan-500/10',
     text: 'text-cyan-700 dark:text-cyan-300',
   },
   Cultural: {
     solid: 'oklch(0.6 0.18 330)',
-    chipBg: 'bg-fuchsia-500/[0.08]',
+    chipBg: 'bg-fuchsia-500/[0.12]',
     badge: 'bg-fuchsia-500/10',
     text: 'text-fuchsia-700 dark:text-fuchsia-300',
   },
   General: {
     solid: 'oklch(0.55 0.02 160)',
-    chipBg: 'bg-muted',
+    chipBg: 'bg-foreground/[0.05]',
     badge: 'bg-muted',
     text: 'text-muted-foreground',
   },

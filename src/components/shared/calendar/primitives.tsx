@@ -3,9 +3,9 @@
 /**
  * calendar/primitives — small shared visual pieces for the Calendar
  * workspace: type badge, source pill, event rows (upcoming + day
- * variants) and the empty state. All surfaces follow the flat
- * Scholario card language: soft surface, hairline border, restrained
- * type-tinted accents, no gradients.
+ * variants) and the empty state. Surfaces continue the iOS liquid-
+ * glass language: translucent type tints, etched hairline borders
+ * and soft depth over the frosted rail card.
  */
 
 import { motion } from 'framer-motion'
@@ -86,13 +86,13 @@ export function EventRow({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index * 0.03, 0.15), duration: 0.2 }}
       onClick={() => onOpen(event)}
-      className="flex w-full items-center gap-3 rounded-lg border border-transparent p-2 text-left transition-colors hover:border-border/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="flex w-full items-center gap-3 rounded-xl border border-transparent p-2 text-left transition-colors hover:border-foreground/[0.07] hover:bg-foreground/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
       {variant === 'upcoming' ? (
-        /* Date tile — type-tinted, restrained */
+        /* Date tile — type-tinted glass tile */
         <span
           className={cn(
-            'flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg border border-border/50',
+            'flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl border border-foreground/[0.08] shadow-[inset_0_1px_0_oklch(1_0_0/0.35)] dark:shadow-[inset_0_1px_0_oklch(1_0_0/0.06)]',
             token.chipBg,
           )}
           aria-hidden
@@ -100,7 +100,7 @@ export function EventRow({
           <span className="text-sm font-semibold leading-none tabular-nums text-foreground">
             {tile.day}
           </span>
-          <span className="mt-0.5 text-[9px] font-semibold uppercase leading-none tracking-wide text-muted-foreground">
+          <span className={cn('mt-0.5 text-[9px] font-semibold uppercase leading-none tracking-wide', token.text)}>
             {tile.month}
           </span>
         </span>
@@ -145,7 +145,7 @@ export function EventRow({
       </span>
 
       {/* Type indicator — dot only keeps rows light; badge on sm+ */}
-      <span className="flex shrink-0 flex-col items-end gap-1.5">
+      <span className="flex shrink-0 flex-col items-end gap-1.5 pr-0.5">
         <span
           className="hidden sm:inline-flex h-2 w-2 rounded-full"
           style={{ background: token.solid }}
@@ -174,7 +174,7 @@ export function CalendarEmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-muted/50 text-muted-foreground/70">
+      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-foreground/[0.07] bg-foreground/[0.04] text-muted-foreground/75 shadow-[inset_0_1px_0_oklch(1_0_0/0.4)] dark:shadow-[inset_0_1px_0_oklch(1_0_0/0.07)]">
         <Icon className="h-5 w-5" aria-hidden />
       </div>
       <p className="text-[13px] font-medium text-muted-foreground">{title}</p>

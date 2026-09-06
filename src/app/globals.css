@@ -181,7 +181,9 @@
 }
 
 @layer utilities {
-  /* Glassmorphism */
+  /* Glassmorphism (NOTE: the dev CSS pipeline strips literal
+     backdrop-filter declarations — the calendar injects its blur
+     via a runtime <style> tag instead; see calendar-workspace) */
   .glass {
     background: oklch(1 0 0 / 0.6);
     backdrop-filter: blur(20px) saturate(180%);
@@ -201,6 +203,146 @@
   .dark .glass-strong {
     background: oklch(0.22 0.014 165 / 0.75);
     border: 1px solid oklch(1 0 0 / 0.1);
+  }
+
+  /* ============================================================
+     CALENDAR — Apple iOS-style "Liquid Glass" system v2
+     Panels float over a drifting aurora of Scholario colors;
+     surfaces use backdrop blur + saturation, a specular 1px top
+     edge, hairline translucent borders and deep soft shadows.
+     NOTE: backdrop-filter declarations are injected at RUNTIME by
+     CalendarWorkspace via a <style> tag — the dev CSS pipeline
+     strips literal backdrop-filter declarations for its legacy
+     targets, but inline DOM styles bypass that pipeline.
+     ============================================================ */
+
+  /* Panel glass — month grid, rail, upcoming card.
+     backdrop-filter is injected at runtime by CalendarWorkspace
+     (the CSS pipeline strips literal backdrop-filter declarations). */
+  .cal-glass {
+    background: oklch(0.99 0.002 145 / 0.46);
+    border: 1px solid oklch(1 0 0 / 0.65);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.85),
+      0 1px 2px oklch(0.18 0.02 160 / 0.04),
+      0 8px 24px oklch(0.18 0.02 160 / 0.05),
+      0 20px 48px oklch(0.18 0.02 160 / 0.04);
+  }
+  .dark .cal-glass {
+    background: oklch(0.2 0.012 165 / 0.48);
+    border: 1px solid oklch(1 0 0 / 0.12);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.08),
+      0 1px 2px oklch(0 0 0 / 0.3),
+      0 8px 24px oklch(0 0 0 / 0.35),
+      0 20px 48px oklch(0 0 0 / 0.3);
+  }
+
+  /* Strong glass — dialogs & bottom sheet (more opaque, deeper blur) */
+  .cal-glass-strong {
+    background: oklch(0.99 0.002 145 / 0.76);
+    border: 1px solid oklch(1 0 0 / 0.65);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.75),
+      0 2px 6px oklch(0.18 0.02 160 / 0.08),
+      0 24px 64px oklch(0.18 0.02 160 / 0.16);
+  }
+  .dark .cal-glass-strong {
+    background: oklch(0.21 0.013 165 / 0.78);
+    border: 1px solid oklch(1 0 0 / 0.12);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.1),
+      0 2px 6px oklch(0 0 0 / 0.4),
+      0 24px 64px oklch(0 0 0 / 0.5);
+  }
+
+  /* Chip glass — segmented nav, active filter pills */
+  .cal-glass-chip {
+    background: oklch(0.99 0.002 145 / 0.56);
+    border: 1px solid oklch(1 0 0 / 0.65);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.7),
+      0 1px 3px oklch(0.18 0.02 160 / 0.07);
+  }
+  .dark .cal-glass-chip {
+    background: oklch(0.21 0.012 165 / 0.52);
+    border: 1px solid oklch(1 0 0 / 0.12);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.09),
+      0 1px 3px oklch(0 0 0 / 0.35);
+  }
+
+  /* Aurora — soft drifting color fields behind the glass panels */
+  .cal-aurora {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .cal-aurora span {
+    position: absolute;
+    border-radius: 9999px;
+    will-change: transform;
+  }
+  .cal-aurora .a1 {
+    width: 34rem; height: 34rem; top: -14%; left: -10%;
+    background: radial-gradient(circle, oklch(0.52 0.17 162 / 0.44) 0%, transparent 72%);
+    animation: cal-drift-a 44s ease-in-out infinite alternate;
+  }
+  .cal-aurora .a2 {
+    width: 30rem; height: 30rem; top: -10%; right: -8%;
+    background: radial-gradient(circle, oklch(0.68 0.19 75 / 0.38) 0%, transparent 72%);
+    animation: cal-drift-b 56s ease-in-out infinite alternate;
+  }
+  .cal-aurora .a3 {
+    width: 42rem; height: 42rem; bottom: -26%; left: 20%;
+    background: radial-gradient(circle, oklch(0.58 0.21 300 / 0.34) 0%, transparent 72%);
+    animation: cal-drift-c 62s ease-in-out infinite alternate;
+  }
+  .cal-aurora .a4 {
+    width: 26rem; height: 26rem; bottom: -12%; right: 10%;
+    background: radial-gradient(circle, oklch(0.66 0.15 200 / 0.34) 0%, transparent 72%);
+    animation: cal-drift-a 50s ease-in-out infinite alternate-reverse;
+  }
+  .dark .cal-aurora .a1 { background: radial-gradient(circle, oklch(0.72 0.17 162 / 0.42) 0%, transparent 72%); }
+  .dark .cal-aurora .a2 { background: radial-gradient(circle, oklch(0.76 0.18 75 / 0.34) 0%, transparent 72%); }
+  .dark .cal-aurora .a3 { background: radial-gradient(circle, oklch(0.72 0.2 300 / 0.34) 0%, transparent 72%); }
+  .dark .cal-aurora .a4 { background: radial-gradient(circle, oklch(0.76 0.15 200 / 0.34) 0%, transparent 72%); }
+
+  @keyframes cal-drift-a {
+    0%   { transform: translate(0, 0) scale(1); }
+    100% { transform: translate(7%, -5%) scale(1.1); }
+  }
+  @keyframes cal-drift-b {
+    0%   { transform: translate(0, 0) scale(1.06); }
+    100% { transform: translate(-6%, 6%) scale(0.96); }
+  }
+  @keyframes cal-drift-c {
+    0%   { transform: translate(0, 0) scale(0.95); }
+    100% { transform: translate(-8%, -7%) scale(1.08); }
+  }
+
+  /* Frosted overlays for calendar dialogs/sheets — progressive
+     enhancement: blurs + tints the scrim only when a glass dialog
+     or glass sheet is open, leaving every other overlay untouched. */
+  body:has(> [data-slot="dialog-content"].cal-glass-dialog) > [data-slot="dialog-overlay"],
+  body:has(> [data-slot="sheet-content"].cal-glass-sheet) > [data-slot="sheet-overlay"] {
+    background: oklch(0.16 0.012 165 / 0.28) !important;
+  }
+
+  /* Fallback — solid surfaces where backdrop-filter is unsupported */
+  @supports not ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
+    .cal-glass { background: oklch(0.99 0.002 145 / 0.94); }
+    .cal-glass-strong { background: oklch(0.995 0 0 / 0.97); }
+    .cal-glass-chip { background: oklch(0.99 0 0 / 0.94); }
+    .dark .cal-glass { background: oklch(0.2 0.012 165 / 0.94); }
+    .dark .cal-glass-strong { background: oklch(0.21 0.013 165 / 0.96); }
+    .dark .cal-glass-chip { background: oklch(0.21 0.012 165 / 0.94); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cal-aurora span { animation: none !important; }
   }
 
   /* Premium gradient text */

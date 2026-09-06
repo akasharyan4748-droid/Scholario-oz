@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * EventDetailDialog — clean, focused read view for one calendar event.
+ * EventDetailDialog — clean, focused read view for one calendar event,
+ * rendered as an iOS glass card (strong frosted surface + blurred scrim).
  *
  * Progressive disclosure: the grid and lists stay light; full context
  * (date, time, location, notes, source) lives here and only appears
@@ -21,7 +22,6 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { useCalendarStore, type CalendarEvent } from '@/lib/store/calendar-store'
 import { SOURCE_META, formatFullDate, formatTimeLabel } from './data'
@@ -45,7 +45,7 @@ function MetaRow({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-foreground/[0.07] bg-foreground/[0.04] text-muted-foreground shadow-[inset_0_1px_0_oklch(1_0_0/0.4)] dark:shadow-[inset_0_1px_0_oklch(1_0_0/0.07)]">
         <Icon className="h-3.5 w-3.5" aria-hidden />
       </div>
       <div className="min-w-0">
@@ -79,12 +79,12 @@ export function EventDetailDialog({ event, onOpenChange, canManage }: EventDetai
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[calc(100vw-1.5rem)] gap-0 p-0 sm:max-w-md">
+      <DialogContent className="cal-glass-dialog cal-glass-strong max-w-[calc(100vw-1.5rem)] gap-0 rounded-2xl bg-transparent p-0 shadow-none sm:max-w-md">
         {/* Type + source */}
         <DialogHeader className="gap-2 px-5 pt-5 text-left sm:px-6 sm:pt-6">
           <div className="flex flex-wrap items-center gap-1.5">
             <TypeBadge type={event.type} />
-            <span className="inline-flex items-center rounded-full bg-muted px-2 py-[3px] text-[10px] font-medium leading-none text-muted-foreground">
+            <span className="inline-flex items-center rounded-full border border-foreground/[0.07] bg-foreground/[0.04] px-2 py-[3px] text-[10px] font-medium leading-none text-muted-foreground">
               {SOURCE_META[event.source]?.label ?? event.source}
             </span>
           </div>
@@ -118,7 +118,7 @@ export function EventDetailDialog({ event, onOpenChange, canManage }: EventDetai
 
         {isUserEvent && canManage && (
           <>
-            <Separator className="mx-5 w-auto sm:mx-6" />
+            <div className="mx-5 h-px bg-foreground/[0.08] sm:mx-6" aria-hidden />
             <div className="flex items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
               <p className="text-[11px] leading-tight text-muted-foreground">
                 You added this event — it stays for this session.
@@ -127,7 +127,7 @@ export function EventDetailDialog({ event, onOpenChange, canManage }: EventDetai
                 variant="ghost"
                 size="sm"
                 onClick={handleDelete}
-                className="h-8 shrink-0 gap-1.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="h-8 shrink-0 gap-1.5 rounded-full text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden /> Remove
               </Button>
