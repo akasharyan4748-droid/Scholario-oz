@@ -777,3 +777,26 @@ Stage Summary:
 - New student modules: Messages (scoped recipients), Notifications (derived from real data), Settings (profile/prefs/appearance/privacy/change-password/sign-out). Shell dead-ends fixed (bell → notifications, Account Settings → settings).
 - Final demo state: Aarav Sharma is Class Captain of Class 2-A (appointed by Dr. Ananya Iyer), one approved class update on the notice board, one resolved issue, one open responsibility task — all reviewable from the principal Leadership tab.
 - Risks/notes: legacy mock/students.ts remains as an unused dataset (type imports only); the auth scholario-auth version bump forces fresh login for existing demo sessions; sandbox OOM discipline still applies (close browser before heavy compiles).
+
+---
+Task ID: STU-QA-2
+Agent: Z.ai Code (main orchestrator)
+Task: Re-verification round — "check again if everything with proper UI update smoothly working" in the student role (fresh browser E2E + captain lifecycle + responsive spot-check).
+
+Work Log:
+- OPS: found a stray duplicate `bun run dev` chain (spawned 22:49, EADDRINUSE loop + tee overwrote dev.log) — killed PIDs 19215-19217; original server kept serving. Then OOM killed next-server (2.89GB RSS + Chrome) mid-QA; the `next dev` wrapper auto-restarted it — closed browser during 85s compile/settle per ops procedure, then resumed. Health 200, warm 81ms.
+- STUDENT LOGIN + DASHBOARD: fresh profile login (aarav.sharma@student123, Student card) → dashboard renders with all 25 nav modules + LIVE badges (Notifications 14, Homework 3, Assignments 2, Learning Hub 14, Flashcards 12, Peer Collab 4, Achievements 6, Messages 2, Fees 1, My Library 2, My Bus 14). Zero page errors, clean console.
+- NOTIFICATIONS: feed = 14 derived items (library overdue ₹10, messages, announcements, exams, assignments, homework, fee reminder ₹4,750/₹9,500). "Mark all read" → "Your Feed 0 new" + nav badge AND topbar bell badge both drop live. PASS.
+- MESSAGES: opened Rohan Mehta thread (unread dot cleared), sent "Testing reply — completed worksheet 4" → appended in thread + conversation preview updates live ("You: … · just now") + thread auto-scroll works. Message persisted across logout/login AND server restart (zustand persist). Unread badge 2→1 derived correctly. PASS.
+- HOMEWORK: Submit → dialog → confirm → card flips to "Submitted" + "Done · 06 Sept 2026", stat "1 submitted", persists (store). Classmate counts (14/18, 16/18…) render. PASS.
+- FLASHCARDS: card tap flips (question/answer "15" both in a11y tree), Show Answer + spaced-repetition rating buttons (Again/Hard/Good/Easy) functional. PASS.
+- CAPTAIN LIFECYCLE (full round in THIS session): principal → Students & Classes → Classes → Class 2 → Leadership → Appoint Captain (searched Aarav, STU-58/DSO2024058/roll 18, note) → holder card "Aarav Sharma · Roll 18 · since 06 Sept 2026" + Replace/End controls. Student relogin → MY CLASS nav group + "Class Captain" banner + Class updates/My tasks action buttons appear; My Class module shows 4 capability actions (Post Class Update 0 pending / Report an Issue / Request Teacher Meeting / Responsibility Tasks / Class Notice Board). Posted "Science fair volunteers" update → toast + live count "1 pending review" + submission visible in My Submissions. Principal → End responsibility (confirm dialog) → "no longer holds Class Captain" toast + slot Vacant. Student relogin → MY CLASS group, banner, and module ALL GONE (0 matches). PASS — assign→appear, write→persist, end→disappear.
+- RESPONSIVE: 375px — dashboard/Fees/Messages all "375 vs 375" (zero horizontal overflow); hamburger menu opens; mobile Fees shows real ledger (₹9,500/₹4,750/₹4,750, RCP-2026-1061 receipt downloadable); mobile Messages list→thread→back-button flow works with persisted messages. PASS.
+- Final state: browser closed, server 200 healthy, 742MB available.
+- Created 15-min webDevReview cron (job 364670) with sandbox ops notes (never double-start dev server; memory discipline; credentials).
+
+Stage Summary:
+- Student role re-verified END-TO-END on a fresh browser profile: all interactive UI updates (notifications mark-read, message send + live badges, homework submit persistence, flashcard flip, captain capabilities) work smoothly with zero console/page errors.
+- Captain system re-confirmed: full appoint→use→end lifecycle dynamically adds/removes student UI; live counters update; writes persist.
+- Ops events this round: stray duplicate dev-server chain killed (EADDRINUSE loop); one OOM server kill auto-recovered by next dev wrapper — QA resumed cleanly after settle wait.
+- Note: captain appointments live in browser localStorage (tenant-scoped zustand persist), so a fresh browser profile starts vacant by design — the principal Leadership tab is the single source for appointments in any given browser session.
