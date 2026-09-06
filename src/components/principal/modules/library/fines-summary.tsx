@@ -37,7 +37,7 @@ import { cn } from '@/lib/utils'
 import { GradientAvatar } from '@/components/shared/ui'
 import { toast } from 'sonner'
 import { LibPanel, LibEmptyState, FineStatusBadge, BorrowerTypePill, LibPill } from './library-shared'
-import { DonutChart as MiniDonut } from "@/components/shared/premium-charts"
+import { EnterpriseDonut } from '@/components/shared/enterprise-donut'
 
 // ─── FinesSummary ───────────────────────────────────────────────────
 
@@ -381,13 +381,10 @@ export function LibraryReports() {
           subtitle="book copies by category"
           action={<LibPill accent="bg-muted text-muted-foreground">{totalBooksForBars} copies total</LibPill>}
         >
-          <MiniDonut
-            data={analytics.byCategory.map((c) => ({ name: c.name, value: c.value, color: c.color }))}
-            centerLabel="Total"
+          <EnterpriseDonut
+            data={analytics.byCategory.map((c) => ({ name: c.name, value: c.value }))}
             centerValue={String(totalBooksForBars)}
-            formatValue={(n) => n.toLocaleString('en-IN')}
-            size={180}
-            thickness={20}
+            centerLabel="Total"
           />
         </LibPanel>
 

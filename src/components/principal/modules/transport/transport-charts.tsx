@@ -1,9 +1,9 @@
 'use client'
 
-import { BarChart3, Gauge } from 'lucide-react'
 import { useTransportStore, useTransportData } from '@/lib/store/transport-store'
 import { TptPanel, TptPill } from './transport-shared'
-import { DonutChart, RadialProgress, HorizontalBarChart } from '@/components/shared/premium-charts'
+import { RadialProgress } from '@/components/shared/premium-charts'
+import { EnterpriseDonut } from '@/components/shared/enterprise-donut'
 
 export function RouteDistributionChart() {
   const data = useTransportData()
@@ -23,13 +23,10 @@ export function RouteDistributionChart() {
       subtitle="students per route"
       action={<TptPill accent="bg-muted text-muted-foreground">{routeDistribution.length} routes</TptPill>}
     >
-      <DonutChart
-        data={donutData}
-        centerLabel="Students"
+      <EnterpriseDonut
+        data={donutData.map((d) => ({ name: d.name, value: d.value }))}
         centerValue={String(totalStudents)}
-        formatValue={(n) => n.toLocaleString('en-IN')}
-        size={180}
-        thickness={20}
+        centerLabel="Students"
       />
     </TptPanel>
   )

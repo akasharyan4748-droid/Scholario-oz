@@ -490,3 +490,33 @@ Stage Summary:
 - All functionality preserved: unified data sources (school events + holidays + exam schedule + user events), 7-type filters, month navigation, day details (rail/bottom sheet), event detail, add/remove events, role gating (principal can manage, student read-only).
 - Verified artifacts: /home/z/my-project/verify/*.png (cal-principal-desktop, cal-day-selected, cal-detail-dialog, cal-after-add, cal-filters-hidden, cal-ipad-portrait, cal-ipad-landscape, cal-mobile, cal-mobile-sheet, cal-mobile-sheet2, cal-mobile-landscape, cal-student-desktop, cal-student-mobile, cal-dark, cal-final).
 - Unresolved / next-phase candidates: teacher panel may still mount its own calendar variant (check teacher modules for a CalendarWorkspace adoption); toast copy "it stays for this session" wording; possible chip tooltip titles already present (title attr) — fine.
+
+---
+Task ID: DONUT-1
+Agent: Z.ai Code (main orchestrator)
+Task: POLISH THE DONUT CHARTS IN LIBRARY & TRANSPORT — UI fix only (restrained enterprise presentation, one reusable component, no data/logic changes).
+
+Work Log:
+- Surveyed the donut landscape: Library (Category Distribution in modules/library/fines-summary.tsx) and Transport (Route Distribution in modules/transport/transport-charts.tsx) both consumed the shared `DonutChart` from src/components/shared/premium-charts.tsx, which carried the rejected styling: per-segment linear gradients, hover pop-out (5px lift + 3px stroke boost breaking ring-thickness consistency), drop-shadow glow, dashed outer highlight ring, rounded stroke caps (awkward boundaries), radial background-ring gradient and saturated oklch palette (chroma 0.14–0.20) assigned by the stores.
+- Built ONE new reusable component: src/components/shared/enterprise-donut.tsx (`EnterpriseDonut`). Geometry is path-based annular sectors — perfectly circular, exact proportional angles from 12 o'clock, consistent 22px thickness, subtle 3° separators (angular gaps revealing the card surface, clamped so tiny segments never invert), single-category case renders a clean uninterrupted ring. Flat muted harmonious palette (oklch L 0.50–0.62, C ≤ 0.09, assigned by data index) — no gradients, glow, shadows, markers or decorative effects. Refined centre: prominent tabular number + small uppercase tracked metric label; on hover/focus it swaps to the hovered category's name/value/percent with a fast 0.15s crossfade. Cohesive legend: 8px rounded-square colour indicator · truncating name · right-aligned percentage column (w-8) · right-aligned count column (w-11), two-way hover/focus sync with the ring, keyboard-accessible buttons with focus-visible ring. Responsive: ring + legend side-by-side ≥ sm, intelligently stacked (centred ring above full-width legend) below sm. Edge cases: empty data/zero total (clean empty state), zero-value entries (legend row kept, no arc), tiny segments, single category.
+- Wired Transport RouteDistributionChart to EnterpriseDonut (data mapping unchanged: routes[i]?.name ?? d.name, value d.value; centre 232 / STUDENTS) and removed the now-unused BarChart3/Gauge/HorizontalBarChart/DonutChart imports.
+- Wired Library Category Distribution (in fines-summary.tsx LibraryReports) to the same component (centre 213 / TOTAL) and removed the MiniDonut import. Data, percentages, totals, category names, store logic, panels and APIs untouched.
+- Verified: eslint (3 changed files) clean, tsc --noEmit clean, dev server serving 200.
+- Browser QA (agent-browser, principal login): Transport Reports + Library Reports inspected at desktop 1440×900 (VLM critique: muted/restrained, consistent thickness, clean flat separators, refined centre, aligned legend, zero clutter), hover sync verified (centre swaps to 44/19% for Route 4, other segments dim, legend row highlights), mobile 390×844 (both modules: ring perfectly circular, centred, legend stacked full-width, long route names truncate with ellipsis, no horizontal overflow — scrollWidth == innerWidth), iPad portrait 768×1024 and Android tablet 912×1368 (clean side-by-side, no overflow), dark mode (muted hues visible/harmonious, centre 232 STUDENTS bright and readable). No console or page errors.
+
+Stage Summary:
+- Library and Transport now share the exact same polished donut presentation (src/components/shared/enterprise-donut.tsx); visual noise removed (gradients/glow/pop-out/dashed ring/oversaturated colours), centre reads 213 TOTAL / 232 STUDENTS, legends are aligned and cohesive, and the treatment is responsive + dark-mode safe with zero data/API/logic changes. The legacy premium-charts DonutChart remains untouched for the other modules (Finance, Analytics, etc.) so no other module's analytics changed.
+- Risks: none known; dev.log shows only the pre-existing duplicate-dev-wrapper EADDRINUSE noise (the serving process on :3000 is healthy).
+- Next-phase recommendations: (1) optionally migrate other modules' categorical donuts (analytics, teacher views) onto EnterpriseDonut module-by-module for system-wide consistency; (2) the calendar visual revert task from the earlier brief remains queued; (3) cron webDevReview re-registration attempted this round (see DONUT-OPS).
+
+---
+Task ID: DONUT-OPS
+Agent: Z.ai Code (main orchestrator)
+Task: Register the mandatory 15-minute webDevReview cron job after the DONUT-1 round.
+
+Work Log:
+- Used the cron tool with kind=webDevReview, fixed_rate every 900s (15 minutes).
+- Payload instructs the reviewer to read this worklog first, QA via agent-browser, prioritise bug fixes, then advance styling detail and feature work, and update this handover document.
+
+Stage Summary:
+- Recurring webDevReview job registered at 15-minute cadence.
