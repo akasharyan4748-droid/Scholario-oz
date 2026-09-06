@@ -29,11 +29,11 @@ export const libraryBooks = [
 ]
 
 export const issuedBooks = [
-  { id: 'ISS001', book: 'Wings of Fire', student: 'Aarav Sharma', admissionNo: 'DSO2025018', issueDate: '2025-11-12', dueDate: '2025-11-26', status: 'Overdue', fine: 20 },
-  { id: 'ISS002', book: 'The Jungle Book', student: 'Diya Patel', admissionNo: 'DSO2025002', issueDate: '2025-11-18', dueDate: '2025-12-02', status: 'Issued', fine: 0 },
-  { id: 'ISS003', book: 'Panchatantra Tales', student: 'Myra Iyer', admissionNo: 'DSO2025010', issueDate: '2025-11-20', dueDate: '2025-12-04', status: 'Issued', fine: 0 },
-  { id: 'ISS004', book: 'Encyclopedia of Science', student: 'Anika Desai', admissionNo: 'DSO2025014', issueDate: '2025-11-05', dueDate: '2025-11-19', status: 'Overdue', fine: 40 },
-  { id: 'ISS005', book: 'Akbar and Birbal', student: 'Kiara Rao', admissionNo: 'DSO2025012', issueDate: '2025-11-22', dueDate: '2025-12-06', status: 'Issued', fine: 0 },
+  { id: 'ISS001', book: 'Wings of Fire', student: 'Aarav Sharma', admissionNo: 'DSO2024058', issueDate: '2025-11-12', dueDate: '2025-11-26', status: 'Overdue', fine: 20 },
+  { id: 'ISS002', book: 'The Jungle Book', student: 'Aadhya Patel', admissionNo: 'DSO2024010', issueDate: '2025-11-18', dueDate: '2025-12-02', status: 'Issued', fine: 0 },
+  { id: 'ISS003', book: 'Panchatantra Tales', student: 'Myra Iyer', admissionNo: 'DSO2024052', issueDate: '2025-11-20', dueDate: '2025-12-04', status: 'Issued', fine: 0 },
+  { id: 'ISS004', book: 'Encyclopedia of Science', student: 'Anika Desai', admissionNo: 'DSO2024056', issueDate: '2025-11-05', dueDate: '2025-11-19', status: 'Overdue', fine: 40 },
+  { id: 'ISS005', book: 'Akbar and Birbal', student: 'Kiara Rao', admissionNo: 'DSO2024054', issueDate: '2025-11-22', dueDate: '2025-12-06', status: 'Issued', fine: 0 },
 ]
 
 // TRANSPORT
@@ -133,7 +133,7 @@ export const upcomingEvents = calendarEvents.slice(0, 5)
 
 // NOTIFICATIONS
 export const notifications = [
-  { id: 'N01', title: 'Fee payment received', description: '₹86,000 from Aadhya Menon', time: '2 min ago', type: 'fee', unread: true },
+  { id: 'N01', title: 'Fee payment received', description: '₹9,500 from Aadhya Menon', time: '2 min ago', type: 'fee', unread: true },
   { id: 'N02', title: 'New admission', description: 'Ira Malhotra joined Class 1-A', time: '18 min ago', type: 'admission', unread: true },
   { id: 'N03', title: 'Attendance alert', description: 'Class 7-B attendance below 85%', time: '1 hr ago', type: 'attendance', unread: true },
   { id: 'N04', title: 'Library book overdue', description: '4 books overdue in primary section', time: '2 hrs ago', type: 'library', unread: false },

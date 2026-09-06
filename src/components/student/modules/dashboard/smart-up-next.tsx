@@ -91,12 +91,6 @@ export function SmartUpNext({ onNavigate }: SmartUpNextProps) {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => toast.success('Schedule optimized!', { description: 'Your study plan has been refreshed.' })}
-            className="shrink-0 rounded-lg border border-border bg-card/60 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition-colors"
-          >
-            Optimize My Day
-          </button>
         </div>
 
         <div className="relative mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">

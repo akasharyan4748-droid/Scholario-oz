@@ -97,7 +97,7 @@ export interface Homework {
 
 export const homeworks: Homework[] = [
   { id: 'HW001', title: 'Addition & Subtraction — Worksheet 4', subject: 'Mathematics', className: 'Class 2-A', assignedBy: 'Rohan Mehta', assignedOn: '2024-11-26', dueDate: '2024-11-29', description: 'Complete the double-digit addition and subtraction worksheet. Show working for each problem.', status: 'Active', submissions: 14, total: 18 },
-  { id: 'HW002', title: 'Reading Comprehension — The Thirsty Crow', subject: 'English', className: 'Class 2-A', assignedBy: 'Deepa Menon', assignedOn: '2024-11-25', dueDate: '2024-11-28', description: 'Read the story and answer all 8 questions in complete sentences.', status: 'Active', submissions: 16, total: 18 },
+  { id: 'HW002', title: 'Reading Comprehension — The Thirsty Crow', subject: 'English', className: 'Class 2-A', assignedBy: 'Priya Nair', assignedOn: '2024-11-25', dueDate: '2024-11-28', description: 'Read the story and answer all 8 questions in complete sentences.', status: 'Active', submissions: 16, total: 18 },
   { id: 'HW003', title: 'Living & Non-Living Things — Chart', subject: 'Science', className: 'Class 2-A', assignedBy: 'Kavita Joshi', assignedOn: '2024-11-22', dueDate: '2024-11-27', description: 'Make a colourful chart showing 5 living and 5 non-living things around you.', status: 'Active', submissions: 11, total: 18 },
   { id: 'HW004', title: 'Hindi Varnamala Practice', subject: 'Hindi', className: 'Class 2-A', assignedBy: 'Meera Krishnan', assignedOn: '2024-11-20', dueDate: '2024-11-24', description: 'Write each letter of the Hindi varnamala 5 times in your notebook.', status: 'Closed', submissions: 18, total: 18 },
   { id: 'HW005', title: 'My Family — Drawing', subject: 'Art & Craft', className: 'Class 2-A', assignedBy: 'Faisal Ahmed', assignedOn: '2024-11-24', dueDate: '2024-11-30', description: 'Draw a picture of your family and label each member.', status: 'Active', submissions: 9, total: 18 },
@@ -124,6 +124,9 @@ export const assignments: Assignment[] = [
 ]
 
 // Timetable — Class 2-A
+// STU-F — teacher names match the C05 subject-teacher map (students-store
+// seed): Priya Nair English, Meera Krishnan Hindi, Kavita Joshi Science,
+// Rohan Mehta Maths/CS, Vikram Singh Social Studies, Faisal Ahmed Arts.
 export interface Period {
   time: string
   subject: string
@@ -134,7 +137,7 @@ export interface Period {
 export const weeklyTimetable: Record<string, Period[]> = {
   Monday: [
     { time: '08:00–08:45', subject: 'Assembly', teacher: '—', room: 'Ground' },
-    { time: '08:45–09:30', subject: 'English', teacher: 'Deepa Menon', room: '2A' },
+    { time: '08:45–09:30', subject: 'English', teacher: 'Priya Nair', room: '2A' },
     { time: '09:30–10:15', subject: 'Mathematics', teacher: 'Rohan Mehta', room: '2A' },
     { time: '10:15–10:30', subject: 'Break', teacher: '—', room: '—' },
     { time: '10:30–11:15', subject: 'Science', teacher: 'Kavita Joshi', room: 'Sci-Lab' },
@@ -146,7 +149,7 @@ export const weeklyTimetable: Record<string, Period[]> = {
   Tuesday: [
     { time: '08:00–08:45', subject: 'Assembly', teacher: '—', room: 'Ground' },
     { time: '08:45–09:30', subject: 'Mathematics', teacher: 'Rohan Mehta', room: '2A' },
-    { time: '09:30–10:15', subject: 'English', teacher: 'Deepa Menon', room: '2A' },
+    { time: '09:30–10:15', subject: 'English', teacher: 'Priya Nair', room: '2A' },
     { time: '10:15–10:30', subject: 'Break', teacher: '—', room: '—' },
     { time: '10:30–11:15', subject: 'Social Studies', teacher: 'Vikram Singh', room: '2A' },
     { time: '11:15–12:00', subject: 'Computer Science', teacher: 'Arjun Kapoor', room: 'Comp-Lab' },
@@ -159,7 +162,7 @@ export const weeklyTimetable: Record<string, Period[]> = {
     { time: '08:45–09:30', subject: 'Hindi', teacher: 'Meera Krishnan', room: '2A' },
     { time: '09:30–10:15', subject: 'Mathematics', teacher: 'Rohan Mehta', room: '2A' },
     { time: '10:15–10:30', subject: 'Break', teacher: '—', room: '—' },
-    { time: '10:30–11:15', subject: 'English', teacher: 'Deepa Menon', room: '2A' },
+    { time: '10:30–11:15', subject: 'English', teacher: 'Priya Nair', room: '2A' },
     { time: '11:15–12:00', subject: 'Science', teacher: 'Kavita Joshi', room: 'Sci-Lab' },
     { time: '12:00–12:45', subject: 'Lunch', teacher: '—', room: '—' },
     { time: '12:45–01:30', subject: 'Art & Craft', teacher: 'Faisal Ahmed', room: 'Art-Room' },
@@ -167,7 +170,7 @@ export const weeklyTimetable: Record<string, Period[]> = {
   ],
   Thursday: [
     { time: '08:00–08:45', subject: 'Assembly', teacher: '—', room: 'Ground' },
-    { time: '08:45–09:30', subject: 'English', teacher: 'Deepa Menon', room: '2A' },
+    { time: '08:45–09:30', subject: 'English', teacher: 'Priya Nair', room: '2A' },
     { time: '09:30–10:15', subject: 'Mathematics', teacher: 'Rohan Mehta', room: '2A' },
     { time: '10:15–10:30', subject: 'Break', teacher: '—', room: '—' },
     { time: '10:30–11:15', subject: 'Hindi', teacher: 'Meera Krishnan', room: '2A' },
@@ -181,7 +184,7 @@ export const weeklyTimetable: Record<string, Period[]> = {
     { time: '08:45–09:30', subject: 'Mathematics', teacher: 'Rohan Mehta', room: '2A' },
     { time: '09:30–10:15', subject: 'Science', teacher: 'Kavita Joshi', room: 'Sci-Lab' },
     { time: '10:15–10:30', subject: 'Break', teacher: '—', room: '—' },
-    { time: '10:30–11:15', subject: 'English', teacher: 'Deepa Menon', room: '2A' },
+    { time: '10:30–11:15', subject: 'English', teacher: 'Priya Nair', room: '2A' },
     { time: '11:15–12:00', subject: 'Hindi', teacher: 'Meera Krishnan', room: '2A' },
     { time: '12:00–12:45', subject: 'Lunch', teacher: '—', room: '—' },
     { time: '12:45–01:30', subject: 'Music', teacher: 'Lakshmi Venkat', room: 'Music-Room' },

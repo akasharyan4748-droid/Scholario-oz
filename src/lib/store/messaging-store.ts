@@ -265,8 +265,8 @@ const SEED_CONVERSATIONS: Conversation[] = [
   { id: 'C08', name: 'Admin Office', avatar: 'AO', role: 'Front Office', type: 'staff', lastMessage: '3 new admission enquiries logged today.', lastTimestamp: new Date(Date.now() - 2 * 24 * 60 * 60000).toISOString(), unread: 0, starred: false, archived: false, urgent: false },
 
   // Parent conversations — linked to students
-  { id: 'C04', name: 'Vikram Sharma', avatar: 'VS', role: 'Parent · Aarav Sharma', type: 'parent', lastMessage: 'When is the next parent-teacher meeting?', lastTimestamp: new Date(Date.now() - 3 * 60 * 60000).toISOString(), unread: 0, starred: false, archived: false, urgent: false, studentName: 'Aarav Sharma', studentClass: 'Class 9-A' },
-  { id: 'C07', name: 'Nikhil Patel', avatar: 'NP', role: 'Parent · Diya Patel', type: 'parent', lastMessage: 'Diya will be late today due to a doctor appointment.', lastTimestamp: new Date(Date.now() - 26 * 60 * 60000).toISOString(), unread: 0, starred: false, archived: false, urgent: false, studentName: 'Diya Patel', studentClass: 'Class 9-A' },
+  { id: 'C04', name: 'Vikram Sharma', avatar: 'VS', role: 'Parent · Aarav Sharma', type: 'parent', lastMessage: 'When is the next parent-teacher meeting?', lastTimestamp: new Date(Date.now() - 3 * 60 * 60000).toISOString(), unread: 0, starred: false, archived: false, urgent: false, studentName: 'Aarav Sharma', studentClass: 'Class 2-A' },
+  { id: 'C07', name: 'Sriram Iyer', avatar: 'SI', role: 'Parent · Myra Iyer', type: 'parent', lastMessage: 'Myra will be late today due to a doctor appointment.', lastTimestamp: new Date(Date.now() - 26 * 60 * 60000).toISOString(), unread: 0, starred: false, archived: false, urgent: false, studentName: 'Myra Iyer', studentClass: 'Class 2-A' },
 
   // Group conversations — linked to class structure (groupId linked below).
   // memberCount / role are kept in sync with the Group.memberRefs length at
@@ -857,7 +857,7 @@ export const useMessagingStore = create<MessagingState>()(
     {
       name: 'scholario-messaging-v1',
       storage: createTenantScopedStorage('scholario-messaging-v1'),
-      version: 1,
+      version: 2,
       // DATA slices only — plain JSON (arrays, records, strings). UI state
       // (active folder/label/conversation, search) and actions excluded.
       partialize: (s) => ({

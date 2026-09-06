@@ -19,5 +19,7 @@ export type {
   House,
   PromotionRecord,
   TransferRecord,
+  StudentPosition,
+  StudentPositionKey,
   StudentsState,
 } from './types'

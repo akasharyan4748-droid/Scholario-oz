@@ -1,15 +1,38 @@
 'use client'
 
-import { Award, Calendar, Cake, Droplet, FileText, IdCard, User } from 'lucide-react'
+import { useMemo } from 'react'
+import { Award, Calendar, Cake, Crown, Droplet, FileText, IdCard, User } from 'lucide-react'
 import { formatINR, formatDate } from '@/lib/format'
-import type { StudentRecord } from '@/lib/store/students-store'
+import { useStudentsStore, type StudentRecord } from '@/lib/store/students-store'
+import { POSITION_DEFS } from '@/lib/student-positions'
 import { Section, InfoRow } from './shared'
 
 type Props = { student: StudentRecord }
 
 export function OverviewTab({ student }: Props) {
+  // Active class responsibilities (Class Captain / Monitor …) — derived from
+  // the persisted assignment, never hardcoded (spec §24). Raw array +
+  // useMemo (zustand v5 selector stability).
+  const allPositions = useStudentsStore((s) => s.studentPositions)
+  const activePositions = useMemo(
+    () => allPositions.filter((p) => p.active && p.studentId === student.id),
+    [allPositions, student.id],
+  )
   return (
     <div className="space-y-4">
+      {activePositions.length > 0 && (
+        <Section title="Class Responsibility">
+          {activePositions.map((p) => (
+            <div key={p.id} className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <Crown className="h-4 w-4 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{POSITION_DEFS[p.key]?.title ?? p.key} · {p.className}-{p.section}</p>
+                <p className="text-[11px] text-muted-foreground">Since {formatDate(p.assignedOn)} · appointed by {p.assignedByName}</p>
+              </div>
+            </div>
+          ))}
+        </Section>
+      )}
       <Section title="Personal Information">
         <div className="grid grid-cols-2 gap-2">
           <InfoRow icon={<Cake className="h-3.5 w-3.5" />} label="DOB" value={formatDate(student.dob)} />

@@ -36,7 +36,6 @@ const roleProfiles: Record<Role, SessionUser> = {
     id: 'EMP-001',
     email: 'principal@scholario.in',
     teacherId: 'T-014',
-    studentId: 'STU-2024-018',
   },
   teacher: {
     role: 'teacher',
@@ -50,9 +49,9 @@ const roleProfiles: Record<Role, SessionUser> = {
     role: 'student',
     name: 'Aarav Sharma',
     avatar: 'AS',
-    id: 'STU-2024-018',
-    email: 'aarav.sharma@scholario.in',
-    studentId: 'STU-2024-018',
+    id: 'STU-58',
+    email: 'aarav.sharma@greenwood.edu.in',
+    studentId: 'STU-58',
   },
   superadmin: {
     role: 'superadmin',
@@ -89,6 +88,9 @@ export const useAuth = create<AuthState>()(
     }),
     {
       name: 'scholario-auth',
+      // v1 — re-key student identity to the canonical STU-58 (fresh sessions
+      // after the roster unification; stale persisted users are discarded).
+      version: 1,
       onRehydrateStorage: () => (state) => {
         useAuth.setState({ hydrated: true })
         if (state) state.setHydrated()

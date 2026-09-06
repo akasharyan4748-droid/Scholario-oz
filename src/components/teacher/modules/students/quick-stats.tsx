@@ -2,11 +2,12 @@
 
 import { motion } from 'framer-motion'
 import { GlassCard } from '@/components/shared/ui'
-import { students } from '@/lib/mock/students'
 import { cn } from '@/lib/utils'
+import { useClass2AStudents } from './data'
 
-// Quick-stats strip — 4 mini KPI tiles derived from the students mock dataset.
+// Quick-stats strip — 4 mini KPI tiles derived from the canonical class roster.
 export function QuickStats() {
+  const students = useClass2AStudents()
   const stats = [
     { label: 'Total Students', value: students.length, color: 'emerald', sub: 'Class 2-A' },
     {

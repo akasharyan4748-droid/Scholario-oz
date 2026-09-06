@@ -1,30 +1,46 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { useMemo } from 'react'
 import {
   User, Phone, Mail, MapPin, Calendar, Droplet, Heart, School,
-  Bus, BookMarked, Edit3, GraduationCap, FileText, ShieldCheck,
+  Bus, BookMarked, GraduationCap, FileText, ShieldCheck,
 } from 'lucide-react'
 import { GlassCard, SectionHeading, StatusBadge, GradientAvatar } from '@/components/shared/ui'
-import { getStudentById } from '@/lib/mock/students'
+import { useStudentsStore } from '@/lib/store/students-store'
+import { POSITION_DEFS } from '@/lib/student-positions'
+import { DEMO_STUDENT_ID } from './applications/student'
 import { formatDate } from '@/lib/format'
-import { toast } from 'sonner'
+import { Crown } from 'lucide-react'
 
 export function ProfileModule() {
-  const s = getStudentById('STU-2024-018')!
+  // STU-B — the canonical students-store record (one roster, every role).
+  const s = useStudentsStore((st) => st.students.find((x) => x.id === DEMO_STUDENT_ID))
+  // Display-only identities derived from the roster number (the canonical
+  // record carries transportRoute; the library id follows the roster order).
+  const libraryId = s ? `LIB-${1000 + Number(s.id.replace('STU-', ''))}` : '—'
+  const email = 'aarav.sharma@greenwood.edu.in'
+
+  if (!s) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-label="Loading profile" />
+      </div>
+    )
+  }
 
   const infoCards = [
-    { label: 'Admission No', value: s.admissionNo, icon: <FileText className="h-4 w-4" />, color: 'from-violet-400 to-purple-500' },
-    { label: 'Library ID', value: s.libraryId, icon: <BookMarked className="h-4 w-4" />, color: 'from-cyan-400 to-sky-500' },
-    { label: 'Transport ID', value: s.transportId ?? '—', icon: <Bus className="h-4 w-4" />, color: 'from-emerald-400 to-teal-500' },
-    { label: 'Roll Number', value: `#${s.rollNo}`, icon: <User className="h-4 w-4" />, color: 'from-amber-400 to-orange-500' },
+    { label: 'Admission No', value: s?.admissionNo ?? '—', icon: <FileText className="h-4 w-4" />, color: 'from-violet-400 to-purple-500' },
+    { label: 'Library ID', value: libraryId, icon: <BookMarked className="h-4 w-4" />, color: 'from-cyan-400 to-sky-500' },
+    { label: 'Transport Route', value: s?.transportRoute ?? 'Not opted in', icon: <Bus className="h-4 w-4" />, color: 'from-emerald-400 to-teal-500' },
+    { label: 'Roll Number', value: s ? `#${s.rollNo}` : '—', icon: <User className="h-4 w-4" />, color: 'from-amber-400 to-orange-500' },
   ]
 
   const personalInfo = [
-    { label: 'Date of Birth', value: formatDate(s.dob), icon: <Calendar className="h-4 w-4" /> },
-    { label: 'Gender', value: s.gender, icon: <User className="h-4 w-4" /> },
-    { label: 'Blood Group', value: s.bloodGroup, icon: <Droplet className="h-4 w-4" /> },
-    { label: 'Admission Date', value: formatDate(s.admissionDate), icon: <Calendar className="h-4 w-4" /> },
+    { label: 'Date of Birth', value: s ? formatDate(s.dob) : '—', icon: <Calendar className="h-4 w-4" /> },
+    { label: 'Gender', value: s?.gender ?? '—', icon: <User className="h-4 w-4" /> },
+    { label: 'Blood Group', value: s?.bloodGroup ?? '—', icon: <Droplet className="h-4 w-4" /> },
+    { label: 'Admission Date', value: s ? formatDate(s.admissionDate) : '—', icon: <Calendar className="h-4 w-4" /> },
   ]
 
   return (
@@ -33,14 +49,6 @@ export function ProfileModule() {
         title="My Profile"
         subtitle="Personal & academic information"
         icon={<User className="h-5 w-5" />}
-        action={
-          <button
-            onClick={() => toast.info('Profile edit not available in demo', { description: 'Contact the school office for any updates to your information.' })}
-            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-md hover:shadow-lg transition-shadow"
-          >
-            <Edit3 className="h-3.5 w-3.5" /> Edit Profile
-          </button>
-        }
       />
 
       {/* Profile header card */}
@@ -75,7 +83,9 @@ export function ProfileModule() {
                 <span className="text-border">·</span>
                 <span>Roll #{s.rollNo}</span>
                 <span className="text-border">·</span>
-                <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> {s.email}</span>
+                <span>{s.houseName} House</span>
+                <span className="text-border">·</span>
+                <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> {email}</span>
               </p>
             </div>
           </div>
@@ -161,7 +171,7 @@ export function ProfileModule() {
                 <Mail className="h-3.5 w-3.5 text-cyan-500" />
                 <p className="text-[11px] text-muted-foreground">Email</p>
               </div>
-              <p className="text-sm font-semibold truncate">{s.email}</p>
+              <p className="text-sm font-semibold truncate">{s.guardianEmail}</p>
             </motion.div>
           </div>
         </GlassCard>
@@ -202,6 +212,9 @@ export function ProfileModule() {
         </GlassCard>
       </div>
 
+      {/* Class responsibility (Class Captain / Monitor — only while active) */}
+      <ClassResponsibilitySection />
+
       {/* Academic summary */}
       <GlassCard className="p-3 sm:p-4 lg:p-5">
         <h3 className="font-semibold text-sm mb-4 flex items-center gap-2">
@@ -234,10 +247,50 @@ export function ProfileModule() {
           <div className="rounded-xl border border-border bg-card/40 p-3">
             <p className="text-[11px] text-muted-foreground mb-1">Pending Fees</p>
             <p className="font-display text-xl font-bold text-rose-600">₹{(s.feeTotal - s.feePaid).toLocaleString('en-IN')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Due by 15 Dec 2024</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Due this term</p>
           </div>
         </div>
       </GlassCard>
     </div>
+  )
+}
+
+/** Class responsibility card — only while the student holds an ACTIVE
+ *  position (Class Captain / Monitor). Derived from the persisted
+ *  assignment, never hardcoded (spec §24). */
+function ClassResponsibilitySection() {
+  const allPositions = useStudentsStore((st) => st.studentPositions)
+  const positions = useMemo(
+    () => allPositions.filter((p) => p.active && p.studentId === DEMO_STUDENT_ID),
+    [allPositions],
+  )
+  if (positions.length === 0) return null
+  return (
+    <GlassCard className="p-3 sm:p-4 lg:p-5 border-primary/25">
+      <h3 className="font-semibold text-sm mb-3.5 flex items-center gap-2">
+        <Crown className="h-4 w-4 text-primary" /> Class Responsibility
+      </h3>
+      <div className="space-y-2.5">
+        {positions.map((p) => (
+          <motion.div
+            key={p.id}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-3"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md">
+              <Crown className="h-4.5 w-4.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">{POSITION_DEFS[p.key]?.title ?? p.key} · {p.className}-{p.section}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Since {formatDate(p.assignedOn)} · appointed by {p.assignedByName}
+              </p>
+            </div>
+            <StatusBadge status="Active" variant="success" dot />
+          </motion.div>
+        ))}
+      </div>
+    </GlassCard>
   )
 }

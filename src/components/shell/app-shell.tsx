@@ -271,6 +271,12 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
       onNavigate('applications')
       return
     }
+    // Students have no 'communication' module — route their bell to the
+    // dedicated student Notifications module (was a dead-end key).
+    if (role === 'student') {
+      onNavigate('notifications')
+      return
+    }
     onNavigate('communication')
   }
 

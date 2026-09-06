@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/format'
 import type { Homework } from '@/lib/mock/academics'
+import type { HomeworkSubmission } from '@/lib/store/student-homework-store'
 import { subjectColors } from './data'
 
 interface ActiveHomeworkListProps {
   items: Homework[]
-  submitted: Record<string, boolean>
+  submitted: Record<string, HomeworkSubmission>
   onSubmit: (id: string) => void
 }
 
@@ -24,7 +25,8 @@ export function ActiveHomeworkList({ items, submitted, onSubmit }: ActiveHomewor
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         {items.map((h, i) => {
           const sc = subjectColors[h.subject] ?? subjectColors.English
-          const isSubmitted = !!submitted[h.id]
+          const submission = submitted[h.id]
+          const isSubmitted = !!submission
           const dueDate = new Date(h.dueDate)
           const today = new Date('2024-11-27')
           const daysLeft = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
@@ -74,7 +76,7 @@ export function ActiveHomeworkList({ items, submitted, onSubmit }: ActiveHomewor
                   </div>
                   {isSubmitted ? (
                     <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
-                      <CheckCircle2 className="h-3 w-3" /> Done
+                      <CheckCircle2 className="h-3 w-3" /> Done · {formatDate(submission.submittedOn)}
                     </Badge>
                   ) : (
                     <Button

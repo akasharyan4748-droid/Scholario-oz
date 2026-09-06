@@ -22,7 +22,7 @@ import { school } from '@/lib/mock/school'
 import { formatDate } from '@/lib/format'
 import { toast } from 'sonner'
 
-const STUDENT_ID = 'STU-2024-018'
+const STUDENT_ID = 'STU-58'
 
 function statusVariant(status: string): 'success' | 'primary' | 'neutral' {
   if (status === 'Issued' || status === 'Downloaded' || status === 'Printed') return 'success'
@@ -75,7 +75,7 @@ export function MyCertificatesModule() {
 
   const mine = useMemo(
     () => documents
-      .filter((d) => d.studentId === STUDENT_ID || d.admissionNo === 'DSO2024018')
+      .filter((d) => d.studentId === STUDENT_ID || d.admissionNo === 'DSO2024058')
       .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt)),
     [documents],
   )

@@ -3,7 +3,7 @@
 // Preserved exports (do not change behavior):
 //   - attendanceOverview (school-wide today + weekTrend + monthly + byClass)
 //   - class2AAttendance (today's Class 2-A roster)
-//   - studentAttendanceCalendar (single student's Nov 2024 history)
+//   - studentAttendanceCalendar (single student's Nov–Dec 2025 history)
 //
 // NEW exports (Phase 2):
 //   - classSections (every class section with its today breakdown + roster)
@@ -75,30 +75,43 @@ export const class2AAttendance = [
   { rollNo: '18', name: 'Aarav Sharma', status: 'present' as const },
 ]
 
-// Student attendance calendar (for student view) — Aarav Sharma STU-2024-018
+// Student attendance calendar (for student view) — Aarav Sharma STU-58
+// (Class 2-A, roll 18, att 96%).
+//
+// STU-F re-key: 25 school days (weekdays only, weekends skipped) spanning
+// 2025-11-06 → 2025-12-10 — the window fully covers Nov 10 → Dec 10 and
+// ends on the demo "today" (Wed 2025-12-10). 23 present + 1 late + 1 absent
+// → (23+1)/25 = 96%, matching STU-58.attendance exactly. No holidays in
+// this window (the 'holiday' status variant stays valid in the type, just
+// unused here). Weekday-only records between the literal Nov 10 → Dec 10
+// endpoints number 23, so the start moves 2 school days earlier to hit the
+// mandated 25-record/96% invariants.
 export const studentAttendanceCalendar = [
-  { date: '2024-11-01', status: 'present' },
-  { date: '2024-11-02', status: 'holiday' },
-  { date: '2024-11-04', status: 'present' },
-  { date: '2024-11-05', status: 'present' },
-  { date: '2024-11-06', status: 'present' },
-  { date: '2024-11-07', status: 'present' },
-  { date: '2024-11-08', status: 'present' },
-  { date: '2024-11-11', status: 'present' },
-  { date: '2024-11-12', status: 'late' },
-  { date: '2024-11-13', status: 'present' },
-  { date: '2024-11-14', status: 'present' },
-  { date: '2024-11-15', status: 'present' },
-  { date: '2024-11-18', status: 'present' },
-  { date: '2024-11-19', status: 'absent' },
-  { date: '2024-11-20', status: 'present' },
-  { date: '2024-11-21', status: 'present' },
-  { date: '2024-11-22', status: 'present' },
-  { date: '2024-11-25', status: 'present' },
-  { date: '2024-11-26', status: 'present' },
-  { date: '2024-11-27', status: 'present' },
-  { date: '2024-11-28', status: 'present' },
-  { date: '2024-11-29', status: 'present' },
+  { date: '2025-11-06', status: 'present' },
+  { date: '2025-11-07', status: 'present' },
+  { date: '2025-11-10', status: 'present' },
+  { date: '2025-11-11', status: 'present' },
+  { date: '2025-11-12', status: 'present' },
+  { date: '2025-11-13', status: 'present' },
+  { date: '2025-11-14', status: 'present' },
+  { date: '2025-11-17', status: 'present' },
+  { date: '2025-11-18', status: 'absent' },
+  { date: '2025-11-19', status: 'present' },
+  { date: '2025-11-20', status: 'present' },
+  { date: '2025-11-21', status: 'present' },
+  { date: '2025-11-24', status: 'present' },
+  { date: '2025-11-25', status: 'present' },
+  { date: '2025-11-26', status: 'present' },
+  { date: '2025-11-27', status: 'present' },
+  { date: '2025-11-28', status: 'present' },
+  { date: '2025-12-01', status: 'present' },
+  { date: '2025-12-02', status: 'present' },
+  { date: '2025-12-03', status: 'present' },
+  { date: '2025-12-04', status: 'late' },
+  { date: '2025-12-05', status: 'present' },
+  { date: '2025-12-08', status: 'present' },
+  { date: '2025-12-09', status: 'present' },
+  { date: '2025-12-10', status: 'present' },
 ]
 
 /* ──────────────────────────────────────────────────────────────────────

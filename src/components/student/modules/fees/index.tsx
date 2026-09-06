@@ -1,30 +1,19 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { IndianRupee, Lock, Wallet } from 'lucide-react'
 import { GlassCard, SectionHeading } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
-import { getStudentById } from '@/lib/mock/students'
 import { formatINR } from '@/lib/format'
 import { toast } from 'sonner'
-import {
-  initialRenewalReceiptData,
-  type PayStage,
-  type RenewalStatus,
-  type RenewalPayType,
-  type RenewalReceiver,
-  type RenewalStage,
-  type RenewalReceiptData,
-} from './data'
-import { RenewalCard } from './renewal-card'
+import { type PayStage } from './data'
 import { KpiSection } from './kpi-section'
 import { OutstandingSection } from './outstanding-section'
 import { PaymentHistory } from './payment-history'
 import { PaymentDialog } from './payment-dialog'
-import { RenewalDialog } from './renewal-dialog'
 // STRUCT-REV — mid-session fee-structure acknowledgement (student side).
 import { FeeRevisionApprovalCard } from './fee-revision-card'
-import { resolveCanonicalStudent } from '../applications/student'
+import { DEMO_STUDENT_ID } from '../applications/student'
 import { useStudentsStore } from '@/lib/store/students-store'
 // PAY-REWORK-1 — real payment submission into the canonical fee ledger.
 import { useFeeStore, type FeeTransaction } from '@/lib/store/fee-store'
@@ -36,23 +25,39 @@ import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { downloadReceiptA5 } from '@/components/principal/modules/fees/fee-receipt-a5'
 
 export function FeesModule() {
-  const student = getStudentById('STU-2024-018')!
-  // STRUCT-REV — canonical twin id (the students-store record that fee
-  // revisions acknowledge against). Roster is static in the demo session.
-  const canonicalStudentId = useMemo(() => {
-    const all = useStudentsStore.getState().students
-    return (all.find((s) => s.admissionNo === student.admissionNo && s.status === 'Active')
-      ?? resolveCanonicalStudent(all))?.id ?? ''
-  }, [])
-  const totalPaid = student.feePaid
-  const totalPending = student.feeTotal - student.feePaid
-  const totalFee = student.feeTotal
-  const paidPct = Math.round((totalPaid / totalFee) * 100)
+  // STU-B — the demo student IS the canonical record (STU-58, Class 2-A).
+  // Every fee figure on this page derives from the one roster, at the
+  // fee-engine scale (₹9,500 total: ₹3,000 tuition + ₹500 management +
+  // ₹6,000 transport).
+  const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
+  const canonicalStudentId = student?.id ?? ''
+  const studentEmail = 'aarav.sharma@greenwood.edu.in'
+  const totalFee = student?.feeTotal ?? 0
+  // ONE ledger — the student's history is the fee store's transaction list
+  // for this student (seed TXN020 + anything the student pays right here).
+  // (Raw array + useMemo — zustand v5 selectors must return stable refs.)
+  const allTransactions = useFeeStore((s) => s.transactions)
+  const myTransactions = useMemo(
+    () => allTransactions.filter((t) => t.studentId === DEMO_STUDENT_ID),
+    [allTransactions],
+  )
+  // KPIs derive LIVE from the ledger (a payment made here counts
+  // immediately; 'Under Verification' submissions are not paid yet).
+  const totalPaid = myTransactions
+    .filter((t) => t.status === 'Success')
+    .reduce((sum, t) => sum + t.amount, 0)
+  const totalPending = Math.max(0, totalFee - totalPaid)
+  const paidPct = totalFee > 0 ? Math.round((totalPaid / totalFee) * 100) : 0
 
   const [payOpen, setPayOpen] = useState(false)
   const [stage, setStage] = useState<PayStage>('form')
   const [method, setMethod] = useState('upi')
   const [paidAmount, setPaidAmount] = useState(totalPending)
+  // Refresh the default amount every time the dialog opens (a previous
+  // payment may have changed the outstanding balance).
+  useEffect(() => {
+    if (payOpen) setPaidAmount(Math.max(0, totalFee - totalPaid))
+  }, [payOpen])
   // PAY-REWORK-1 — the canonical acknowledgement of THIS submission.
   const [submittedRef, setSubmittedRef] = useState('')
   const [submittedTxn, setSubmittedTxn] = useState<FeeTransaction | null>(null)
@@ -60,40 +65,6 @@ export function FeesModule() {
   const receiptSettings = useFeeStore((s) => s.receiptSettings)
   const gatewayConfig = useFeeStore((s) => s.gatewayConfig)
   const addAlert = useLiveAlerts((s) => s.addAlert)
-
-  // New Academic Session Renewal State
-  const [renewalStatus, setRenewalStatus] = useState<RenewalStatus>('open')
-  const [renewalDialogOpen, setRenewalDialogOpen] = useState(false)
-  const [renewalPayType, setRenewalPayType] = useState<RenewalPayType>('online')
-  const [renewalReceiver, setRenewalReceiver] = useState<RenewalReceiver>('Ananya Sharma (Class Teacher)')
-  const [renewalStage, setRenewalStage] = useState<RenewalStage>('form')
-  const [renewalReceiptData, setRenewalReceiptData] = useState<RenewalReceiptData>(initialRenewalReceiptData)
-
-  const handleProcessRenewal = () => {
-    setRenewalStage('processing')
-    setTimeout(() => {
-      const modeText = renewalPayType === 'online' ? `Online (${method.toUpperCase()})` : 'Cash Collection'
-      const statusText = renewalPayType === 'online' ? 'Confirmed & Promoted' : 'Pending Acceptance by ' + renewalReceiver
-
-      setRenewalReceiptData({
-        receiptNo: `RCP-2025-RNW-${Math.floor(1000 + Math.random() * 9000)}`,
-        txnId: `TXN2025-${Math.floor(100000 + Math.random() * 900000)}`,
-        date: new Date().toISOString().split('T')[0],
-        amount: 65000,
-        mode: modeText,
-        receiver: renewalPayType === 'online' ? 'Online Gateway' : renewalReceiver,
-        status: statusText,
-      })
-
-      if (renewalPayType === 'cash') {
-        setRenewalStatus('pending_cash')
-      } else {
-        setRenewalStatus('approved')
-      }
-
-      setRenewalStage('receipt')
-    }, 2000)
-  }
 
   // PAY-REWORK-1 + final spec §3 — the student/guardian submission lands in
   // the ONE fee ledger. TWO rails, honestly differentiated:
@@ -125,7 +96,7 @@ export function FeesModule() {
         mode: payMode,
         feeHead: 'Tuition',
         purpose: `Online fee payment ${viaGateway ? `via ${gatewayConfig?.provider} gateway` : 'submitted by student'} (${method.toUpperCase()})`,
-        collectedBy: student.name,
+        collectedBy: student?.name ?? 'Student',
         collectorRole: 'self',
         referenceNo: reference || undefined,
         ...(viaGateway
@@ -146,7 +117,7 @@ export function FeesModule() {
             id: `alert-${Date.now()}`,
             severity: 'low',
             title: 'Gateway payment received',
-            desc: `${student.name} paid ${formatINR(paidAmount)} via ${gatewayConfig?.provider ?? 'gateway'} (${payMode}) · auto-confirmed, receipt ${result.transaction.receiptNo}.`,
+            desc: `${student?.name ?? 'Student'} paid ${formatINR(paidAmount)} via ${gatewayConfig?.provider ?? 'gateway'} (${payMode}) · auto-confirmed, receipt ${result.transaction.receiptNo}.`,
             color: 'emerald',
             navKey: 'fees',
             isNew: true,
@@ -158,7 +129,7 @@ export function FeesModule() {
             id: `alert-${Date.now()}`,
             severity: 'high',
             title: 'Manual payment awaiting verification',
-            desc: `${student.name} submitted ${formatINR(paidAmount)} via ${payMode} · ref ${reference || '—'}.`,
+            desc: `${student?.name ?? 'Student'} submitted ${formatINR(paidAmount)} via ${payMode} · ref ${reference || '—'}.`,
             color: 'amber',
             navKey: 'fees',
             isNew: true,
@@ -212,25 +183,11 @@ export function FeesModule() {
     }, 200)
   }
 
-  const handleSimulateAccept = () => {
-    setRenewalStatus('approved')
-    setRenewalReceiptData((prev) => ({
-      ...prev,
-      status: 'Cash Received & Renewal Confirmed',
-    }))
-    toast.success('Simulated Acceptance: Cash Received by Staff!')
-  }
-
-  const handleOpenRenewalDialog = () => {
-    setRenewalStage('form')
-    setRenewalDialogOpen(true)
-  }
-
   return (
     <div className="space-y-6">
       <SectionHeading
         title="My Fees"
-        subtitle="Academic Year 2024–2025 · Demo School of Scholario"
+        subtitle="Academic Year 2026–2027 · Demo School of Scholario"
         icon={<IndianRupee className="h-5 w-5" />}
         action={
           totalPending > 0 && onlinePaymentsEnabled && (
@@ -248,13 +205,12 @@ export function FeesModule() {
           fee-structure revision affecting this student's class. */}
       <FeeRevisionApprovalCard canonicalStudentId={canonicalStudentId} />
 
-      <RenewalCard status={renewalStatus} onOpenDialog={handleOpenRenewalDialog} />
-
       <KpiSection
         totalFee={totalFee}
         totalPaid={totalPaid}
         totalPending={totalPending}
         paidPct={paidPct}
+        txnCount={myTransactions.length}
       />
 
       {onlinePaymentsEnabled ? (
@@ -288,7 +244,7 @@ export function FeesModule() {
         </GlassCard>
       )}
 
-      <PaymentHistory totalPaid={totalPaid} />
+      <PaymentHistory totalPaid={totalPaid} transactions={myTransactions} receiptSettings={receiptSettings} />
 
       {onlinePaymentsEnabled && (
         <PaymentDialog
@@ -298,11 +254,11 @@ export function FeesModule() {
           paidAmount={paidAmount}
           totalPending={totalPending}
           student={{
-            name: student.name,
-            admissionNo: student.admissionNo,
-            email: student.email,
-            className: student.className,
-            section: student.section,
+            name: student?.name ?? 'Aarav Sharma',
+            admissionNo: student?.admissionNo ?? 'DSO2024058',
+            email: studentEmail,
+            className: student?.className ?? 'Class 2',
+            section: student?.section ?? 'A',
           }}
           reference={submittedRef}
           receiptNo={submittedTxn?.receiptNo}
@@ -315,22 +271,6 @@ export function FeesModule() {
           onComplete={handlePaidComplete}
         />
       )}
-
-      <RenewalDialog
-        open={renewalDialogOpen}
-        stage={renewalStage}
-        status={renewalStatus}
-        payType={renewalPayType}
-        receiver={renewalReceiver}
-        receiptData={renewalReceiptData}
-        method={method}
-        student={{ name: student.name, admissionNo: student.admissionNo }}
-        onOpenChange={setRenewalDialogOpen}
-        onPayTypeChange={setRenewalPayType}
-        onReceiverChange={setRenewalReceiver}
-        onProcess={handleProcessRenewal}
-        onSimulateAccept={handleSimulateAccept}
-      />
     </div>
   )
 }

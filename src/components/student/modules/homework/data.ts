@@ -8,7 +8,6 @@ export const subjectColors: Record<string, { bg: string; text: string; gradient:
   'Art & Craft': { bg: 'bg-fuchsia-500/10', text: 'text-fuchsia-600 dark:text-fuchsia-400', gradient: 'from-fuchsia-400 to-pink-500' },
 }
 
-// Track submission status per homework id
-export const initialSubmitted: Record<string, boolean> = {
-  HW004: true, // Closed — Hindi
-}
+// STU-F — submission status now lives in the persisted
+// student-homework-store (src/lib/store/student-homework-store.ts);
+// the retired local initialSubmitted map reset on every unmount.

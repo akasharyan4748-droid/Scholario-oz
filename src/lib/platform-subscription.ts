@@ -40,8 +40,8 @@ let globalPlatformConfig: PlatformConfig = {
 
 // In-memory subscription database
 const subscriptionStore: Record<string, StudentSubscriptionRecord> = {
-  'STU-2024-018': {
-    studentId: 'STU-2024-018',
+  'STU-58': {
+    studentId: 'STU-58',
     studentName: 'Aarav Sharma',
     schoolName: 'Demo School of Scholario',
     isActive: true,

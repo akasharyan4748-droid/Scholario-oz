@@ -64,6 +64,7 @@ import {
   SEED_WEBHOOK_EVENTS,
   SEED_TRANSACTIONS,
   SEED_FEE_TRANSACTIONS,
+  STU58_SEED_TXNS,
   SEED_CASH_REQUESTS,
   SEED_AUDIT,
   SEED_ADDITIONAL_CHARGES,
@@ -3700,7 +3701,7 @@ export const useFeeStore = create<FeeState>()(
   // `additionalCharges` array (event-based charges like the Class 8
   // Educational Tour) when the persisted state predates the key. Never
   // overwrites user-created charges; never touches transactions.
-  version: 13,
+  version: 14,
   migrate: (persistedState: any, fromVersion: number) => {
     // v13 — APPS-IA-1 standalone-collection lifecycle: `status` gains
     // 'Draft' and 'Archived' values and charges carry optional lifecycle
@@ -3876,6 +3877,18 @@ export const useFeeStore = create<FeeState>()(
           rules: DEFAULT_ENTRY_FEE_POLICY.rules.map((r) => ({ ...r, applies: { ...r.applies, ...(r.applies.classIds ? { classIds: [...r.applies.classIds] } : {}) } })),
         },
       }
+    }
+    // v14 — STU-B roster unification: the demo student STU-58 (Aarav Sharma,
+    // Class 2-A) joins the canonical roster, so the student-side fee history
+    // derives from the ONE ledger. Backfills his seed payment when the
+    // persisted state predates the roster extension. Never touches any other
+    // transaction.
+    if (fromVersion < 14 && persistedState && typeof persistedState === 'object') {
+      const st = persistedState as Record<string, any>
+      if (Array.isArray(st.transactions) && !st.transactions.some((t: any) => t?.studentId === 'STU-58')) {
+        return { ...st, transactions: [...STU58_SEED_TXNS, ...st.transactions] }
+      }
+      return st
     }
     return persistedState
   },

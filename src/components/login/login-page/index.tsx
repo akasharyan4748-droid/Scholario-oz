@@ -35,7 +35,30 @@ export function LoginPage({ onBackToWebsite }: { onBackToWebsite?: () => void })
   }
 
   const handleLogin = async (role?: Role) => {
-    const r = role ?? selectedRole ?? 'principal'
+    // Role resolution priority: explicit override → selected card → the
+    // DB-authenticated user's actual role → principal (demo fallback).
+    // Typing student credentials without picking a card must NEVER land in
+    // the principal workspace (role-safety fix).
+    let dbRole: Role | null = null
+    if (!role && !selectedRole && email) {
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        })
+        if (res.ok) {
+          const data = (await res.json()) as { data?: { role?: string } }
+          const raw = data.data?.role?.toLowerCase()
+          if (raw === 'principal' || raw === 'teacher' || raw === 'student' || raw === 'superadmin') {
+            dbRole = raw
+          }
+        }
+      } catch {
+        // fall through to the demo default
+      }
+    }
+    const r = role ?? selectedRole ?? dbRole ?? 'principal'
     if (!email || !password) {
       setError('Please enter your email and password.')
       return

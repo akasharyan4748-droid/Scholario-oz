@@ -2,7 +2,8 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { StudentsState, StudentStatus } from './types'
+import type { StudentPosition, StudentPositionKey, StudentsState, StudentStatus } from './types'
+import { POSITION_DEFS } from '@/lib/student-positions'
 import { HOUSE_DEFS, SEED_SUBJECTS } from './constants'
 import { SS, SC } from './seed-data'
 import { SUBJECTS_BY_LEVEL } from './constants'
@@ -37,6 +38,27 @@ export const useStudentsStore = create<StudentsState>()(
   houses: HOUSE_DEFS,
   promotions: [],
   transfers: [],
+  // Class Captain / Monitor positions — seeded with ONE example in another
+  // class so the principal Leadership tab shows an occupied state out of the
+  // box; the demo student starts WITHOUT a position (assign via Leadership
+  // tab to see the student-side capabilities appear, then end it to watch
+  // them disappear — spec §38 E2E).
+  studentPositions: [
+    {
+      id: 'POS-SEED-1',
+      studentId: 'STU-27',
+      studentName: 'Diya Verma',
+      classId: 'C10',
+      className: 'Class 9',
+      section: 'A',
+      key: 'class-monitor',
+      assignedById: 'PRINCIPAL',
+      assignedByName: 'Dr. Ananya Iyer',
+      assignedOn: '2026-08-15T09:00:00.000Z',
+      active: true,
+      notes: 'Appointed at the Investiture Ceremony.',
+    },
+  ],
   // Canonical subject registry (Spec §28). Cloned from SEED_SUBJECTS so
   // principal mutations (rename / add custom) don't mutate the seed.
   academicSubjects: SEED_SUBJECTS.map((s) => ({ ...s })),
@@ -93,6 +115,93 @@ export const useStudentsStore = create<StudentsState>()(
   },
   assignHouseCaptain: (id, sid, role) => {
     set((state) => ({ houses: state.houses.map((h) => h.id === id ? (role === 'captain' ? { ...h, captainId: sid } : { ...h, viceCaptainId: sid }) : h) }))
+  },
+  // ─── Student positions (Class Captain / Monitor — spec §21–§25) ─────
+  assignStudentPosition: (input) => {
+    const st = get()
+    const student = st.students.find((s) => s.id === input.studentId)
+    if (!student) return { ok: false as const, error: 'Student not found.' }
+    if (student.status !== 'Active') return { ok: false as const, error: 'Only active students can hold a class responsibility.' }
+    // One active holder per (class · section · position) — replacing an
+    // existing holder ends their position first (history preserved).
+    const displaced = st.studentPositions.filter(
+      (p) => p.active && p.classId === student.classId && p.section === student.section && p.key === input.key,
+    )
+    const now = new Date().toISOString()
+    const record: import('./types').StudentPosition = {
+      id: `POS-${Date.now().toString(36)}`,
+      studentId: student.id,
+      studentName: student.name,
+      classId: student.classId,
+      className: student.className,
+      section: student.section,
+      key: input.key,
+      assignedById: input.assignedById,
+      assignedByName: input.assignedByName,
+      assignedOn: now,
+      active: true,
+      notes: input.notes,
+    }
+    set((state) => ({
+      studentPositions: [
+        record,
+        ...state.studentPositions.map((p) =>
+          displaced.some((d) => d.id === p.id)
+            ? { ...p, active: false, endedOn: now, endedByName: input.assignedByName }
+            : p,
+        ),
+      ],
+      students: state.students.map((s) =>
+        s.id === student.id
+          ? {
+              ...s,
+              timeline: [
+                {
+                  id: `tl-${Date.now()}`,
+                  type: 'position' as const,
+                  title: `Appointed ${POSITION_DEFS[input.key]?.title ?? input.key}`,
+                  description: `${POSITION_DEFS[input.key]?.title ?? input.key} of ${student.className}-${student.section} · by ${input.assignedByName}`,
+                  date: now,
+                  by: input.assignedByName,
+                },
+                ...s.timeline,
+              ],
+            }
+          : s,
+      ),
+    }))
+    return { ok: true as const, record }
+  },
+  endStudentPosition: (positionId, byName) => {
+    const st = get()
+    const pos = st.studentPositions.find((p) => p.id === positionId)
+    if (!pos) return { ok: false as const, error: 'Position not found.' }
+    if (!pos.active) return { ok: false as const, error: 'This position is already inactive.' }
+    const now = new Date().toISOString()
+    set((state) => ({
+      studentPositions: state.studentPositions.map((p) =>
+        p.id === positionId ? { ...p, active: false, endedOn: now, endedByName: byName } : p,
+      ),
+      students: state.students.map((s) =>
+        s.id === pos.studentId
+          ? {
+              ...s,
+              timeline: [
+                {
+                  id: `tl-${Date.now()}`,
+                  type: 'position' as const,
+                  title: `${POSITION_DEFS[pos.key]?.title ?? pos.key} responsibility ended`,
+                  description: `${POSITION_DEFS[pos.key]?.title ?? pos.key} of ${pos.className}-${pos.section} · concluded by ${byName}`,
+                  date: now,
+                  by: byName,
+                },
+                ...s.timeline,
+              ],
+            }
+          : s,
+      ),
+    }))
+    return { ok: true as const }
   },
   updateClassTeacher: (classId, teacherId) => {
     set((state) => ({
@@ -393,13 +502,17 @@ export const useStudentsStore = create<StudentsState>()(
       // archive / transfers persist), isolated per school namespace.
       name: 'scholario-students-v1',
       storage: createTenantScopedStorage('scholario-students-v1'),
-      version: 1,
+      // v2 — roster extended with the 16 Class 2-A students (STU-43..58):
+      // one canonical store now backs principal + teacher + student roles.
+      // Version bump discards stale persisted state so the new roster seeds.
+      version: 2,
       partialize: (s) => ({
         students: s.students,
         classes: s.classes,
         houses: s.houses,
         promotions: s.promotions,
         transfers: s.transfers,
+        studentPositions: s.studentPositions,
         academicSubjects: s.academicSubjects,
       }),
     },

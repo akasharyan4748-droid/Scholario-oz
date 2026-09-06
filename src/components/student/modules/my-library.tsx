@@ -23,7 +23,7 @@ import type { IssueRecord } from '@/lib/store/library-store'
 import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-const STUDENT_ID = 'STU-2024-018'
+const STUDENT_ID = 'STU-58'
 
 function daysBetween(a: string, b: string): number {
   return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000)

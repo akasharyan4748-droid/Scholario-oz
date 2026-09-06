@@ -1,0 +1,603 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→/**
+     4→     4→ * MyClassModule — the Class Captain / Monitor workspace (spec §22–§23).
+     5→     5→ *
+     6→     6→ * Renders ONLY when the student holds an ACTIVE position. Every action card
+     7→     7→ * is capability-gated (derived from the persisted assignment — never
+     8→     8→ * hardcoded), and every write goes through the authorization-checked
+     9→     9→ * class-responsibility store, so the UI can never grant more than the
+    10→    10→ * school assigned. If the position is ended, this whole module unmounts.
+    11→    11→ */
+    12→    12→import { useMemo, useState } from 'react'
+    13→    13→import { motion } from 'framer-motion'
+    14→    14→import {
+    15→    15→  Crown, Megaphone, AlertTriangle, CalendarClock, ListTodo, Pin, X, Send,
+    16→    16→  CheckCircle2, Clock, ShieldCheck, Inbox,
+    17→    17→} from 'lucide-react'
+    18→    18→import { GlassCard, SectionHeading, GradientAvatar, StatusBadge } from '@/components/shared/ui'
+    19→    19→import { Button } from '@/components/ui/button'
+    20→    20→import { Badge } from '@/components/ui/badge'
+    21→    21→import { cn } from '@/lib/utils'
+    22→    22→import { useStudentsStore, type StudentPosition, type StudentRecord } from '@/lib/store/students-store'
+    23→    23→import { POSITION_DEFS, hasCapability, allCapabilities, type StudentCapability } from '@/lib/student-positions'
+    24→    24→import { useClassResponsibilityStore, type ClassUpdateCategory, type IssueCategory, type IssuePriority, type ResponsibilityTask } from '@/lib/store/class-responsibility-store'
+    25→    25→import { teachers } from '@/lib/mock/teachers'
+    26→    26→import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
+    27→    27→import { formatDate, formatRelativeTime } from '@/lib/format'
+    28→    28→import { toast } from 'sonner'
+    29→    29→import { DEMO_STUDENT_ID } from '../applications/student'
+    30→    30→
+    31→    31→const CAPABILITY_META: Record<StudentCapability, { label: string; icon: typeof Crown }> = {
+    32→    32→  'post-class-updates': { label: 'Class updates', icon: Megaphone },
+    33→    33→  'report-issues': { label: 'Issue reporting', icon: AlertTriangle },
+    34→    34→  'view-class-tasks': { label: 'Responsibility tasks', icon: ListTodo },
+    35→    35→  'request-teacher': { label: 'Teacher requests', icon: CalendarClock },
+    36→    36→  'coordinate-activity': { label: 'Activity coordination', icon: CheckCircle2 },
+    37→    37→  'class-noticeboard': { label: 'Class notice board', icon: Pin },
+    38→    38→}
+    39→    39→
+    40→    40→/** Teachers the student may request a meeting with (class teacher + subject
+    41→    41→ *  teachers of THEIR class — never a school-wide directory, spec §30). */
+    42→    42→function allowedTeachers(classId: string, section: string): { id: string; name: string; subject: string }[] {
+    43→    43→  const cls = useStudentsStore.getState().classes.find((c) => c.id === classId)
+    44→    44→  if (!cls) return []
+    45→    45→  const sec = cls.sections.find((s) => s.name === section)
+    46→    46→  const roster: { id: string; name: string; subject: string }[] = []
+    47→    47→  const seen = new Set<string>()
+    48→    48→  const push = (id: string | undefined, subject: string) => {
+    49→    49→    if (!id || seen.has(id)) return
+    50→    50→    const t = teachers.find((x) => x.id === id)
+    51→    51→    if (!t) return
+    52→    52→    seen.add(id)
+    53→    53→    roster.push({ id: t.id, name: t.name, subject })
+    54→    54→  }
+    55→    55→  push(sec?.classTeacherId ?? cls.classTeacherId, 'Class Teacher')
+    56→    56→  for (const [subId, tid] of Object.entries(cls.subjectTeachers)) {
+    57→    57→    const name = cls.subjects.find((n) => n === subId) ?? subId.replace('sub-', '')
+    58→    58→    push(tid, name.charAt(0).toUpperCase() + name.slice(1))
+    59→    59→  }
+    60→    60→  return roster
+    61→    61→}
+    62→    62→
+    63→    63→export function MyClassModule() {
+    64→    64→  const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
+    65→    65→  const positions = useStudentsStore((s) => s.studentPositions.filter((p) => p.active && p.studentId === DEMO_STUDENT_ID))
+    66→    66→
+    67→    67→  const updates = useClassResponsibilityStore((s2) => s2.classUpdates)
+    68→    68→  const issues = useClassResponsibilityStore((s2) => s2.issueReports)
+    69→    69→  const tasks = useClassResponsibilityStore((s2) => s2.responsibilityTasks)
+    70→    70→  const requests = useClassResponsibilityStore((s2) => s2.teacherRequests)
+    71→    71→
+    72→    72→  const [dialog, setDialog] = useState<'update' | 'issue' | 'meeting' | null>(null)
+    73→    73→
+    74→    74→  const caps = allCapabilities(positions)
+    75→    75→  const myUpdates = useMemo(() => updates.filter((u) => u.studentId === DEMO_STUDENT_ID), [updates])
+    76→    76→  const noticeBoard = useMemo(
+    77→    77→    () =>
+    78→    78→      student
+    79→    79→        ? updates.filter((u) => u.classId === student.classId && u.section === student.section && u.status === 'approved')
+    80→    80→        : [],
+    81→    81→    [updates, student],
+    82→    82→  )
+    83→    83→  const myIssues = useMemo(() => issues.filter((i) => i.studentId === DEMO_STUDENT_ID), [issues])
+    84→    84→  const myTasks = useMemo(() => tasks.filter((t) => t.studentId === DEMO_STUDENT_ID), [tasks])
+    85→    85→  const myRequests = useMemo(() => requests.filter((r) => r.studentId === DEMO_STUDENT_ID), [requests])
+    86→    86→
+    87→    87→  if (!student || positions.length === 0) {
+    88→    88→    // No active responsibility — the panel hides the nav entry entirely; this
+    89→    89→    // is a defensive empty state.
+    90→    90→    return (
+    91→    91→      <div className="py-16 text-center">
+    92→    92→        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground">
+    93→    93→          <ShieldCheck className="h-6 w-6" />
+    94→    94→        </div>
+    95→    95→        <p className="text-sm text-muted-foreground">No active class responsibility.</p>
+    96→    96→      </div>
+    97→    97→    )
+    98→    98→  }
+    99→    99→
+   100→   100→  const primary = positions[0]
+   101→   101→  const positionTitles = positions.map((p) => POSITION_DEFS[p.key]?.title ?? p.key).join(' · ')
+   102→   102→
+   103→   103→  return (
+   104→   104→    <div className="space-y-6">
+   105→   105→      <SectionHeading
+   106→   106→        title="My Class"
+   107→   107→        subtitle={`${student.className}-${student.section} · Class responsibility`}
+   108→   108→        icon={<Crown className="h-5 w-5" />}
+   109→   109→      />
+   110→   110→
+   111→   111→      {/* Position hero */}
+   112→   112→      <GlassCard className="p-4 sm:p-5 overflow-hidden relative">
+   113→   113→        <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-2xl" aria-hidden />
+   114→   114→        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+   115→   115→          <motion.div
+   116→   116→            initial={{ scale: 0.8, rotate: -8 }}
+   117→   117→            animate={{ scale: 1, rotate: 0 }}
+   118→   118→            transition={{ type: 'spring', stiffness: 200, delay: 0.1 }}
+   119→   119→            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg"
+   120→   120→          >
+   121→   121→            <Crown className="h-7 w-7" />
+   122→   122→          </motion.div>
+   123→   123→          <div className="flex-1 min-w-0">
+   124→   124→            <div className="flex items-center gap-2 flex-wrap">
+   125→   125→              <h2 className="font-display text-xl font-extrabold tracking-tight">{positionTitles}</h2>
+   126→   126→              <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10 text-[10px]">
+   127→   127→                Active
+   128→   128→              </Badge>
+   129→   129→            </div>
+   130→   130→            <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+   131→   131→              <span>{student.className}-{student.section}</span>
+   132→   132→              <span className="text-border">·</span>
+   133→   133→              <span>Since {formatDate(primary.assignedOn)}</span>
+   134→   134→              <span className="text-border">·</span>
+   135→   135→              <span>Appointed by {primary.assignedByName}</span>
+   136→   136→            </p>
+   137→   137→            <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
+   138→   138→              {caps.map((c) => {
+   139→   139→                const Meta = CAPABILITY_META[c]
+   140→   140→                return (
+   141→   141→                  <Badge key={c} variant="secondary" className="text-[10px] bg-primary/5 text-primary border border-primary/20 gap-1">
+   142→   142→                    <Meta.icon className="h-3 w-3" /> {Meta.label}
+   143→   143→                  </Badge>
+   144→   144→                )
+   145→   145→              })}
+   146→   146→            </div>
+   147→   147→          </div>
+   148→   148→        </div>
+   149→   149→      </GlassCard>
+   150→   150→
+   151→   151→      {/* Action cards — capability-gated */}
+   152→   152→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+   153→   153→        {hasCapability(positions, 'post-class-updates') && (
+   154→   154→          <ActionCard
+   155→   155→            icon={<Megaphone className="h-5 w-5" />}
+   156→   156→            title="Post a Class Update"
+   157→   157→            desc="Share a notice, reminder or activity plan with your class (teacher-reviewed)."
+   158→   158→            stat={`${myUpdates.filter((u) => u.status === 'pending-review').length} pending review`}
+   159→   159→            onClick={() => setDialog('update')}
+   160→   160→            accent="violet"
+   161→   161→          />
+   162→   162→        )}
+   163→   163→        {hasCapability(positions, 'report-issues') && (
+   164→   164→          <ActionCard
+   165→   165→            icon={<AlertTriangle className="h-5 w-5" />}
+   166→   166→            title="Report an Issue"
+   167→   167→            desc="Report a class problem — facilities, safety or anything the teacher should know."
+   168→   168→            stat={`${myIssues.filter((i) => i.status !== 'resolved').length} open`}
+   169→   169→            onClick={() => setDialog('issue')}
+   170→   170→            accent="amber"
+   171→   171→          />
+   172→   172→        )}
+   173→   173→        {hasCapability(positions, 'request-teacher') && (
+   174→   174→          <ActionCard
+   175→   175→            icon={<CalendarClock className="h-5 w-5" />}
+   176→   176→            title="Request Teacher Meeting"
+   177→   177→            desc="Ask your class or subject teacher for a short meeting."
+   178→   178→            stat={`${myRequests.filter((r) => r.status === 'requested').length} awaiting`}
+   179→   179→            onClick={() => setDialog('meeting')}
+   180→   180→            accent="sky"
+   181→   181→          />
+   182→   182→        )}
+   183→   183→      </div>
+   184→   184→
+   185→   185→      {/* Tasks + submissions two-column */}
+   186→   186→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+   187→   187→        {hasCapability(positions, 'view-class-tasks') && (
+   188→   188→          <GlassCard className="p-3 sm:p-4 lg:p-5">
+   189→   189→            <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+   190→   190→              <ListTodo className="h-4 w-4 text-emerald-500" /> Responsibility Tasks
+   191→   191→              <Badge variant="secondary" className="text-[10px] bg-muted text-muted-foreground ml-auto">
+   192→   192→                {myTasks.filter((t) => !t.done).length} open
+   193→   193→              </Badge>
+   194→   194→            </h3>
+   195→   195→            {myTasks.length === 0 ? (
+   196→   196→              <EmptyMini text="No tasks assigned yet — your teacher or principal can assign responsibilities here." />
+   197→   197→            ) : (
+   198→   198→              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+   199→   199→                {myTasks.map((t) => (
+   200→   200→                  <TaskRow key={t.id} task={t} />
+   201→   201→                ))}
+   202→   202→              </div>
+   203→   203→            )}
+   204→   204→          </GlassCard>
+   205→   205→        )}
+   206→   206→
+   207→   207→        <GlassCard className="p-3 sm:p-4 lg:p-5">
+   208→   208→          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+   209→   209→            <Inbox className="h-4 w-4 text-violet-500" /> My Submissions
+   210→   210→            <Badge variant="secondary" className="text-[10px] bg-muted text-muted-foreground ml-auto">
+   211→   211→              {myUpdates.length + myIssues.length + myRequests.length} total
+   212→   212→            </Badge>
+   213→   213→          </h3>
+   214→   214→          {myUpdates.length + myIssues.length + myRequests.length === 0 ? (
+   215→   215→            <EmptyMini text="Nothing submitted yet — updates, issues and meeting requests you send appear here with their review status." />
+   216→   216→          ) : (
+   217→   217→            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+   218→   218→              {myUpdates.map((u) => (
+   219→   219→                <div key={u.id} className="flex items-start gap-3 rounded-xl border border-border bg-card/40 p-3">
+   220→   220→                  <Megaphone className="h-4 w-4 text-violet-500 mt-0.5 shrink-0" />
+   221→   221→                  <div className="flex-1 min-w-0">
+   222→   222→                    <p className="text-sm font-semibold truncate">{u.title}</p>
+   223→   223→                    <p className="text-[11px] text-muted-foreground">{u.category} · {formatRelativeTime(u.postedOn)}</p>
+   224→   224→                  </div>
+   225→   225→                  <SubmissionStatus status={u.status === 'pending-review' ? 'Pending review' : u.status === 'approved' ? 'Approved' : 'Removed'} tone={u.status === 'approved' ? 'success' : u.status === 'pending-review' ? 'info' : 'muted'} />
+   226→   226→                </div>
+   227→   227→              ))}
+   228→   228→              {myIssues.map((i) => (
+   229→   229→                <div key={i.id} className="flex items-start gap-3 rounded-xl border border-border bg-card/40 p-3">
+   230→   230→                  <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+   231→   231→                  <div className="flex-1 min-w-0">
+   232→   232→                    <p className="text-sm font-semibold truncate">{i.title}</p>
+   233→   233→                    <p className="text-[11px] text-muted-foreground capitalize">{i.category} · {i.priority} · {formatRelativeTime(i.reportedOn)}</p>
+   234→   234→                  </div>
+   235→   235→                  <SubmissionStatus status={i.status === 'open' ? 'Open' : i.status === 'acknowledged' ? 'Acknowledged' : 'Resolved'} tone={i.status === 'resolved' ? 'success' : 'info'} />
+   236→   236→                </div>
+   237→   237→              ))}
+   238→   238→              {myRequests.map((r) => (
+   239→   239→                <div key={r.id} className="flex items-start gap-3 rounded-xl border border-border bg-card/40 p-3">
+   240→   240→                  <CalendarClock className="h-4 w-4 text-sky-500 mt-0.5 shrink-0" />
+   241→   241→                  <div className="flex-1 min-w-0">
+   242→   242→                    <p className="text-sm font-semibold truncate">{r.teacherName}</p>
+   243→   243→                    <p className="text-[11px] text-muted-foreground truncate">{r.topic} · {formatRelativeTime(r.requestedOn)}</p>
+   244→   244→                  </div>
+   245→   245→                  <SubmissionStatus status={r.status === 'requested' ? 'Requested' : r.status === 'acknowledged' ? 'Acknowledged' : 'Completed'} tone={r.status === 'requested' ? 'info' : 'success'} />
+   246→   246→                </div>
+   247→   247→              ))}
+   248→   248→            </div>
+   249→   249→          )}
+   250→   250→        </GlassCard>
+   251→   251→      </div>
+   252→   252→
+   253→   253→      {/* Class notice board — approved updates (captain + classmates) */}
+   254→   254→      {hasCapability(positions, 'class-noticeboard') && (
+   255→   255→        <GlassCard className="p-3 sm:p-4 lg:p-5">
+   256→   256→          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+   257→   257→            <Pin className="h-4 w-4 text-primary" /> Class Notice Board
+   258→   258→            <Badge variant="secondary" className="text-[10px] bg-muted text-muted-foreground ml-auto">approved by teacher</Badge>
+   259→   259→          </h3>
+   260→   260→          {noticeBoard.length === 0 ? (
+   261→   261→            <EmptyMini text="No approved notices yet — updates appear here once your class teacher approves them." />
+   262→   262→          ) : (
+   263→   263→            <div className="space-y-2">
+   264→   264→              {noticeBoard.map((u) => (
+   265→   265→                <div key={u.id} className="rounded-xl border border-border bg-card/40 p-3.5">
+   266→   266→                  <div className="flex items-center gap-2 flex-wrap mb-1">
+   267→   267→                    <Badge variant="secondary" className="text-[10px] bg-primary/5 text-primary border border-primary/20 capitalize">{u.category}</Badge>
+   268→   268→                    <p className="text-sm font-semibold">{u.title}</p>
+   269→   269→                    <span className="text-[10px] text-muted-foreground ml-auto font-mono">{formatRelativeTime(u.postedOn)}</span>
+   270→   270→                  </div>
+   271→   271→                  <p className="text-xs text-muted-foreground leading-relaxed">{u.body}</p>
+   272→   272→                  <p className="text-[10px] text-muted-foreground/70 mt-1.5 font-mono">
+   273→   273→                    {u.authorName} · {u.positionTitle} · approved by {u.reviewedByName}
+   274→   274→                  </p>
+   275→   275→                </div>
+   276→   276→              ))}
+   277→   277→            </div>
+   278→   278→          )}
+   279→   279→        </GlassCard>
+   280→   280→      )}
+   281→   281→
+   282→   282→      {/* Dialogs */}
+   283→   283→      {dialog === 'update' && <PostUpdateDialog positions={positions} onClose={() => setDialog(null)} />}
+   284→   284→      {dialog === 'issue' && <ReportIssueDialog onClose={() => setDialog(null)} />}
+   285→   285→      {dialog === 'meeting' && <MeetingDialog onClose={() => setDialog(null)} />}
+   286→   286→    </div>
+   287→   287→  )
+   288→   288→}
+   289→   289→
+   290→   290→// ─── Small building blocks ───────────────────────────────────────────
+   291→   291→
+   292→   292→function ActionCard({ icon, title, desc, stat, onClick, accent }: {
+   293→   293→  icon: React.ReactNode
+   294→   294→  title: string
+   295→   295→  desc: string
+   296→   296→  stat: string
+   297→   297→  onClick: () => void
+   298→   298→  accent: 'violet' | 'amber' | 'sky'
+   299→   299→}) {
+   300→   300→  const accentCls = {
+   301→   301→    violet: 'from-violet-500 to-purple-600',
+   302→   302→    amber: 'from-amber-500 to-orange-600',
+   303→   303→    sky: 'from-sky-500 to-indigo-600',
+   304→   304→  }[accent]
+   305→   305→  return (
+   306→   306→    <motion.button
+   307→   307→      whileHover={{ y: -3 }}
+   308→   308→      whileTap={{ scale: 0.98 }}
+   309→   309→      onClick={onClick}
+   310→   310→      className="text-left rounded-2xl border border-border bg-card/60 p-4 hover:border-primary/30 hover:shadow-premium transition-all"
+   311→   311→    >
+   312→   312→      <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${accentCls} text-white shadow-md mb-3`}>
+   313→   313→        {icon}
+   314→   314→      </div>
+   315→   315→      <p className="font-semibold text-sm">{title}</p>
+   316→   316→      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{desc}</p>
+   317→   317→      <p className="text-[10px] text-muted-foreground/70 mt-2.5 font-mono">{stat}</p>
+   318→   318→    </motion.button>
+   319→   319→  )
+   320→   320→}
+   321→   321→
+   322→   322→function TaskRow({ task }: { task: ResponsibilityTask }) {
+   323→   323→  const completeTask = useClassResponsibilityStore((s) => s.completeTask)
+   324→   324→  const toggle = () => {
+   325→   325→    const result = completeTask(task.id, DEMO_STUDENT_ID)
+   326→   326→    if (!result.ok) toast.error('Could not update task', { description: result.error })
+   327→   327→  }
+   328→   328→  return (
+   329→   329→    <button onClick={toggle} className={cn(
+   330→   330→      'w-full flex items-start gap-3 rounded-xl border p-3 text-left transition-colors',
+   331→   331→      task.done ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-border bg-card/40 hover:bg-muted/30',
+   332→   332→    )}>
+   333→   333→      <span className={cn(
+   334→   334→        'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors',
+   335→   335→        task.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-border bg-background',
+   336→   336→      )}>
+   337→   337→        {task.done && <CheckCircle2 className="h-3.5 w-3.5" />}
+   338→   338→      </span>
+   339→   339→      <div className="flex-1 min-w-0">
+   340→   340→        <p className={cn('text-sm font-semibold', task.done && 'line-through text-muted-foreground')}>{task.title}</p>
+   341→   341→        <p className="text-[11px] text-muted-foreground mt-0.5">{task.detail}</p>
+   342→   342→        <p className="text-[10px] text-muted-foreground/70 mt-1 font-mono">
+   343→   343→          by {task.assignedByName}{task.dueOn ? ` · due ${formatDate(task.dueOn)}` : ''}{task.done && task.doneOn ? ` · completed ${formatDate(task.doneOn)}` : ''}
+   344→   344→        </p>
+   345→   345→      </div>
+   346→   346→    </button>
+   347→   347→  )
+   348→   348→}
+   349→   349→
+   350→   350→function SubmissionStatus({ status, tone }: { status: string; tone: 'success' | 'info' | 'muted' }) {
+   351→   351→  void tone
+   352→   352→  return <StatusBadge status={status} variant="info" dot />
+   353→   353→}
+   354→   354→
+   355→   355→function EmptyMini({ text }: { text: string }) {
+   356→   356→  return (
+   357→   357→    <div className="py-8 text-center">
+   358→   358→      <div className="mx-auto mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-muted/60 text-muted-foreground">
+   359→   359→        <Clock className="h-4 w-4" />
+   360→   360→      </div>
+   361→   361→      <p className="text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed">{text}</p>
+   362→   362→    </div>
+   363→   363→  )
+   364→   364→}
+   365→   365→
+   366→   366→// ─── Dialogs ─────────────────────────────────────────────────────────
+   367→   367→
+   368→   368→function DialogShell({ title, subtitle, onClose, children, footer }: {
+   369→   369→  title: string
+   370→   370→  subtitle?: string
+   371→   371→  onClose: () => void
+   372→   372→  children: React.ReactNode
+   373→   373→  footer: React.ReactNode
+   374→   374→}) {
+   375→   375→  useDismissOnEscape(onClose)
+   376→   376→  return (
+   377→   377→    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
+   378→   378→      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl border border-border bg-background shadow-premium-lg overflow-hidden">
+   379→   379→        <div className="flex items-center justify-between gap-2 px-4 py-3.5 border-b border-border/60">
+   380→   380→          <div className="min-w-0">
+   381→   381→            <h3 className="text-sm font-semibold">{title}</h3>
+   382→   382→            {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
+   383→   383→          </div>
+   384→   384→          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose} aria-label={`Close ${title.toLowerCase()} dialog`}>
+   385→   385→            <X className="h-4 w-4" />
+   386→   386→          </Button>
+   387→   387→        </div>
+   388→   388→        <div className="px-4 py-4 space-y-3 max-h-[60vh] overflow-y-auto">{children}</div>
+   389→   389→        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border/60 bg-muted/20">{footer}</div>
+   390→   390→      </div>
+   391→   391→    </div>
+   392→   392→  )
+   393→   393→}
+   394→   394→
+   395→   395→function PostUpdateDialog({ positions, onClose }: { positions: StudentPosition[]; onClose: () => void }) {
+   396→   396→  const postClassUpdate = useClassResponsibilityStore((s) => s.postClassUpdate)
+   397→   397→  const [title, setTitle] = useState('')
+   398→   398→  const [body, setBody] = useState('')
+   399→   399→  const [category, setCategory] = useState<ClassUpdateCategory>('notice')
+   400→   400→
+   401→   401→  const submit = () => {
+   402→   402→    if (!title.trim() || !body.trim()) return
+   403→   403→    const result = postClassUpdate({ actorStudentId: DEMO_STUDENT_ID, title: title.trim(), body: body.trim(), category })
+   404→   404→    if (result.ok) {
+   405→   405→      toast.success('Update submitted for review', { description: 'Your class teacher will review it before it appears on the class notice board.' })
+   406→   406→      onClose()
+   407→   407→    } else {
+   408→   408→      toast.error('Could not post update', { description: result.error })
+   409→   409→    }
+   410→   410→  }
+   411→   411→
+   412→   412→  return (
+   413→   413→    <DialogShell
+   414→   414→      title="Post a class update"
+   415→   415→      subtitle={`${POSITION_DEFS[positions[0]?.key]?.title} · reviewed by your teacher`}
+   416→   416→      onClose={onClose}
+   417→   417→      footer={
+   418→   418→        <>
+   419→   419→          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+   420→   420→          <Button size="sm" disabled={!title.trim() || !body.trim()} onClick={submit}>
+   421→   421→            <Send className="h-3.5 w-3.5" /> Submit for review
+   422→   422→          </Button>
+   423→   423→        </>
+   424→   424→      }
+   425→   425→    >
+   426→   426→      <div>
+   427→   427→        <label className="text-xs font-medium">Type</label>
+   428→   428→        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+   429→   429→          {(['notice', 'reminder', 'event', 'activity'] as const).map((c) => (
+   430→   430→            <button key={c} onClick={() => setCategory(c)} className={cn(
+   431→   431→              'rounded-lg px-3 py-1.5 text-xs font-medium capitalize border transition-colors',
+   432→   432→              category === c ? 'bg-primary/10 border-primary/30 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
+   433→   433→            )}>
+   434→   434→              {c}
+   435→   435→            </button>
+   436→   436→          ))}
+   437→   437→        </div>
+   438→   438→      </div>
+   439→   439→      <div>
+   440→   440→        <label htmlFor="cu-title" className="text-xs font-medium">Title</label>
+   441→   441→        <input id="cu-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Science project submissions due Friday"
+   442→   442→          className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" />
+   443→   443→      </div>
+   444→   444→      <div>
+   445→   445→        <label htmlFor="cu-body" className="text-xs font-medium">Message</label>
+   446→   446→        <textarea id="cu-body" value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="What should your class know?"
+   447→   447→          className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
+   448→   448→      </div>
+   449→   449→    </DialogShell>
+   450→   450→  )
+   451→   451→}
+   452→   452→
+   453→   453→function ReportIssueDialog({ onClose }: { onClose: () => void }) {
+   454→   454→  const reportIssue = useClassResponsibilityStore((s) => s.reportIssue)
+   455→   455→  const [category, setCategory] = useState<IssueCategory>('facility')
+   456→   456→  const [priority, setPriority] = useState<IssuePriority>('medium')
+   457→   457→  const [title, setTitle] = useState('')
+   458→   458→  const [description, setDescription] = useState('')
+   459→   459→
+   460→   460→  const submit = () => {
+   461→   461→    if (!title.trim() || !description.trim()) return
+   462→   462→    const result = reportIssue({ actorStudentId: DEMO_STUDENT_ID, category, priority, title: title.trim(), description: description.trim() })
+   463→   463→    if (result.ok) {
+   464→   464→      toast.success('Issue reported', { description: 'Your class teacher and the principal have been notified.' })
+   465→   465→      onClose()
+   466→   466→    } else {
+   467→   467→      toast.error('Could not report issue', { description: result.error })
+   468→   468→    }
+   469→   469→  }
+   470→   470→
+   471→   471→  return (
+   472→   472→    <DialogShell
+   473→   473→      title="Report an issue"
+   474→   474→      subtitle="Goes to your class teacher and the principal"
+   475→   475→      onClose={onClose}
+   476→   476→      footer={
+   477→   477→        <>
+   478→   478→          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+   479→   479→          <Button size="sm" disabled={!title.trim() || !description.trim()} onClick={submit}>
+   480→   480→            <Send className="h-3.5 w-3.5" /> Report
+   481→   481→          </Button>
+   482→   482→        </>
+   483→   483→      }
+   484→   484→    >
+   485→   485→      <div>
+   486→   486→        <label className="text-xs font-medium">Category</label>
+   487→   487→        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+   488→   488→          {(['facility', 'safety', 'bullying', 'academics', 'other'] as const).map((c) => (
+   489→   489→            <button key={c} onClick={() => setCategory(c)} className={cn(
+   490→   490→              'rounded-lg px-3 py-1.5 text-xs font-medium capitalize border transition-colors',
+   491→   491→              category === c ? 'bg-primary/10 border-primary/30 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
+   492→   492→            )}>
+   493→   493→              {c}
+   494→   494→            </button>
+   495→   495→          ))}
+   496→   496→        </div>
+   497→   497→      </div>
+   498→   498→      <div>
+   499→   499→        <label className="text-xs font-medium">Priority</label>
+   500→   500→        <div className="flex items-center gap-1.5 mt-1.5">
+   501→   501→          {(['low', 'medium', 'high'] as const).map((p) => (
+   502→   502→            <button key={p} onClick={() => setPriority(p)} className={cn(
+   503→   503→              'rounded-lg px-3 py-1.5 text-xs font-medium capitalize border transition-colors',
+   504→   504→              priority === p
+   505→   505→                ? p === 'high' ? 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
+   506→   506→                  : p === 'medium' ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+   507→   507→                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+   508→   508→                : 'border-border text-muted-foreground hover:text-foreground',
+   509→   509→            )}>
+   510→   510→              {p}
+   511→   511→            </button>
+   512→   512→          ))}
+   513→   513→        </div>
+   514→   514→      </div>
+   515→   515→      <div>
+   516→   516→        <label htmlFor="ir-title" className="text-xs font-medium">Title</label>
+   517→   517→        <input id="ir-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Classroom fan not working"
+   518→   518→          className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" />
+   519→   519→      </div>
+   520→   520→      <div>
+   521→   521→        <label htmlFor="ir-desc" className="text-xs font-medium">What happened?</label>
+   522→   522→        <textarea id="ir-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} placeholder="Describe the issue…"
+   523→   523→          className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
+   524→   524→      </div>
+   525→   525→    </DialogShell>
+   526→   526→  )
+   527→   527→}
+   528→   528→
+   529→   529→function MeetingDialog({ onClose }: { onClose: () => void }) {
+   530→   530→  const requestTeacherMeeting = useClassResponsibilityStore((s) => s.requestTeacherMeeting)
+   531→   531→  const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
+   532→   532→  const teacherList = useMemo(
+   533→   533→    () => (student ? allowedTeachers(student.classId, student.section) : []),
+   534→   534→    [student],
+   535→   535→  )
+   536→   536→  const [teacherId, setTeacherId] = useState<string>(teacherList[0]?.id ?? '')
+   537→   537→  const [topic, setTopic] = useState('')
+   538→   538→  const [slot, setSlot] = useState('')
+   539→   539→
+   540→   540→  const submit = () => {
+   541→   541→    if (!teacherId || !topic.trim()) return
+   542→   542→    const teacher = teacherList.find((t) => t.id === teacherId)
+   543→   543→    const result = requestTeacherMeeting({
+   544→   544→      actorStudentId: DEMO_STUDENT_ID,
+   545→   545→      teacherId,
+   546→   546→      teacherName: teacher?.name ?? teacherId,
+   547→   547→      topic: topic.trim(),
+   548→   548→      preferredSlot: slot.trim() || 'Any convenient time',
+   549→   549→    })
+   550→   550→    if (result.ok) {
+   551→   551→      toast.success('Meeting requested', { description: `${teacher?.name} has been notified — you will see the status under My Submissions.` })
+   552→   552→      onClose()
+   553→   553→    } else {
+   554→   554→      toast.error('Could not request meeting', { description: result.error })
+   555→   555→    }
+   556→   556→  }
+   557→   557→
+   558→   558→  return (
+   559→   559→    <DialogShell
+   560→   560→      title="Request a teacher meeting"
+   561→   561→      subtitle="Your class and subject teachers"
+   562→   562→      onClose={onClose}
+   563→   563→      footer={
+   564→   564→        <>
+   565→   565→          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+   566→   566→          <Button size="sm" disabled={!teacherId || !topic.trim()} onClick={submit}>
+   567→   567→            <Send className="h-3.5 w-3.5" /> Request
+   568→   568→          </Button>
+   569→   569→        </>
+   570→   570→      }
+   571→   571→    >
+   572→   572→      <div>
+   573→   573→        <label className="text-xs font-medium">Teacher</label>
+   574→   574→        <div className="space-y-1.5 mt-1.5">
+   575→   575→          {teacherList.map((t) => (
+   576→   576→            <button key={t.id} onClick={() => setTeacherId(t.id)} className={cn(
+   577→   577→              'w-full flex items-center gap-3 rounded-lg border p-2.5 text-left transition-colors',
+   578→   578→              teacherId === t.id ? 'border-primary/50 bg-primary/5' : 'border-border/60 hover:bg-muted/40',
+   579→   579→            )}>
+   580→   580→              <GradientAvatar name={t.name} size="sm" />
+   581→   581→              <div className="flex-1 min-w-0">
+   582→   582→                <p className="text-sm font-medium truncate">{t.name}</p>
+   583→   583→                <p className="text-[11px] text-muted-foreground">{t.subject}</p>
+   584→   584→              </div>
+   585→   585→              {teacherId === t.id && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+   586→   586→            </button>
+   587→   587→          ))}
+   588→   588→        </div>
+   589→   589→      </div>
+   590→   590→      <div>
+   591→   591→        <label htmlFor="mt-topic" className="text-xs font-medium">Topic</label>
+   592→   592→        <input id="mt-topic" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. Discuss the class science project plan"
+   593→   593→          className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" />
+   594→   594→      </div>
+   595→   595→      <div>
+   596→   596→        <label htmlFor="mt-slot" className="text-xs font-medium">Preferred time (optional)</label>
+   597→   597→        <input id="mt-slot" value={slot} onChange={(e) => setSlot(e.target.value)} placeholder="e.g. Tuesday lunch break"
+   598→   598→          className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" />
+   599→   599→      </div>
+   600→   600→    </DialogShell>
+   601→   601→  )
+   602→   602→}
+   603→   603→

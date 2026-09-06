@@ -14,6 +14,7 @@ import { SegmentedTabs } from '../shared/segmented-tabs'
 import { ClassOverview } from './details/class-overview'
 import { ClassSubjects } from './details/class-subjects'
 import { ClassTeachers } from './details/class-teachers'
+import { ClassLeadership } from './details/class-leadership'
 
 export function ClassDetailsPage({ cls, onBack, store, onStudentClick }: {
   cls: ClassRecord; onBack: () => void; store: any; onStudentClick?: (s: StudentRecord) => void
@@ -47,7 +48,7 @@ export function ClassDetailsPage({ cls, onBack, store, onStudentClick }: {
             <p className="text-xs text-muted-foreground truncate">{liveClass.level} · {liveClass.sections.length} sections · Room {liveClass.room}</p>
           </div>
         </div>
-        <SegmentedTabs tabs={[{ value: 'overview', label: 'Overview' }, { value: 'students', label: 'Students', badge: students.length }, { value: 'subjects', label: 'Subjects' }, { value: 'teachers', label: 'Teachers' }]} value={detailTab} onValueChange={setDetailTab} />
+        <SegmentedTabs tabs={[{ value: 'overview', label: 'Overview' }, { value: 'students', label: 'Students', badge: students.length }, { value: 'subjects', label: 'Subjects' }, { value: 'teachers', label: 'Teachers' }, { value: 'leadership', label: 'Leadership' }]} value={detailTab} onValueChange={setDetailTab} />
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4">
@@ -65,6 +66,7 @@ export function ClassDetailsPage({ cls, onBack, store, onStudentClick }: {
         {detailTab === 'students' && <ClassStudentsTab students={students} cls={liveClass} onStudentClick={onStudentClick} />}
         {detailTab === 'subjects' && <ClassSubjects cls={liveClass} />}
         {detailTab === 'teachers' && <ClassTeachers cls={liveClass} />}
+        {detailTab === 'leadership' && <ClassLeadership cls={liveClass} />}
       </div>
     </PageTransition>
   )

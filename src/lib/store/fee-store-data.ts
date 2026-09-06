@@ -783,6 +783,11 @@ const RAW_TXNS: TxnSeed[] = [
   { id: 'TXN017', receiptNo: 'RCP-2026-1058', studentId: 'STU-40', amount: 2600, mode: 'UPI', status: 'Failed', date: '2026-08-15', recordedAt: '2026-08-15T07:19:00.000Z', purpose: 'Term 2 Tuition', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: null, verifiedAt: null, referenceNo: 'UPI-FAIL-558899', academicYear: '2026-2027', paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD017', gatewayOrderId: 'order_NJ7aBcD017', reconciliationStatus: 'exception', refundReason: 'Payment failed at gateway — insufficient funds in payer account' },
   { id: 'TXN018', receiptNo: 'RCP-2026-1059', studentId: 'STU-35', amount: 3100, mode: 'Card', status: 'Failed', date: '2026-08-06', recordedAt: '2026-08-06T11:51:00.000Z', purpose: 'Term 2 Tuition', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: null, verifiedAt: null, referenceNo: 'CARD-FAIL-9981', academicYear: '2026-2027', meta: { cardLast4: '9981' }, paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD018', gatewayOrderId: 'order_NJ7aBcD018', reconciliationStatus: 'exception', refundReason: 'Card declined by issuing bank — parent to retry with different card' },
   { id: 'TXN019', receiptNo: 'RCP-2026-1060', studentId: 'STU-41', amount: 1500, mode: 'Card', status: 'Refunded', date: '2026-08-15', recordedAt: '2026-08-15T04:27:00.000Z', purpose: 'Duplicate instalment — refunded to source', feeHead: 'Tuition', collectedBy: 'Principal', verifiedBy: 'Principal', verifiedAt: '2026-08-15', referenceNo: 'CARD-****2244', academicYear: '2026-2027', meta: { cardLast4: '2244' }, paymentSource: 'online', gateway: 'razorpay', gatewayPaymentId: 'pay_NJ7aBcD019', gatewayOrderId: 'order_NJ7aBcD019', gatewayFee: 30, taxOnFee: 5, netAmount: 1465, reconciliationStatus: 'reconciled', refundedAmount: 1500, refundReason: 'Duplicate payment — parent requested refund for second transaction' },
+  // STU-B — the demo student's Term-1 payment (Class 2-A, fee-engine scale:
+  // ₹3,000 tuition + ₹500 management + ₹6,000 transport; ₹4,750 of ₹9,500
+  // paid → matches the canonical STU-58 record exactly). Direct-to-VPA UPI,
+  // office-verified — no gateway involvement (paymentSource 'offline').
+  { id: 'TXN020', receiptNo: 'RCP-2026-1061', studentId: 'STU-58', amount: 4750, mode: 'UPI', status: 'Success', date: '2026-07-10', recordedAt: '2026-07-10T06:30:00.000Z', purpose: 'Term 1 fees — tuition, management & part transport', feeHead: 'Tuition', collectedBy: 'Rohan Mehta', collectorRole: 'class_teacher', verifiedBy: 'Principal', verifiedAt: '2026-07-11', referenceNo: 'UPI-5544332211', academicYear: '2026-2027', paymentSource: 'offline' },
 ]
 
 export const SEED_TRANSACTIONS: FeeTransaction[] = RAW_TXNS.map(({ className: _ignored, ...rest }) => {
@@ -797,6 +802,11 @@ export const SEED_TRANSACTIONS: FeeTransaction[] = RAW_TXNS.map(({ className: _i
 })
 
 export const SEED_FEE_TRANSACTIONS = SEED_TRANSACTIONS
+
+// STU-B — the demo student's seed payment, isolated so the fee store's v14
+// migration can backfill it into persisted states that predate the roster
+// unification (the student-side fee history derives from the ONE ledger).
+export const STU58_SEED_TXNS: FeeTransaction[] = SEED_TRANSACTIONS.filter((t) => t.studentId === 'STU-58')
 
 // ─── Cash Request seed ───────────────────────────────────────────────
 // Teacher-collected cash awaiting Principal verification. Amounts mirror the

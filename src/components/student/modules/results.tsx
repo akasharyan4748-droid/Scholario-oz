@@ -12,6 +12,10 @@ import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { examResults } from '@/lib/mock/academics'
+import { school } from '@/lib/mock/school'
+import { useStudentsStore } from '@/lib/store/students-store'
+import { DEMO_STUDENT_ID } from './applications/student'
+import { downloadHTMLFile, safeFileName } from '@/lib/download-file'
 import { gradeColor } from '@/lib/format'
 import { toast } from 'sonner'
 
@@ -24,8 +28,120 @@ const subjectColors: Record<string, string> = {
   'Computer Science': 'from-lime-400 to-green-500',
 }
 
+const REPORT_CARD_FILENAME = safeFileName('Report Card UT3 DSO2024058', 'html')
+
+function esc(v: string): string {
+  return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+/**
+ * STU-F — the REAL report card document. Same standalone-HTML approach as
+ * the certificate / fee-receipt downloads: inline CSS only, no CDN
+ * dependencies, print-ready via the browser. Every value derives from
+ * examResults + the school mock + the canonical roster identity (STU-58).
+ */
+function buildReportCardHTML(identity: {
+  name: string; admissionNo: string; classSection: string; rollNo: string
+}): string {
+  const r = examResults
+  const rows = r.studentResults
+    .map((s) => {
+      const pct = ((s.obtained / s.maxMarks) * 100).toFixed(1)
+      return `<tr><td>${esc(s.subject)}</td><td class="c">${s.maxMarks}</td><td class="c">${s.obtained}</td><td class="c">${pct}%</td><td class="c">${esc(s.grade)}</td></tr>`
+    })
+    .join('')
+  const issuedOn = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Report Card — Unit Test 3 — ${esc(identity.name)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Georgia, 'Times New Roman', serif; margin: 40px auto; max-width: 720px; color: #1e293b; }
+  .letterhead { text-align: center; border-bottom: 3px double #6d28d9; padding-bottom: 14px; margin-bottom: 22px; }
+  .school { font-size: 22px; font-weight: bold; color: #0f172a; letter-spacing: 0.02em; }
+  .aff { font-size: 11px; color: #475569; margin-top: 4px; }
+  .contact { font-size: 10px; color: #64748b; margin-top: 2px; }
+  h1 { text-align: center; font-size: 15px; letter-spacing: 0.25em; margin: 18px 0 6px; color: #0f172a; }
+  .docmeta { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin: 0 0 16px; font-family: ui-monospace, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  table.data th, table.data td { border: 1px solid #94a3b8; padding: 7px 10px; font-size: 12px; }
+  table.data thead th { background: #f5f3ff; color: #6d28d9; text-align: left; }
+  table.data tfoot th, table.data tfoot td { background: #f5f3ff; color: #4c1d95; font-weight: bold; }
+  .c { text-align: center; }
+  table.meta td, table.meta th { border: 1px solid #cbd5e1; padding: 7px 10px; font-size: 12px; }
+  table.meta th { background: #f8fafc; text-align: left; width: 30%; color: #475569; }
+  .summary { display: flex; gap: 10px; margin: 14px 0; flex-wrap: wrap; }
+  .summary div { flex: 1; min-width: 120px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; text-align: center; font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; }
+  .summary strong { display: block; font-size: 16px; color: #0f172a; margin-top: 3px; text-transform: none; letter-spacing: 0; }
+  .remarks { border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 14px; font-size: 12px; margin: 14px 0; background: #f8fafc; line-height: 1.5; }
+  .remarks .by { margin-top: 8px; color: #64748b; font-size: 11px; }
+  .sign { display: flex; justify-content: space-between; margin-top: 56px; }
+  .sign div { text-align: center; font-size: 12px; color: #0f172a; }
+  .sign .line { border-top: 1px solid #334155; width: 230px; margin: 0 auto 6px; padding-top: 8px; font-weight: bold; }
+  .sign .role { color: #64748b; font-size: 10px; margin-top: 2px; }
+  @media print { body { margin: 10mm auto; } }
+</style>
+</head>
+<body>
+  <div class="letterhead">
+    <div class="school">${esc(school.name)}</div>
+    <div class="aff">${esc(school.affiliation)}</div>
+    <div class="contact">${esc(school.address)}</div>
+  </div>
+  <h1>STUDENT REPORT CARD</h1>
+  <div class="docmeta"><span>Unit Test 3 · November 2024</span><span>Issued ${issuedOn}</span></div>
+  <table class="meta">
+    <tr><th>Student Name</th><td>${esc(identity.name)}</td></tr>
+    <tr><th>Admission No</th><td>${esc(identity.admissionNo)}</td></tr>
+    <tr><th>Class / Section</th><td>${esc(identity.classSection)}</td></tr>
+    <tr><th>Roll No</th><td>${esc(identity.rollNo)}</td></tr>
+    <tr><th>Examination</th><td>Unit Test 3 · November 2024</td></tr>
+  </table>
+  <table class="data">
+    <thead>
+      <tr><th>Subject</th><th class="c">Max Marks</th><th class="c">Obtained</th><th class="c">Percentage</th><th class="c">Grade</th></tr>
+    </thead>
+    <tbody>${rows}</tbody>
+    <tfoot>
+      <tr><th>Total</th><th class="c">${r.maxTotal}</th><th class="c">${r.total}</th><th class="c">${r.percentage}%</th><th class="c">${esc(r.grade)}</th></tr>
+    </tfoot>
+  </table>
+  <div class="summary">
+    <div>Total Marks<strong>${r.total} / ${r.maxTotal}</strong></div>
+    <div>Percentage<strong>${r.percentage}%</strong></div>
+    <div>Overall Grade<strong>${esc(r.grade)}</strong></div>
+    <div>Class Rank<strong>#${r.rank} / ${r.totalStudents}</strong></div>
+  </div>
+  <div class="remarks">
+    <strong>Class Teacher's Remarks</strong><br />
+    ${esc(r.remarks)}
+    <div class="by">— Rohan Mehta, Class Teacher</div>
+  </div>
+  <div class="sign">
+    <div><div class="line">Rohan Mehta</div><div class="role">Class Teacher</div></div>
+    <div><div class="line">${esc(school.principal)}</div><div class="role">Principal</div></div>
+  </div>
+</body>
+</html>`
+}
+
 export function ResultsModule() {
   const r = examResults
+  // STU-F — identity from the ONE canonical roster (STU-58).
+  const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
+
+  const handleDownloadReportCard = () => {
+    const html = buildReportCardHTML({
+      name: student?.name ?? 'Aarav Sharma',
+      admissionNo: student?.admissionNo ?? 'DSO2024058',
+      classSection: `${student?.className ?? 'Class 2'}-${student?.section ?? 'A'}`,
+      rollNo: student?.rollNo ?? '18',
+    })
+    downloadHTMLFile(html, REPORT_CARD_FILENAME)
+    toast.success('Report card downloaded', { description: `${REPORT_CARD_FILENAME} — open it and print directly.` })
+  }
 
   return (
     <div className="space-y-6">
@@ -35,7 +151,7 @@ export function ResultsModule() {
         icon={<Award className="h-5 w-5" />}
         action={
           <Button
-            onClick={() => toast.success('Report card download started', { description: 'RCP-UT3-2024-018.pdf will appear in your downloads.' })}
+            onClick={handleDownloadReportCard}
             className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
           >
             <Download className="h-3.5 w-3.5" /> Download Report Card

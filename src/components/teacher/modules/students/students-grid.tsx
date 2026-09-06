@@ -6,14 +6,16 @@ import { Search, Award, Phone } from 'lucide-react'
 import { GlassCard, StatusBadge, GradientAvatar } from '@/components/shared/ui'
 import { ProgressBar } from '@/components/shared/charts'
 import { Input } from '@/components/ui/input'
-import { students, type Student } from '@/lib/mock/students'
+import type { Student } from '@/lib/mock/students'
 import { cn } from '@/lib/utils'
-import { scoreSequence, type Filter } from './data'
+import { scoreSequence, useClass2AStudents, type Filter } from './data'
 
 // Students directory grid with search + attendance filter. Owns its own search/filter state.
 export function StudentsGrid({ onSelect }: { onSelect: (s: Student) => void }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
+  // STU-B — canonical roster (Class 2-A from the students-store).
+  const students = useClass2AStudents()
 
   const filtered = useMemo(() => {
     let list = students

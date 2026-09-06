@@ -12,19 +12,13 @@ import { DEFAULT_PAYMENT_MODES } from '@/lib/store/fee-store-data'
 // Banking) are offered; offline modes (Cash / Bank Transfer) are office
 // channels handled by the school, and Cheque is deprecated.
 
-// Aarav's payment history (GWS2024018)
-export const myTransactions = [
-  { id: 'TXN018A', receiptNo: 'RCP-2024-1018', amount: 42000, mode: 'UPI' as const, status: 'Success' as const, date: '2024-04-15', purpose: 'Annual Fee — Q1' },
-  { id: 'TXN018B', receiptNo: 'RCP-2024-1018B', amount: 22000, mode: 'UPI' as const, status: 'Success' as const, date: '2024-07-12', purpose: 'Annual Fee — Q2 (Partial)' },
-]
-
-// Fee breakdown
+// Aarav's fee breakdown — mirrors the CANONICAL Class 2 (C05) fee structure
+// from the fee engine: Tuition ₹250 × 12 + Management & Maintenance ₹500 +
+// Transport ₹500 × 12 (opted in). ₹4,750 of ₹9,500 paid (Term 1 instalment).
 export const feeBreakdown = [
-  { name: 'Tuition Fee', amount: 60000, paid: 46000 },
-  { name: 'Transport Fee', amount: 18000, paid: 12000 },
-  { name: 'Library Fee', amount: 2000, paid: 2000 },
-  { name: 'Exam Fee', amount: 3000, paid: 2000 },
-  { name: 'Activity Fee', amount: 3000, paid: 2000 },
+  { name: 'Tuition Fee', amount: 3000, paid: 3000 },
+  { name: 'Management & Maintenance', amount: 500, paid: 500 },
+  { name: 'Transport Fee', amount: 6000, paid: 1250 },
 ]
 
 /** Shape consumed by payment-form-stage.tsx (unchanged). */
@@ -69,38 +63,4 @@ export interface PaymentStudentInfo {
   email: string
   className: string
   section: string
-}
-
-export type RenewalStatus = 'open' | 'pending_cash' | 'approved'
-
-export type RenewalPayType = 'online' | 'cash'
-
-export type RenewalReceiver = 'Ananya Sharma (Class Teacher)' | 'Dr. Ramesh Varma (Principal)' | 'Central Accounts Desk'
-
-export type RenewalStage = 'form' | 'processing' | 'receipt'
-
-export interface RenewalReceiptData {
-  receiptNo: string
-  txnId: string
-  date: string
-  amount: number
-  mode: string
-  receiver: string
-  status: string
-}
-
-export const RENEWAL_RECEIVERS: { value: RenewalReceiver; label: string }[] = [
-  { value: 'Ananya Sharma (Class Teacher)', label: 'Ananya Sharma — Class Teacher (Class 10-A)' },
-  { value: 'Dr. Ramesh Varma (Principal)', label: 'Dr. Ramesh Varma — Principal' },
-  { value: 'Central Accounts Desk', label: 'Central Accounts Desk' },
-]
-
-export const initialRenewalReceiptData: RenewalReceiptData = {
-  receiptNo: 'RCP-2025-RENEW-018',
-  txnId: 'TXN-2025-884210',
-  date: new Date().toISOString().split('T')[0],
-  amount: 65000,
-  mode: 'Cash Payment',
-  receiver: 'Ananya Sharma (Class Teacher)',
-  status: 'Pending Teacher Acceptance',
 }

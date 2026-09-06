@@ -1,7 +1,7 @@
 'use client'
 
 import {
-  Archive, Award, Bus, Clock, Home, IndianRupee, RotateCcw, TrendingUp, User,
+  Archive, Award, Bus, Clock, Crown, Home, IndianRupee, RotateCcw, TrendingUp, User,
 } from 'lucide-react'
 import { formatDate } from '@/lib/format'
 import type { StudentRecord } from '@/lib/store/students-store'
@@ -18,6 +18,7 @@ export function TimelineTab({ student }: Props) {
       case 'transfer': return <Bus className="h-3.5 w-3.5" />
       case 'fee': return <IndianRupee className="h-3.5 w-3.5" />
       case 'house': return <Home className="h-3.5 w-3.5" />
+      case 'position': return <Crown className="h-3.5 w-3.5" />
       case 'archive': return <Archive className="h-3.5 w-3.5" />
       case 'restore': return <RotateCcw className="h-3.5 w-3.5" />
       default: return <Clock className="h-3.5 w-3.5" />

@@ -4,13 +4,13 @@ import { motion } from 'framer-motion'
 import { Megaphone, ArrowUpRight, MapPin, Bus } from 'lucide-react'
 import { GlassCard, StatusBadge } from '@/components/shared/ui'
 import { announcements } from '@/lib/mock/operations'
-import { toast } from 'sonner'
 
 interface AnnouncementsTransportProps {
   transportId?: string
+  onNavigate: (key: string) => void
 }
 
-export function AnnouncementsTransport({ transportId }: AnnouncementsTransportProps) {
+export function AnnouncementsTransport({ transportId, onNavigate }: AnnouncementsTransportProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
@@ -18,7 +18,10 @@ export function AnnouncementsTransport({ transportId }: AnnouncementsTransportPr
           <h3 className="font-semibold text-sm flex items-center gap-2">
             <Megaphone className="h-4 w-4 text-primary" /> School Announcements
           </h3>
-          <button className="text-xs text-primary font-medium hover:underline flex items-center gap-1">
+          <button
+            onClick={() => onNavigate('announcements')}
+            className="text-xs text-primary font-medium hover:underline flex items-center gap-1"
+          >
             View all <ArrowUpRight className="h-3 w-3" />
           </button>
         </div>
@@ -83,7 +86,7 @@ export function AnnouncementsTransport({ transportId }: AnnouncementsTransportPr
             </div>
           </div>
           <button
-            onClick={() => toast.info('Live tracking unavailable in demo mode', { description: 'Vehicle HR-26-IJ-5634 is currently in maintenance' })}
+            onClick={() => onNavigate('bus')}
             className="mt-3 w-full rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-xs font-semibold py-2 hover:bg-cyan-500/15 transition-colors"
           >
             Track My Bus

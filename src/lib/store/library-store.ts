@@ -118,16 +118,16 @@ const SEED_RESERVATIONS: Reservation[] = [
 ]
 
 // Current-session borrower records — the logged-in student (Aarav Sharma,
-// STU-2024-018, Class 2) and teacher (Rohan Mehta, T-014) so their role
+// STU-58, Class 2) and teacher (Rohan Mehta, T-014) so their role
 // views show REAL circulation data from this same store (no second source).
 // Dates are relative to "today" so overdue/status computations stay honest.
 function rel(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
 }
 const SESSION_BORROWER_ISSUES: IssueRecord[] = [
-  { id: 'ISS101', bookId: 'BK003', bookTitle: 'Panchatantra Tales', borrowerId: 'STU-2024-018', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024018', class: 'Class 2-A', issueDate: rel(6), dueDate: rel(-8), status: 'Issued', fine: 0, fineStatus: 'Pending' },
-  { id: 'ISS102', bookId: 'BK004', bookTitle: 'Mathematics for Class 2', borrowerId: 'STU-2024-018', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024018', class: 'Class 2-A', issueDate: rel(20), dueDate: rel(-2), status: 'Overdue', fine: 10, fineStatus: 'Pending' },
-  { id: 'ISS103', bookId: 'BK008', bookTitle: 'Tenali Raman Stories', borrowerId: 'STU-2024-018', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024018', class: 'Class 2-A', issueDate: rel(40), dueDate: rel(26), returnDate: rel(25), status: 'Returned', fine: 0, fineStatus: 'Paid' },
+  { id: 'ISS101', bookId: 'BK003', bookTitle: 'Panchatantra Tales', borrowerId: 'STU-58', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024058', class: 'Class 2-A', issueDate: rel(6), dueDate: rel(-8), status: 'Issued', fine: 0, fineStatus: 'Pending' },
+  { id: 'ISS102', bookId: 'BK004', bookTitle: 'Mathematics for Class 2', borrowerId: 'STU-58', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024058', class: 'Class 2-A', issueDate: rel(20), dueDate: rel(-2), status: 'Overdue', fine: 10, fineStatus: 'Pending' },
+  { id: 'ISS103', bookId: 'BK008', bookTitle: 'Tenali Raman Stories', borrowerId: 'STU-58', borrowerName: 'Aarav Sharma', borrowerType: 'student', admissionNo: 'DSO2024058', class: 'Class 2-A', issueDate: rel(40), dueDate: rel(26), returnDate: rel(25), status: 'Returned', fine: 0, fineStatus: 'Paid' },
   { id: 'ISS104', bookId: 'BK012', bookTitle: 'Physics for Class 10', borrowerId: 'T-014', borrowerName: 'Rohan Mehta', borrowerType: 'teacher', issueDate: rel(9), dueDate: rel(-5), status: 'Issued', fine: 0, fineStatus: 'Pending' },
   { id: 'ISS105', bookId: 'BK001', bookTitle: 'Wings of Fire', borrowerId: 'T-014', borrowerName: 'Rohan Mehta', borrowerType: 'teacher', issueDate: rel(35), dueDate: rel(33), returnDate: rel(30), status: 'Returned', fine: 0, fineStatus: 'Paid' },
 ]
@@ -315,7 +315,7 @@ export const useLibraryStore = create<LibraryState>()(
       // v2 — borrowers re-pointed to the canonical students-store roster
       // (names/classes/admission numbers now cross-module consistent).
       // Version bump discards stale v1 seed state once and re-seeds.
-      version: 2,
+      version: 3,
       // DATA slices only — search/filters are UI state, actions are functions.
       partialize: (s) => ({ books: s.books, issues: s.issues, reservations: s.reservations }),
     },

@@ -7,13 +7,16 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { formatINR, formatDate } from '@/lib/format'
 import { toast } from 'sonner'
-import { myTransactions } from './data'
+import type { FeeTransaction, ReceiptSettings } from '@/lib/store/fee-store'
+import { downloadReceiptA5 } from '@/components/principal/modules/fees/fee-receipt-a5'
 
 interface PaymentHistoryProps {
   totalPaid: number
+  transactions: FeeTransaction[]
+  receiptSettings: ReceiptSettings
 }
 
-export function PaymentHistory({ totalPaid }: PaymentHistoryProps) {
+export function PaymentHistory({ totalPaid, transactions, receiptSettings }: PaymentHistoryProps) {
   return (
     <GlassCard className="p-3 sm:p-4 lg:p-5">
       <div className="flex items-center justify-between mb-4">
@@ -21,7 +24,7 @@ export function PaymentHistory({ totalPaid }: PaymentHistoryProps) {
           <h3 className="font-semibold text-sm flex items-center gap-2">
             <Receipt className="h-4 w-4 text-cyan-500" /> Payment History
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">{myTransactions.length} transactions · All successful</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{transactions.length} transactions · from the school fee ledger</p>
         </div>
         <StatusBadge status={`${formatINR(totalPaid)} paid`} variant="success" dot />
       </div>
@@ -39,7 +42,7 @@ export function PaymentHistory({ totalPaid }: PaymentHistoryProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {myTransactions.map((t, i) => (
+            {transactions.map((t, i) => (
               <motion.tr
                 key={t.id}
                 initial={{ opacity: 0, x: -8 }}
@@ -61,7 +64,12 @@ export function PaymentHistory({ totalPaid }: PaymentHistoryProps) {
                 </TableCell>
                 <TableCell className="text-right">
                   <button
-                    onClick={() => toast.success('Receipt downloaded', { description: `${t.receiptNo}.pdf` })}
+                    onClick={() => {
+                      downloadReceiptA5(t, receiptSettings)
+                      toast.success('Receipt downloaded', { description: `${t.receiptNo}.html` })
+                    }}
+                    aria-label={`Download receipt ${t.receiptNo}`}
+                    title="Download receipt"
                     className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                   >
                     <Download className="h-3.5 w-3.5" />

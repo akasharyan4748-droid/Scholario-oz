@@ -12,5 +12,4 @@
 export { SuperAdminDashboard } from './super-admin-dashboard';
 export { AdminDashboard } from './admin-dashboard';
 export { TeacherDashboard } from './teacher-dashboard';
-export { StudentDashboard } from './student-dashboard';
 export { ParentDashboard } from './parent-dashboard';

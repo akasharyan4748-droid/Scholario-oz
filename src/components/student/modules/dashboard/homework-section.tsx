@@ -6,9 +6,9 @@ import {
 } from 'lucide-react'
 import { GlassCard, StatusBadge } from '@/components/shared/ui'
 import { assignments, homeworks } from '@/lib/mock/academics'
-import { issuedBooks } from '@/lib/mock/operations'
+import { useLibraryStore } from '@/lib/store/library-store'
 import { formatDate } from '@/lib/format'
-import { toast } from 'sonner'
+import { DEMO_STUDENT_ID } from '../applications/student'
 
 interface HomeworkSectionProps {
   pendingHomework: typeof homeworks
@@ -17,7 +17,14 @@ interface HomeworkSectionProps {
 }
 
 export function HomeworkSection({ pendingHomework, dueAssignments, libraryId }: HomeworkSectionProps) {
-  const myIssuedBook = issuedBooks.find((b) => b.admissionNo === 'DSO2025018')
+  // STU-F — the library card reads the ONE library store (the same source
+  // My Library and Notifications use), filtered to the demo student's live
+  // overdue issue. The old source (mock/operations + a stale admissionNo)
+  // silently rendered nothing; the toast-only "Return Book" stub was removed
+  // — returns happen at the counter (My Library is the read-only view).
+  const myIssue = useLibraryStore((s) =>
+    s.issues.find((i) => i.borrowerId === DEMO_STUDENT_ID && i.status === 'Overdue'),
+  )
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -98,7 +105,7 @@ export function HomeworkSection({ pendingHomework, dueAssignments, libraryId }: 
           </h3>
           <span className="text-[10px] font-mono text-muted-foreground">{libraryId}</span>
         </div>
-        {myIssuedBook && (
+        {myIssue && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -109,20 +116,14 @@ export function HomeworkSection({ pendingHomework, dueAssignments, libraryId }: 
                 <BookMarked className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-sm">{myIssuedBook.book}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Issued {formatDate(myIssuedBook.issueDate)}</p>
+                <p className="font-semibold text-sm">{myIssue.bookTitle}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Issued {formatDate(myIssue.issueDate)}</p>
                 <div className="flex items-center gap-2 mt-2">
                   <StatusBadge status="Overdue" variant="danger" dot />
-                  <span className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">Fine: ₹{myIssuedBook.fine}</span>
+                  <span className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">Fine: ₹{myIssue.fine}</span>
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => toast.info('Library book return requested. Please visit the library counter.', { description: 'Librarian: Geeta Sharma' })}
-              className="mt-3 w-full rounded-lg bg-primary/10 text-primary text-xs font-semibold py-2 hover:bg-primary/15 transition-colors"
-            >
-              Return Book
-            </button>
           </motion.div>
         )}
         <div className="mt-3 pt-3 border-t border-border space-y-1.5 text-xs">

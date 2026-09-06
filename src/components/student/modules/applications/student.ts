@@ -3,19 +3,14 @@
 /**
  * Student-side helpers for the Applications & Forms module.
  *
- * IDENTITY MODEL (two records, one demo student):
- *   • DISPLAY identity  — the mock roster student (`getStudentById('STU-2024-018')`,
- *     Aarav Sharma) used across the student panel.
- *   • FINANCIAL identity — the CANONICAL twin in the students store, matched by
- *     `admissionNo` (DSO2024018). Submissions and payments MUST use this record —
- *     the fee store validates canonical ids only, and payment derivation joins
- *     on `studentId`.
- *   Fallback when no twin exists: first Active canonical student whose class
- *   name starts with "Class 2" (the demo student's class).
+ * IDENTITY MODEL (one canonical record — since the roster unification):
+ *   The demo student IS the canonical students-store record STU-58
+ *   (Aarav Sharma, Class 2-A, DSO2024058). Submissions and payments use
+ *   this record — the fee store validates canonical ids, and payment
+ *   derivation joins on `studentId`.
  */
 
 import { useMemo } from 'react'
-import { getStudentById } from '@/lib/mock/students'
 import { useStudentsStore, type StudentRecord } from '@/lib/store/students-store'
 import {
   useApplicationsStore,
@@ -24,34 +19,30 @@ import {
   type StudentSubmissionIdentity,
 } from '@/lib/store/applications-store'
 
-export const DEMO_STUDENT_ID = 'STU-2024-018'
+export const DEMO_STUDENT_ID = 'STU-58'
 
-/** Display + canonical identity pair for the demo student. */
+/** Canonical identity for the demo student. */
 export interface StudentIdentityPair {
-  /** Display identity from the mock roster (the student-panel face). */
-  display: ReturnType<typeof getStudentById>
-  /** Canonical record — used for submissions, payments and eligibility. */
+  /** Canonical record — display, submissions, payments and eligibility. */
   canonical: StudentRecord
 }
 
-/** Reactive hook resolving the canonical (financial) identity. */
+/** Reactive hook resolving the canonical identity. */
 export function useDemoStudent(): StudentIdentityPair | null {
   const students = useStudentsStore((s) => s.students)
   return useMemo(() => {
-    const canonical = resolveCanonicalStudent(students)
+    const canonical = students.find((s) => s.id === DEMO_STUDENT_ID && s.status === 'Active')
     if (!canonical) return null
-    return { display: getStudentById(DEMO_STUDENT_ID), canonical }
+    return { canonical }
   }, [students])
 }
 
-/** Resolve the canonical (financial) identity for the demo student (non-reactive). */
+/** Resolve the canonical identity for the demo student (non-reactive). */
 export function resolveCanonicalStudent(students: StudentRecord[]): StudentRecord | undefined {
-  const mock = getStudentById(DEMO_STUDENT_ID)
-  if (mock) {
-    const twin = students.find((s) => s.admissionNo === mock.admissionNo && s.status === 'Active')
-    if (twin) return twin
-  }
-  return students.find((s) => s.status === 'Active' && s.className.startsWith('Class 2'))
+  return (
+    students.find((s) => s.id === DEMO_STUDENT_ID && s.status === 'Active') ??
+    students.find((s) => s.status === 'Active' && s.className.startsWith('Class 2'))
+  )
 }
 
 /**

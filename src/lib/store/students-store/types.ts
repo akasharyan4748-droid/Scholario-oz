@@ -10,11 +10,50 @@ export type Gender = 'Male' | 'Female'
 
 export interface TimelineEvent {
   id: string
-  type: 'admission' | 'promotion' | 'transfer' | 'fee' | 'house' | 'archive' | 'restore'
+  type: 'admission' | 'promotion' | 'transfer' | 'fee' | 'house' | 'archive' | 'restore' | 'position'
   title: string
   description: string
   date: string
   by: string
+}
+
+// ============================================================
+// STUDENT POSITIONS — Class Captain / Monitor responsibility model
+// (see src/lib/student-positions.ts for the capability vocabulary).
+// A position is a scoped, persisted assignment: the student remains a
+// normal Student; capabilities derive from the ACTIVE position record.
+// ============================================================
+
+export type StudentPositionKey =
+  | 'class-captain'
+  | 'class-vice-captain'
+  | 'class-monitor'
+  | 'sports-captain'
+  | 'eco-monitor'
+  | 'library-monitor'
+
+export interface StudentPosition {
+  /** Stable id (POS-1, POS-2 …). */
+  id: string
+  /** Canonical student id (STU-x) — the holder. */
+  studentId: string
+  /** Holder display name at assignment time (snapshot for history rows). */
+  studentName: string
+  /** Class + section the position is scoped to (derived from the student). */
+  classId: string
+  className: string
+  section: string
+  /** Position vocabulary key (titles/capabilities resolve from it). */
+  key: StudentPositionKey
+  /** Who assigned it (teacher id or 'PRINCIPAL'). */
+  assignedById: string
+  assignedByName: string
+  assignedOn: string
+  /** Active flag — ending a position flips this; history is preserved. */
+  active: boolean
+  endedOn?: string
+  endedByName?: string
+  notes?: string
 }
 
 export interface StudentRecord {
@@ -166,6 +205,9 @@ export interface StudentsState {
   houses: House[]
   promotions: PromotionRecord[]
   transfers: TransferRecord[]
+  /** Class Captain / Monitor assignments (spec §21–§25) — the persisted
+   *  permission source of truth for scoped student responsibilities. */
+  studentPositions: StudentPosition[]
   /**
    * Canonical subject registry (Spec §28). Each entry has a stable id and
    * a display name that may be renamed. Both Students & Classes UI and
@@ -182,6 +224,20 @@ export interface StudentsState {
   executePromotion: (id: string, by: string) => void
   addHousePoints: (id: string, pts: number) => void
   assignHouseCaptain: (id: string, sid: string, role: 'captain' | 'vice') => void
+  /** Assign a scoped student position (Class Captain/Monitor …). Validates the
+   *  student is Active; one active holder per (class · section · position). */
+  assignStudentPosition: (input: {
+    studentId: string
+    key: StudentPositionKey
+    assignedById: string
+    assignedByName: string
+    notes?: string
+  }) => { ok: true; record: StudentPosition } | { ok: false; error: string }
+  /** End an active position (history preserved; capabilities disappear). */
+  endStudentPosition: (
+    positionId: string,
+    byName: string,
+  ) => { ok: true } | { ok: false; error: string }
   /** Replace the class-level Class Teacher. Pass null/undefined to clear. */
   updateClassTeacher: (classId: string, teacherId: string | null) => void
   /** Replace the class-level Assistant Class Teacher. Pass null/undefined to clear. */

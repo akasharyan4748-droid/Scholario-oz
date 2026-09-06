@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bus, MessageSquare } from 'lucide-react'
+import { Bus } from 'lucide-react'
 import { GlassCard, SectionHeading } from '@/components/shared/ui'
 import { myBusRoute, myBusStops } from '@/lib/mock/bus-tracking'
-import { toast } from 'sonner'
 import { KpiRow } from './kpi-row'
 import { LiveMap } from './live-map'
 import { BusDetails } from './bus-details'
@@ -42,14 +41,6 @@ export function BusTrackingModule() {
         title="My School Bus"
         subtitle="Live tracking for Route 4 · Sohna Road & Sector 49"
         icon={<Bus className="h-5 w-5" />}
-        action={
-          <button
-            onClick={() => toast.success('Alert sent', { description: 'Parent notified of your bus status' })}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-violet-500/20"
-          >
-            <MessageSquare className="h-3.5 w-3.5" /> Notify Parent
-          </button>
-        }
       />
 
       <KpiRow eta={eta} speed={speed} stopsToGo={stopsToGo} currentStopIdx={currentStopIdx} />

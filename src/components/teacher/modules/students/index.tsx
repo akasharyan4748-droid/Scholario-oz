@@ -17,13 +17,28 @@ import { SectionHeading } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { Student } from '@/lib/mock/students'
+import { toCsv } from '@/lib/csv'
+import { downloadCSVFile } from '@/lib/download-file'
 import { FeeCollectionsPanel } from './fee-collections'
 import { QuickStats } from './quick-stats'
 import { StudentsGrid } from './students-grid'
 import { StudentProfileSheet } from './student-profile-sheet'
+import { useClass2AStudents } from './data'
 
 export function StudentsModule() {
   const [selected, setSelected] = useState<Student | null>(null)
+  const students = useClass2AStudents()
+
+  const handleExport = () => {
+    const csv = toCsv(
+      ['Roll No', 'Admission No', 'Name', 'Class', 'Section', 'Gender', 'Attendance %', 'Fee Status', 'Fee Paid', 'Fee Total', 'Father', 'Guardian Phone'],
+      students.map((s) => [
+        s.rollNo, s.admissionNo, s.name, s.className, s.section, s.gender, s.attendance, s.feeStatus, s.feePaid, s.feeTotal, s.fatherName, s.guardianPhone,
+      ]),
+    )
+    downloadCSVFile(csv, 'class-2a-student-list.csv')
+    toast.success('Export ready', { description: `Class 2-A student list · ${students.length} students · CSV` })
+  }
 
   return (
     <div className="space-y-5">
@@ -32,7 +47,7 @@ export function StudentsModule() {
         subtitle="Class 2-A · Manage and view student profiles"
         icon={<Users className="h-5 w-5" />}
         action={
-          <Button variant="outline" onClick={() => toast.success('Export started', { description: 'Class 2-A student list · CSV' })}>
+          <Button variant="outline" onClick={handleExport}>
             <Download className="h-4 w-4" /> Export
           </Button>
         }

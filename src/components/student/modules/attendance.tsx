@@ -15,21 +15,54 @@ const holidayCount = studentAttendanceCalendar.filter((d) => d.status === 'holid
 const totalDays = studentAttendanceCalendar.length
 const attendancePct = Math.round(((presentCount + lateCount) / totalDays) * 100)
 
+// STU-F — inline monthly trend, endpoint-aligned with the live KPI (last
+// point = attendancePct = 96). Mirrors the derivation in dashboard/data.tsx:
+// Jul–Oct are the pre-window history, Nov is the calendar's own monthly
+// aggregate (16/17), Dec (the latest, in-progress month) carries the live
+// overall rate so the chart can never disagree with the gauge.
 const trendData = [
-  { name: 'Jun', v: 95 }, { name: 'Jul', v: 94 }, { name: 'Aug', v: 92 },
-  { name: 'Sep', v: 95 }, { name: 'Oct', v: 93 }, { name: 'Nov', v: 93 },
+  { name: 'Jul', v: 94 }, { name: 'Aug', v: 92 }, { name: 'Sep', v: 95 },
+  { name: 'Oct', v: 93 }, { name: 'Nov', v: 94 }, { name: 'Dec', v: attendancePct },
 ]
+const latestTrend = trendData[trendData.length - 1]
+const prevTrend = trendData[trendData.length - 2]
+const trendDelta = +(latestTrend.v - prevTrend.v).toFixed(1)
 
-// Build a November 2024 calendar (1 = Friday)
-const novCalendar = (() => {
-  const days: { date: number | null; status?: string; fullDate?: string }[] = []
-  for (let i = 0; i < 5; i++) days.push({ date: null }) // Nov 1, 2024 is Friday (index 4 in Sun=0)
-  for (let d = 1; d <= 30; d++) {
-    const fullDate = `2024-11-${String(d).padStart(2, '0')}`
-    const entry = studentAttendanceCalendar.find((e) => e.date === fullDate)
-    days.push({ date: d, status: entry?.status, fullDate })
+// Window label derived from the records (e.g. 'November – December 2025').
+const windowLabel = (() => {
+  if (studentAttendanceCalendar.length === 0) return ''
+  const first = new Date(studentAttendanceCalendar[0].date)
+  const last = new Date(studentAttendanceCalendar[studentAttendanceCalendar.length - 1].date)
+  const firstLabel = first.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+  const lastLabel = last.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+  if (firstLabel === lastLabel) return firstLabel
+  return `${first.toLocaleDateString('en-IN', { month: 'long' })} – ${lastLabel}`
+})()
+
+// Month grids derived from the actual record dates — one grid per month
+// present in the data (Nov 2025 + Dec 2025). Leading blanks come from the
+// month's real first weekday; days without records render as muted cells.
+const monthGrids = (() => {
+  const byMonth = new Map<string, { date: string; status?: string }[]>()
+  for (const rec of studentAttendanceCalendar) {
+    const key = rec.date.slice(0, 7)
+    if (!byMonth.has(key)) byMonth.set(key, [])
+    byMonth.get(key)!.push(rec)
   }
-  return days
+  return [...byMonth.entries()].map(([key, recs]) => {
+    const [y, m] = key.split('-').map(Number)
+    const firstDow = new Date(y, m - 1, 1).getDay()
+    const daysInMonth = new Date(y, m, 0).getDate()
+    const cells: { date: number | null; status?: string; fullDate?: string }[] = []
+    for (let i = 0; i < firstDow; i++) cells.push({ date: null })
+    for (let d = 1; d <= daysInMonth; d++) {
+      const fullDate = `${key}-${String(d).padStart(2, '0')}`
+      const entry = recs.find((e) => e.date === fullDate)
+      cells.push({ date: d, status: entry?.status, fullDate })
+    }
+    const label = new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+    return { key, label, cells }
+  })
 })()
 
 const statusColors: Record<string, string> = {
@@ -50,7 +83,7 @@ export function AttendanceModule() {
     <div className="space-y-6">
       <SectionHeading
         title="My Attendance"
-        subtitle="November 2024 · Class 2-A"
+        subtitle={`${windowLabel} · Class 2-A`}
         icon={<CalendarCheck className="h-5 w-5" />}
         action={<StatusBadge status="Excellent" variant="success" dot />}
       />
@@ -59,14 +92,14 @@ export function AttendanceModule() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <GlassCard className="p-3 sm:p-4 lg:p-5">
           <h3 className="font-semibold text-sm mb-1">Attendance Rate</h3>
-          <p className="text-xs text-muted-foreground mb-3">Overall this month</p>
+          <p className="text-xs text-muted-foreground mb-3">Overall this period</p>
           <div className="flex items-center justify-center">
             <RadialGauge value={attendancePct} label="present" size={180} color="oklch(0.55 0.14 162)" />
           </div>
           <div className="mt-3 flex items-center justify-center gap-2 text-xs">
             <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">+1.4%</span>
-            <span className="text-muted-foreground">vs last month (92%)</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{trendDelta >= 0 ? `+${trendDelta}%` : `${trendDelta}%`}</span>
+            <span className="text-muted-foreground">vs last month ({prevTrend.v}%)</span>
           </div>
         </GlassCard>
 
@@ -144,7 +177,7 @@ export function AttendanceModule() {
       <GlassCard className="p-3 sm:p-4 lg:p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-semibold text-sm">November 2024 — Attendance Calendar</h3>
+            <h3 className="font-semibold text-sm">{windowLabel} — Attendance Calendar</h3>
             <p className="text-xs text-muted-foreground mt-0.5">Daily attendance heatmap</p>
           </div>
           <div className="flex items-center gap-3 text-[10px]">
@@ -154,36 +187,41 @@ export function AttendanceModule() {
             <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-muted" /> Holiday</div>
           </div>
         </div>
-        <div className="grid grid-cols-7 gap-2">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-            <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground pb-1">{d}</div>
-          ))}
-          {novCalendar.map((day, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.005 }}
-              className={`relative aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-medium ${
-                day.date === null
-                  ? 'bg-transparent'
-                  : day.status
-                    ? `${statusColors[day.status]} ${statusRings[day.status] ?? ''} ring-1`
-                    : 'bg-card/40 border border-border text-muted-foreground'
-              }`}
-              title={day.fullDate ? `${day.fullDate} · ${day.status ?? 'no record'}` : ''}
-            >
-              {day.date !== null && (
-                <>
-                  <span className="leading-none">{day.date}</span>
-                  {day.status === 'present' && <CheckCircle2 className="h-2.5 w-2.5 mt-0.5 opacity-80" />}
-                  {day.status === 'late' && <Clock className="h-2.5 w-2.5 mt-0.5 opacity-80" />}
-                  {day.status === 'absent' && <XCircle className="h-2.5 w-2.5 mt-0.5 opacity-80" />}
-                </>
-              )}
-            </motion.div>
-          ))}
-        </div>
+        {monthGrids.map((grid) => (
+          <div key={grid.key} className="mb-4 last:mb-0">
+            <p className="text-xs font-semibold text-foreground/80 mb-2">{grid.label}</p>
+            <div className="grid grid-cols-7 gap-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground pb-1">{d}</div>
+              ))}
+              {grid.cells.map((day, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: i * 0.005 }}
+                  className={`relative aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-medium ${
+                    day.date === null
+                      ? 'bg-transparent'
+                      : day.status
+                        ? `${statusColors[day.status]} ${statusRings[day.status] ?? ''} ring-1`
+                        : 'bg-card/40 border border-border text-muted-foreground'
+                  }`}
+                  title={day.fullDate ? `${day.fullDate} · ${day.status ?? 'no record'}` : ''}
+                >
+                  {day.date !== null && (
+                    <>
+                      <span className="leading-none">{day.date}</span>
+                      {day.status === 'present' && <CheckCircle2 className="h-2.5 w-2.5 mt-0.5 opacity-80" />}
+                      {day.status === 'late' && <Clock className="h-2.5 w-2.5 mt-0.5 opacity-80" />}
+                      {day.status === 'absent' && <XCircle className="h-2.5 w-2.5 mt-0.5 opacity-80" />}
+                    </>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        ))}
       </GlassCard>
 
       {/* Trend chart + recent records */}

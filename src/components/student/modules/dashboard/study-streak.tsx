@@ -5,7 +5,6 @@ import { TrendingUp, Flame, Zap } from 'lucide-react'
 import { GlassCard } from '@/components/shared/ui'
 import { AnimatedCounter } from '@/components/shared/animated-counter'
 import { playerStats } from '@/lib/mock/gamification'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 export function StudyStreak() {
@@ -91,19 +90,13 @@ export function StudyStreak() {
             </div>
           </div>
 
-          {/* Right: Streak rewards + CTA */}
+          {/* Right: Streak rewards */}
           <div className="lg:col-span-2 flex flex-col gap-2">
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-center">
               <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Next Reward</p>
               <p className="font-display text-lg font-bold mt-0.5">30 days</p>
               <p className="text-[10px] text-muted-foreground">+250 XP bonus</p>
             </div>
-            <button
-              onClick={() => toast.success('Streak secured for today!', { description: 'Come back tomorrow to extend your streak 🔥' })}
-              className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-amber-500/20 hover:brightness-110 active:scale-[0.97] transition-all"
-            >
-              Claim Today
-            </button>
           </div>
         </div>
       </GlassCard>

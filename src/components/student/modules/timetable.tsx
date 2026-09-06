@@ -90,7 +90,7 @@ export function TimetableModule() {
     <div className="space-y-6">
       <SectionHeading
         title="My Timetable"
-        subtitle="Class 2-A · Academic Year 2024–2025"
+        subtitle="Class 2-A · Academic Year 2025–2026"
         icon={<CalendarDays className="h-5 w-5" />}
         action={<StatusBadge status="Wednesday is today" variant="primary" dot />}
       />
@@ -169,7 +169,7 @@ export function TimetableModule() {
           <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
             {[
               { subject: 'Mathematics', name: 'Rohan Mehta', role: 'Class Teacher' },
-              { subject: 'English', name: 'Deepa Menon', role: 'Subject Teacher' },
+              { subject: 'English', name: 'Priya Nair', role: 'Subject Teacher' },
               { subject: 'Science', name: 'Kavita Joshi', role: 'Subject Teacher' },
               { subject: 'Hindi', name: 'Meera Krishnan', role: 'Subject Teacher' },
               { subject: 'Social Studies', name: 'Vikram Singh', role: 'Subject Teacher' },

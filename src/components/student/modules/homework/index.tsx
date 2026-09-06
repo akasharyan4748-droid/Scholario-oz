@@ -5,14 +5,19 @@ import { BookOpen } from 'lucide-react'
 import { SectionHeading, StatusBadge } from '@/components/shared/ui'
 import { homeworks } from '@/lib/mock/academics'
 import { toast } from 'sonner'
-import { initialSubmitted } from './data'
+import { useStudentHomeworkStore } from '@/lib/store/student-homework-store'
 import { StatsRow } from './stats-row'
 import { ActiveHomeworkList } from './active-homework-list'
 import { ClosedHomeworkList } from './closed-homework-list'
 import { SubmissionDialog } from './submission-dialog'
 
 export function HomeworkModule() {
-  const [submitted, setSubmitted] = useState<Record<string, boolean>>(initialSubmitted)
+  // STU-F — submission status lives in the PERSISTED store (survives
+  // unmount / navigation / reload). The old local useState map reset on
+  // every unmount. Only ACTIVE homework submissions are user state; the
+  // closed/graded homework (with teacher feedback) stays in mock data.
+  const submitted = useStudentHomeworkStore((s) => s.submitted)
+  const markSubmitted = useStudentHomeworkStore((s) => s.markSubmitted)
   const [openId, setOpenId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -22,7 +27,7 @@ export function HomeworkModule() {
   const active = homeworks.filter((h) => h.status === 'Active')
   const closed = homeworks.filter((h) => h.status === 'Closed')
   const openHomework = homeworks.find((h) => h.id === openId)
-  const submittedCount = Object.values(submitted).filter(Boolean).length
+  const submittedCount = active.filter((h) => submitted[h.id]).length
 
   const handleSubmit = () => {
     setSubmitting(true)
@@ -31,9 +36,9 @@ export function HomeworkModule() {
       setSubmitting(false)
       setSuccess(true)
       setTimeout(() => {
-        if (openId) {
-          setSubmitted((p) => ({ ...p, [openId]: true }))
-        }
+        // The final state writes to the persisted store — 'Submitted'
+        // status + timestamp derive from it from here on.
+        if (openId) markSubmitted(openId)
         setOpenId(null)
         setSuccess(false)
         setNotes('')

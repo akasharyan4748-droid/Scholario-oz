@@ -203,7 +203,7 @@ const DEFAULT_TEMPLATES: DocumentTemplate[] = [
 // ─── Seed generated documents (small starter log) ─────────────────────
 // Every record references a REAL student from the roster store (STU-1 …)
 // with their real name / admission no / class, so previews render the full
-// document and every record stays traceable. idx 17 (DSO2024018) keeps the
+// document and every record stays traceable. idx 57 (DSO2024058 — Aarav Sharma) keeps the
 // student-role "my certificates" view connected (it matches by admission
 // number).
 
@@ -266,9 +266,9 @@ function seedDocs(): GeneratedDocument[] {
     purpose?: string
   }[] = [
     { type: 'Bonafide', idx: 0, status: 'Issued', daysAgo: 2, purpose: 'Bank Account Opening' },
-    // idx 17 → admission no DSO2024018 (student-role twin — stays connected).
-    { type: 'Bonafide', idx: 17, status: 'Issued', daysAgo: 12, purpose: 'Passport Application' },
-    { type: 'Character', idx: 17, status: 'Downloaded', daysAgo: 34, purpose: 'Scholarship Application' },
+    // idx 57 → STU-58 Aarav Sharma (the student-role demo student, now canonical).
+    { type: 'Bonafide', idx: 57, status: 'Issued', daysAgo: 12, purpose: 'Passport Application' },
+    { type: 'Character', idx: 57, status: 'Downloaded', daysAgo: 34, purpose: 'Scholarship Application' },
     { type: 'Transfer', idx: 1, status: 'Downloaded', daysAgo: 5 },
     { type: 'Character', idx: 2, status: 'Printed', daysAgo: 7, purpose: 'Visa Documentation' },
     { type: 'ID Card', idx: 3, status: 'Issued', daysAgo: 11 },
@@ -545,7 +545,7 @@ export const useCertificatesStore = create<CertificatesState>()(
       // persist; actions live on the store instance.
       name: 'scholario-certificates-v1',
       storage: createTenantScopedStorage('scholario-certificates-v1'),
-      version: 1,
+      version: 2,
       partialize: (s) => ({
         templates: s.templates,
         documents: s.documents,

@@ -5,16 +5,16 @@ import {
 } from 'lucide-react'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { formatINR } from '@/lib/format'
-import { myTransactions } from './data'
 
 interface KpiSectionProps {
   totalFee: number
   totalPaid: number
   totalPending: number
   paidPct: number
+  txnCount: number
 }
 
-export function KpiSection({ totalFee, totalPaid, totalPending, paidPct }: KpiSectionProps) {
+export function KpiSection({ totalFee, totalPaid, totalPending, paidPct, txnCount }: KpiSectionProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
       <KpiCard
@@ -22,7 +22,7 @@ export function KpiSection({ totalFee, totalPaid, totalPending, paidPct }: KpiSe
         value={totalFee}
         format={(n) => formatINR(n)}
         icon={<FileText className="h-5 w-5" />}
-        trendLabel="Annual fee 2024-25"
+        trendLabel="Annual fee 2026-27"
         accent="violet"
         delay={0}
       />
@@ -41,15 +41,15 @@ export function KpiSection({ totalFee, totalPaid, totalPending, paidPct }: KpiSe
         value={totalPending}
         format={(n) => formatINR(n)}
         icon={<AlertCircle className="h-5 w-5" />}
-        trendLabel="Due by 15 Dec 2024"
+        trendLabel="Due this term"
         accent="rose"
         delay={0.1}
       />
       <KpiCard
         label="Transactions"
-        value={myTransactions.length}
+        value={txnCount}
         icon={<Receipt className="h-5 w-5" />}
-        trendLabel="All successful"
+        trendLabel="On the school ledger"
         accent="cyan"
         delay={0.15}
       />

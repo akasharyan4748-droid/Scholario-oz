@@ -6,7 +6,7 @@ import { GlassCard, SectionHeading } from '@/components/shared/ui'
 import { RadialGauge } from '@/components/shared/charts'
 import { todaySchedule } from '@/lib/mock/academics'
 import { cn } from '@/lib/utils'
-import { absentCount, attendancePct, lateCount, presentCount } from './data'
+import { absentCount, attendancePct, attendanceWindowLabel, lateCount, presentCount } from './data'
 
 const subjectColors: Record<string, string> = {
   English: 'from-emerald-400 to-teal-500',
@@ -64,7 +64,7 @@ export function TodayClasses() {
       {/* Attendance gauge */}
       <GlassCard className="p-3 sm:p-4 lg:p-5">
         <h3 className="font-semibold text-sm mb-1">My Attendance</h3>
-        <p className="text-xs text-muted-foreground mb-3">November 2024</p>
+        <p className="text-xs text-muted-foreground mb-3">{attendanceWindowLabel}</p>
         <div className="flex items-center justify-center mb-3">
           <RadialGauge value={attendancePct} label="present" size={150} color="oklch(0.55 0.14 162)" />
         </div>
