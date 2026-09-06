@@ -244,10 +244,7 @@ export function DownloadsModule() {
 //
 // Each Quick Access item is a compact document card (md thumbnail + name +
 // format badge + small download icon) — reads like a real document, not
-// a pill. Grid: grid-cols-2 sm:grid-cols-3 gap-3 so 2 per row on mobile,
-// 3 per row on small+ screens. The md thumbnail (h-16 w-12, with the
-// format edge stripe + dog-ear fold) gives enough size to recognize the
-// document type at a glance.
+// a pill. Single column on mobile (names stay readable), 3-up ≥ sm.
 
 function QuickAccess({
   docs, onOpen, onDownload,
@@ -276,7 +273,7 @@ function QuickAccess({
         </span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {docs.map((doc, i) => (
           <motion.div
             key={doc.id}

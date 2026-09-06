@@ -119,9 +119,9 @@ export function DocumentList({ onSelectDoc }: DocumentListProps) {
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
-      {/* Table — overflow-x-auto for small screens */}
-      <div className="overflow-x-auto downloads-list-scroll">
-        <table className="w-full text-xs min-w-[680px]">
+      {/* Desktop (md+) — refined library-style table */}
+      <div className="hidden md:block overflow-x-auto downloads-list-scroll">
+        <table className="w-full text-xs min-w-[680px] [&_td]:py-3">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
               <th className="text-left font-semibold px-3 py-2.5 w-[46%]">Document</th>
@@ -151,7 +151,7 @@ export function DocumentList({ onSelectDoc }: DocumentListProps) {
                       right under the name. The document identity (thumbnail +
                       format badge) is consolidated in one column so the user
                       reads it as a single document, not scattered across cells. */}
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <DocumentThumbnail format={doc.format as DocFormat} size="md" />
                       <div className="min-w-0 flex-1">
@@ -175,17 +175,17 @@ export function DocumentList({ onSelectDoc }: DocumentListProps) {
                   </td>
 
                   {/* Category */}
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-3">
                     <CategoryPill category={doc.category} />
                   </td>
 
                   {/* Source */}
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-3">
                     <SourceBadge source={doc.source} />
                   </td>
 
                   {/* Updated date */}
-                  <td className="px-3 py-2.5 text-[10px] text-muted-foreground whitespace-nowrap">
+                  <td className="px-3 py-3 text-[10px] text-muted-foreground whitespace-nowrap">
                     <span className="block font-medium text-foreground/80">
                       {formatRelativeTime(doc.updatedDate)}
                     </span>
@@ -195,75 +195,76 @@ export function DocumentList({ onSelectDoc }: DocumentListProps) {
                   </td>
 
                   {/* Actions */}
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center justify-end gap-0.5">
-                      <Button
-                        variant="ghost" size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                        onClick={(e) => handlePreview(doc, e)}
-                        title="Preview"
-                        aria-label={`Preview ${doc.name}`}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost" size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400"
-                        onClick={(e) => handleDownload(doc, e)}
-                        title="Download"
-                        aria-label={`Download ${doc.name}`}
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost" size="sm"
-                            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                            onClick={(e) => e.stopPropagation()}
-                            title="More actions"
-                            aria-label={`More actions for ${doc.name}`}
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44 text-xs">
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handlePreview(doc) }}>
-                            <Eye className="h-3.5 w-3.5 mr-1.5" /> Preview
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDownload(doc) }}>
-                            <Download className="h-3.5 w-3.5 mr-1.5" /> Download
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handlePrint(doc) }}>
-                            <Printer className="h-3.5 w-3.5 mr-1.5" /> Print
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleShare(doc) }}>
-                            <Share2 className="h-3.5 w-3.5 mr-1.5" /> Copy share link
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handlePin(doc) }}>
-                            <Star className="h-3.5 w-3.5 mr-1.5" /> Add to favourites
-                          </DropdownMenuItem>
-                          {isGenerated && doc.docNumber && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleRegenerate(doc) }}>
-                                <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Regenerate
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectDoc(doc) }}>
-                                <Info className="h-3.5 w-3.5 mr-1.5" /> View record
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+                  <td className="px-3 py-3">
+                    <RowActions
+                      doc={doc}
+                      isGenerated={isGenerated}
+                      onSelectDoc={onSelectDoc}
+                      onPreview={handlePreview}
+                      onDownload={handleDownload}
+                      onPrint={handlePrint}
+                      onShare={handleShare}
+                      onPin={handlePin}
+                      onRegenerate={handleRegenerate}
+                    />
                   </td>
                 </motion.tr>
               )
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile (<md) — the table transforms into readable document cards:
+          thumbnail + name + format badge + description on top, a compact
+          meta row (category · source · updated) below, and the same action
+          trio right-aligned. No horizontal scrolling. */}
+      <div className="md:hidden divide-y divide-border/60">
+        {docs.map((doc, i) => {
+          const isGenerated = doc.source === 'Generated'
+          return (
+            <motion.div
+              key={doc.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18, delay: Math.min(i * 0.012, 0.18) }}
+              onClick={() => onSelectDoc(doc)}
+              className="p-3 cursor-pointer active:bg-muted/40 transition-colors"
+            >
+              <div className="flex items-start gap-3 min-w-0">
+                <DocumentThumbnail format={doc.format as DocFormat} size="md" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground leading-tight truncate">
+                    {doc.name}
+                  </p>
+                  <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                    <FileTypeBadge format={doc.format as DocFormat} size="xs" />
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      {doc.size ?? docDescriptionLabel(doc)}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1.5 truncate">
+                    {doc.category} · {doc.source} · {formatRelativeTime(doc.updatedDate)}
+                  </p>
+                </div>
+                {/* Touch-friendly action column — same handlers as desktop */}
+                <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <MobileActions
+                    doc={doc}
+                    isGenerated={isGenerated}
+                    onSelectDoc={onSelectDoc}
+                    onPreview={handlePreview}
+                    onDownload={handleDownload}
+                    onPrint={handlePrint}
+                    onShare={handleShare}
+                    onPin={handlePin}
+                    onRegenerate={handleRegenerate}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )
+        })}
       </div>
 
       {/* Footer summary line */}
@@ -281,5 +282,147 @@ export function DocumentList({ onSelectDoc }: DocumentListProps) {
         </span>
       </div>
     </div>
+  )
+}
+
+// ─── Row actions (desktop) ───────────────────────────────────────────
+//
+// Consistent h-7 ghost icon buttons — Preview · Download (emerald hover,
+// the module's primary per-row action) · More (overflow). Every button
+// carries a title tooltip + aria-label.
+
+interface RowActionsProps {
+  doc: DownloadDocument
+  isGenerated: boolean
+  onSelectDoc: (doc: DownloadDocument) => void
+  onPreview: (doc: DownloadDocument, e?: React.MouseEvent) => void
+  onDownload: (doc: DownloadDocument, e?: React.MouseEvent) => void
+  onPrint: (doc: DownloadDocument, e?: React.MouseEvent) => void
+  onShare: (doc: DownloadDocument, e?: React.MouseEvent) => void
+  onPin: (doc: DownloadDocument, e?: React.MouseEvent) => void
+  onRegenerate: (doc: DownloadDocument, e?: React.MouseEvent) => void
+}
+
+function RowActions({
+  doc, isGenerated, onSelectDoc,
+  onPreview, onDownload, onPrint, onShare, onPin, onRegenerate,
+}: RowActionsProps) {
+  return (
+    <div className="flex items-center justify-end gap-0.5">
+      <Button
+        variant="ghost" size="sm"
+        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+        onClick={(e) => onPreview(doc, e)}
+        title="Preview"
+        aria-label={`Preview ${doc.name}`}
+      >
+        <Eye className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        variant="ghost" size="sm"
+        className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400"
+        onClick={(e) => onDownload(doc, e)}
+        title="Download"
+        aria-label={`Download ${doc.name}`}
+      >
+        <Download className="h-3.5 w-3.5" />
+      </Button>
+      <OverflowMenu
+        doc={doc}
+        isGenerated={isGenerated}
+        onSelectDoc={onSelectDoc}
+        onPreview={onPreview}
+        onDownload={onDownload}
+        onPrint={onPrint}
+        onShare={onShare}
+        onPin={onPin}
+        onRegenerate={onRegenerate}
+      />
+    </div>
+  )
+}
+
+// ─── Row actions (mobile) ────────────────────────────────────────────
+// Touch-friendly vertical stack: Download first (primary), Preview, More.
+
+function MobileActions(props: RowActionsProps) {
+  const { doc, onDownload, onPreview } = props
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <Button
+        variant="ghost" size="sm"
+        className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400"
+        onClick={(e) => onDownload(doc, e)}
+        title="Download"
+        aria-label={`Download ${doc.name}`}
+      >
+        <Download className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost" size="sm"
+        className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+        onClick={(e) => onPreview(doc, e)}
+        title="Preview"
+        aria-label={`Preview ${doc.name}`}
+      >
+        <Eye className="h-4 w-4" />
+      </Button>
+      <OverflowMenu {...props} mobile />
+    </div>
+  )
+}
+
+// ─── Shared overflow menu (Preview/Download/Print/Share/Pin/…) ───────
+
+function OverflowMenu({
+  doc, isGenerated, onSelectDoc, mobile,
+  onPreview, onDownload, onPrint, onShare, onPin, onRegenerate,
+}: RowActionsProps & { mobile?: boolean }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost" size="sm"
+          className={cn(
+            'p-0 text-muted-foreground hover:text-foreground',
+            mobile ? 'h-8 w-8' : 'h-7 w-7',
+          )}
+          onClick={(e) => e.stopPropagation()}
+          title="More actions"
+          aria-label={`More actions for ${doc.name}`}
+        >
+          <MoreHorizontal className={mobile ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44 text-xs">
+        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPreview(doc) }}>
+          <Eye className="h-3.5 w-3.5 mr-1.5" /> Preview
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(doc) }}>
+          <Download className="h-3.5 w-3.5 mr-1.5" /> Download
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPrint(doc) }}>
+          <Printer className="h-3.5 w-3.5 mr-1.5" /> Print
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShare(doc) }}>
+          <Share2 className="h-3.5 w-3.5 mr-1.5" /> Copy share link
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPin(doc) }}>
+          <Star className="h-3.5 w-3.5 mr-1.5" /> Add to favourites
+        </DropdownMenuItem>
+        {isGenerated && doc.docNumber && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRegenerate(doc) }}>
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Regenerate
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectDoc(doc) }}>
+              <Info className="h-3.5 w-3.5 mr-1.5" /> View record
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

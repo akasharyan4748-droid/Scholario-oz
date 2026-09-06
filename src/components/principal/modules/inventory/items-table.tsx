@@ -44,7 +44,9 @@ const STATUSES: Array<{ value: string; label: string }> = [
 
 type ActionKind = 'add' | 'issue' | 'damaged' | 'return'
 
-// Distinct icon per category — improves scannability vs one generic box.
+// Distinct icon per category — monochrome outline glyphs in a neutral
+// chip. The glyph aids scanning; the STATUS colour lives in the badge and
+// the qty number, so the icon never double-codes state.
 function categoryIcon(category: string, className: string) {
   switch (category) {
     case 'Stationery': return <Pen className={className} />
@@ -89,18 +91,18 @@ export function ItemsTable({ onAction }: ItemsTableProps) {
       title="Inventory Items"
       subtitle={`${filtered.length} of ${items.length} items`}
       action={
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="relative">
+        <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto sm:justify-end">
+          <div className="relative min-w-0 flex-1 sm:flex-none sm:w-48">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Name or code"
-              className="pl-8 h-8 w-40 sm:w-48 text-xs"
+              className="pl-8 h-8 w-full sm:w-48 text-xs"
             />
           </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="flex-1 sm:flex-none sm:w-32 h-8 text-xs" aria-label="Filter by category"><SelectValue /></SelectTrigger>
             <SelectContent>
               {CATEGORIES.map((c) => (
                 <SelectItem key={c} value={c}>{c === 'all' ? 'All Categories' : c}</SelectItem>
@@ -108,7 +110,7 @@ export function ItemsTable({ onAction }: ItemsTableProps) {
             </SelectContent>
           </Select>
           <Select value={locationFilter} onValueChange={setLocationFilter}>
-            <SelectTrigger className="w-32 h-8 text-xs hidden sm:flex"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-32 h-8 text-xs hidden sm:flex" aria-label="Filter by location"><SelectValue /></SelectTrigger>
             <SelectContent>
               {LOCATIONS.map((l) => (
                 <SelectItem key={l} value={l}>{l === 'all' ? 'All Locations' : l}</SelectItem>
@@ -116,7 +118,7 @@ export function ItemsTable({ onAction }: ItemsTableProps) {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-28 h-8 text-xs hidden md:flex"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-28 h-8 text-xs hidden md:flex" aria-label="Filter by status"><SelectValue /></SelectTrigger>
             <SelectContent>
               {STATUSES.map((s) => (
                 <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
@@ -135,13 +137,13 @@ export function ItemsTable({ onAction }: ItemsTableProps) {
         />
       ) : (
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="[&_td]:py-3">
             <TableHeader>
               <TableRow className="bg-muted/40">
                 <TableHead className="font-semibold text-[10px] uppercase tracking-wider">Item</TableHead>
                 <TableHead className="font-semibold text-[10px] uppercase tracking-wider hidden sm:table-cell">Category</TableHead>
                 <TableHead className="font-semibold text-[10px] uppercase tracking-wider text-center">Stock</TableHead>
-                <TableHead className="font-semibold text-[10px] uppercase tracking-wider hidden lg:table-cell">Min</TableHead>
+                <TableHead className="font-semibold text-[10px] uppercase tracking-wider text-right hidden lg:table-cell">Min</TableHead>
                 <TableHead className="font-semibold text-[10px] uppercase tracking-wider text-right">Value</TableHead>
                 <TableHead className="font-semibold text-[10px] uppercase tracking-wider hidden md:table-cell">Location</TableHead>
                 <TableHead className="font-semibold text-[10px] uppercase tracking-wider">Status</TableHead>
@@ -162,14 +164,7 @@ export function ItemsTable({ onAction }: ItemsTableProps) {
                   >
                     <TableCell>
                       <div className="flex items-center gap-2.5">
-                        <div className={cn(
-                          'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-                          outOfStock
-                            ? 'bg-rose-500/10 text-rose-600'
-                            : lowStock
-                              ? 'bg-amber-500/10 text-amber-600'
-                              : 'bg-primary/10 text-primary',
-                        )}>
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40 text-muted-foreground">
                           {categoryIcon(it.category, 'h-4 w-4')}
                         </div>
                         <div className="min-w-0 max-w-[260px]">
@@ -190,10 +185,10 @@ export function ItemsTable({ onAction }: ItemsTableProps) {
                         <span className="text-[10px] text-muted-foreground">{it.unit}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell text-center text-xs text-muted-foreground tabular-nums">
+                    <TableCell className="hidden lg:table-cell text-right text-xs text-muted-foreground tabular-nums">
                       {it.minStock}
                     </TableCell>
-                    <TableCell className="text-right text-sm font-medium tabular-nums">
+                    <TableCell className="text-right text-sm font-medium tabular-nums whitespace-nowrap">
                       {formatINR(it.totalValue, true)}
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-xs text-muted-foreground">

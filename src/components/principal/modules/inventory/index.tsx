@@ -125,15 +125,15 @@ export function InventoryModule() {
 
       {/* KPI overview strip — compact summary above the tab content.
           Values come from useInventoryData().analytics (single source); each
-          card deep-links to the relevant tab. Small cards (p-3.5, text-xl) —
-          a summary strip, not a hero. */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+          card deep-links to the relevant tab. Neutral white cards (p-4) —
+          colour only as functional accents (amber = stock warning). */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <InvKpiCard
           icon={<Boxes className="h-4 w-4" />}
           label="Total Items"
           value={analytics.totalItems}
           sub={`${analytics.categoryCount} categories`}
-          accent="cyan"
+          accent="slate"
           delay={0}
         />
         <InvKpiCard
@@ -158,7 +158,7 @@ export function InventoryModule() {
           label="Movements"
           value={movementsCount}
           sub="all stock activity"
-          accent="violet"
+          accent="slate"
           onClick={() => setTab('movements')}
           delay={0.15}
         />

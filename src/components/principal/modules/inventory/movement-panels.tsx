@@ -27,10 +27,9 @@ import {
 import { useInventoryStore, useInventoryData } from '@/lib/store/inventory-store'
 import type { InventoryItem, MovementType } from '@/lib/store/inventory-store'
 import { formatINR, formatDate } from '@/lib/format'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { InvPanel, InvEmptyState, ItemStatusBadge, MovementTypeBadge } from './inventory-shared'
-import { DonutChart } from "@/components/shared/premium-charts"
+import { EnterpriseDonut } from '@/components/shared/enterprise-donut'
 
 // ─── Movement icon + sign helper ────────────────────────────────────
 
@@ -54,15 +53,9 @@ const MOVEMENT_ICON: Record<MovementType, React.ReactNode> = {
   'Adjustment': <ArrowRightLeft className="h-3.5 w-3.5" />,
 }
 
-const MOVEMENT_ACCENT: Record<MovementType, string> = {
-  'Stock In': 'bg-emerald-500/10 text-emerald-600',
-  'Returned': 'bg-emerald-500/10 text-emerald-600',
-  'Issued': 'bg-amber-500/10 text-amber-600',
-  'Stock Out': 'bg-rose-500/10 text-rose-600',
-  'Damaged': 'bg-rose-500/10 text-rose-600',
-  'Lost': 'bg-rose-500/10 text-rose-600',
-  'Adjustment': 'bg-cyan-500/10 text-cyan-600',
-}
+// Neutral icon chip — the movement SEMANTICS (in/out sign + colour) already
+// live in the badge and the qty column, so the chip stays quiet.
+const MOVEMENT_CHIP = 'bg-muted/50 text-muted-foreground ring-1 ring-border/60'
 
 // ─── StockMovementLog ───────────────────────────────────────────────
 
@@ -84,7 +77,7 @@ export function StockMovementLog({ limit }: { limit?: number }) {
         />
       ) : (
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="[&_td]:py-3">
             <TableHeader>
               <TableRow className="bg-muted/40">
                 <TableHead className="font-semibold text-[10px] uppercase tracking-wider">Type</TableHead>
@@ -108,7 +101,7 @@ export function StockMovementLog({ limit }: { limit?: number }) {
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <div className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-md', MOVEMENT_ACCENT[m.type])}>
+                        <div className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-md', MOVEMENT_CHIP)}>
                           {MOVEMENT_ICON[m.type]}
                         </div>
                         <MovementTypeBadge type={m.type} />
@@ -185,10 +178,8 @@ export function LowStockAlerts({ onAddStock }: LowStockAlertsProps) {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.05 }}
                   className={cn(
-                    'rounded-xl border p-3',
-                    out
-                      ? 'border-rose-500/30 bg-rose-500/[0.04] dark:bg-rose-500/[0.06]'
-                      : 'border-amber-500/30 bg-amber-500/[0.04] dark:bg-amber-500/[0.06]',
+                    'rounded-xl border bg-card p-3.5',
+                    out ? 'border-rose-500/30' : 'border-amber-500/30',
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -262,15 +253,13 @@ export function CategoryValueDistribution() {
     <InvPanel
       title="Category Value Distribution"
       subtitle={`${cats.length} categories · ${formatINR(total, true)} total`}
-      bodyClassName="p-4 space-y-3"
+      bodyClassName="p-4"
     >
-      <DonutChart
-        data={sorted.map((c) => ({ name: c.name, value: c.value, color: c.color }))}
-        centerLabel="Total Value"
+      <EnterpriseDonut
+        data={sorted.map((c) => ({ name: c.name, value: c.value }))}
         centerValue={formatINR(total, true)}
+        centerLabel="Total Value"
         formatValue={(n) => formatINR(n, true)}
-        size={180}
-        thickness={20}
       />
     </InvPanel>
   )
@@ -307,7 +296,7 @@ export function InventoryReports() {
             <InvEmptyState icon={<TrendingUp className="h-5 w-5" />} title="No movement data yet" />
           ) : (
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="[&_td]:py-2.5">
                 <TableHeader>
                   <TableRow className="bg-muted/40">
                     <TableHead className="font-semibold text-[10px] uppercase tracking-wider">Type</TableHead>

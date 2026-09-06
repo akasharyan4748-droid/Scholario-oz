@@ -229,7 +229,7 @@ export function HistoryTab({ onGoGenerate }: { onGoGenerate?: () => void }) {
           <>
             {/* Desktop registry table */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-xs [&_td]:py-3 [&_th]:py-2.5">
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
                     <th className="text-left font-semibold px-3 py-2">Certificate No.</th>
@@ -247,16 +247,16 @@ export function HistoryTab({ onGoGenerate }: { onGoGenerate?: () => void }) {
                     const TypeIcon = d.icon
                     return (
                       <tr key={doc.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                        <td className="px-3 py-2.5 font-mono text-[11px] font-semibold text-foreground whitespace-nowrap">
+                        <td className="px-3 py-3 font-mono text-[11px] font-semibold text-foreground whitespace-nowrap">
                           {doc.docNumber}
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-3 py-3">
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-muted text-muted-foreground whitespace-nowrap">
                             <TypeIcon className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
                             {d.short}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-3 py-3">
                           <div className="flex items-center gap-2.5">
                             <DocumentIcon docType={doc.docType} size="sm" />
                             <div className="min-w-0">

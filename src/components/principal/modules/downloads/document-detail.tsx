@@ -13,7 +13,6 @@ import {
   Download, Printer, X, FileText, Calendar, Hash, User, HardDrive,
   Tag, FolderTree, Share2, Star, RotateCcw, Info, CheckCircle2,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription,
@@ -155,35 +154,21 @@ export function DocumentDetail({ doc, open, onClose }: DocumentDetailProps) {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.22 }}
-                className="rounded-xl border border-border bg-gradient-to-br from-muted/30 to-background p-6 shadow-sm aspect-[3/4] flex flex-col"
+                className="rounded-xl border border-border bg-muted/30 p-6 aspect-[3/4] flex flex-col"
               >
                 {/* Top row — format badge right-aligned (the xl thumbnail
                     in the center already carries the full format identity:
-                    edge stripe + glyph + dog-ear fold + “PDF” label, so the
-                    small top thumbnail was redundant; removed). */}
+                    edge stripe + glyph + dog-ear fold). */}
                 <div className="flex items-center justify-end gap-2">
                   <FormatBadge format={doc.format} />
                 </div>
 
                 <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-                  <div className="relative">
-                    <div
-                      className={cn(
-                        'absolute -inset-3 blur-2xl rounded-full',
-                        doc.format === 'PDF' && 'bg-rose-500/10',
-                        doc.format === 'XLSX' && 'bg-emerald-500/10',
-                        doc.format === 'DOCX' && 'bg-sky-500/10',
-                        doc.format === 'CSV' && 'bg-teal-500/10',
-                        doc.format === 'JPG' && 'bg-violet-500/10',
-                      )}
-                      aria-hidden
-                    />
-                    <DocumentThumbnail
-                      format={doc.format as DocFormat}
-                      size="xl"
-                      className="relative"
-                    />
-                  </div>
+                  <DocumentThumbnail
+                    format={doc.format as DocFormat}
+                    size="xl"
+                    className="relative"
+                  />
                   <p className="mt-4 text-sm font-semibold leading-tight max-w-[220px]">
                     {doc.name}
                   </p>

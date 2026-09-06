@@ -151,17 +151,9 @@ export function SourceBadge({
   )
 }
 
-// ─── CategoryPill — small category chip ────────────────────────────────
-
-const CATEGORY_PILL: Record<DocCategory, string> = {
-  'Admissions': 'text-slate-600 dark:text-slate-300',
-  'Student Records': 'text-cyan-700 dark:text-cyan-300',
-  'Finance': 'text-amber-700 dark:text-amber-300',
-  'Academics': 'text-emerald-700 dark:text-emerald-300',
-  'Operations': 'text-teal-700 dark:text-teal-300',
-  'Health': 'text-rose-700 dark:text-rose-300',
-  'Transport': 'text-violet-700 dark:text-violet-300',
-}
+// ─── CategoryPill — small category chip (neutral) ────────────────────
+// Category is metadata, not status — a single neutral tone keeps the
+// row quiet. Colour is reserved for status/semantic badges.
 
 export function CategoryPill({
   category,
@@ -173,8 +165,7 @@ export function CategoryPill({
   return (
     <span
       className={cn(
-        'text-[10px] font-medium tracking-tight whitespace-nowrap',
-        CATEGORY_PILL[category],
+        'text-[10px] font-medium tracking-tight whitespace-nowrap text-muted-foreground',
         className,
       )}
     >

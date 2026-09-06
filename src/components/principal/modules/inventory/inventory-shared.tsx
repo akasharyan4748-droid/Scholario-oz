@@ -9,8 +9,9 @@
  * title rendered as `<h3 className="text-sm font-semibold">`, no separate
  * colored header strip with `border-b bg-muted/20`). Other primitives
  * remain module-specific:
- *   - InvKpiCard: soft tinted background KPI card (5 accents) — kept for
- *     any sub-page that wants a chip-style KPI; not rendered in the shell.
+ *   - InvKpiCard: neutral enterprise stat card (white surface, hairline
+ *     border, muted icon chip) — colour appears only as functional warning
+ *     accents, never as pastel card backgrounds.
  *   - InvPill: compact semantic pill
  *   - ItemStatusBadge: In Stock / Low Stock / Out of Stock (with dot)
  *   - MovementTypeBadge: Stock In / Stock Out / Adjustment / Damaged / Lost / Returned / Issued
@@ -30,21 +31,28 @@ import { Panel } from '../shared/panel'
 
 export type InvTab = 'items' | 'movements' | 'lowstock' | 'reports'
 
-// ─── Accent map (soft tinted backgrounds) ────────────────────────────
+// ─── Accent map (icon-chip accents only — cards stay neutral) ────────
+//
+// Colour is functional: amber/rose mark warning states; emerald marks the
+// primary value metric; everything else is neutral. Card surfaces are
+// always white with a hairline border — no pastel backgrounds, no blur
+// blobs, no lift-on-hover.
 
-const ACCENT_MAP: Record<string, { bg: string; ring: string; hover: string; cardBg: string; cardBorder: string }> = {
-  emerald: { bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300', ring: 'ring-emerald-500/20', hover: 'hover:shadow-emerald-500/20', cardBg: 'bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06]', cardBorder: 'border-emerald-500/20' },
-  rose: { bg: 'bg-rose-500/15 text-rose-700 dark:text-rose-300', ring: 'ring-rose-500/20', hover: 'hover:shadow-rose-500/20', cardBg: 'bg-rose-500/[0.04] dark:bg-rose-500/[0.06]', cardBorder: 'border-rose-500/20' },
-  amber: { bg: 'bg-amber-500/15 text-amber-700 dark:text-amber-300', ring: 'ring-amber-500/20', hover: 'hover:shadow-amber-500/20', cardBg: 'bg-amber-500/[0.04] dark:bg-amber-500/[0.06]', cardBorder: 'border-amber-500/20' },
-  cyan: { bg: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300', ring: 'ring-cyan-500/20', hover: 'hover:shadow-cyan-500/20', cardBg: 'bg-cyan-500/[0.04] dark:bg-cyan-500/[0.06]', cardBorder: 'border-cyan-500/20' },
-  violet: { bg: 'bg-violet-500/15 text-violet-700 dark:text-violet-300', ring: 'ring-violet-500/20', hover: 'hover:shadow-violet-500/20', cardBg: 'bg-violet-500/[0.04] dark:bg-violet-500/[0.06]', cardBorder: 'border-violet-500/20' },
+const ACCENT_MAP: Record<string, { icon: string; value?: string }> = {
+  emerald: { icon: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-emerald-500/20' },
+  rose: { icon: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 ring-rose-500/20', value: 'text-rose-600' },
+  amber: { icon: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/20', value: 'text-amber-600' },
+  cyan: { icon: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 ring-cyan-500/20' },
+  violet: { icon: 'bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-violet-500/20' },
+  slate: { icon: 'bg-muted/60 text-muted-foreground ring-border' },
 }
 
 export type InvAccent = keyof typeof ACCENT_MAP
 
-// ─── InvKpiCard (soft tinted KPI) ──────────────────────────────────────
-// Kept for any sub-page that wants the chip-style KPI card. Not rendered
-// in the Inventory shell (Task 9 dropped the 4-card KPI row).
+// ─── InvKpiCard (neutral enterprise stat card) ──────────────────────
+// White surface + hairline border + muted icon chip. Colour appears only
+// on the icon chip (and the value for warning states) — never as a card
+// background. Deep-links keep hover affordances + a focus ring.
 
 interface KpiProps {
   icon: React.ReactNode
@@ -57,34 +65,32 @@ interface KpiProps {
 }
 
 export function InvKpiCard({ icon, label, value, sub, accent, onClick, delay = 0 }: KpiProps) {
-  const a = ACCENT_MAP[accent]
+  const a = ACCENT_MAP[accent] ?? ACCENT_MAP.slate
   return (
     <motion.button
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay, ease: [0.22, 1, 0.36, 1] }}
       onClick={onClick}
       disabled={!onClick}
       className={cn(
-        'group relative w-full text-left rounded-xl border p-3.5 transition-all duration-200 overflow-hidden',
-        a.cardBg, a.cardBorder,
-        onClick && `cursor-pointer hover:shadow-md ${a.hover} hover:-translate-y-0.5`,
+        'group relative w-full text-left rounded-xl border border-border bg-card p-4 transition-all duration-200',
+        onClick && 'cursor-pointer hover:border-foreground/25 hover:shadow-sm',
         onClick && 'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
       )}
     >
-      <div className={cn('absolute -top-6 -right-6 h-16 w-16 rounded-full blur-2xl opacity-30', a.bg)} aria-hidden />
-      <div className="relative flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider truncate">{label}</p>
-          <p className="font-display text-xl sm:text-2xl font-bold tabular-nums mt-1.5 leading-none">{value}</p>
+          <p className={cn('font-display text-xl sm:text-2xl font-bold tabular-nums mt-1.5 leading-none', a.value)}>{value}</p>
           {sub && <p className="text-[10px] text-muted-foreground mt-1.5 truncate">{sub}</p>}
         </div>
-        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1', a.bg, a.ring)}>
+        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1', a.icon)}>
           {icon}
         </span>
       </div>
       {onClick && (
-        <ArrowRight className="absolute bottom-2 right-2 h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        <ArrowRight className="absolute bottom-3 right-3 h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
       )}
     </motion.button>
   )

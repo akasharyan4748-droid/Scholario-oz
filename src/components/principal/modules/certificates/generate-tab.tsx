@@ -557,7 +557,12 @@ function StudentPicker({
                 active ? 'bg-emerald-500/10' : 'hover:bg-muted/40',
               )}
             >
-              <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-[10px] font-semibold text-white')}>
+              <div className={cn(
+                'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold',
+                active
+                  ? 'bg-primary/15 text-primary'
+                  : 'bg-muted text-muted-foreground',
+              )}>
                 {s.name.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">

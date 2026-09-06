@@ -69,13 +69,13 @@ export interface DocTypeMeta {
 export type DocTone = 'emerald' | 'rose' | 'sky' | 'amber' | 'violet' | 'teal' | 'slate'
 
 const TONE_STYLES: Record<DocTone, { text: string; bg: string; border: string; stripe: string }> = {
-  emerald: { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', stripe: 'bg-emerald-500' },
-  rose: { text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', stripe: 'bg-rose-500' },
-  sky: { text: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20', stripe: 'bg-sky-500' },
-  amber: { text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', stripe: 'bg-amber-500' },
-  violet: { text: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/20', stripe: 'bg-violet-500' },
-  teal: { text: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-500/10', border: 'border-teal-500/20', stripe: 'bg-teal-500' },
-  slate: { text: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/20', stripe: 'bg-slate-500' },
+  emerald: { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/[0.07]', border: 'border-emerald-500/20', stripe: 'bg-emerald-500/60' },
+  rose: { text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500/[0.07]', border: 'border-rose-500/20', stripe: 'bg-rose-500/60' },
+  sky: { text: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500/[0.07]', border: 'border-sky-500/20', stripe: 'bg-sky-500/60' },
+  amber: { text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/[0.07]', border: 'border-amber-500/20', stripe: 'bg-amber-500/60' },
+  violet: { text: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-500/[0.07]', border: 'border-violet-500/20', stripe: 'bg-violet-500/60' },
+  teal: { text: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-500/[0.07]', border: 'border-teal-500/20', stripe: 'bg-teal-500/60' },
+  slate: { text: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-500/[0.07]', border: 'border-slate-500/20', stripe: 'bg-slate-500/60' },
 }
 
 const FORMAT_TONE: Record<DocFormat, DocTone> = {
@@ -153,7 +153,8 @@ export interface DocumentThumbnailProps {
   /** Tone override (default: from format/docType, or emerald) */
   tone?: DocTone
   /** Show the format text label band at the bottom of the thumbnail.
-   *  Default: true for PDF (strongest identity), false otherwise. */
+   *  Default: false — the FileTypeBadge beside the name already carries the
+   *  format, so a label band inside the icon would be redundant. */
   showFormatLabel?: boolean
   className?: string
 }
@@ -203,10 +204,9 @@ export function DocumentThumbnail({
   const meta = docType ? DOC_TYPE_META[docType] : undefined
   const resolvedTone = tone ?? meta?.tone ?? (format ? FORMAT_TONE[format] : 'emerald')
   const resolvedIcon = icon ?? meta?.icon ?? (format ? FORMAT_ICON[format] : <FileText className="h-full w-full" />)
-  // Show the format label automatically for PDF (strongest identity) unless
-  // the caller explicitly disabled it. For other formats, only show it if
-  // the caller explicitly enabled it.
-  const shouldShowLabel = showFormatLabel ?? (format === 'PDF')
+  // The FileTypeBadge next to the document name is the type indicator; the
+  // thumbnail stays a pure paper silhouette (no redundant text band).
+  const shouldShowLabel = showFormatLabel ?? false
   const ts = TONE_STYLES[resolvedTone]
   const fold = THUMB_FOLD_SIZE[size]
 

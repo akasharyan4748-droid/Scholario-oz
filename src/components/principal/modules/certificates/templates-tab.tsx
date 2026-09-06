@@ -15,8 +15,10 @@
  *   - Filter chips are text-only pills with a count badge — no per-type
  *     colored icons. With the single-emerald accent, the doc-type
  *     distinction lives in the label, not the color.
- *   - Template cards use a neutral mini-preview pane. The DEFAULT star
- *     is small (text-[9px] pill). Row actions are ghost h-7 icon buttons.
+ *   - Template cards are professional document-template cards: a framed
+ *     preview pane (muted desk, centered paper with a soft shadow), clean
+ *     title/metadata rows, a subtle DEFAULT state, and a separated action
+ *     row of consistent h-7 ghost icon buttons with title tooltips.
  */
 
 import { useState, useMemo } from 'react'
@@ -237,55 +239,61 @@ function TemplateCard({
   onToggle: () => void
 }) {
   return (
-    <div className="relative rounded-xl border border-border bg-card overflow-hidden">
-      {/* Mini preview — neutral background, not per-accent tinted.
-          Bumped from h-28 to h-36 for more document presence. */}
+    <div className="group flex flex-col rounded-xl border border-border bg-card overflow-hidden transition-all hover:border-foreground/25 hover:shadow-sm">
+      {/* Preview pane — a framed desk with the document paper centred on it.
+          The whole pane is the preview button (with a title tooltip). */}
       <button
         onClick={onPreview}
-        className="block w-full h-36 p-2 relative bg-muted/30 hover:bg-muted/50 transition-colors"
+        title="Preview template"
+        aria-label={`Preview ${template.name}`}
+        className="relative block w-full h-40 p-2.5 bg-muted/50 hover:bg-muted/70 transition-colors"
       >
-        <MiniPreview template={template} />
+        <div className="h-full w-full rounded-md shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+          <MiniPreview template={template} />
+        </div>
         {template.isDefault && (
-          <span className="absolute top-1.5 right-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+          <span className="absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-card border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 shadow-sm">
             <Star className="h-2.5 w-2.5 fill-emerald-500 text-emerald-600 dark:text-emerald-400" />
             Default
           </span>
         )}
       </button>
-      {/* Footer info — document thumbnail replaces the accent swatch for
-          real document identity. Keeps the single emerald accent. */}
-      <div className="p-3">
+      {/* Footer — document identity + metadata + actions */}
+      <div className="flex flex-1 flex-col p-3">
         <div className="flex items-center gap-2 mb-1.5">
           <DocumentThumbnail docType={template.docType} size="sm" />
-          <p className="text-xs font-semibold truncate flex-1 min-w-0">{template.name}</p>
+          <p className="text-xs font-semibold truncate flex-1 min-w-0" title={template.name}>{template.name}</p>
         </div>
-        <div className="flex items-center gap-1 mb-2 pl-0.5">
+        <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
           <StylePill style={template.style} accent={template.accentColor} />
           <span className={cn(
-            'inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold',
+            'inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold shrink-0',
             template.active
               ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-              : 'bg-slate-500/10 text-slate-500 line-through',
+              : 'bg-slate-500/10 text-slate-500',
           )}>
             {template.active ? 'Active' : 'Inactive'}
           </span>
           {/* Real usage count from the issued-document log */}
-          <span className="ml-auto inline-flex items-center gap-0.5 text-[9px] text-muted-foreground tabular-nums" title="Documents generated with this template">
+          <span className="ml-auto inline-flex items-center gap-0.5 text-[9px] text-muted-foreground tabular-nums shrink-0" title="Documents generated with this template">
             <FileStack className="h-2.5 w-2.5" />
             {usage}
           </span>
         </div>
         {/* Fields the template prints — honest capability line */}
-        <p className="text-[9px] text-muted-foreground leading-snug line-clamp-2 mb-2">
+        <p className="text-[9px] text-muted-foreground leading-snug line-clamp-2 mb-3 flex-1">
           {DOC_FIELDS[template.docType]?.join(' · ')}
         </p>
-        {/* Row actions — ghost h-7 icon buttons, Academics pattern */}
-        <div className="flex items-center gap-0.5">
+        {/* Actions — consistent ghost icon buttons with tooltips; the
+            deactivate action reads as destructive on hover without going
+            loud. Separated from the content by a hairline. */}
+        <div className="flex items-center gap-0.5 -mx-1 px-1 pt-2 border-t border-border/60">
           <Button
             variant="ghost" size="sm"
             className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
             onClick={onPreview}
             title="Preview"
+            aria-label={`Preview ${template.name}`}
           >
             <Eye className="h-3.5 w-3.5" />
           </Button>
@@ -294,6 +302,7 @@ function TemplateCard({
             className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
             onClick={onDuplicate}
             title="Duplicate"
+            aria-label={`Duplicate ${template.name}`}
           >
             <Copy className="h-3.5 w-3.5" />
           </Button>
@@ -304,6 +313,7 @@ function TemplateCard({
               onClick={onSetDefault}
               disabled={!template.active}
               title="Set as default"
+              aria-label={`Set ${template.name} as default`}
             >
               <Star className="h-3.5 w-3.5" />
             </Button>
@@ -312,16 +322,22 @@ function TemplateCard({
               variant="ghost" size="sm"
               className="h-7 w-7 p-0 text-emerald-600 dark:text-emerald-400"
               disabled
-              title="Default"
+              title="Default template"
             >
               <Check className="h-3.5 w-3.5" />
             </Button>
           )}
           <Button
             variant="ghost" size="sm"
-            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+            className={cn(
+              'h-7 w-7 p-0',
+              template.active
+                ? 'text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400'
+                : 'text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400',
+            )}
             onClick={onToggle}
             title={template.active ? 'Deactivate' : 'Activate'}
+            aria-label={`${template.active ? 'Deactivate' : 'Activate'} ${template.name}`}
           >
             {template.active ? <X className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
           </Button>
