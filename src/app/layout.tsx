@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Sora } from "next/font/google";
+import { MotionConfig } from "framer-motion";
 import "./globals.css";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/shared/theme-provider";
@@ -41,8 +42,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${sora.variable} antialiased bg-background text-foreground`}
       >
         <ThemeProvider>
-          {children}
-          <SonnerToaster position="bottom-right" closeButton />
+          {/* Global a11y (SR-UI §21/§27): every framer-motion animation
+              respects the OS "prefers-reduced-motion" setting. */}
+          <MotionConfig reducedMotion="user">
+            {children}
+            <SonnerToaster position="bottom-right" closeButton />
+          </MotionConfig>
         </ThemeProvider>
       </body>
     </html>

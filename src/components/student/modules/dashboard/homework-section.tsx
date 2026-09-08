@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   BookOpen, ClipboardList, BookMarked,
@@ -22,9 +23,19 @@ export function HomeworkSection({ pendingHomework, dueAssignments, libraryId }: 
   // overdue issue. The old source (mock/operations + a stale admissionNo)
   // silently rendered nothing; the toast-only "Return Book" stub was removed
   // — returns happen at the counter (My Library is the read-only view).
-  const myIssue = useLibraryStore((s) =>
-    s.issues.find((i) => i.borrowerId === DEMO_STUDENT_ID && i.status === 'Overdue'),
+  // SR-UI §25 — the summary stats derive from the SAME store (raw array +
+  // useMemo — zustand v5 selectors must return stable refs). No fake
+  // "books read / reading streak" numbers.
+  const allIssues = useLibraryStore((s) => s.issues)
+  const myIssues = useMemo(
+    () => allIssues.filter((i) => i.borrowerId === DEMO_STUDENT_ID),
+    [allIssues],
   )
+  const myIssue = myIssues.find((i) => i.status === 'Overdue')
+  const openCount = myIssues.filter((i) => i.status === 'Issued' || i.status === 'Overdue').length
+  const totalFine = myIssues
+    .filter((i) => i.status === 'Overdue')
+    .reduce((sum, i) => sum + (i.fine ?? 0), 0)
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -127,8 +138,8 @@ export function HomeworkSection({ pendingHomework, dueAssignments, libraryId }: 
           </motion.div>
         )}
         <div className="mt-3 pt-3 border-t border-border space-y-1.5 text-xs">
-          <div className="flex justify-between"><span className="text-muted-foreground">Books read this term</span><span className="font-semibold">12</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Reading streak</span><span className="font-semibold text-emerald-600">7 days 🔥</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Books issued now</span><span className="font-semibold">{openCount}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Overdue fine</span><span className={totalFine > 0 ? 'font-semibold text-rose-600 dark:text-rose-400' : 'font-semibold text-emerald-600 dark:text-emerald-400'}>{totalFine > 0 ? `₹${totalFine}` : 'None'}</span></div>
         </div>
       </GlassCard>
     </div>

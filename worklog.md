@@ -800,3 +800,39 @@ Stage Summary:
 - Captain system re-confirmed: full appoint→use→end lifecycle dynamically adds/removes student UI; live counters update; writes persist.
 - Ops events this round: stray duplicate dev-server chain killed (EADDRINUSE loop); one OOM server kill auto-recovered by next dev wrapper — QA resumed cleanly after settle wait.
 - Note: captain appointments live in browser localStorage (tenant-scoped zustand persist), so a fresh browser profile starts vacant by design — the principal Leadership tab is the single source for appointments in any given browser session.
+
+---
+Task ID: SR-UI-1
+Agent: Z.ai Code (main orchestrator)
+Task: Student Role UI System + Profile complete refinement (34-section spec — Principal design language as foundation, preserve student personality, Student Profile as top priority).
+
+Work Log:
+- INSPECTION: read the Principal StudentProfilePage (hero card → 4 quick metrics → pill tabs → max-w-4xl content), students-store types (StudentRecord full field set incl. academics/house/medical/achievements/documents), shared UI primitives (GlassCard/SectionHeading/StatusBadge/GradientAvatar), fee/library/certificates store APIs, SECTION_TEACHERS + teachers mock, HOUSE_DEFS (Tagore H4: motto 'Creativity Unbound', 1090 pts), academic-session (AY 2026–2027), flashcardStats + playerStats gamification seeds.
+- STUDENT PROFILE REBUILD (src/components/student/modules/profile.tsx — complete rewrite): Principal-page structure with student personality —
+  · HERO: controlled violet gradient (h-24/28), spring avatar + Active shield, name + Active + captain badge (Crown, from ACTIVE studentPositions only), identity line (Class-Section · Roll · House · email), meta badges (House/Blood/Category/Session AY 2026–2027).
+  · QUICK METRICS (4-up, principal Metric pattern): Attendance 96% / Overall 91%·A+ / Rank #3 / Fee status — ALL from the canonical record.
+  · QUICK INFO (7 gradient-chip cards, real fields only): Admission No, Roll, Library ID, Class & Section, House, Transport Route, Academic Session.
+  · PILL TABS (role=tablist, principal pattern): Personal | Parents & Guardian | Address & Medical | Academic | Documents & Activity.
+    – Personal: 6 InfoRows (DOB/Gender/Blood/Admission Date/Category/Previous School) + school-managed note + REUSED StudentIdentityCodes (QR + barcode from principal module).
+    – Parents: father/mother GradientAvatar rows + guardian phone/email + privacy note.
+    – Address & Medical: address + city/state + medical (read-only note).
+    – Academic: My Class card (class/section/class teacher Rohan Mehta via section.classTeacherId/rank), My House card (Tagore color-dot/motto/points/wins from houses store), Fee Snapshot (LIVE ledger: paid ₹4,750/pending/animated progress bar — same derivation as Fees module), Subject Performance (6 subjects with animated color-coded progress bars + grade badges + teacher names).
+    – Documents & Activity: certificates (certificates-store: BON/2026/00002 Bonafide + Character), library issues (ISS101-103 with overdue fine), achievements (Inter-School Quiz Winner), school records (Birth Cert/TC/Aadhaar verified) — with honest EmptyNotes.
+  · CLASS RESPONSIBILITY section: active positions w/ title/class/since/appointedBy + ALL 6 capability chips (Class updates / Report issues / Responsibility tasks / Teacher requests / Class activity / Class notice board).
+  · QUICK ACTIONS (student-appropriate only — spec §11): My Certificates / Academic Records / My Library / Account Settings (onNavigate; live counts).
+- student-panel.tsx: ProfileModule moved from staticModules to the onNavigate branch (Quick Actions need setActive) — same pattern as notifications.
+- DASHBOARD REAL-DATA FIXES (spec §25):
+  · SmartUpNext: REMOVED fabricated "AI Suggested" badge + "60% complete" + "due in 2 hours" + "85% mastery"; now derives from REAL queue — nearest Pending assignment (ASG001 Numbers 1–100, due 02 Dec, 20 marks), nearest Active homework (HW003 Chart, due 27 Nov, Kavita Joshi), flashcards (12 due, 44% mastered from flashcardStats 38/86); badge → "Your Queue"; subtitle honest.
+  · homework-section library card: fake "Books read 12 / Reading streak 7 days 🔥" → real library-store stats (Books issued now / Overdue fine ₹10); zustand v5 raw-array+useMemo pattern.
+  · study-streak: fabricated "+4 this week" trend → honest "Level 10 · 4,180 XP" (from playerStats).
+- GLOBAL A11Y: src/app/layout.tsx — wrapped children in <MotionConfig reducedMotion="user"> (every framer-motion animation now respects OS prefers-reduced-motion; spec §21/§27, whole-app win).
+- VERIFIED IN BROWSER (student login, fresh session): profile renders all 5 tabs with real data (DOB 27 Sept 2017, DSO2024058, Vikram/Neha Sharma, R-89 Sector 14 Gurugram, Rohan Mehta, Tagore 'Creativity Unbound' 1,090, ₹4,750/₹4,750 fee, BON/2026/00002, ISS101-103, Quiz Winner); Quick Action navigation works (My Certificates → module); CAPTAIN: appointed via principal Leadership flow → hero badge "Class Captain · Class 2-A" + responsibility section "Since 08 Sept 2026 · appointed by Dr. Ananya Iyer" + 6 capability chips + MY CLASS nav group; responsive 9 breakpoints (1440/1280/1180/1024/912/768/430/390/375) on profile ALL no-overflow + dashboard 4 widths + Academic/Documents tabs at 390; 12-module nav sweep (Timetable→Announcements) zero page errors, clean console; VLM desktop review — items evaluated, duplicate-h1 is the app-wide shell+SectionHeading pattern (consistent across roles, kept), banner contrast misread (text is on white card body), grid-gap nitpick = screenshot artifact; VLM mobile "critical N-badge/overflow" claims DISPROVEN by DOM ground truth (DSO2024058 scrollW=clientW=141, no single-letter elements, no doc overflow).
+- OPS: OOM recovery cycle mid-QA (server restarted via cron-spawned chain, zombie wrappers killed); one stale-ref navigation misstep recovered via DOM-text clicks.
+- Final: bunx tsc --noEmit CLEAN · eslint on all 6 changed files CLEAN · dev server 200 healthy.
+
+Stage Summary:
+- Student Profile is now a premium Principal-structured, student-personalized page: hero + live 4-metric row + 7 quick-info cards + 5 tabbed sections + capability-chipped responsibility display + working quick actions — every figure from the canonical roster/ledger/library/certificates stores.
+- Dashboard honesty pass complete: SmartUpNext derives from the real work queue, library stats from the real issues store, streak chip from real XP; zero fabricated "AI" claims.
+- Whole-app accessibility: reduced-motion now globally respected.
+- Cross-role consistency re-confirmed: same student identity/position/fee figures visible from both principal (Leadership/appoint dialog) and student (profile) surfaces.
+- Remaining known items (documented, not blocking): app-wide shell-title + SectionHeading duplication is the established pattern; principal dashboard marketing stats (1,842/₹1.84 Cr) still pending the deferred deep-cleanup pass.

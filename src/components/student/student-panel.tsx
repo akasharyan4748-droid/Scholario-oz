@@ -96,7 +96,8 @@ const navGroups: NavGroup[] = [
 ]
 
 const staticModules: Record<string, React.ReactNode> = {
-  profile: <ProfileModule />,
+  // profile moved to the onNavigate branch — its Quick Actions need the
+  // panel's setActive (same pattern as notifications).
   messages: <StudentMessagesModule />,
   settings: <StudentSettingsModule />,
   timetable: <TimetableModule />,
@@ -205,6 +206,8 @@ export function StudentPanel() {
     >
       {active === 'dashboard' ? (
         <StudentDashboard onNavigate={setActive} />
+      ) : active === 'profile' ? (
+        <ProfileModule onNavigate={setActive} />
       ) : active === 'notifications' ? (
         // Needs the panel's setActive for its "View" deep-links (same pattern
         // as the dashboard branch above).

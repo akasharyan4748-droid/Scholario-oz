@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { TrendingUp, Flame, Zap } from 'lucide-react'
+import { Flame, Zap } from 'lucide-react'
 import { GlassCard } from '@/components/shared/ui'
 import { AnimatedCounter } from '@/components/shared/animated-counter'
 import { playerStats } from '@/lib/mock/gamification'
@@ -39,8 +39,8 @@ export function StudyStreak() {
                 <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
                   Study Streak
                 </span>
-                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                  <TrendingUp className="h-3 w-3" /> +4 this week
+                <span className="text-[10px] font-semibold text-muted-foreground flex items-center gap-0.5">
+                  <Zap className="h-3 w-3 text-amber-500" /> Level {playerStats.level} · {playerStats.xp.toLocaleString('en-IN')} XP
                 </span>
               </div>
               <h3 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight flex items-baseline gap-2">
