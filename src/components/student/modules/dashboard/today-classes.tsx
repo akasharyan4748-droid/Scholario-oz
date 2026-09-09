@@ -30,7 +30,7 @@ export function TodayClasses() {
       <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
         <SectionHeading
           title="Today's Classes"
-          subtitle="Wednesday · 7 periods scheduled"
+          subtitle={`${new Date().toLocaleDateString('en-IN', { weekday: 'long' })} · ${todayClasses.length} periods scheduled`}
           icon={<Clock className="h-5 w-5" />}
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

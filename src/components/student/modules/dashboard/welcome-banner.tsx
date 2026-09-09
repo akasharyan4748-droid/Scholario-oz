@@ -46,10 +46,10 @@ export function WelcomeBanner({ student }: WelcomeBannerProps) {
               {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
             </div>
             <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Hi {student.name.split(' ').slice(0, 1).join(' ')}! 🎒
+              Hi {student.name.split(' ').slice(0, 1).join(' ')}!
             </h1>
             <p className="text-violet-50/90 mt-1 text-sm sm:text-base">
-              Class {student.className}-{student.section} · Roll #{student.rollNo} · Ready to learn today?
+              {student.className}-{student.section} · Roll #{student.rollNo} · Ready to learn today?
             </p>
           </div>
         </div>

@@ -3,21 +3,28 @@
 import { useStudentsStore } from '@/lib/store/students-store'
 import { useFeeStore } from '@/lib/store/fee-store'
 import { DEMO_STUDENT_ID } from '../applications/student'
-import { homeworks, assignments, exams } from '@/lib/mock/academics'
+import { homeworks, assignments } from '@/lib/mock/academics'
 import { attendancePct } from './data'
 import { WelcomeBanner } from './welcome-banner'
 import { KpiGrid } from './kpi-grid'
 import { SmartUpNext } from './smart-up-next'
-import { LearningInsights } from './learning-insights'
-import { PerformanceTrend } from './performance-trend'
 import { StudyStreak } from './study-streak'
 import { TodayClasses } from './today-classes'
 import { HomeworkSection } from './homework-section'
 import { ChartsRow } from './charts-row'
-import { ExamsResults } from './exams-results'
-import { AnnouncementsTransport } from './announcements-transport'
+import { SchoolNotices } from './school-notices'
 import { ClassResponsibilityBanner } from './class-responsibility-banner'
 
+/**
+ * StudentDashboard — a DAILY COMMAND CENTER, not a report (final
+ * simplification pass). Flow: TODAY (focus queue, timetable, homework,
+ * KPIs) → PROGRESS (trend charts, streak) → NOTICES.
+ *
+ * Removed in the simplification pass: LearningInsights (hardcoded
+ * duplicates of the KPI row), PerformanceTrend (hardcoded weekly bars
+ * duplicating ChartsRow), ExamsResults (Results module + KPI already
+ * cover it), and the transport card (Transport module owns that data).
+ */
 export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => void }) {
   // STU-B — canonical identity (one roster, every role).
   const student = useStudentsStore((st) => st.students.find((x) => x.id === DEMO_STUDENT_ID))
@@ -32,7 +39,6 @@ export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => 
   const feePending = Math.max(0, (student?.feeTotal ?? 0) - ledgerPaid)
   const pendingHomework = homeworks.filter((h) => h.status === 'Active').slice(0, 3)
   const dueAssignments = assignments.filter((a) => a.status === 'Pending').slice(0, 2)
-  const upcomingExams = exams.filter((e) => e.status === 'Scheduled').slice(0, 2)
   // Display identities derived from the roster number (same convention as Profile).
   const libraryId = student ? `LIB-${1000 + Number(student.id.replace('STU-', ''))}` : '—'
 
@@ -57,13 +63,8 @@ export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => 
         feePending={feePending}
       />
 
+      {/* ── TODAY: what to focus on right now ─────────────────────────── */}
       <SmartUpNext onNavigate={onNavigate} />
-
-      <LearningInsights />
-
-      <PerformanceTrend />
-
-      <StudyStreak />
 
       <TodayClasses />
 
@@ -73,11 +74,13 @@ export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => 
         libraryId={libraryId}
       />
 
+      {/* ── PROGRESS: how you're trending ─────────────────────────────── */}
       <ChartsRow />
 
-      <ExamsResults upcomingExams={upcomingExams} />
+      <StudyStreak />
 
-      <AnnouncementsTransport transportId={student.transportRoute ?? undefined} onNavigate={onNavigate} />
+      {/* ── NOTICES: what the school wants you to know ────────────────── */}
+      <SchoolNotices onNavigate={onNavigate} />
     </div>
   )
 }

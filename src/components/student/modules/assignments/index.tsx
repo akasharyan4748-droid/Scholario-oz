@@ -12,11 +12,16 @@ import { ClipboardList } from 'lucide-react'
 import { SectionHeading, StatusBadge } from '@/components/shared/ui'
 import { assignments } from '@/lib/mock/academics'
 import { toast } from 'sonner'
+import { useStudentsStore } from '@/lib/store/students-store'
+import { DEMO_STUDENT_ID } from '../applications/student'
 import { AssignmentsKpiRow } from './kpi-row'
 import { AssignmentsTabs } from './assignments-tabs'
 import { SubmitAssignmentDialog } from './submit-dialog'
 
 export function AssignmentsModule() {
+  // Canonical class label (data-driven, same roster every role uses).
+  const student = useStudentsStore((st) => st.students.find((x) => x.id === DEMO_STUDENT_ID))
+  const classLabel = student ? `${student.className}-${student.section}` : ''
   const [submittedSet, setSubmittedSet] = useState<Set<string>>(new Set())
   const [openId, setOpenId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -61,7 +66,7 @@ export function AssignmentsModule() {
     <div className="space-y-6">
       <SectionHeading
         title="My Assignments"
-        subtitle="Class 2-A · Submit and track your work"
+        subtitle={`${classLabel} · Submit and track your work`}
         icon={<ClipboardList className="h-5 w-5" />}
         action={
           <div className="flex items-center gap-2">

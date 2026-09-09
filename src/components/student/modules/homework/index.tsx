@@ -6,6 +6,8 @@ import { SectionHeading, StatusBadge } from '@/components/shared/ui'
 import { homeworks } from '@/lib/mock/academics'
 import { toast } from 'sonner'
 import { useStudentHomeworkStore } from '@/lib/store/student-homework-store'
+import { useStudentsStore } from '@/lib/store/students-store'
+import { DEMO_STUDENT_ID } from '../applications/student'
 import { StatsRow } from './stats-row'
 import { ActiveHomeworkList } from './active-homework-list'
 import { ClosedHomeworkList } from './closed-homework-list'
@@ -18,6 +20,9 @@ export function HomeworkModule() {
   // closed/graded homework (with teacher feedback) stays in mock data.
   const submitted = useStudentHomeworkStore((s) => s.submitted)
   const markSubmitted = useStudentHomeworkStore((s) => s.markSubmitted)
+  // Canonical class label (data-driven, same roster every role uses).
+  const student = useStudentsStore((st) => st.students.find((x) => x.id === DEMO_STUDENT_ID))
+  const classLabel = student ? `${student.className}-${student.section}` : ''
   const [openId, setOpenId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -63,7 +68,7 @@ export function HomeworkModule() {
     <div className="space-y-6">
       <SectionHeading
         title="My Homework"
-        subtitle="Class 2-A · Assigned by your teachers"
+        subtitle={`${classLabel} · Assigned by your teachers`}
         icon={<BookOpen className="h-5 w-5" />}
         action={
           <div className="flex items-center gap-2">

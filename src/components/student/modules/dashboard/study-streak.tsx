@@ -45,7 +45,7 @@ export function StudyStreak() {
               </div>
               <h3 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight flex items-baseline gap-2">
                 <AnimatedCounter value={playerStats.streak} />
-                <span className="text-sm font-semibold text-muted-foreground">days 🔥</span>
+                <span className="text-sm font-semibold text-muted-foreground">days</span>
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Best: <span className="font-semibold text-rose-600 dark:text-rose-400">{playerStats.longestStreak} days</span>
@@ -82,9 +82,8 @@ export function StudyStreak() {
                         : 'bg-muted/60 text-muted-foreground/40'
                     )}
                     title={isActive ? 'Active study day' : 'No activity'}
-                  >
-                    {isActive ? '🔥' : ''}
-                  </motion.div>
+                    aria-hidden
+                  />
                 )
               })}
             </div>
