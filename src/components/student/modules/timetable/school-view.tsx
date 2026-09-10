@@ -30,10 +30,15 @@ export function SchoolView({ slots }: { slots: TimetableSlot[] }) {
     const present = new Set(slots.map((s) => s.day))
     return DAYS.filter((d) => present.has(d))
   }, [slots])
-  const classes = useMemo(() => {
-    const names = new Set(slots.map((s) => s.className))
-    return [...names].sort()
-  }, [slots])
+  // Unique class names in school order — plain derivation (the React
+  // Compiler memoizes it; a manual useMemo with sort() cannot be preserved).
+  const classes = (() => {
+    const seen: string[] = []
+    for (const s of slots) {
+      if (!seen.includes(s.className)) seen.push(s.className)
+    }
+    return seen.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  })()
 
   const defaultDay: DayType = todayDay !== 'Sunday' && schoolDays.includes(todayDay) ? todayDay : (schoolDays[0] ?? 'Monday')
   const [selectedDay, setSelectedDay] = useState<DayType>(defaultDay)

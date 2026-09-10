@@ -123,7 +123,12 @@ export const useStudentAttendanceStore = create<StudentAttendanceStoreState>()(
         set((state) => {
           const byKey = new Map(state.records.map((r) => [`${r.studentId}|${r.date}`, r]))
           for (const e of entries) {
-            const key = `${e.studentId}|${e.date}`
+            // NOTE: entries carry {studentId, status, note} — the DATE comes
+            // from the outer parameter. Keying on the outer `date` (not
+            // e.date, which does not exist) is what makes a re-save UPDATE
+            // the existing row instead of duplicating it — the student then
+            // always sees the corrected status.
+            const key = `${e.studentId}|${date}`
             const existing = byKey.get(key)
             if (existing) {
               byKey.set(key, { ...existing, status: e.status, note: e.note ?? existing.note, markedBy, markedAt: now })
@@ -220,4 +225,35 @@ export function monthlyTrend(records: StudentAttendanceRecord[], months = 6): { 
     }
   }
   return points
+}
+
+/**
+ * Weekly aggregation → the honest "improving or declining?" curve.
+ * One point per ISO week (Mon-based) that has records, oldest → newest,
+ * labeled by the week's Monday ("10 Nov"). NO synthetic history — weeks
+ * without records simply do not appear. Late arrivals count as attended
+ * (same convention as computeStats).
+ */
+export function weeklyTrend(records: StudentAttendanceRecord[], weeks = 8): { name: string; v: number }[] {
+  if (records.length === 0) return []
+  const byWeek = new Map<string, { attended: number; total: number }>()
+  for (const r of records) {
+    const d = new Date(`${r.date}T00:00:00`)
+    if (Number.isNaN(d.getTime())) continue
+    // ISO week start (Monday)
+    const dow = (d.getDay() + 6) % 7
+    const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow)
+    const key = isoDate(monday)
+    const agg = byWeek.get(key) ?? { attended: 0, total: 0 }
+    agg.total++
+    if (r.status === 'present' || r.status === 'late') agg.attended++
+    byWeek.set(key, agg)
+  }
+  return [...byWeek.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .slice(-weeks)
+    .map(([key, agg]) => ({
+      name: new Date(`${key}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+      v: Math.round((agg.attended / agg.total) * 100),
+    }))
 }

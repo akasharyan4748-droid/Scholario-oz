@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion'
 import { Sparkles } from 'lucide-react'
 import { examResults } from '@/lib/mock/academics'
-import { attendancePct } from './data'
+import { useAttendanceSnapshot } from './data'
 
 interface WelcomeBannerProps {
   student: {
@@ -16,6 +16,8 @@ interface WelcomeBannerProps {
 }
 
 export function WelcomeBanner({ student }: WelcomeBannerProps) {
+  // STU-ATT — live from the canonical attendance records.
+  const attendance = useAttendanceSnapshot()
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -55,7 +57,7 @@ export function WelcomeBanner({ student }: WelcomeBannerProps) {
         </div>
         <div className="flex gap-3">
           <div className="rounded-2xl bg-white/15 backdrop-blur px-4 py-3 text-center border border-white/20">
-            <p className="font-display text-2xl font-bold">{attendancePct}%</p>
+            <p className="font-display text-2xl font-bold">{attendance.pct}%</p>
             <p className="text-[11px] text-violet-100">Attendance</p>
           </div>
           <div className="rounded-2xl bg-white/15 backdrop-blur px-4 py-3 text-center border border-white/20">

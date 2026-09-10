@@ -6,7 +6,7 @@ import { GlassCard, SectionHeading } from '@/components/shared/ui'
 import { RadialGauge } from '@/components/shared/charts'
 import { todaySchedule } from '@/lib/mock/academics'
 import { cn } from '@/lib/utils'
-import { absentCount, attendancePct, attendanceWindowLabel, lateCount, presentCount } from './data'
+import { useAttendanceSnapshot } from './data'
 
 const subjectColors: Record<string, string> = {
   English: 'from-emerald-400 to-teal-500',
@@ -23,6 +23,8 @@ const subjectColors: Record<string, string> = {
 
 export function TodayClasses() {
   const todayClasses = todaySchedule.filter((p) => p.subject !== 'Break' && p.subject !== 'Lunch' && p.subject !== 'Assembly')
+  // STU-ATT — live from the canonical attendance records.
+  const attendance = useAttendanceSnapshot()
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -64,21 +66,21 @@ export function TodayClasses() {
       {/* Attendance gauge */}
       <GlassCard className="p-3 sm:p-4 lg:p-5">
         <h3 className="font-semibold text-sm mb-1">My Attendance</h3>
-        <p className="text-xs text-muted-foreground mb-3">{attendanceWindowLabel}</p>
+        <p className="text-xs text-muted-foreground mb-3">{attendance.windowLabel || 'This term'}</p>
         <div className="flex items-center justify-center mb-3">
-          <RadialGauge value={attendancePct} label="present" size={150} color="oklch(0.55 0.14 162)" />
+          <RadialGauge value={attendance.pct} label="attended" size={150} color="oklch(0.55 0.14 162)" />
         </div>
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="rounded-xl bg-emerald-500/10 py-2">
-            <p className="font-display text-lg font-bold text-emerald-600 dark:text-emerald-400">{presentCount}</p>
+            <p className="font-display text-lg font-bold text-emerald-600 dark:text-emerald-400">{attendance.present}</p>
             <p className="text-[10px] text-muted-foreground">Present</p>
           </div>
           <div className="rounded-xl bg-amber-500/10 py-2">
-            <p className="font-display text-lg font-bold text-amber-600 dark:text-amber-400">{lateCount}</p>
+            <p className="font-display text-lg font-bold text-amber-600 dark:text-amber-400">{attendance.late}</p>
             <p className="text-[10px] text-muted-foreground">Late</p>
           </div>
           <div className={cn('rounded-xl bg-rose-500/10 py-2')}>
-            <p className="font-display text-lg font-bold text-rose-600 dark:text-rose-400">{absentCount}</p>
+            <p className="font-display text-lg font-bold text-rose-600 dark:text-rose-400">{attendance.absent}</p>
             <p className="text-[10px] text-muted-foreground">Absent</p>
           </div>
         </div>

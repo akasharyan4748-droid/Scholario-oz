@@ -35,6 +35,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useStudentsStore } from '@/lib/store/students-store'
 import type { StudentRecord } from '@/lib/store/students-store'
+import { useStudentAttendanceStore, computeStats, studentRecords } from '@/lib/store/student-attendance-store'
 import { useFeeStore } from '@/lib/store/fee-store'
 import { useLibraryStore } from '@/lib/store/library-store'
 import { useCertificatesStore } from '@/lib/store/certificates-store'
@@ -67,6 +68,15 @@ export function ProfileModule({ onNavigate }: { onNavigate?: (key: string) => vo
     () => allTxns.filter((t) => t.studentId === DEMO_STUDENT_ID && t.status === 'Success')
       .reduce((sum, t) => sum + t.amount, 0),
     [allTxns],
+  )
+
+  // STU-ATT — attendance derives LIVE from the canonical attendance records
+  // (the same rows Teacher/Principal write), so a correction anywhere updates
+  // the profile snapshot — it can never disagree with the Attendance module.
+  const allAttendance = useStudentAttendanceStore((s) => s.records)
+  const attendancePct = useMemo(
+    () => computeStats(studentRecords(allAttendance, DEMO_STUDENT_ID)).percent,
+    [allAttendance],
   )
 
   // Library + certificates — the same stores My Library / My Certificates
@@ -176,7 +186,7 @@ export function ProfileModule({ onNavigate }: { onNavigate?: (key: string) => vo
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-0 sm:divide-x sm:divide-border">
           <SnapshotStat
             label="Attendance"
-            value={`${s.attendance}%`}
+            value={`${attendancePct}%`}
             icon={<Activity className="h-4 w-4" />}
             color="text-emerald-600 dark:text-emerald-400"
             bg="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"

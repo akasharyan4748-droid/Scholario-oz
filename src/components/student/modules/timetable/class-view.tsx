@@ -71,8 +71,8 @@ export function ClassView({
   const todayDay = realTodayDay()
   const scheduledDays = useMemo(() => scheduledDaysForClass(slots, className), [slots, className])
   const todayEntries = useMemo(
-    () => (todayDay !== 'Sunday' ? buildDayEntries(slots, todayDay) : []),
-    [slots, todayDay]
+    () => (todayDay !== 'Sunday' ? buildDayEntries(slots, todayDay, className) : []),
+    [slots, todayDay, className]
   )
   const todayHoliday = useMemo(() => {
     if (todayDay === 'Sunday') return { name: 'Weekend' }
@@ -82,7 +82,7 @@ export function ClassView({
 
   const defaultDay: DayType = todayDay !== 'Sunday' && scheduledDays.includes(todayDay) ? todayDay : (scheduledDays[0] ?? 'Monday')
   const [selectedDay, setSelectedDay] = useState<DayType>(defaultDay)
-  const selectedEntries = useMemo(() => buildDayEntries(slots, selectedDay), [slots, selectedDay])
+  const selectedEntries = useMemo(() => buildDayEntries(slots, selectedDay, className), [slots, selectedDay, className])
 
   // Recent published changes affecting MY class (72h TTL inside the helper)
   const recentChanges = useMemo(() => getRecentChangesForClass(className, publications), [className, publications])
@@ -100,8 +100,8 @@ export function ClassView({
     [scheduledDays]
   )
   const nextDayEntries = useMemo(
-    () => (nextDay ? buildDayEntries(slots, nextDay.day) : []),
-    [slots, nextDay]
+    () => (nextDay ? buildDayEntries(slots, nextDay.day, className) : []),
+    [slots, nextDay, className]
   )
 
   const mySubjectCount = useMemo(

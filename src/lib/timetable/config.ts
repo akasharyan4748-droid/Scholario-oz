@@ -33,7 +33,17 @@ export interface TimetableSlot {
 export const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
 export type DayType = (typeof DAYS)[number]
 
-export const PERIODS = [
+/** Canonical period structure (breaks carry a typed breakType). */
+export interface PeriodDef {
+  number: number
+  name: string
+  time: string
+  isBreak?: boolean
+  breakType?: 'short' | 'lunch'
+  durationMin: number
+}
+
+export const PERIODS: PeriodDef[] = [
   { number: 1, name: 'Period 1', time: '08:30 AM - 09:15 AM', durationMin: 45 },
   { number: 2, name: 'Period 2', time: '09:15 AM - 10:00 AM', durationMin: 45 },
   { number: 3, name: 'Period 3', time: '10:00 AM - 10:45 AM', durationMin: 45 },
@@ -62,7 +72,7 @@ export function buildInitialRows() {
     name: p.name,
     time: p.time,
     isBreak: p.isBreak || false,
-    breakType: p.breakType as 'short' | 'lunch' | undefined,
+    breakType: p.breakType,
     durationMin: p.durationMin,
   }))
 }

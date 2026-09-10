@@ -1,72 +1,68 @@
 'use client'
 
-import { studentAttendanceCalendar } from '@/lib/mock/attendance'
+/**
+ * Dashboard attendance snapshot — DERIVED LIVE from the canonical
+ * `student-attendance-store` (the same records Teacher/Principal write).
+ *
+ * Previously this file derived every number from the static mock calendar
+ * (`lib/mock/attendance`) — the dashboard could silently disagree with the
+ * Attendance module after a teacher corrected a day. Now both surfaces read
+ * the ONE record set:
+ *   - pct / present / late / absent — computeStats over the student's records
+ *   - windowLabel — from the first/last record dates
+ *   - trend — the honest weekly aggregation (weeks without records simply
+ *     do not appear; no synthetic pre-window history)
+ */
+import { useMemo } from 'react'
+import {
+  useStudentAttendanceStore,
+  computeStats,
+  studentRecords,
+  weeklyTrend,
+} from '@/lib/store/student-attendance-store'
+import { DEMO_STUDENT_ID } from '../applications/student'
 
-export const presentCount = studentAttendanceCalendar.filter((d) => d.status === 'present').length
-export const lateCount = studentAttendanceCalendar.filter((d) => d.status === 'late').length
-export const absentCount = studentAttendanceCalendar.filter((d) => d.status === 'absent').length
-export const totalDays = studentAttendanceCalendar.length
-export const attendancePct = Math.round(((presentCount + lateCount) / totalDays) * 100)
-
-// STU-F — window label derived from the calendar records (e.g.
-// 'November – December 2025'). Used wherever the dashboard labels the
-// attendance period instead of a hardcoded month.
-export const attendanceWindowLabel = (() => {
-  if (studentAttendanceCalendar.length === 0) return ''
-  const first = new Date(studentAttendanceCalendar[0].date)
-  const last = new Date(studentAttendanceCalendar[studentAttendanceCalendar.length - 1].date)
-  const firstLabel = first.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
-  const lastLabel = last.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
-  if (firstLabel === lastLabel) return firstLabel
-  return `${first.toLocaleDateString('en-IN', { month: 'long' })} – ${lastLabel}`
-})()
-
-// Inline history for months with no calendar records (pre-window months),
-// keyed by calendar month index (0=Jan … 11=Dec) — en-IN short labels have
-// quirks (September renders as 'Sept'), so the lookup must not depend on
-// the label string.
-const INLINE_HISTORY: Record<number, number> = {
-  0: 93, 1: 94, 2: 95, 3: 94, 4: 95, 5: 95,
-  6: 94, 7: 92, 8: 95, 9: 93, 10: 93, 11: 93,
+export interface AttendanceSnapshot {
+  /** Overall attendance percentage over recorded school days. */
+  pct: number
+  present: number
+  late: number
+  absent: number
+  /** Recorded school days. */
+  total: number
+  /** e.g. 'November – December 2025' (from the records themselves). */
+  windowLabel: string
+  /** Weekly trend points from real records (may be short — that's honest). */
+  trend: { name: string; v: number }[]
+  /** Week-over-week delta, when at least two weeks exist. */
+  weekDelta: number | null
 }
 
-// STU-F — attendance trend DERIVED from studentAttendanceCalendar:
-//   • months with records aggregate per-month (group by 'YYYY-MM' → percent);
-//   • months with no records fall back to the inline history;
-//   • the LATEST month is always the live overall rate (attendancePct) so
-//     the chart endpoint can never disagree with the KPI gauge (96 for
-//     STU-58) — the latest month is still in progress, so the honest
-//     "current" value is the window rate, not a partial-month percent.
-// Output: 6 points ending at the calendar's latest month, e.g.
-// Jul 94 · Aug 92 · Sep 95 · Oct 93 · Nov 94 · Dec 96.
-export const attendanceTrend = (() => {
-  const monthly = new Map<string, { counted: number; total: number }>()
-  for (const r of studentAttendanceCalendar) {
-    const key = r.date.slice(0, 7)
-    const agg = monthly.get(key) ?? { counted: 0, total: 0 }
-    agg.total += 1
-    if (r.status === 'present' || r.status === 'late') agg.counted += 1
-    monthly.set(key, agg)
-  }
-  const latestKey = studentAttendanceCalendar.length > 0
-    ? studentAttendanceCalendar[studentAttendanceCalendar.length - 1].date.slice(0, 7)
-    : null
-  if (!latestKey) return [{ name: 'Now', v: attendancePct }]
-
-  const months: { key: string; name: string; monthIdx: number }[] = []
-  const [y, m] = latestKey.split('-').map(Number)
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(y, m - 1 - i, 1)
-    months.push({
-      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-      name: d.toLocaleDateString('en-IN', { month: 'short' }),
-      monthIdx: d.getMonth(),
-    })
-  }
-  return months.map(({ key, name, monthIdx }) => {
-    if (key === latestKey) return { name, v: attendancePct }
-    const agg = monthly.get(key)
-    if (agg && agg.total > 0) return { name, v: Math.round((agg.counted / agg.total) * 100) }
-    return { name, v: INLINE_HISTORY[monthIdx] ?? attendancePct }
-  })
-})()
+export function useAttendanceSnapshot(): AttendanceSnapshot {
+  const records = useStudentAttendanceStore((s) => s.records)
+  return useMemo(() => {
+    const my = studentRecords(records, DEMO_STUDENT_ID)
+    const stats = computeStats(my)
+    const trend = weeklyTrend(my)
+    const windowLabel = (() => {
+      if (my.length === 0) return ''
+      const first = new Date(`${my[0].date}T00:00:00`)
+      const last = new Date(`${my[my.length - 1].date}T00:00:00`)
+      const a = first.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+      const b = last.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+      return a === b ? a : `${first.toLocaleDateString('en-IN', { month: 'long' })} – ${b}`
+    })()
+    const weekDelta =
+      trend.length >= 2 ? +(trend[trend.length - 1].v - trend[trend.length - 2].v).toFixed(1) : null
+    return {
+      pct: stats.percent,
+      present: stats.present,
+      late: stats.late,
+      absent: stats.absent,
+      total: stats.total,
+      windowLabel,
+      trend,
+      weekDelta,
+    }
+  }, [records])
+}

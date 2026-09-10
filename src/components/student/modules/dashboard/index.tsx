@@ -4,7 +4,7 @@ import { useStudentsStore } from '@/lib/store/students-store'
 import { useFeeStore } from '@/lib/store/fee-store'
 import { DEMO_STUDENT_ID } from '../applications/student'
 import { homeworks, assignments } from '@/lib/mock/academics'
-import { attendancePct } from './data'
+import { useAttendanceSnapshot } from './data'
 import { WelcomeBanner } from './welcome-banner'
 import { KpiGrid } from './kpi-grid'
 import { SmartUpNext } from './smart-up-next'
@@ -37,6 +37,10 @@ export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => 
       .reduce((sum, t) => sum + t.amount, 0),
   )
   const feePending = Math.max(0, (student?.feeTotal ?? 0) - ledgerPaid)
+  // STU-ATT — attendance KPI derives LIVE from the canonical attendance
+  // records (same source as the Attendance module): a teacher's correction
+  // updates this number on the next render.
+  const attendance = useAttendanceSnapshot()
   const pendingHomework = homeworks.filter((h) => h.status === 'Active').slice(0, 3)
   const dueAssignments = assignments.filter((a) => a.status === 'Pending').slice(0, 2)
   // Display identities derived from the roster number (same convention as Profile).
@@ -58,7 +62,7 @@ export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => 
       <ClassResponsibilityBanner onNavigate={onNavigate} />
 
       <KpiGrid
-        attendancePct={attendancePct}
+        attendancePct={attendance.pct}
         pendingHomeworkCount={pendingHomework.length}
         feePending={feePending}
       />

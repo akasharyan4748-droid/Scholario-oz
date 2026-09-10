@@ -122,9 +122,16 @@ export interface DayEntry {
  * periods render their slot; Short Break / Lunch Break render as neutral
  * structural rows BETWEEN the day's first and last scheduled period
  * (Saturday half-days never show a trailing lunch).
+ *
+ * `className` scopes the day's slots to ONE class — the student's "My
+ * Class" view must never mix other classes' periods into the schedule
+ * (Phase 11: the class comes from enrollment, and the day's schedule
+ * comes from THAT class's canonical slots only).
  */
-export function buildDayEntries(slots: TimetableSlot[], day: DayType): DayEntry[] {
-  const daySlots = slots.filter((s) => s.day === day).sort((a, b) => a.period - b.period)
+export function buildDayEntries(slots: TimetableSlot[], day: DayType, className?: string): DayEntry[] {
+  const daySlots = slots
+    .filter((s) => s.day === day && (className === undefined || s.className === className))
+    .sort((a, b) => a.period - b.period)
   if (daySlots.length === 0) return []
   const min = daySlots[0].period
   const max = daySlots[daySlots.length - 1].period

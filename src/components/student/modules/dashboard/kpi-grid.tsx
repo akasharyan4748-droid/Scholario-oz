@@ -6,7 +6,7 @@ import {
 import { KpiCard } from '@/components/shared/kpi-card'
 import { formatINR } from '@/lib/format'
 import { homeworks, examResults } from '@/lib/mock/academics'
-import { attendanceTrend } from './data'
+import { useAttendanceSnapshot } from './data'
 
 interface KpiGridProps {
   attendancePct: number
@@ -15,6 +15,8 @@ interface KpiGridProps {
 }
 
 export function KpiGrid({ attendancePct, pendingHomeworkCount, feePending }: KpiGridProps) {
+  // STU-ATT — sparkline + week delta derive from the canonical records.
+  const attendance = useAttendanceSnapshot()
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
       <KpiCard
@@ -22,10 +24,10 @@ export function KpiGrid({ attendancePct, pendingHomeworkCount, feePending }: Kpi
         value={attendancePct}
         suffix="%"
         icon={<CalendarCheck className="h-5 w-5" />}
-        trend={1.4}
-        trendLabel="Excellent record"
+        trend={attendance.weekDelta ?? undefined}
+        trendLabel={attendance.weekDelta !== null ? 'vs last week' : 'Building your record'}
         accent="emerald"
-        sparkline={attendanceTrend}
+        sparkline={attendance.trend.length >= 2 ? attendance.trend : undefined}
         sparkKey="v"
         delay={0}
       />
