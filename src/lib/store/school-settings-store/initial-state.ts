@@ -119,6 +119,9 @@ export const initialState: StateShape = {
       { id: 'ex-u2', name: 'Unit Test II', weightage: 10 },
       { id: 'ex-fn', name: 'Annual / Final Term', weightage: 40 },
     ],
+    // School attendance policy — Student Attendance derives its status
+    // labels (Excellent / Good / Needs Attention) from these thresholds.
+    attendanceThresholds: { excellent: 95, needsAttention: 85 },
   },
 
   timetable: {

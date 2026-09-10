@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CalendarCheck, Check, X, Clock, Plane, Save, CheckCircle2, Users,
@@ -11,10 +11,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { class2AAttendance } from '@/lib/mock/attendance'
+import { useStudentsStore } from '@/lib/store/students-store'
+import { useStudentAttendanceStore, type AttendanceStatus } from '@/lib/store/student-attendance-store'
 import { cn } from '@/lib/utils'
 
-type Status = 'present' | 'absent' | 'late' | 'leave'
+type Status = AttendanceStatus
 
 const statusConfig: Record<Status, { label: string; icon: React.ReactNode; active: string; inactive: string }> = {
   present: {
@@ -43,18 +44,60 @@ const statusConfig: Record<Status, { label: string; icon: React.ReactNode; activ
   },
 }
 
+/** Today's date (YYYY-MM-DD) — the canonical attendance date for marking. */
+function todayISO(): string {
+  const d = new Date()
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 export function AttendanceModule() {
   const [selectedClass, setSelectedClass] = useState('2-A')
   const [search, setSearch] = useState('')
-  const [records, setRecords] = useState<Record<string, Status>>(() => {
-    const init: Record<string, Status> = {}
-    class2AAttendance.forEach((r) => {
-      init[r.rollNo] = r.status as Status
-    })
-    return init
-  })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // ── Canonical roster (students-store) — real IDs back the attendance rows ──
+  const allStudents = useStudentsStore((s) => s.students)
+  const roster = useMemo(
+    () =>
+      allStudents
+        .filter((s) => s.classId === 'C05' && s.section === selectedClass.split('-')[1] && s.status === 'Active')
+        .sort((a, b) => Number(a.rollNo) - Number(b.rollNo))
+        .map((s) => ({ id: s.id, rollNo: s.rollNo, name: s.name })),
+    [allStudents, selectedClass]
+  )
+
+  // ── Canonical attendance records — draft state initializes from the store ──
+  // so already-saved statuses (incl. corrections from another surface) show,
+  // and Save writes back through ONE source of truth the Student role reads.
+  const attendanceRecords = useStudentAttendanceStore((s) => s.records)
+  const markClassAttendance = useStudentAttendanceStore((s) => s.markClassAttendance)
+  const date = todayISO()
+
+  const [records, setRecords] = useState<Record<string, Status>>(() => {
+    const init: Record<string, Status> = {}
+    for (const r of roster) {
+      const existing = attendanceRecords.find((x) => x.studentId === r.id && x.date === date)
+      init[r.rollNo] = existing?.status ?? 'present'
+    }
+    return init
+  })
+
+  const reloadDraft = useCallback(
+    (classKey: string) => {
+      const section = classKey.split('-')[1]
+      const students = allStudents.filter((s) => s.classId === 'C05' && s.section === section && s.status === 'Active')
+      const init: Record<string, Status> = {}
+      for (const r of students) {
+        const existing = attendanceRecords.find((x) => x.studentId === r.id && x.date === date)
+        init[r.rollNo] = existing?.status ?? 'present'
+      }
+      setRecords(init)
+      setSaved(false)
+    },
+    [allStudents, attendanceRecords, date]
+  )
 
   const setStatus = (rollNo: string, status: Status) => {
     setRecords((prev) => ({ ...prev, [rollNo]: status }))
@@ -63,7 +106,7 @@ export function AttendanceModule() {
 
   const bulkMarkPresent = () => {
     const init: Record<string, Status> = {}
-    class2AAttendance.forEach((r) => {
+    roster.forEach((r) => {
       init[r.rollNo] = 'present'
     })
     setRecords(init)
@@ -77,22 +120,31 @@ export function AttendanceModule() {
     return c
   }, [records])
 
-  const filtered = class2AAttendance.filter((r) =>
+  const filtered = roster.filter((r) =>
     r.name.toLowerCase().includes(search.toLowerCase()) || r.rollNo.includes(search)
   )
 
   const handleSave = () => {
     setSaving(true)
     setTimeout(() => {
+      // Write to the canonical student-attendance store — the Student role's
+      // Attendance page reflects these records immediately (upsert semantics:
+      // re-saving a date corrects every student's status live).
+      const written = markClassAttendance({
+        date,
+        entries: roster.map((r) => ({ studentId: r.id, status: records[r.rollNo] ?? 'present' })),
+        markedBy: 'Rohan Mehta',
+      })
       setSaving(false)
       setSaved(true)
       toast.success('Attendance saved successfully', {
-        description: `Class ${selectedClass} · ${counts.present} present, ${counts.absent} absent, ${counts.late} late, ${counts.leave} on leave`,
+        description: `Class ${selectedClass} · ${counts.present} present, ${counts.absent} absent, ${counts.late} late, ${counts.leave} on leave · ${written} students`,
       })
-    }, 1100)
+    }, 600)
   }
 
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const total = roster.length
 
   return (
     <div className="space-y-5">
@@ -102,7 +154,7 @@ export function AttendanceModule() {
         icon={<CalendarCheck className="h-5 w-5" />}
         action={
           <div className="flex items-center gap-2">
-            <Select value={selectedClass} onValueChange={setSelectedClass}>
+            <Select value={selectedClass} onValueChange={(v) => { setSelectedClass(v); reloadDraft(v) }}>
               <SelectTrigger className="w-32 h-9">
                 <SelectValue />
               </SelectTrigger>
@@ -171,7 +223,7 @@ export function AttendanceModule() {
                 <motion.span key={c.value} initial={{ scale: 1.3 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }}>
                   {c.value}
                 </motion.span>
-                <span className="text-base text-muted-foreground font-normal">/18</span>
+                <span className="text-base text-muted-foreground font-normal">/{total}</span>
               </p>
             </GlassCard>
           </motion.div>
@@ -183,7 +235,7 @@ export function AttendanceModule() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
             <h3 className="font-semibold text-sm">Class {selectedClass} · Student Roster</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Tap a status button for each student. Attendance rate: {((counts.present / 18) * 100).toFixed(1)}%</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Tap a status button for each student. Attendance rate: {total > 0 ? ((counts.present / total) * 100).toFixed(1) : '0.0'}%</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -207,7 +259,7 @@ export function AttendanceModule() {
             const current = records[r.rollNo]
             return (
               <motion.div
-                key={r.rollNo}
+                key={r.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
@@ -226,7 +278,7 @@ export function AttendanceModule() {
                 <GradientAvatar name={r.name} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-sm truncate">{r.name}</p>
-                  <p className="text-[11px] text-muted-foreground">Roll #{r.rollNo} · Class 2-A</p>
+                  <p className="text-[11px] text-muted-foreground">Roll #{r.rollNo} · Class {selectedClass}</p>
                 </div>
                 <div className="flex items-center gap-1.5">
                   {(Object.keys(statusConfig) as Status[]).map((s) => {
@@ -243,6 +295,8 @@ export function AttendanceModule() {
                           isActive ? cfg.active : cn('bg-transparent', cfg.inactive)
                         )}
                         title={cfg.label}
+                        aria-label={`Mark ${r.name} as ${cfg.label}`}
+                        aria-pressed={isActive}
                       >
                         {cfg.icon}
                         <span className="hidden sm:inline">{cfg.label}</span>
@@ -253,17 +307,23 @@ export function AttendanceModule() {
               </motion.div>
             )
           })}
+          {filtered.length === 0 && (
+            <div className="py-10 text-center">
+              <Users className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">No students match “{search}”</p>
+            </div>
+          )}
         </div>
 
         {/* Footer summary */}
         <div className="mt-4 pt-4 border-t border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <span className="text-muted-foreground">Total: <span className="font-semibold text-foreground">18 students</span></span>
+            <span className="text-muted-foreground">Total: <span className="font-semibold text-foreground">{total} students</span></span>
             <span className="text-muted-foreground">·</span>
             <StatusBadge
-              status={counts.present >= 15 ? 'Healthy' : counts.present >= 12 ? 'Average' : 'Low'}
-              variant={counts.present >= 15 ? 'success' : counts.present >= 12 ? 'warning' : 'danger'}
+              status={total > 0 && counts.present / total >= 0.85 ? 'Healthy' : total > 0 && counts.present / total >= 0.65 ? 'Average' : 'Low'}
+              variant={total > 0 && counts.present / total >= 0.85 ? 'success' : total > 0 && counts.present / total >= 0.65 ? 'warning' : 'danger'}
               dot
             />
           </div>

@@ -234,6 +234,12 @@ export interface SchoolSettingsState {
     classes: ClassConfig[]
     subjects: SubjectConfig[]
     examStructures: { id: string; name: string; weightage: number }[]
+    /**
+     * School-configured attendance policy thresholds (percent). Student
+     * attendance status labels (Excellent / Good / Needs Attention) derive
+     * from THIS config — never hardcoded institutional rules.
+     */
+    attendanceThresholds: { excellent: number; needsAttention: number }
   }
 
   // Timetable
