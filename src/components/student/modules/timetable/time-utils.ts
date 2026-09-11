@@ -79,6 +79,24 @@ export function shortDateLabel(d: Date): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
+/** Next calendar occurrence of a weekday (today counts when it matches). */
+export function nextOccurrenceOfDay(day: DayType, from: Date = new Date()): Date {
+  const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
+  const target = names.indexOf(day)
+  const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate())
+  for (let guard = 0; guard < 8 && cursor.getDay() !== target; guard++) {
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return cursor
+}
+
+/** "Friday, 11 September"-style label for a weekday's next occurrence. */
+export function upcomingDayLabel(day: DayType, todayDay: DayType | 'Sunday', from: Date = new Date()): string {
+  const d = nextOccurrenceOfDay(day, from)
+  const label = d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
+  return day === todayDay ? `Today · ${label}` : label
+}
+
 /** Holiday name for a date (canonical school calendar), or null. */
 export function holidayName(d: Date): string | null {
   return getHoliday(isoDate(d))?.name ?? null

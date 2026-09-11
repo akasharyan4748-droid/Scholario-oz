@@ -882,3 +882,41 @@ Stage Summary:
 - Student Timetable is production-grade: enrollment-scoped MY CLASS (bug fixed), read-only SCHOOL MASTER, live Principal publish sync with subtle 72h change awareness + derived notifications, deterministic subject colours, holiday/next-school-day states.
 - Every attendance number on every student screen now derives from the ONE canonical record set — the mock attendance calendar is fully retired from the student role.
 - Remaining known items: principal-side attendance heatmap still uses synthetic per-date rates (principal scope, out of student brief); gamification streak (StudyStreak) still reads mock playerStats (intentional gamification layer, not attendance); principal dashboard marketing stats deferred as before.
+
+---
+Task ID: STU-TT-P2
+Agent: Z.ai Code (main orchestrator)
+Task: SCHOLARIO-OS — STUDENT TIMETABLE / CONTROLLED REBUILD — PASS #2 (two genuinely different modes: MY CLASS vertical timeline + SCHOOL master sheet; no patching, no mock data, no Principal regression)
+
+Work Log:
+- INSPECTION: read the existing student timetable module (index/class-view/school-view/period-card/time-utils/subject-colors), canonical config (@/lib/timetable/config: DAYS Mon–Sat, PERIODS 1-3 + Short Break + 4-5 + Lunch + 6-7, 08:30–14:45), timetable-store three-tier model (slots/publishedSlots/publications + 72h change helpers), school-settings (general.schoolName, academics.currentSession = AY 2026-2027), student STU-58 (Class 2 / Section A). Confirmed the old implementation was the pre-Pass#2 concept: horizontal 3-column card grid, Sparkles icon on "Today's Classes", School view defaulting to By-Day grouped cards with a big class-filter bar. Also found Pass#1 regression: "My Classwork" quickAction still in the student top bar.
+- PASS#1 REGRESSION FIX: removed quickAction from student-panel AppShell call — the top bar now has zero quick-action buttons (verified in browser: only Search/theme/Notifications/avatar).
+- MODE 1 — MY CLASS REBUILD (class-view.tsx complete rewrite + new timeline-row.tsx, period-card.tsx deleted):
+  · Context header: "MY CLASS" eyebrow / "Class 2-A · Section A" / "AY 2026–2027 · 6 school days · 10 subjects" + one subtle emerald "Updated {time-ago}" chip (72h publication TTL). Enrollment-derived class — NO class selector (DOM-verified zero comboboxes).
+  · Day selector = only the school's real scheduled days (Mon–Sat from publishedSlots; Sunday never appears); today pill carries ring + dot; Day | Full Week scope toggle.
+  · Day view: "Today · Friday, 11 September" (or next-occurrence date like "Monday, 14 September" for non-today days) + "7 periods · 8:30 AM – 2:45 PM" + live clock; VERTICAL chronological timeline — time rail (8:30 / AM), thin connector line with capped first/last segments, colored period nodes, PERIOD eyebrow + LARGE subject title (subject-coloured), teacher · room metadata, subject-tinted cards; Break/Lunch = neutral slim dashed rows with hollow nodes; NOW/NEXT static badges (no pulse/blink — repeat:Infinity removed entirely); completed periods dimmed with check; recent-change chip ("Hindi → English") stays subtle emerald.
+  · Full Week view: 6 day blocks (grid-cols-1 lg:grid-cols-2 — readability over density, never 7 squeezed columns), each block = compact one-line period rows + dashed break dividers + one "Today" chip on Friday.
+  · Holiday/weekend honesty: "No classes today" notice + next school day derivation when today isn't a school day.
+- MODE 2 — SCHOOL REBUILD (school-view.tsx complete rewrite):
+  · Context header: "SCHOOL" eyebrow / "Master Timetable" / schoolName · session · "View only · managed by your school".
+  · THE MASTER SHEET IS THE EXPERIENCE (default, no By-Day mode): real <table> with sticky left "Period · Time" column (P1 8:30–9:15 AM … ), day column headers Mon–Sat with TODAY chip on Friday, rows = Period 1/2/3/Break(spanning)/4/5/Lunch(spanning)/6/7, each cell = per-class mini tiles (subject dot + subject + class badge + teacher · room).
+  · Own-class tiles subtly highlighted (primary ring/tint + primary badge) — 40 Class 2-A tiles distinct from 14 other-class tiles; quiet secondary class-filter chips (All/2-A/2-B/9-A/10-A/12-Sci-A, own marked with dot); sheet footer legend "2-A your class".
+  · Click any tile → Radix Popover lightweight detail (subject + Your class chip + Teacher/Room/Class/Day/Time + "read-only" note) — NOT an admin modal (VLM-verified).
+  · table-fixed layout: desktop fits all 6 day columns with NO horizontal scroll (934px table = 934px container at 1280 viewport); mobile 375px scrolls horizontally with STICKY first column (scrollTo 400 verified, VLM-confirmed stuck left rail); zero truncated tiles (scrollWidth check).
+- HEADER DISCIPLINE: index.tsx rewritten — no repeated big "Timetable" SectionHeading (app shell h1 already says it); the single prominent control is the My Class | School segmented toggle; Sparkles import removed everywhere (grep-verified 0 matches in module + panel).
+- REACT COMPILER FIX: plain holidayName(new Date()) expression broke memoization preservation — wrapped in useMemo([todayDay]) per codebase pattern; lint clean after.
+- E2E VERIFIED (agent-browser, real student/principal logins, zero page + console errors throughout):
+  · MY CLASS: Friday default (today), 9-entry timeline (7 periods + 2 breaks in order P1 Hindi→P2 Mathematics→P3 Science→Break→P4 English→P5 Social Studies→Lunch→P6 PE→P7 Art & Craft), exactly ONE "Next" badge pre-school (7:29 AM clock), 0 badges on Monday view, day header "Monday, 14 September" (next occurrence).
+  · FULL WEEK: 6 blocks, 1 Today chip, 51 rows, readable (VLM pass).
+  · SCHOOL: 9 rows (7 teaching + 2 break spans), 54 tiles (40 own-class highlighted), Today column marker, 9-A filter → 3 tiles all 9-A, popover detail verified + VLM pass (lightweight card, own-class distinct, no defects).
+  · PUBLISH→STUDENT SYNC (full round): principal Edit → Fri P1 Hindi→English → Apply → Apply Changes → Publish → student My Class instantly shows "Period 1 … English, Meera Krishnan" + "Updated just now" chip + "Hindi → English" change chip + School sheet cell updated; then RESTORED back to Hindi + republished (demo data canonical again).
+  · PRINCIPAL REGRESSION: Timetable module intact (Export/Edit buttons, ACTIVE SLOTS 54 / ROOMS 9 / FACULTY 18 / CONFLICTS 0 stats, class/faculty/room comboboxes, day selector); Edit mode + slot dialog + publish flow all functional — untouched by student work.
+  · RESPONSIVE: 375px (timeline preserved, master sheet scrollable with sticky first col, no doc overflow), 768px (sheet scrolls in-container, no doc overflow), 1280px (master sheet fits fully, no overflow). VLM mobile reviews passed.
+- Gates: bunx tsc --noEmit 0 errors ✓ · bunx eslint src clean ✓ · dev server HTTP 200 ✓ · no Sparkles / no repeat:Infinity / no animate-pulse in module ✓ · browser closed after QA.
+
+Stage Summary:
+- Student Timetable is now conceptually correct per Pass#2: MY CLASS = personal vertical chronological timeline (auto-resolved class, day nav over real working days, NOW/NEXT without animation, Full Week as readable day blocks); SCHOOL = true read-only master sheet (Period/Time sticky column × Mon–Sat headers × period rows, per-class tiles, own-class subtle highlight, popover detail, secondary filter).
+- Principal↔Student live publish sync re-verified end-to-end on the NEW UI (change chip + Updated chip + instant slot updates), demo data restored to canonical after the test.
+- Pass#1 regression (top-bar "My Classwork") fixed and browser-verified.
+- Zero hardcoded days/classes/times in the new UI — everything derives from publishedSlots, PERIODS config, school settings, and the real clock.
+- Remaining known items (unchanged from prior rounds): captain appointments live in browser localStorage by design; principal dashboard marketing stats deferred (principal scope).

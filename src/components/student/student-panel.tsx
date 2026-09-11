@@ -217,10 +217,6 @@ export function StudentPanel() {
       onNavigate={navigate}
       role="student"
       roleLabel={student ? `Student · ${student.className}-${student.section}` : 'Student · Class 2-A'}
-      quickAction={{
-        label: 'My Classwork',
-        onClick: () => navigate('homework'),
-      }}
     >
       {active === 'dashboard' ? (
         <StudentDashboard onNavigate={navigate} />
