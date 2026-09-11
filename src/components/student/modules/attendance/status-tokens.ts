@@ -80,7 +80,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     label: 'Weekend',
     aria: 'Weekend — no school',
     dot: 'bg-muted-foreground/30',
-    cell: 'bg-muted/50 text-muted-foreground/70',
+    cell: 'bg-muted/40 text-muted-foreground/60',
     chip: 'border-border bg-muted/50 text-muted-foreground',
     icon: Sun,
   },

@@ -60,6 +60,7 @@ interface SchoolSettingsActions {
   updateDuplicateDetection: SchoolSettingsState['updateDuplicateDetection']
   addWaiverAudit: SchoolSettingsState['addWaiverAudit']
   updateFacilities: SchoolSettingsState['updateFacilities']
+  updateIdCard: SchoolSettingsState['updateIdCard']
 }
 
 // Initial non-action state for the School Settings store. Splitting this out
@@ -247,6 +248,19 @@ export const initialState: StateShape = {
   facilities: {
     hasHostelFacility: true,
     hasTransportFacility: true,
+  },
+
+  // IDENTITY-CARD SYSTEM — the school's configured card template (§27–28).
+  // Sensitive particulars stay OFF by default; the school opts in.
+  idCard: {
+    theme: 'violet',
+    showHouse: true,
+    showAdmissionNo: true,
+    showDob: false,
+    showBloodGroup: false,
+    showValidUntil: true,
+    showQr: true,
+    verificationNote: 'If found, please return to the school office.',
   },
 
   admissionSettings: {

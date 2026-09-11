@@ -24,14 +24,10 @@ import { motion } from 'framer-motion'
 import {
   User, Phone, Mail, Calendar, Droplet, Heart, Crown, GraduationCap,
   Activity, TrendingUp, IndianRupee, IdCard, Award, Library, Bus,
-  ChevronRight, ClipboardList, ShieldCheck, X,
+  ChevronRight, ClipboardList, ShieldCheck,
 } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
 import { GlassCard, SectionHeading, StatusBadge, GradientAvatar } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog, DialogContent, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useStudentsStore } from '@/lib/store/students-store'
 import type { StudentRecord } from '@/lib/store/students-store'
@@ -39,12 +35,12 @@ import { useStudentAttendanceStore, computeStats, studentRecords } from '@/lib/s
 import { useFeeStore } from '@/lib/store/fee-store'
 import { useLibraryStore } from '@/lib/store/library-store'
 import { useCertificatesStore } from '@/lib/store/certificates-store'
-import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 import { POSITION_DEFS } from '@/lib/student-positions'
 import { examResults } from '@/lib/mock/academics'
 import { DEMO_STUDENT_ID } from './applications/student'
 import { formatDate, formatINR } from '@/lib/format'
 import { ACTIVE_SESSION_ID, formatSessionLabel } from '@/lib/academic-session'
+import { StudentIdCardDialog } from '@/components/student/shell/student-id-card'
 
 const TABS = [
   { key: 'personal', label: 'Personal' },
@@ -283,8 +279,8 @@ export function ProfileModule({ onNavigate }: { onNavigate?: (key: string) => vo
         </GlassCard>
       )}
 
-      {/* ── School ID (intentional feature, out of the main flow) ─────── */}
-      <SchoolIdDialog open={idOpen} onOpenChange={setIdOpen} student={s} />
+      {/* ── School ID — school-configured institutional card (§27–28) ── */}
+      <StudentIdCardDialog open={idOpen} onOpenChange={setIdOpen} student={s} />
     </div>
   )
 }
@@ -470,92 +466,5 @@ function RecordsTab({ student: s, certCount, openIssues, overdueFine, onNavigate
         ))}
       </div>
     </GlassCard>
-  )
-}
-
-/** ── School ID dialog — the intentional home for QR/ID codes ────────── */
-function SchoolIdDialog({ open, onOpenChange, student: s }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  student: StudentRecord
-}) {
-  const sessionLabel = formatSessionLabel(ACTIVE_SESSION_ID)
-  const school = useSchoolSettingsStore((st) => st.general)
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm p-0 overflow-hidden bg-transparent border-0 shadow-none [&>button]:hidden">
-        <DialogTitle className="sr-only">School ID Card</DialogTitle>
-        <DialogDescription className="sr-only">
-          Your {school.schoolName} student identity card.
-        </DialogDescription>
-        <div className="relative rounded-2xl border border-border bg-card shadow-premium-lg overflow-hidden">
-          {/* Card header — school identity */}
-          <div className="bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 px-4 py-3 text-white">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20 text-sm font-extrabold backdrop-blur">
-                  {school.logoText}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-display text-sm font-bold truncate">{school.schoolName}</p>
-                  <p className="text-[10px] text-violet-100 tracking-wider uppercase">Student Identity Card</p>
-                </div>
-              </div>
-              <StatusBadge status="Active" variant="success" dot />
-            </div>
-          </div>
-
-          {/* Student block */}
-          <div className="p-4">
-            <div className="flex items-center gap-3.5">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 text-white text-xl font-extrabold border-2 border-border/60">
-                {s.avatar}
-              </div>
-              <div className="min-w-0">
-                <p className="font-display text-base font-bold truncate">{s.name}</p>
-                <p className="text-xs text-muted-foreground">{s.className}-{s.section} · Roll #{s.rollNo}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{sessionLabel}</p>
-              </div>
-            </div>
-
-            {/* Detail grid */}
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              {[
-                { label: 'Admission No', value: s.admissionNo },
-                { label: 'House', value: `${s.houseName}` },
-              ].map((f) => (
-                <div key={f.label} className="rounded-xl border border-border bg-card/40 px-3 py-2">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{f.label}</p>
-                  <p className="text-sm font-semibold font-mono truncate">{f.value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* QR — scan to verify in Scholario */}
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-card/40 p-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold">Scan to verify</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Presents this card in the Scholario system.
-                </p>
-              </div>
-              <div className="rounded-lg border border-border/60 bg-white p-1.5 shrink-0">
-                <QRCodeSVG value={`SCHOLARIO:STU:${s.id}`} size={56} level="M" marginSize={1} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-3 w-full gap-2"
-          onClick={() => onOpenChange(false)}
-        >
-          <X className="h-3.5 w-3.5" /> Close
-        </Button>
-      </DialogContent>
-    </Dialog>
   )
 }

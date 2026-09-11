@@ -19,6 +19,7 @@ import { ThemeToggle } from '@/components/shared/theme-toggle'
 import { CommandPalette } from '@/components/shared/command-palette'
 import type { ShellProps } from './app-shell/types'
 import { SidebarAside } from './app-shell/sidebar-aside'
+import { StudentSidebar } from '@/components/student/shell/student-sidebar'
 import { NotificationsDropdown, type NotificationItem } from './app-shell/notifications-dropdown'
 import { ProfileDropdownTrigger, ProfileDropdown } from './app-shell/profile-dropdown'
 
@@ -281,7 +282,16 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+    <div
+      className={cn(
+        'flex h-screen w-full overflow-hidden bg-background text-foreground',
+        // STUDENT VISUAL IDENTITY — the student shell re-scopes the
+        // interactive token layer (primary / ring / accent) to the Student
+        // violet at the design-system level. Every module rendered inside
+        // this subtree inherits the identity; green stays semantic-only.
+        role === 'student' && 'student-theme'
+      )}
+    >
       {/* Sidebar Overlay */}
       <AnimatePresence>
         {mobileOpen && (
@@ -295,18 +305,34 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
         )}
       </AnimatePresence>
 
-      <SidebarAside
-        collapsed={collapsed}
-        setCollapsed={setCollapsed}
-        mobileOpen={mobileOpen}
-        setMobileOpen={setMobileOpen}
-        cmdOpen={cmdOpen}
-        setCmdOpen={setCmdOpen}
-        groups={groups}
-        activeKey={activeKey}
-        onNavigate={onNavigate}
-        role={role}
-      />
+      {/* Student Role gets its OWN rebuilt sidebar (violet identity,
+          personal workspace structure); other roles keep the shared one. */}
+      {role === 'student' ? (
+        <StudentSidebar
+          collapsed={collapsed}
+          setCollapsed={setCollapsed}
+          mobileOpen={mobileOpen}
+          setMobileOpen={setMobileOpen}
+          cmdOpen={cmdOpen}
+          setCmdOpen={setCmdOpen}
+          groups={groups}
+          activeKey={activeKey}
+          onNavigate={onNavigate}
+        />
+      ) : (
+        <SidebarAside
+          collapsed={collapsed}
+          setCollapsed={setCollapsed}
+          mobileOpen={mobileOpen}
+          setMobileOpen={setMobileOpen}
+          cmdOpen={cmdOpen}
+          setCmdOpen={setCmdOpen}
+          groups={groups}
+          activeKey={activeKey}
+          onNavigate={onNavigate}
+          role={role}
+        />
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden">

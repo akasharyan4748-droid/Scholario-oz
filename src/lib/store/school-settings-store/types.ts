@@ -299,6 +299,34 @@ export interface SchoolSettingsState {
     hasTransportFacility: boolean
   }
 
+  /**
+   * IDENTITY-CARD SYSTEM (Student ID Card §27–28) — the school-level
+   * template the Principal/Admin configures; every student's physical
+   * ID card renders FROM THIS CONFIG (the student can never redesign the
+   * school's card). `theme` drives the card's institutional accent; the
+   * field visibility flags decide which particulars print on the card —
+   * sensitive fields (DOB / blood group / emergency contact) stay OFF
+   * until the school explicitly enables them.
+   */
+  idCard: {
+    /** Institutional card accent — one of the curated school themes. */
+    theme: 'violet' | 'sky' | 'emerald' | 'rose' | 'amber'
+    /** Print the student's house on the card (only when the student has one). */
+    showHouse: boolean
+    /** Print the admission number on the card. */
+    showAdmissionNo: boolean
+    /** Print the date of birth (sensitive — off by default). */
+    showDob: boolean
+    /** Print the blood group (medical — off by default). */
+    showBloodGroup: boolean
+    /** Print the session-validity line ("Valid till …"). */
+    showValidUntil: boolean
+    /** Print the scannable verification QR (signed identifier only). */
+    showQr: boolean
+    /** Office line printed on the card reverse/footer (return-if-found note). */
+    verificationNote: string
+  }
+
   // Admission Settings
   admissionSettings: {
     requiredDocs: string[]
@@ -350,4 +378,5 @@ export interface SchoolSettingsState {
   updateDuplicateDetection: (data: Partial<DuplicateDetectionConfig>) => void
   addWaiverAudit: (entry: Omit<WaiverAuditEntry, 'id' | 'timestamp'>) => void
   updateFacilities: (data: Partial<SchoolSettingsState['facilities']>) => void
+  updateIdCard: (data: Partial<SchoolSettingsState['idCard']>) => void
 }

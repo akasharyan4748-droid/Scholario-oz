@@ -402,6 +402,63 @@
   --sa-gradient: linear-gradient(135deg, oklch(0.45 0.18 265), oklch(0.5 0.2 290));
 }
 
+/* ============================================================
+   STUDENT ROLE THEME — violet identity (design-system level).
+   The Student workspace must NOT inherit the school's emerald
+   primary. Scoping the shell root with `.student-theme` re-maps
+   the interactive-token layer (primary / ring / accent) to the
+   Student violet for every descendant — shadcn/ui components,
+   focus rings, selected states and `text-primary` accents all
+   inherit it with zero per-component overrides. Green remains
+   available for SEMANTIC meaning only (present / success /
+   paid / live) via explicit emerald utilities.
+   ============================================================ */
+.student-theme {
+  --primary: oklch(0.54 0.2 295);
+  --primary-foreground: oklch(0.985 0.008 295);
+  --ring: oklch(0.54 0.2 295);
+  --accent: oklch(0.955 0.022 295);
+  --accent-foreground: oklch(0.36 0.1 295);
+}
+.dark .student-theme {
+  --primary: oklch(0.7 0.16 295);
+  --primary-foreground: oklch(0.17 0.02 295);
+  --ring: oklch(0.7 0.16 295);
+  --accent: oklch(0.29 0.05 295);
+  --accent-foreground: oklch(0.9 0.06 295);
+}
+/* White-card scope interplay: `.dark .on-card` re-scopes --primary to
+   light-theme EMERALD for readability on white cards — inside the student
+   shell it must re-scope to the light-theme STUDENT VIOLET instead. */
+.dark .student-theme .on-card {
+  --primary: oklch(0.54 0.2 295);
+  --primary-foreground: oklch(0.985 0.008 295);
+  --ring: oklch(0.54 0.2 295);
+}
+
+/* ============================================================
+   ID CARD PRINTING — when the student prints their school ID,
+   only the card itself prints (physical-card proportions, no
+   app chrome). The dialog toggles `printing-id-card` on <body>
+   for the duration of window.print().
+   ============================================================ */
+@media print {
+  body.printing-id-card * { visibility: hidden !important; }
+  body.printing-id-card .id-card-print-root,
+  body.printing-id-card .id-card-print-root * { visibility: visible !important; }
+  body.printing-id-card .id-card-print-root {
+    position: fixed !important;
+    top: 12mm;
+    left: 12mm;
+    margin: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+    transform: scale(0.72);
+    transform-origin: top left;
+  }
+  body.printing-id-card { background: white !important; }
+}
+
 /* Premium focus ring — unified across all interactive elements */
 .focus-ring:focus-visible {
   outline: none;

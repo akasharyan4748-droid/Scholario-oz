@@ -36,8 +36,14 @@ export const useSchoolSettingsStore = create<SchoolSettingsState>()(
       // entries and patches the existing ones' names/types to match
       // the new seed WITHOUT losing any user-edited catalogue entries
       // they may have added on top.
-      version: 6,
+      version: 7,
       migrate: (persistedState: any, fromVersion: number) => {
+        // ─── v7 — IDENTITY-CARD SYSTEM (Student ID Card §27–28) ────────
+        // Appends the school-configured ID-card template to persisted
+        // profiles that predate it (existing user state is untouched).
+        if (fromVersion < 7 && persistedState && !persistedState.idCard) {
+          persistedState.idCard = initialState.idCard
+        }
         // ─── v4 — ACTIVE SESSION REALIGNMENT (SaaS-STAGE-1) ────────────
         // The active session must agree with the live fee dataset
         // ('2026-2027'). Old persisted state carried the stale

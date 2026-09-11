@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import {
   LayoutDashboard, User, CalendarDays, CalendarCheck, BookOpen, Award,
   IndianRupee, Megaphone, Trophy, Library, Bus, GraduationCap, HeartPulse,
-  ClipboardList, ShieldCheck, Crown, Bell, MessageCircle, Settings,
+  ClipboardList, ShieldCheck, Crown, MessageCircle, Settings, ScrollText,
 } from 'lucide-react'
 import { AppShell, type NavGroup } from '@/components/shell/app-shell'
 import { StudentDashboard } from './modules/dashboard'
@@ -31,17 +31,33 @@ import { getStudentSubscription } from '@/lib/platform-subscription'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { useStudentMessagingStore, countUnreadConversations } from '@/lib/store/student-messaging-store'
 import { POSITION_DEFS } from '@/lib/student-positions'
+import { homeworks, assignments } from '@/lib/mock/academics'
 
 /**
- * SIMPLIFIED navigation (final consolidation pass): 25 sidebar entries → 15
- * in five scannable groups. Homework+Assignments → Classwork; Learning Hub
- * + Flashcards + Planner + Study Groups → Learning; Notifications +
- * Announcements + Calendar → Notices; Achievements + Portfolio + Career →
- * Progress; Diary + Wellness → Wellbeing.
+ * STUDENT WORKSPACE NAVIGATION (final Student-experience IA).
+ *
+ * Structure mirrors how a student thinks about their school life:
+ *   HOME → who am I, what's happening today
+ *   SCHOOL → the official record: timetable, attendance, classwork, results
+ *   LEARNING → my growth: learning hub, progress, wellbeing
+ *   COMMUNITY → people & announcements: messages, notices
+ *   RECORDS → the paperwork: fees, library, certificates, transport,
+ *             applications
+ *   ACCOUNT → settings
+ *
+ * Every module is real (no placeholder/dead entries). The Class
+ * Leadership group appears ONLY while the student holds an ACTIVE
+ * position (permission-derived, never hardcoded).
+ *
+ * BADGES — real derived counts only, never decorative numbers:
+ *   · Classwork — active homework + pending assignments (canonical data)
+ *   · Messages  — unread conversations (messaging store)
+ *   · Notices   — unread notifications (notification store)
+ * No other module has a real "unread/pending count" concept → no badge.
  */
 const navGroups: NavGroup[] = [
   {
-    label: 'Overview',
+    label: 'Home',
     items: [
       { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4.5 w-4.5" /> },
       { key: 'profile', label: 'My Profile', icon: <User className="h-4.5 w-4.5" /> },
@@ -52,18 +68,16 @@ const navGroups: NavGroup[] = [
     items: [
       { key: 'timetable', label: 'Timetable', icon: <CalendarDays className="h-4.5 w-4.5" /> },
       { key: 'attendance', label: 'Attendance', icon: <CalendarCheck className="h-4.5 w-4.5" /> },
-      { key: 'classwork', label: 'Classwork', icon: <BookOpen className="h-4.5 w-4.5" />, badge: 5 },
+      { key: 'classwork', label: 'Classwork', icon: <BookOpen className="h-4.5 w-4.5" /> },
       { key: 'results', label: 'Results', icon: <Award className="h-4.5 w-4.5" /> },
     ],
   },
   {
     label: 'Learning',
     items: [
-      {
-        key: 'learning', label: 'Learning', icon: <GraduationCap className="h-4.5 w-4.5" />, badge: 12,
-      },
-      { key: 'wellbeing', label: 'My Wellbeing', icon: <HeartPulse className="h-4.5 w-4.5" /> },
+      { key: 'learning', label: 'Learning', icon: <GraduationCap className="h-4.5 w-4.5" /> },
       { key: 'progress', label: 'My Progress', icon: <Trophy className="h-4.5 w-4.5" /> },
+      { key: 'wellbeing', label: 'My Wellbeing', icon: <HeartPulse className="h-4.5 w-4.5" /> },
     ],
   },
   {
@@ -76,9 +90,9 @@ const navGroups: NavGroup[] = [
   {
     label: 'Records',
     items: [
-      { key: 'fees', label: 'Fees', icon: <IndianRupee className="h-4.5 w-4.5" />, badge: 1 },
+      { key: 'fees', label: 'Fees', icon: <IndianRupee className="h-4.5 w-4.5" /> },
       { key: 'my-library', label: 'Library', icon: <Library className="h-4.5 w-4.5" /> },
-      { key: 'my-certificates', label: 'Certificates', icon: <Award className="h-4.5 w-4.5" /> },
+      { key: 'my-certificates', label: 'Certificates', icon: <ScrollText className="h-4.5 w-4.5" /> },
       { key: 'bus', label: 'Transport', icon: <Bus className="h-4.5 w-4.5" /> },
       { key: 'applications', label: 'Applications', icon: <ClipboardList className="h-4.5 w-4.5" /> },
     ],
@@ -128,15 +142,21 @@ const LEGACY_TAB: Record<string, string> = {
   portfolio: 'portfolio',
   career: 'career',
   diary: 'diary',
-  wellness: 'wellness',
+  wellness: 'wellbeing',
   notifications: 'notifications',
 }
 
-/** Live badge overrides — derived unread counts (never hardcoded). */
-function withLiveBadges(items: NavGroup['items'], unreadNotifs: number, unreadMsgs: number) {
+/** Live badge overrides — derived unread/pending counts (never hardcoded). */
+function withLiveBadges(
+  items: NavGroup['items'],
+  unreadNotifs: number,
+  unreadMsgs: number,
+  classworkPending: number,
+) {
   return items.map((item) => {
     if (item.key === 'notices') return { ...item, badge: unreadNotifs > 0 ? unreadNotifs : undefined }
     if (item.key === 'messages') return { ...item, badge: unreadMsgs > 0 ? unreadMsgs : undefined }
+    if (item.key === 'classwork') return { ...item, badge: classworkPending > 0 ? classworkPending : undefined }
     return item
   })
 }
@@ -149,9 +169,17 @@ export function StudentPanel() {
   const studentId = 'STU-58'
   const studentName = 'Aarav Sharma'
 
-  // Live nav badges — derived unread notifications + unread conversations.
+  // Live nav badges — ALL derived from real stores/data, zero constants.
   const unreadNotifs = useUnreadStudentNotificationCount()
   const unreadMsgs = useStudentMessagingStore((s) => countUnreadConversations(s.conversations, s.seenAt))
+  // Classwork = active homework + pending assignments from the canonical
+  // academics dataset (the same source the Classwork module reads).
+  const classworkPending = useMemo(
+    () =>
+      homeworks.filter((h) => h.status === 'Active').length +
+      assignments.filter((a) => a.status === 'Pending').length,
+    [],
+  )
 
   // Class Captain / Monitor: the nav entry appears ONLY while the student
   // holds an ACTIVE position — derived from the persisted assignment,
@@ -179,9 +207,17 @@ export function StudentPanel() {
         ]
       : []
   const groups: NavGroup[] = [
-    { ...navGroups[0], items: withLiveBadges(navGroups[0].items, unreadNotifs, unreadMsgs) },
+    // Home first, then the (conditional) Class Leadership responsibility —
+    // it earns prominence while active and vanishes the moment it ends.
+    {
+      ...navGroups[0],
+      items: withLiveBadges(navGroups[0].items, unreadNotifs, unreadMsgs, classworkPending),
+    },
     ...myClassGroup,
-    ...navGroups.slice(1).map((g) => ({ ...g, items: withLiveBadges(g.items, unreadNotifs, unreadMsgs) })),
+    ...navGroups.slice(1).map((g) => ({
+      ...g,
+      items: withLiveBadges(g.items, unreadNotifs, unreadMsgs, classworkPending),
+    })),
   ]
 
   // Central navigation: resolves legacy keys → consolidated modules and

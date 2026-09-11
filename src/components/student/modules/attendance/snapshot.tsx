@@ -3,11 +3,17 @@
 /**
  * attendance/snapshot — the "How am I doing?" answer (brief §5–§7, §16, §24).
  *
- * One card, one hierarchy: the overall percentage is dominant, the four
- * counted statuses sit beside it as quiet facts, and today's status closes
- * the card. No gauge, no icon tiles, no repeated percentage (§24) — every
- * number derives from the canonical records via computeStats, and the
- * performance label comes from the SCHOOL'S configured thresholds only.
+ * One card, one hierarchy: the overall percentage is dominant (with a
+ * subtle violet progress arc — the STUDENT accent, never a green "doing
+ * well" wash), the four counted statuses sit beside it as quiet facts,
+ * and today's status closes the card. No icon tiles, no repeated
+ * percentage (§24) — every number derives from the canonical records via
+ * computeStats, and the performance label comes from the SCHOOL'S
+ * configured thresholds only.
+ *
+ * Colour = meaning (Student design system): the arc/ring carries the
+ * violet student identity; status colours stay semantic (green present,
+ * amber late, rose absent, cyan leave).
  */
 
 import { cn } from '@/lib/utils'
@@ -28,6 +34,46 @@ interface SnapshotProps {
   today: TodayStatus
 }
 
+/** Subtle progress arc — violet student accent, percent-proportional. */
+function ProgressArc({ percent }: { percent: number }) {
+  const size = 64
+  const stroke = 6
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const filled = Math.max(0, Math.min(100, percent)) / 100
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="shrink-0"
+      role="img"
+      aria-label={`Attendance progress: ${percent} percent`}
+    >
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        strokeWidth={stroke}
+        className="stroke-muted-foreground/15"
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        strokeWidth={stroke}
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - filled)}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        className="stroke-primary transition-[stroke-dashoffset] duration-700 ease-out"
+      />
+    </svg>
+  )
+}
+
 export function Snapshot({ stats, windowLabel, thresholds, today }: SnapshotProps) {
   // Performance label — ONLY from the school's configured policy (§7).
   const label =
@@ -45,32 +91,37 @@ export function Snapshot({ stats, windowLabel, thresholds, today }: SnapshotProp
   return (
     <GlassCard hover={false} className="on-card p-5 sm:p-6">
       <div className="flex flex-col gap-6 lg:flex-row lg:gap-0">
-        {/* ── Dominant: overall percentage (scope = whole record window) ── */}
-        <div className="lg:flex lg:min-w-[240px] lg:flex-col lg:justify-center lg:pr-8">
+        {/* ── Dominant: overall percentage + subtle violet arc ─────────── */}
+        <div className="lg:flex lg:min-w-[260px] lg:flex-col lg:justify-center lg:pr-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Overall · {windowLabel}
           </p>
-          <div className="mt-2 flex items-baseline gap-3">
-            <p className="text-5xl font-bold tabular-nums tracking-tight text-foreground">
-              {stats.percent}
-              <span className="ml-0.5 text-2xl font-semibold text-muted-foreground/70">%</span>
-            </p>
-            {label && (
-              <span
-                className={cn(
-                  'rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
-                  label === 'Excellent' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
-                  label === 'Good' && 'border-amber-500/30 bg-amber-500/10 text-amber-700',
-                  label === 'Needs Attention' && 'border-rose-500/30 bg-rose-500/10 text-rose-700',
+          <div className="mt-2 flex items-center gap-4 sm:gap-5">
+            <ProgressArc percent={stats.percent} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <p className="text-5xl font-bold tabular-nums tracking-tight text-foreground">
+                  {stats.percent}
+                  <span className="ml-0.5 text-2xl font-semibold text-muted-foreground/70">%</span>
+                </p>
+                {label && (
+                  <span
+                    className={cn(
+                      'rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
+                      label === 'Excellent' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
+                      label === 'Good' && 'border-sky-500/30 bg-sky-500/10 text-sky-700',
+                      label === 'Needs Attention' && 'border-rose-500/30 bg-rose-500/10 text-rose-700',
+                    )}
+                  >
+                    {label}
+                  </span>
                 )}
-              >
-                {label}
-              </span>
-            )}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {stats.attended} of {stats.total} recorded school day{stats.total === 1 ? '' : 's'} attended
+              </p>
+            </div>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {stats.attended} of {stats.total} recorded school day{stats.total === 1 ? '' : 's'} attended
-          </p>
           {thresholds && (
             <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground/80">
               School policy: {thresholds.needsAttention}%+ required · {thresholds.excellent}%+ excellent
