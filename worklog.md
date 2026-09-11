@@ -920,3 +920,40 @@ Stage Summary:
 - Pass#1 regression (top-bar "My Classwork") fixed and browser-verified.
 - Zero hardcoded days/classes/times in the new UI — everything derives from publishedSlots, PERIODS config, school settings, and the real clock.
 - Remaining known items (unchanged from prior rounds): captain appointments live in browser localStorage by design; principal dashboard marketing stats deferred (principal scope).
+
+---
+Task ID: 3 (Student Attendance — full production rebuild)
+Agent: main-agent (Z.ai Code)
+Task: Rebuild Student Attendance module end-to-end per 48-section brief — Timetable design language as benchmark, read-only personal record, one canonical data source, mathematically correct percentage, premium calendar + records + trend, responsive + accessible + dark-mode-safe.
+
+Work Log:
+- INSPECTED existing architecture first: canonical attendance = Zustand `student-attendance-store` (persisted v1) written by Teacher/Principal via markClassAttendance/markStudent (same rows the Student reads — ONE source); school-calendar.ts = single holiday/working-day truth (getHoliday/isWorkingDay; weekends Sat+Sun; winter/summer breaks; fixed Indian holidays); school-settings-store.academics.attendanceThresholds = {excellent:95, needsAttention:85} (policy source); academic-session.ts = active session resolver; backend /api/attendance (Prisma) exists but the live SPA data layer for demo is the Zustand store — kept ONE canonical system, no duplicates.
+- Backend reality check: daily (full-day) attendance only → NO subject-attendance view, NO fake leave-management, NO fake correction workflow rendered (brief §19/§20/§21 honesty rules honored; architecture ready for later integration).
+- DELETED old attendance.tsx (536-line single file) — clean rebuild in src/components/student/modules/attendance/ (5 files):
+  · status-tokens.ts — THE single status vocabulary (Present/Late/Absent/Approved Leave/Holiday/Weekend/No Record/Upcoming): label + aria sentence + dot + soft-tint cell + chip + meaning-icon. Status never colour-alone (§12/§36/§38). No dark: text variants (white-card surface assumption — see dark-mode fix below).
+  · date-utils.ts — timezone-safe local ISO helpers (no toISOString UTC shift), Monday-first month grid, day resolution chain (record → weekend → holiday → future → norecord), workingDaysInMonth, ONE format per grain (long/short/weekday/window/recordedAt).
+  · snapshot.tsx — “How am I doing?” card: dominant % + policy label (Excellent/Good/Needs Attention ONLY from school thresholds) + 4 quiet status counts + Today line (status chip + marker). No gauge, no icon tiles, no repeated percentage (§5–§7/§16/§24).
+  · calendar-view.tsx — primary experience: month nav bounded by real record history (min = first record month, max = current), Current chip, “N school days · M recorded · P%” month line, soft-tint Mon-first grid with status dots, today ring + selection ring, legend (never colour alone), INLINE day-detail panel (no modal) showing only fields the record actually carries (Class · Full-day attendance, Marked by, Recorded time, Note when present) (§8–§11/§23/§31).
+  · month-records.tsx — same-month chronological list (newest first, weekday + marker per row), working-day summary keeping calendar-days ≠ school-days, row click selects the day in the calendar, Show all N records toggle, slim salary-scroll scrollbar (§13/§17/§22).
+  · trend.tsx — dependency-free responsive SVG area chart (emerald 2px non-scaling line, dot + % label per real recorded week, dashed 25/50/75 guides, x-labels aligned to dots) + honest insight derived from last two real weeks only; explicit “not enough history” states (§14/§15).
+  · index.tsx — context header (MY ATTENDANCE eyebrow / Class 2-A · Section A / AY 2026–2027 · N recorded days — NO repeated giant title, §4); resolution chain student → enrollment → active session → own records (STU-58 filter — no other student’s data can appear, §3/§27); memoized month data (month nav never refetches — client store reads, §29); empty state with zero fabricated numbers (§32).
+- PERCENTAGE POLICY (§6): kept the school’s existing convention — attended = Present+Late, denominator = RECORDED school days only → holidays/weekends/no-record never reduce attendance; “No Record” never silently becomes Absent. Verified math end-to-end: 24/25 = 96% overall; August month = 15/16 = 94%; 16 Aug + 9 Sept records = 25 total — calendar, list, snapshot and trend all agree (§38).
+- DARK-MODE DEFECT FOUND + FIXED at design-system level: GlassCard (149-file shared primitive) hardcodes bg-white while children use theme tokens → in dark mode text-foreground inside cards = near-white-on-white (INVISIBLE) — pre-existing app-wide (approved Timetable has it too). Scoped fix per §42 (no blast radius, no Timetable regression): added `.dark .on-card` utility in globals.css re-scoping surface tokens (foreground/muted-foreground/primary/muted/border/card/background/ring) to light values inside white-card subtrees; applied `on-card` to the 5 Attendance GlassCards; removed my status tokens’ dark: text variants (they assumed dark cards). Light mode pixel-identical (VLM re-verified); dark mode now fully readable (VLM pass, zero faint text).
+- E2E VERIFIED (agent-browser, student login aarav.sharma/greenwood):
+  · Module renders: MY ATTENDANCE header · 96% Excellent · 23/1/1/0 · policy line · Today Present by Rohan Mehta · September 22 school days · 9 recorded · 100%.
+  · Calendar: 31 cells, correct statuses per date (4 Sept = Late), weekend/holiday/future/norecord aria labels all correct; Aug-15-2026 correctly weekend-first in resolution chain.
+  · Day detail: click 4 Sept → “Friday, 4 September 2026 · Class 2-A · Full-day attendance · Late · Marked by Rohan Mehta · Recorded 9:05 am” (aria-live).
+  · Records: Show-all toggle 8→9 rows; row click ↔ calendar selection sync.
+  · Month nav: Sept→Aug (prev disabled at Aug = first record month 10 Aug; next enabled), default selection falls to month’s latest record (31 Aug detail verified), back to Sept.
+  · Empty state: localStorage records=[] → “No attendance recorded yet … will appear once the school records your first school day” with NO percentage/chart; data then restored (96% back).
+  · Teacher regression: teacher-shell auth → Class Attendance module loads (Class 2-A roster, Present/Absent/Late markers, Save Attendance) — canonical write path + store untouched.
+  · Responsive: 390px mobile VLM pass (calendar usable, snapshot 2×2 reflow, no overflow/truncation); 1440px desktop VLM 8.5/10 premium verdict.
+  · Dark mode: VLM pass post-fix (all headings/text readable on white cards; trend/legend/chips clean).
+  · Zero page errors / zero console errors throughout; dev.log clean (all API 200).
+- Gates: bunx tsc --noEmit 0 errors ✓ · bun run lint 0 errors/0 warnings ✓ · dev server :3000 HTTP 200 ✓ · browser session state restored to student.
+
+Stage Summary:
+- Student Attendance fully REBUILT (not patched): one canonical store, one status vocabulary, one date format per grain, mathematically consistent numbers across every surface, read-only (zero write paths in the student module), enrollment+session auto-resolved, policy from School Settings, holidays respected, no-record honest, empty states real.
+- New app-wide capability added: `.on-card` light-surface token scope in globals.css — reusable by any future module that needs readable token content on the established white GlassCard surface in dark mode (Timetable left untouched per §41; its identical pre-existing dark-mode faintness noted as a known systemic item for a future design-system pass).
+- Timetable benchmark respected without copying its layout: same card/spacing/typography/navigation language, attendance-specific information architecture (snapshot → calendar+records → trend).
+- Known deferred (honesty rules): subject-wise attendance, leave management UI, and correction/dispute workflow intentionally NOT fabricated — backend is daily-attendance-only; UI architected so each can integrate later without rebuild.

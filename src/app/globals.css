@@ -148,6 +148,25 @@
     font-feature-settings: "cv11", "ss01";
     text-rendering: optimizeLegibility;
   }
+  /* Light-surface token scope — the app's GlassCard surface stays white in
+     dark mode (established app-wide card treatment). Content INSIDE those
+     cards that uses theme tokens (text-foreground, text-muted-foreground,
+     bg-muted, border-border…) must keep the LIGHT-theme token values to
+     remain readable on the white surface. Applying `.on-card` to a white
+     card root re-scopes the surface tokens for its subtree in dark mode. */
+  .dark .on-card {
+    --background: oklch(0.99 0.004 145);
+    --foreground: oklch(0.18 0.02 160);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.18 0.02 160);
+    --primary: oklch(0.55 0.14 162);
+    --primary-foreground: oklch(0.99 0.01 160);
+    --muted: oklch(0.965 0.006 150);
+    --muted-foreground: oklch(0.5 0.015 160);
+    --border: oklch(0.92 0.008 150);
+    --input: oklch(0.92 0.008 150);
+    --ring: oklch(0.55 0.14 162);
+  }
   /* Custom scrollbar */
   ::-webkit-scrollbar {
     width: 10px;
