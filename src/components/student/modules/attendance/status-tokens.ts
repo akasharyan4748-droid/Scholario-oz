@@ -35,6 +35,8 @@ export interface StatusToken {
   dot: string
   /** Calendar cell treatment — a confident soft tint (§21). */
   cell: string
+  /** Strong selected-day outline — the day's OWN status colour (never a generic green). */
+  ring: string
   /** Compact chip (lists, detail panel). */
   chip: string
   /** Icon shown in the day-detail panel only — meaning, not decoration (§37). */
@@ -47,6 +49,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     aria: 'Present',
     dot: 'bg-emerald-500',
     cell: 'bg-emerald-500/[0.16] text-emerald-900',
+    ring: 'ring-emerald-500',
     chip: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
     icon: CheckCircle2,
   },
@@ -55,6 +58,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     aria: 'Late arrival',
     dot: 'bg-amber-500',
     cell: 'bg-amber-500/[0.18] text-amber-900',
+    ring: 'ring-amber-500',
     chip: 'border-amber-500/30 bg-amber-500/10 text-amber-700',
     icon: Clock,
   },
@@ -63,6 +67,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     aria: 'Absent',
     dot: 'bg-rose-500',
     cell: 'bg-rose-500/[0.13] text-rose-900',
+    ring: 'ring-rose-500',
     chip: 'border-rose-500/30 bg-rose-500/10 text-rose-700',
     icon: XCircle,
   },
@@ -71,6 +76,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     aria: 'Approved leave',
     dot: 'bg-cyan-600',
     cell: 'bg-cyan-500/[0.15] text-cyan-900',
+    ring: 'ring-cyan-500',
     chip: 'border-cyan-600/30 bg-cyan-600/10 text-cyan-700',
     icon: Plane,
   },
@@ -79,6 +85,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     aria: 'School holiday',
     dot: 'bg-violet-500/70',
     cell: 'bg-violet-500/[0.12] text-violet-900',
+    ring: 'ring-violet-500',
     chip: 'border-violet-500/30 bg-violet-500/10 text-violet-700',
     icon: PartyPopper,
   },
@@ -87,6 +94,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     aria: 'Weekend — no school',
     dot: 'bg-muted-foreground/30',
     cell: 'bg-muted/40 text-muted-foreground/60',
+    ring: 'ring-muted-foreground/60',
     chip: 'border-border bg-muted/50 text-muted-foreground',
     icon: Sun,
   },
@@ -95,6 +103,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     aria: 'No attendance recorded',
     dot: 'bg-muted-foreground/40',
     cell: 'bg-card text-muted-foreground border border-border',
+    ring: 'ring-muted-foreground/60',
     chip: 'border-border bg-muted/40 text-muted-foreground',
     icon: CircleDashed,
   },
@@ -103,6 +112,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     aria: 'School day — not yet recorded',
     dot: 'bg-muted-foreground/25',
     cell: 'bg-transparent text-muted-foreground/60 border border-dashed border-border/70',
+    ring: 'ring-border',
     chip: 'border-border bg-transparent text-muted-foreground/70',
     icon: CalendarClock,
   },

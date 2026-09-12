@@ -10,6 +10,13 @@
  * the same grade can never render two different colours (§30 status
  * badge system). Dark variants included because these badges also render
  * on page-level (non-card) surfaces.
+ *
+ * HERO presentation (final refinement): the hero renders the grade as an
+ * ACADEMIC badge in violet — "academic performance / learning" is violet
+ * in the workspace colour philosophy — while the percentage beside it
+ * carries the emerald and the rank carries the amber. Attention grades
+ * (C/D/E) keep their semantic warning tones even in the hero, so a
+ * struggling result can never read as calm achievement.
  */
 
 export interface GradeTone {
@@ -54,4 +61,16 @@ const FALLBACK: GradeTone = TONES.D
 /** The tone for any grade string ("A+", "A", "B"… unknown → soft rose). */
 export function gradeTone(grade: string): GradeTone {
   return TONES[grade] ?? FALLBACK
+}
+
+/** Grades presented as confident academic achievement (hero context). */
+const ACADEMIC_GRADES = new Set(['A+', 'A', 'B'])
+
+/** The HERO's academic badge — violet for achievement grades, semantic for attention grades. */
+export const HERO_GRADE_BADGE =
+  'border-violet-500/25 bg-violet-500/[0.09] text-violet-700 dark:text-violet-400'
+
+/** The hero badge class for a grade — violet academic, or semantic when attention is the message. */
+export function heroGradeBadge(grade: string): string {
+  return ACADEMIC_GRADES.has(grade) ? HERO_GRADE_BADGE : (TONES[grade] ?? FALLBACK).badge
 }

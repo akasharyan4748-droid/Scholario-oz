@@ -1,15 +1,21 @@
 'use client'
 
 /**
- * attendance/snapshot — the "How am I doing?" hero (§20, gen 2).
+ * attendance/snapshot — the "How am I doing?" hero (§20, gen 2, final
+ * colour refinement).
  *
- * The percentage IS the hero: a beautiful compact arc beside the big
- * number, with the performance label from the SCHOOL's thresholds. The
- * four counted statuses follow as soft colour-coded fact tiles — each
- * one meaningful colour (green present, amber late, rose absent, cyan
- * leave), never decoration (§29). Policy appears as ONE compact chip
- * (§27 — "95%+ Excellent", never the full sentence). Today closes the
- * card: the fastest answer a student needs.
+ * A mostly NEUTRAL warm surface (the zone reads as paper, not as green)
+ * where colour carries meaning only:
+ *   · the percentage + its arc stay EMERALD — the one primary positive
+ *     metric (present/confirmed is green in the workspace philosophy)
+ *   · the performance label follows the school's thresholds (Excellent
+ *     emerald / Good sky / Needs Attention rose)
+ *   · the four counted statuses follow as soft tinted fact tiles — each
+ *     one meaningful colour (present emerald, late amber, absent rose,
+ *     leave cyan), never decoration (§29)
+ *   · policy appears as ONE compact chip (§27 — "95%+ Excellent", never
+ *     the full sentence)
+ *   · today closes the card: the fastest answer a student needs
  *
  * Every number derives from the canonical records via computeStats.
  */
@@ -33,7 +39,7 @@ interface SnapshotProps {
   today: TodayStatus
 }
 
-/** Compact progress arc — the student's green identity, percent-proportional. */
+/** Compact progress arc — emerald: attendance's primary positive metric. */
 function ProgressArc({ percent }: { percent: number }) {
   const size = 68
   const stroke = 6
@@ -103,17 +109,17 @@ export function Snapshot({ stats, windowLabel, thresholds, today }: SnapshotProp
   return (
     <GlassCard hover={false} className="on-card overflow-hidden p-0">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(250px,0.9fr)_1.35fr]">
-        {/* ── The percentage — dominant, with its arc ─────────────────── */}
-        <div className="bg-primary/[0.04] p-5 sm:p-6 lg:border-r lg:border-border/70">
+        {/* ── The percentage — dominant, emerald, with its arc ───────── */}
+        <div className="bg-amber-500/[0.04] p-5 sm:p-6 lg:border-r lg:border-border/70">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Overall · {windowLabel}
           </p>
           <div className="mt-2.5 flex items-center gap-4 sm:gap-5">
             <ProgressArc percent={stats.percent} />
             <div className="min-w-0">
-              <p className="text-[2.9rem] font-bold leading-none tabular-nums tracking-tight text-foreground sm:text-5xl">
+              <p className="text-[2.9rem] font-bold leading-none tabular-nums tracking-tight text-primary sm:text-5xl">
                 {stats.percent}
-                <span className="ml-0.5 text-2xl font-semibold text-muted-foreground/60">%</span>
+                <span className="ml-0.5 text-2xl font-semibold text-primary/55">%</span>
               </p>
               {label && (
                 <span

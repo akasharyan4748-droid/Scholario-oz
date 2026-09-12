@@ -178,8 +178,8 @@ export function AttendanceModule() {
           />
         </div>
 
-        {/* 3 — "Is it improving?" (§25) */}
-        <Trend points={weekPoints} />
+        {/* 3 — "Is it improving?" (§25) — emerald line, school-policy reference lines */}
+        <Trend points={weekPoints} thresholds={thresholds} />
       </div>
     </PageTransition>
   )

@@ -1,0 +1,1986 @@
+SCHOLARIO-OS
+STUDENT WORKSPACE — ARCHITECTURE + UX/UI REFINEMENT
+PHASE: NAVIGATION CLEANUP + STUDY MATERIALS + CONDITIONAL TRANSPORT
++ ADVANCED CLASS LEADERSHIP SYSTEM
+
+============================================================
+IMPORTANT — READ BEFORE CHANGING ANYTHING
+============================================================
+
+This is an EXISTING Scholario-OS project.
+
+DO NOT restart the project.
+DO NOT create a parallel architecture.
+DO NOT replace existing authentication, RBAC, multi-tenancy,
+Supabase, Prisma, RLS, services, shared components or domain logic.
+
+First inspect the existing implementation.
+
+The existing production architecture and architecture constitution
+are the source of truth.
+
+Reuse existing:
+
+• authentication
+• multi-tenancy
+• schoolId isolation
+• RBAC
+• permissions
+• feature flags
+• notifications
+• storage
+• search
+• audit logging
+• shared domain services
+• school settings
+• teacher assignments
+• student assignments
+• existing Student Workspace components
+
+Do not create duplicate business logic, APIs, models or services
+where an existing system already supports the requirement.
+
+This is a PRODUCTION REFACTOR + FEATURE IMPLEMENTATION,
+not a visual mockup.
+
+============================================================
+1. FINAL STUDENT WORKSPACE NAVIGATION
+============================================================
+
+Clean the Student Workspace.
+
+CURRENT MODULES THAT MUST BE REMOVED:
+
+1. My Progress
+2. My Wellbeing
+3. Library
+
+These are NOT being redesigned right now.
+
+Remove them cleanly.
+
+Do not show:
+
+• disabled menu items
+• Coming Soon
+• empty placeholders
+• dead routes
+• fake cards
+• search results for removed modules
+• duplicate navigation entries
+
+Clean their routes/references according to the existing architecture.
+
+IMPORTANT:
+
+Do not unnecessarily delete reusable underlying infrastructure if
+another existing/future feature depends on it.
+
+Remove the Student Workspace exposure and dead references,
+not unrelated shared infrastructure.
+
+============================================================
+2. NEW STUDY MATERIALS MODULE
+============================================================
+
+Replace the student-facing Library experience with:
+
+STUDY MATERIALS
+
+This is NOT a traditional library.
+
+It is a school-managed digital resource repository.
+
+Core concept:
+
+Teacher / Principal uploads material
+
+↓
+
+Material is assigned to appropriate students/classes/sections/subjects
+
+↓
+
+Student sees only material they are authorized to access
+
+↓
+
+Student previews / downloads it
+
+Examples:
+
+• PDF
+• Images
+• worksheets
+• notes
+• circular/reference documents
+• presentations
+• study guides
+• question papers
+• revision material
+
+Do not overcomplicate the student UI.
+
+============================================================
+3. STUDY MATERIALS — STUDENT EXPERIENCE
+============================================================
+
+Student should see something like:
+
+Study Materials
+
+[Search materials...]
+
+[All] [Mathematics] [Science] [English] ...
+
+Then useful material cards/list items.
+
+Each material:
+
+Title
+Subject
+Uploaded by
+Date
+Type
+Size where useful
+
+Actions:
+
+[Preview]
+[Download]
+
+Do NOT show excessive metadata.
+
+No giant descriptions.
+
+No unnecessary analytics.
+
+============================================================
+4. STUDY MATERIALS FILTERING
+============================================================
+
+Materials should support targeting such as:
+
+School-wide
+Class
+Section
+Subject
+Specific student/group
+
+The exact targeting model should reuse the existing authorization/
+assignment architecture where possible.
+
+A Class 2-A student must NOT see:
+
+Class 8 material
+
+unless explicitly targeted to them.
+
+A student must never access another student's restricted material
+by guessing a URL.
+
+============================================================
+5. STUDY MATERIALS UPLOADERS
+============================================================
+
+Authorized users should include at minimum:
+
+• Principal / authorized school administrator
+• Teacher
+
+But permission must come from the existing role/permission system.
+
+Do NOT hardcode:
+
+if teacher then upload
+
+Instead use permission-based authorization.
+
+Example conceptual permissions:
+
+materials.view
+materials.download
+materials.create
+materials.edit
+materials.publish
+materials.delete
+
+The exact naming may follow the project's existing permission
+convention.
+
+============================================================
+6. TEACHER UPLOAD FLOW
+============================================================
+
+Teacher:
+
+Study Materials
+→ Add Material
+
+Fields should be minimal and useful:
+
+Title
+Subject
+Target audience
+File
+Optional short description
+Publish / Save
+
+Target audience may include:
+
+My Classes
+Specific Class
+Specific Section
+Specific Subject
+Selected Students
+
+Only expose options the teacher is authorized to target.
+
+============================================================
+7. PRINCIPAL / ADMIN UPLOAD
+============================================================
+
+Principal / authorized administrator can upload:
+
+School-wide materials
+Class materials
+Section materials
+Subject materials
+Other permitted audiences
+
+Again:
+
+permission driven.
+
+Do not create separate hardcoded UI logic for every role.
+
+============================================================
+8. FILE SECURITY
+============================================================
+
+Study Materials must use secure storage.
+
+Do NOT make private student-targeted files publicly accessible.
+
+Use the existing secure storage architecture.
+
+Where Supabase Storage is used:
+
+• private buckets where appropriate
+• server-authorized access
+• signed URLs / secure retrieval
+• authorization before issuing access
+• tenant isolation
+
+A student must not be able to download another school's file
+by manipulating:
+
+file ID
+storage path
+material ID
+URL
+
+Validate authorization server-side.
+
+============================================================
+9. FILE VALIDATION
+============================================================
+
+Before upload:
+
+validate:
+
+• file type
+• file size
+• filename
+• ownership/authorization
+• school tenant
+
+Do not blindly trust client MIME type.
+
+Use safe file handling according to the existing backend architecture.
+
+============================================================
+10. MATERIAL LIFECYCLE
+============================================================
+
+Support a clean lifecycle where useful:
+
+Draft
+Published
+Archived
+
+Students should see only Published materials they are authorized
+to access.
+
+Teachers/admins can manage their authorized materials.
+
+Do not expose internal workflow complexity to students.
+
+============================================================
+11. MATERIAL PREVIEW
+============================================================
+
+Where browser preview is supported:
+
+PDF:
+→ preview
+
+Image:
+→ preview
+
+Unsupported file:
+→ download
+
+The UI should remain clean.
+
+No giant technical file viewer controls.
+
+============================================================
+12. STUDY MATERIALS SEARCH
+============================================================
+
+Search by:
+
+• title
+• subject
+• uploader where appropriate
+• type
+
+Search must remain tenant and permission aware.
+
+Do not search the entire database from the client.
+
+============================================================
+13. STUDY MATERIALS NOTIFICATION
+============================================================
+
+When a teacher/principal publishes important material,
+the existing notification system may notify the intended students.
+
+But do NOT notify for every trivial upload.
+
+Respect the existing notification architecture.
+
+============================================================
+14. TRANSPORT — CONDITIONAL MODULE VISIBILITY
+============================================================
+
+The existing Transport module is already visually good.
+
+DO NOT redesign it unnecessarily.
+
+Keep the current strong Transport experience.
+
+However, make its visibility dynamic.
+
+Transport should NOT appear in the Student Workspace simply because
+the product supports transport.
+
+It should appear ONLY when the student has an active transport
+assignment.
+
+============================================================
+15. TRANSPORT ASSIGNMENT
+============================================================
+
+A student may receive transport:
+
+• during admission
+• later through school administration
+• through an authorized principal/admin workflow
+• through an authorized class teacher workflow if existing
+permissions allow it
+
+Once transport is officially assigned:
+
+Student Workspace
+→ Transport becomes visible.
+
+If transport is removed/deactivated:
+
+Transport disappears from the student's navigation.
+
+Do not show:
+
+Disabled Transport
+No transport assigned
+Coming soon
+
+The module should simply not be present for students who do not
+have transport.
+
+============================================================
+16. TRANSPORT SECURITY
+============================================================
+
+Transport information is sensitive.
+
+Student can only see:
+
+their assigned transport information
+and information necessary for their journey/safety.
+
+Never expose:
+
+other students' personal data
+other routes unnecessarily
+driver personal data beyond what is required
+administrative transport controls
+
+Use the existing tenant/RBAC/RLS architecture.
+
+============================================================
+17. IMPORTANT — CLASS LEADERSHIP SYSTEM
+============================================================
+
+NOW IMPLEMENT A SERIOUS CLASS LEADERSHIP SYSTEM.
+
+Schools commonly appoint students such as:
+
+• Class Captain / Class Monitor
+• Vice Captain / Voice Captain
+
+Do NOT implement this as a simple boolean:
+
+is_monitor = true
+
+That will NOT scale.
+
+Build a proper role/position assignment system using the existing
+dynamic role/permission architecture.
+
+============================================================
+18. LEADERSHIP CONCEPT
+============================================================
+
+A student remains:
+
+Student
+
+but can additionally receive a temporary leadership position.
+
+Example:
+
+Student
++
+Class Captain
+
+or
+
+Student
++
+Vice Captain
+
+The leadership position is an ASSIGNMENT,
+not a replacement for the student's base identity.
+
+============================================================
+19. POSITION MODEL
+============================================================
+
+Create/use a reusable concept such as:
+
+Student Position / Student Leadership Assignment
+
+It should support:
+
+position
+student
+school
+class
+section
+academic session
+start date
+end date
+appointed by
+status
+permissions
+notes/reason where appropriate
+audit metadata
+
+Do not hardcode the position directly onto the student record.
+
+============================================================
+20. EXAMPLE POSITIONS
+============================================================
+
+Initial built-in positions:
+
+Class Captain / Class Monitor
+Vice Captain / Voice Captain
+
+But architect the system so future school-defined positions can exist.
+
+Examples in future:
+
+House Captain
+Sports Captain
+Cultural Captain
+Library Representative
+Discipline Representative
+Tech Representative
+Eco Club Leader
+Event Coordinator
+
+Do NOT implement all these now unless the existing architecture
+already supports them.
+
+Just make the system extensible.
+
+============================================================
+21. CLASS SCOPE IS CRITICAL
+============================================================
+
+A Class Captain for:
+
+Class 2-A
+
+must NOT gain authority over:
+
+Class 2-B
+Class 3
+Class 4
+another school
+another tenant
+
+Leadership permissions are scoped.
+
+Example:
+
+Captain of Class 2-A
+→ can perform permitted captain actions for Class 2-A only.
+
+============================================================
+22. ACADEMIC SESSION SCOPE
+============================================================
+
+Leadership assignments should be session-aware.
+
+Example:
+
+2026–27
+
+A Class Captain appointment should not automatically remain active
+forever.
+
+At session change:
+
+previous appointment expires unless explicitly renewed.
+
+Support:
+
+start date
+end date
+active/inactive
+
+============================================================
+23. APPOINTMENT WORKFLOW
+============================================================
+
+Authorized person:
+
+Principal
+or authorized class teacher/admin
+
+selects:
+
+Student
+Position
+Class
+Section
+Start date
+End date
+
+Then:
+
+Confirm appointment
+
+↓
+
+Leadership assignment created
+
+↓
+
+Audit event recorded
+
+↓
+
+Student notification
+
+↓
+
+Student profile/ID reflects position
+
+↓
+
+Leadership permissions become active
+
+The exact workflow should respect existing authorization.
+
+============================================================
+24. NO SELF-ASSIGNMENT
+============================================================
+
+A student must NEVER be able to:
+
+appoint themselves
+grant themselves permissions
+edit their own leadership role
+extend their own appointment
+appoint another student
+
+All leadership mutations must be server-authorized.
+
+============================================================
+25. APPOINTMENT AUDIT
+============================================================
+
+Every appointment change must be auditable.
+
+Record:
+
+who appointed
+who was appointed
+position
+scope
+when
+previous state
+new state
+reason where appropriate
+
+Also audit:
+
+appointment
+revocation
+replacement
+permission changes
+
+Use the existing Audit Log infrastructure.
+
+============================================================
+26. CAPTAIN VS VICE CAPTAIN
+============================================================
+
+Do not assume they need identical permissions.
+
+Create a permission matrix.
+
+Example starting model:
+
+CLASS CAPTAIN:
+
+Can:
+
+• access class leadership dashboard
+• view class announcements relevant to their section
+• see permitted class tasks
+• create/request class reminders
+• submit class-wide requests to teacher
+• report class issues to teacher
+• help coordinate permitted class activities
+• see class event/task status where authorized
+• assist teacher with non-sensitive coordination
+• access leadership notices
+• view permitted class-level participation summaries
+
+Cannot:
+
+• edit attendance
+• mark another student's attendance
+• edit marks/results
+• change grades
+• view private academic records
+• view fee details
+• view health/medical information
+• view parent contact information
+• access disciplinary records
+• change student profiles
+• remove students
+• change class assignments
+• appoint another leader
+• access administrative settings
+• send school-wide official notices
+• access teacher-only data
+
+============================================================
+27. VICE CAPTAIN / VOICE CAPTAIN
+============================================================
+
+Vice Captain should have a similar but slightly narrower
+coordination capability by default.
+
+Can:
+
+• access leadership dashboard
+• coordinate permitted class activities
+• view relevant class notices
+• submit requests/issues
+• assist Captain
+• access permitted class task information
+
+Cannot:
+
+• change academic records
+• modify attendance
+• access private student information
+• access fees
+• access teacher controls
+• appoint users
+• change permissions
+
+The system must allow the school to customize these permissions
+later through the existing permission system.
+
+============================================================
+28. NEVER GIVE STUDENT LEADERS ADMIN POWER
+============================================================
+
+This is extremely important.
+
+A Class Captain is NOT a junior teacher.
+
+Do NOT give them:
+
+teacher dashboard
+teacher permissions
+student database access
+attendance editing
+marks editing
+fee access
+disciplinary access
+parent communication data
+medical data
+private messages
+school administration controls
+
+Leadership should provide coordination capabilities,
+not administrative authority.
+
+============================================================
+29. LEADERSHIP DASHBOARD
+============================================================
+
+When a student has an active leadership assignment,
+their Student Workspace should dynamically expose a small
+leadership experience.
+
+For example:
+
+LEADERSHIP
+
+Class Captain
+Class 2-A
+
+or:
+
+Leadership
+Class 2-A · Vice Captain
+
+Do NOT show this module to ordinary students.
+
+============================================================
+30. LEADERSHIP SIDEBAR
+============================================================
+
+Normal student:
+
+No Leadership section.
+
+Captain:
+
+Leadership
+→ Class Dashboard
+→ Tasks / Coordination
+→ Notices / Requests
+→ Activity
+
+Vice Captain:
+
+Leadership
+→ Class Dashboard
+→ Coordination
+→ Notices / Requests
+
+The exact items should be driven by permissions.
+
+Do not show empty pages.
+
+If a permission is absent:
+
+that feature does not appear.
+
+============================================================
+31. LEADERSHIP IDENTITY
+============================================================
+
+The appointed position should appear clearly but tastefully.
+
+For example:
+
+Aarav Sharma
+Class 2-A · Roll #18
+
+[Class Captain]
+
+This tag can appear:
+
+• Profile
+• Student ID
+• relevant leadership panel
+
+Do not make it look like a permanent rank.
+
+It should clearly be an active appointment.
+
+============================================================
+32. STUDENT ID CARD
+============================================================
+
+Keep the previously approved clean ID card direction.
+
+REMOVE:
+
+• QR code
+• checksum
+• technical token
+• encoded admission information
+• unnecessary machine-readable security strings
+
+The ID should remain a professional institutional identity card.
+
+If the student has an active leadership position,
+display:
+
+CLASS CAPTAIN
+
+or
+
+VICE CAPTAIN
+
+in an appropriate official-looking badge/tag.
+
+Do not expose internal IDs.
+
+============================================================
+33. LEADERSHIP TAG MUST BE DYNAMIC
+============================================================
+
+If:
+
+Class Captain assignment active
+→ show Class Captain.
+
+If assignment expires/revoked
+→ immediately remove the tag.
+
+Do not permanently write the title into the student's profile.
+
+The source of truth must be the active leadership assignment.
+
+============================================================
+34. LEADERSHIP PANEL — CLASS DASHBOARD
+============================================================
+
+Design this as a focused coordination workspace.
+
+Possible sections:
+
+Today's class
+Upcoming class events
+Teacher notices
+Pending class tasks
+Requests
+Class activity
+
+Keep it useful.
+
+Avoid fake statistics such as:
+
+"Leadership score 92"
+"Class influence 87"
+"Leadership XP"
+
+unless a real methodology exists.
+
+============================================================
+35. CLASS TASKS
+============================================================
+
+Captain may receive permitted coordination tasks.
+
+Example:
+
+"Collect project participation list"
+
+"Remind class about science activity"
+
+"Coordinate house practice"
+
+"Confirm students who need materials"
+
+But avoid exposing private student information.
+
+Tasks should be:
+
+class-scoped
+permission-scoped
+auditable
+
+============================================================
+36. CLASS REQUESTS
+============================================================
+
+Captain may submit requests to:
+
+Class Teacher
+or
+authorized school staff
+
+Examples:
+
+Need extra worksheets
+Classroom issue
+Activity request
+Equipment request
+Class event request
+
+This should NOT become unrestricted messaging.
+
+Use structured request categories where appropriate.
+
+============================================================
+37. TEACHER COMMUNICATION
+============================================================
+
+Leadership students may have a special communication channel
+to their assigned class teacher for coordination.
+
+But:
+
+• no access to teacher private information
+• no access to other teachers' conversations
+• no access to parent conversations
+• no unrestricted broadcast messaging
+
+Respect existing messaging/RBAC.
+
+============================================================
+38. LEADERSHIP NOTICES
+============================================================
+
+Teacher can send a leadership-specific notice/task.
+
+Example:
+
+"Please coordinate the class for tomorrow's activity."
+
+Only students with the relevant leadership permission should see it.
+
+============================================================
+39. CLASS-WIDE ACTIONS
+============================================================
+
+If a leadership student is allowed to create a class reminder,
+it must be explicitly permission controlled.
+
+Example:
+
+Captain creates:
+
+"Bring your Science notebook tomorrow."
+
+The teacher/school can moderate or approve such messages
+depending on the school's configured workflow.
+
+Do NOT allow uncontrolled student-generated official notices.
+
+============================================================
+40. MODERATION
+============================================================
+
+Any student-created content visible to classmates should have
+appropriate moderation controls.
+
+Potential states:
+
+Draft
+Pending approval
+Published
+Rejected
+Archived
+
+Do not make every leadership action automatically public.
+
+============================================================
+41. LEADERSHIP PERMISSION ENGINE
+============================================================
+
+Do NOT implement:
+
+if (isCaptain) { show everything }
+
+Instead:
+
+Student
++
+Active Assignment
++
+Scope
++
+Permission
++
+Current session
++
+School policy
+
+=
+
+Capability
+
+This is the key architecture.
+
+============================================================
+42. PERMISSION EVALUATION
+============================================================
+
+Every sensitive action must be checked server-side.
+
+Example:
+
+canStudentPerform(
+  student,
+  permission,
+  schoolId,
+  classId,
+  sectionId
+)
+
+The server must verify:
+
+• authenticated user
+• student identity
+• school tenant
+• active assignment
+• academic session
+• class/section scope
+• permission
+• resource ownership
+
+Never rely only on hidden UI buttons.
+
+============================================================
+43. RLS
+============================================================
+
+RLS must prevent unauthorized access even if someone manually
+calls an API.
+
+A Captain from Class 2-A must not query:
+
+Class 2-B leadership data.
+
+A student must not query:
+
+another school's materials
+another student's fee ledger
+another student's private profile
+teacher-only records
+
+============================================================
+44. LEADERSHIP REVOCATION
+============================================================
+
+Principal / authorized teacher should be able to:
+
+Revoke
+Replace
+Expire
+
+a leadership assignment.
+
+When revoked:
+
+• permissions immediately stop
+• Leadership navigation disappears
+• leadership tag disappears
+• ID representation updates
+• existing tasks remain auditable
+• historical appointment remains in audit/history where permitted
+
+Do not delete history just because the assignment ended.
+
+============================================================
+45. REPLACEMENT
+============================================================
+
+Support:
+
+Student A
+Class Captain
+
+↓
+
+Replaced by Student B
+
+The old assignment becomes:
+
+Ended / Replaced
+
+New assignment becomes:
+
+Active
+
+Avoid two active Captains for the same position/scope unless
+school settings explicitly allow multiple holders.
+
+============================================================
+46. CONFLICT PREVENTION
+============================================================
+
+Prevent invalid assignments.
+
+Examples:
+
+same student
+same position
+same class
+same period
+
+should not accidentally create duplicate active assignments.
+
+Use database constraints / transactional logic where appropriate.
+
+============================================================
+47. LEADERSHIP NOTIFICATION
+============================================================
+
+When appointed:
+
+Student receives:
+
+"You've been appointed Class Captain for Class 2-A."
+
+When revoked:
+
+"Your Class Captain assignment has ended."
+
+Keep notifications short.
+
+Do not send long explanatory messages.
+
+============================================================
+48. SEARCH INTEGRATION
+============================================================
+
+Global Student Workspace search must dynamically include:
+
+Study Materials
+Transport (only if assigned)
+Leadership (only if appointed)
+Leadership tasks
+Leadership requests
+
+It must NOT include:
+
+My Progress
+My Wellbeing
+Library
+
+because those modules are removed.
+
+Search must remain permission aware.
+
+============================================================
+49. DASHBOARD INTEGRATION
+============================================================
+
+Normal student dashboard:
+
+Do not add leadership content.
+
+Captain dashboard:
+
+A small useful card may appear:
+
+Leadership
+Class Captain · 2-A
+
+[Open]
+
+Only when active.
+
+Do not allow leadership to dominate the student dashboard.
+
+============================================================
+50. PROFILE INTEGRATION
+============================================================
+
+Profile should show:
+
+Student identity
+
+Class 2-A · Roll #18
+
+If active:
+
+Class Captain
+
+or
+
+Vice Captain
+
+Use a compact badge.
+
+Do not alter the entire profile layout.
+
+============================================================
+51. PROFILE HERO
+============================================================
+
+Keep the improved profile direction:
+
+NO coloured horizontal bar behind the student's name.
+
+Instead:
+
+premium identity card inspired by the quality of the Dashboard's
+top card.
+
+The name must never overlap decorative backgrounds.
+
+Use:
+
+student photo/avatar
+name
+status
+class
+section
+roll
+house
+school identity
+View School ID
+
+Keep it clean.
+
+============================================================
+52. ID CARD
+============================================================
+
+Final visible ID:
+
+School logo
+School name
+Student photograph
+Student name
+Class / Section
+Roll Number
+Admission Number where appropriate
+House
+Academic session where appropriate
+Active status
+Leadership title if applicable
+Authorized signature if available
+School contact details if appropriate
+
+NO:
+
+QR
+checksum
+internal token
+database ID
+technical security text
+
+============================================================
+53. FEES
+============================================================
+
+Do not redesign the entire Fees module unnecessarily if the
+previous implementation already follows the approved direction.
+
+But maintain:
+
+Balance Due
+Total Payable
+Paid
+Fee Breakdown
+Payment History
+Statement
+Pay Now
+
+Online payment should appear when configured.
+
+If online payment is disabled:
+
+show a concise offline state.
+
+Payment must be:
+
+server verified
+tenant isolated
+student isolated
+idempotent
+auditable
+
+Never update the fee ledger solely from client-side success.
+
+============================================================
+54. OVER-TEXTING RULE
+============================================================
+
+This is a GLOBAL UI REQUIREMENT.
+
+Remove unnecessary explanatory paragraphs.
+
+Prefer:
+
+Balance due
+₹4,750
+
+instead of:
+
+"Balance for the session — payable as arranged with the school
+office."
+
+Prefer:
+
+Class Captain
+Class 2-A
+
+instead of a paragraph explaining what a captain is.
+
+Use:
+
+labels
+numbers
+badges
+compact helper text
+tooltips where genuinely necessary
+
+Do not make the UI feel like documentation.
+
+============================================================
+55. VISUAL LANGUAGE
+============================================================
+
+The Student Workspace should be:
+
+Premium
+Colourful
+Modern
+Clean
+Fast
+Friendly
+Professional
+Consistent
+
+Use colour strategically.
+
+Suggested semantic palette:
+
+Emerald:
+success / active / completed
+
+Violet:
+learning / achievement / primary accent
+
+Blue:
+information / materials
+
+Amber:
+attention / pending
+
+Red:
+error / overdue / critical
+
+But do not turn every card into a rainbow.
+
+============================================================
+56. DO NOT MAKE EVERYTHING A CARD
+============================================================
+
+Avoid:
+
+card
+inside card
+inside card
+inside card
+
+Use:
+
+lists
+rows
+tabs
+compact panels
+timelines
+tables
+sections
+
+where they are more appropriate.
+
+============================================================
+57. NO GENERIC DASHBOARD TEMPLATE
+============================================================
+
+Do not force:
+
+4 KPI cards
++
+gradient banner
++
+3 cards
+
+onto every module.
+
+Each area should have its own information architecture.
+
+============================================================
+58. RESPONSIVE
+============================================================
+
+Tablet/iPad is a first-class target.
+
+Also support:
+
+Desktop
+Mobile
+
+No:
+
+horizontal overflow
+clipped text
+tiny buttons
+broken tables
+overlapping headers
+
+============================================================
+59. ACCESSIBILITY
+============================================================
+
+All interactive controls:
+
+keyboard accessible
+visible focus
+semantic labels
+sufficient contrast
+screen-reader friendly where appropriate
+
+Do not communicate status through colour alone.
+
+============================================================
+60. PERFORMANCE
+============================================================
+
+Do not load all student data on every page.
+
+Use:
+
+server-side data fetching
+selective queries
+pagination
+indexes
+lazy loading
+cached configuration where appropriate
+
+Study Materials should not download files until the user actually
+requests preview/download.
+
+============================================================
+61. SECURITY AUDIT
+============================================================
+
+Before finishing, test:
+
+Student A cannot see Student B's restricted materials.
+
+Student A cannot access another school.
+
+Student cannot grant leadership permissions.
+
+Student cannot manipulate classId to access another class.
+
+Captain 2-A cannot access Captain 2-B data.
+
+Expired Captain cannot access leadership features.
+
+Revoked Captain loses access immediately.
+
+Vice Captain cannot perform Captain-only action if permission
+does not exist.
+
+Student cannot modify fee ledger.
+
+Student cannot modify official profile.
+
+Student cannot modify attendance/results.
+
+Transport appears only for actively assigned students.
+
+Transport disappears after assignment is removed.
+
+Private materials cannot be fetched through guessed URLs.
+
+All sensitive mutations are server-authorized.
+
+============================================================
+62. DATABASE / ARCHITECTURE AUDIT
+============================================================
+
+Before creating new tables/models:
+
+inspect existing schema.
+
+Reuse existing concepts if available.
+
+Only add new models when genuinely required.
+
+Potential conceptual entities:
+
+StudentLeadershipAssignment
+StudentPosition
+LeadershipPermission
+
+BUT:
+
+DO NOT blindly create these names.
+
+Use the project's existing naming conventions and architecture.
+
+Prefer a reusable position/assignment abstraction if one already
+exists for teachers/staff.
+
+Do not create duplicate role systems.
+
+============================================================
+63. SCHOOL SETTINGS
+============================================================
+
+Where appropriate, allow the school configuration to control:
+
+Transport availability
+Leadership positions
+Leadership permissions
+Material policies
+Upload limits
+Allowed file types
+Payment availability
+
+But do not overwhelm school admins with unnecessary settings.
+
+Defaults should be sensible.
+
+============================================================
+64. FUTURE EXTENSIBILITY
+============================================================
+
+The architecture should make it possible later to add:
+
+House Captain
+Sports Captain
+Cultural Captain
+Club Leader
+Event Coordinator
+Student Council
+Prefect
+School Ambassador
+
+without rewriting the authorization architecture.
+
+But do NOT build a giant Student Government module now.
+
+Build the foundation correctly.
+
+============================================================
+65. IMPORTANT DISTINCTION
+============================================================
+
+There are three levels:
+
+BASE IDENTITY
+
+Student
+
++
+
+POSITION
+
+Class Captain / Vice Captain
+
++
+
+PERMISSIONS
+
+Exactly what that position can do within a defined scope.
+
+Never confuse these three.
+
+============================================================
+66. FINAL STUDENT NAVIGATION EXAMPLE
+============================================================
+
+NORMAL STUDENT:
+
+Dashboard
+My Profile
+
+SCHOOL
+Timetable
+Attendance
+Results
+
+LEARNING
+Learning
+Study Materials
+
+COMMUNITY
+Messages
+Notices
+
+RECORDS
+Fees
+Certificates
+Transport* 
+Applications
+
+ACCOUNT
+Settings
+
+*Transport only if actively assigned.
+
+NO:
+
+My Progress
+My Wellbeing
+Library
+
+============================================================
+67. CAPTAIN NAVIGATION EXAMPLE
+============================================================
+
+Dashboard
+My Profile
+
+SCHOOL
+Timetable
+Attendance
+Results
+
+LEARNING
+Learning
+Study Materials
+
+LEADERSHIP
+Class Dashboard
+Coordination
+Requests
+
+COMMUNITY
+Messages
+Notices
+
+RECORDS
+Fees
+Certificates
+Transport*
+
+ACCOUNT
+Settings
+
+Again:
+
+Only show Leadership items for which the student actually has
+permission.
+
+============================================================
+68. CAPTAIN PROFILE EXAMPLE
+============================================================
+
+Aarav Sharma
+Active
+
+Class 2-A · Roll #18 · Tagore House
+
+[Class Captain]
+
+[View School ID]
+
+This should look official but not childish.
+
+============================================================
+69. STUDY MATERIALS EXAMPLE
+============================================================
+
+Study Materials
+
+[Search...]
+
+[All] [Maths] [Science] [English]
+
+--------------------------------
+
+Mathematics
+Fractions — Revision Notes
+
+PDF · 2.4 MB
+Uploaded by Rohan Mehta
+12 Sep 2026
+
+[Preview] [Download]
+
+--------------------------------
+
+Science
+Living Things — Worksheet
+
+PDF · 1.8 MB
+Uploaded by Kavita Joshi
+10 Sep 2026
+
+[Preview] [Download]
+
+Keep the UI concise.
+
+============================================================
+70. LEADERSHIP DASHBOARD EXAMPLE
+============================================================
+
+Class Captain
+Class 2-A
+
+Today's coordination
+
+• Science activity
+• Class reminder
+• Teacher request
+
+[Open task]
+
+Recent requests
+
+Worksheet request
+Pending
+
+Classroom equipment
+Resolved
+
+Keep it operational.
+
+Not gamified.
+
+============================================================
+71. NO FAKE GAMIFICATION
+============================================================
+
+Do NOT introduce:
+
+Leadership XP
+Captain score
+Influence score
+Popularity score
+Leadership rank
+
+This is a school management/learning product,
+not a social game.
+
+Badges can exist elsewhere if genuinely designed,
+but leadership itself should not become a popularity contest.
+
+============================================================
+72. DATA TRANSPARENCY
+============================================================
+
+Every visible status should have a real source.
+
+Examples:
+
+Class Captain
+→ active leadership assignment
+
+Transport
+→ active transport assignment
+
+Study Material
+→ published material targeted to student
+
+Fee balance
+→ fee ledger
+
+Attendance
+→ attendance records
+
+Do not create UI states that are disconnected from backend truth.
+
+============================================================
+73. FINAL QA — NAVIGATION
+============================================================
+
+[ ] My Progress removed
+[ ] My Wellbeing removed
+[ ] Library removed
+[ ] No dead routes
+[ ] No dead sidebar items
+[ ] No dead search results
+[ ] Study Materials added
+[ ] Transport conditional
+[ ] Leadership conditional
+[ ] Existing modules unaffected
+
+============================================================
+74. FINAL QA — STUDY MATERIALS
+============================================================
+
+[ ] Teacher can upload if authorized
+[ ] Principal/admin can upload if authorized
+[ ] Materials can target correct audience
+[ ] Student only sees authorized materials
+[ ] PDF preview works
+[ ] Image preview works
+[ ] Download works
+[ ] Secure storage
+[ ] No public restricted files
+[ ] Tenant isolation
+[ ] Permission checks
+[ ] Search works
+[ ] Publish/archive lifecycle works
+[ ] No unnecessary text
+
+============================================================
+75. FINAL QA — LEADERSHIP
+============================================================
+
+[ ] Captain is an assignment, not a boolean
+[ ] Vice Captain is an assignment
+[ ] Class/section scoped
+[ ] Academic-session scoped
+[ ] Start/end date supported
+[ ] Principal can appoint
+[ ] Authorized teacher can appoint
+[ ] Student cannot self-appoint
+[ ] Audit log exists
+[ ] Appointment notification exists
+[ ] Leadership tag appears dynamically
+[ ] ID card reflects active position
+[ ] Expiry removes permissions
+[ ] Revocation removes permissions
+[ ] Replacement supported
+[ ] Duplicate active appointments prevented
+[ ] Captain permissions are limited
+[ ] Vice Captain permissions are limited
+[ ] No academic editing
+[ ] No fee access
+[ ] No medical/private data
+[ ] No parent data
+[ ] No teacher administration access
+[ ] Server-side permission checks
+[ ] RLS enforcement
+[ ] Cross-class access impossible
+[ ] Cross-tenant access impossible
+
+============================================================
+76. FINAL UX TEST
+============================================================
+
+Ask of every screen:
+
+Can a student understand this in 2–3 seconds?
+
+If yes:
+keep it.
+
+If not:
+simplify it.
+
+Ask:
+
+Does this text help the student perform an action?
+
+If no:
+remove it.
+
+Ask:
+
+Does this metric represent real data?
+
+If no:
+remove it.
+
+Ask:
+
+Does this button actually work?
+
+If no:
+remove it.
+
+============================================================
+77. FINAL PRODUCT PHILOSOPHY
+============================================================
+
+SCHOLARIO STUDENT WORKSPACE
+
+should NOT feel like:
+
+"an ERP with many menus."
+
+It should feel like:
+
+"my personal school workspace."
+
+The system should intelligently reveal functionality
+based on who the student is and what is actually relevant
+to that student.
+
+NORMAL STUDENT
+→ sees normal student capabilities.
+
+TRANSPORT STUDENT
+→ automatically gets Transport.
+
+CLASS CAPTAIN
+→ automatically gets Leadership capabilities.
+
+VICE CAPTAIN
+→ automatically gets the narrower permitted capabilities.
+
+STUDY MATERIALS
+→ shows only resources relevant to that student.
+
+Everything else remains invisible.
+
+The interface should stay simple
+BECAUSE the backend is intelligent.
+
+That is the goal.
+
+============================================================
+IMPLEMENTATION RULE
+============================================================
+
+Do not stop after changing the UI.
+
+Implement the complete vertical slice where required:
+
+Database
+→ server services
+→ authorization
+→ RLS
+→ API
+→ UI
+→ navigation
+→ notifications
+→ audit
+→ empty/loading/error states
+
+Use the existing architecture.
+
+Do not create mock-only functionality.
+
+Do not hardcode demo-only behaviour.
+
+Use Demo School's real tenant data where appropriate.
+
+At the end, run a complete build/type/lint/runtime sanity check
+and fix all errors introduced by this work.
+
+The final implementation must be production-quality,
+secure, multi-tenant, permission-driven, responsive,
+fast and visually consistent with Scholario-OS.

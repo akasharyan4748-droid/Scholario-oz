@@ -1,0 +1,2579 @@
+SCHOLARIO-OS
+STUDENT WORKSPACE
+LEARNING MODULE — COMPLETE PRODUCT-GRADE REDESIGN + FUNCTIONAL UPGRADE
+
+============================================================
+0. THIS IS A MAJOR PRODUCT REFACTOR
+============================================================
+
+You are not being asked to make a few visual changes.
+
+You are being asked to:
+
+1. COMPLETELY DECOMMISSION the current Student Workspace
+   "Classwork" module for now.
+
+2. COMPLETELY REDESIGN and substantially upgrade the
+   entire "Learning" module.
+
+3. Turn Learning into a premium, deeply functional,
+   student-centric "Learning OS" inside Scholario.
+
+The current screenshots are REFERENCE MATERIAL for understanding
+the existing UI, information hierarchy, visual language and
+current implementation.
+
+Do NOT blindly copy the screenshots.
+
+Improve them according to Scholario's existing product design system.
+
+The final result must feel like a real product that students
+would genuinely want to use every day.
+
+============================================================
+1. FIRST: REMOVE CLASSWORK PROPERLY
+============================================================
+
+IMPORTANT:
+
+The current Student Workspace has:
+
+Classwork
+
+with:
+
+Homework
+Assignments
+Active Homework
+Submission
+Teacher
+Due Dates
+etc.
+
+For the CURRENT PRODUCT VERSION:
+
+REMOVE THE CLASSWORK MODULE COMPLETELY.
+
+This does NOT mean merely hiding it from the sidebar.
+
+Properly decommission the Student Workspace Classwork module.
+
+Before removing anything:
+
+1. Inspect the repository.
+2. Identify every Classwork route.
+3. Identify every Classwork component.
+4. Identify every Classwork API/server action.
+5. Identify Classwork-specific hooks.
+6. Identify Classwork-specific mock/seed data.
+7. Identify Classwork navigation entries.
+8. Identify Classwork permissions used ONLY by this module.
+9. Identify Classwork database models used ONLY by this module.
+10. Identify imports and dependencies.
+
+Then remove/decommission only what is safe to remove.
+
+CRITICAL:
+
+Do NOT delete shared infrastructure that may be required
+by other modules.
+
+Do NOT break:
+
+Messaging
+Notifications
+Learning
+Student profile
+Teacher system
+School Settings
+Authentication
+Permissions
+Database
+Navigation
+Search
+Results
+Attendance
+Fees
+etc.
+
+If a backend model is shared with future or existing functionality,
+do not destructively delete it merely because the current
+Student Workspace page is being removed.
+
+Instead:
+
+- remove the Student Workspace exposure
+- preserve shared infrastructure where necessary
+- keep architecture ready for Classwork to return in the future
+
+Do NOT create a "Coming Soon" Classwork page.
+
+It should simply not exist in the current Student Workspace navigation.
+
+Also remove any dead UI references.
+
+The sidebar should move naturally from:
+
+Attendance
+Classwork
+Results
+
+to:
+
+Attendance
+Results
+
+with no awkward gap.
+
+Update:
+
+navigation
+search indexing
+breadcrumbs if applicable
+permissions if applicable
+route guards if applicable
+dashboard shortcuts if applicable
+
+so that Classwork is genuinely absent from the current
+Student Workspace experience.
+
+============================================================
+2. LEARNING IS NOW A CORE PRODUCT MODULE
+============================================================
+
+Learning should not feel like another generic school ERP page.
+
+It should feel like:
+
+A PERSONAL LEARNING OS.
+
+The student's central place for:
+
+• discovering learning resources
+• studying
+• revising
+• planning
+• focusing
+• taking notes
+• creating flashcards
+• tracking mastery
+• asking questions
+• collaborating
+• setting goals
+• maintaining study routines
+• reviewing weak areas
+• building learning habits
+
+The module should connect these experiences intelligently.
+
+============================================================
+3. CORE LEARNING ARCHITECTURE
+============================================================
+
+Keep the main Learning sections conceptually organized as:
+
+LEARNING HUB
+FLASHCARDS
+STUDY PLANNER
+STUDY GROUPS
+
+But improve the product depth substantially.
+
+The four sections should not feel like four unrelated pages.
+
+They are one connected learning ecosystem.
+
+Example:
+
+Learning Hub
+↓
+Student discovers "Fractions"
+↓
+Saves resource
+↓
+Adds it to Study Planner
+↓
+Studies it
+↓
+Creates/reviews flashcards
+↓
+Completes quiz
+↓
+Weak area detected
+↓
+Planner recommends revision
+↓
+Student studies again
+↓
+Progress updates
+
+Everything should work as a coherent system.
+
+============================================================
+4. REMOVE OVER-TEXTING
+============================================================
+
+This is a HARD REQUIREMENT.
+
+The current screenshots contain too many explanatory subtitles,
+descriptions and repeated context.
+
+Reduce them aggressively.
+
+Do NOT repeatedly write:
+
+Class 2-A
+Section A
+Academic Year 2026–27
+School name
+Student name
+
+inside every Learning page.
+
+The Student Workspace already knows the student's context.
+
+For example:
+
+GOOD:
+
+Learning Hub
+Your learning space
+
+or even simply:
+
+Learning Hub
+
+BAD:
+
+Learning Resources
+Videos, notes, worksheets & quizzes for your subjects
+Class 2-A · Section A · AY 2026–27 · Demo School...
+
+Context should be available through the workspace,
+not repeated in every module.
+
+============================================================
+5. VISUAL DESIGN DIRECTION
+============================================================
+
+Use the existing Scholario Student Workspace as the foundation.
+
+The screenshots show several useful visual references:
+
+MY PROGRESS:
+- rich colour
+- personality
+- visual motivation
+
+RESULTS:
+- academic sophistication
+- strong hierarchy
+
+ATTENDANCE:
+- meaningful status colours
+
+LEARNING:
+- colourful resource cards
+- section navigation
+
+Combine these strengths.
+
+DO NOT make the entire Learning module green.
+
+DO NOT make everything purple.
+
+Use a sophisticated multi-accent learning palette.
+
+Suggested semantic palette:
+
+EMERALD
+→ completion
+→ success
+→ healthy learning state
+
+VIOLET
+→ deep study
+→ focus
+→ flashcards
+→ cognitive tools
+
+BLUE / CYAN
+→ resources
+→ information
+→ videos
+→ digital content
+
+AMBER / ORANGE
+→ goals
+→ attention
+→ upcoming work
+→ challenges
+
+PINK / CORAL
+→ streaks
+→ motivation
+→ milestones
+
+NEUTRAL
+→ core surfaces
+→ text
+→ structure
+
+Colours should have semantic purpose.
+
+Do not randomly colour every card.
+
+============================================================
+6. COLOURFUL ≠ CHILDISH
+============================================================
+
+This is a premium education platform.
+
+The UI must be:
+
+colourful
+modern
+energetic
+friendly
+intelligent
+
+but NOT:
+
+childish
+cartoonish
+neon
+over-saturated
+game-like everywhere
+
+Use colour as information architecture.
+
+The student should feel:
+
+"This is exciting to use."
+
+not:
+
+"This is a children's game."
+
+============================================================
+7. LEARNING HUB
+============================================================
+
+Transform Learning Hub into the student's learning command centre.
+
+The top should immediately answer:
+
+What should I study?
+
+What am I working on?
+
+What is coming up?
+
+What needs revision?
+
+What did I learn recently?
+
+============================================================
+8. LEARNING HUB — PERSONALIZED HOME
+============================================================
+
+Instead of showing generic statistics like:
+
+248 resources
+5 bookmarked
+3 completed
+42 hours
+
+without context,
+
+prioritize actionable information.
+
+Possible layout:
+
+LEARNING
+
+[Search learning...]
+
+--------------------------------
+
+TODAY
+
+Continue where you left off
+
+Mathematics
+Fractions — Practice Set
+
+72% complete
+
+[Continue]
+
+--------------------------------
+
+YOUR FOCUS
+
+3 tasks planned
+45 min study goal
+1 revision due
+
+[Start study]
+
+--------------------------------
+
+SUBJECTS
+
+Mathematics
+English
+Science
+Hindi
+etc.
+
+Each subject can show:
+
+mastery
+recent activity
+next recommended action
+
+--------------------------------
+
+RECOMMENDED FOR YOU
+
+Real resources based on:
+
+subjects
+recent activity
+weak areas
+bookmarks
+assigned school content
+study history
+
+--------------------------------
+
+RECENTLY STUDIED
+
+compact cards
+
+--------------------------------
+
+BOOKMARKS
+
+small preview
+
+============================================================
+9. LEARNING HUB — SUBJECT EXPERIENCE
+============================================================
+
+Clicking a subject should open a focused subject learning view.
+
+Example:
+
+MATHEMATICS
+
+Mastery
+72%
+
+Continue
+Practice
+Notes
+Flashcards
+Resources
+
+Recent:
+
+Fractions
+Addition
+Place Value
+
+Weak areas:
+
+Fractions
+Word Problems
+
+Recommended:
+
+Fractions Practice
+10 questions
+15 min
+
+[Start]
+
+Do NOT overwhelm the user.
+
+Progressive disclosure is mandatory.
+
+============================================================
+10. RESOURCE SYSTEM
+============================================================
+
+Learning resources should support actual types.
+
+Potential types:
+
+Video
+PDF
+Notes
+Worksheet
+Quiz
+Article
+Presentation
+Interactive
+Assignment-like practice
+Flashcard deck
+
+BUT:
+
+Only display resource types actually supported
+by the backend/application.
+
+Do not create fake functionality.
+
+Every resource should have metadata such as:
+
+subject
+topic
+type
+duration/pages/questions
+difficulty
+teacher/school source
+created date
+completion status
+bookmark status
+
+where applicable.
+
+============================================================
+11. RESOURCE DISCOVERY
+============================================================
+
+Build an excellent search/filter experience.
+
+Search:
+
+"fractions"
+"photosynthesis"
+"grammar"
+etc.
+
+Filters:
+
+Subject
+Type
+Topic
+Difficulty
+Duration
+Saved
+Completed
+Recommended
+
+Use compact filter chips.
+
+Do NOT create huge filter panels that dominate the page.
+
+============================================================
+12. RESOURCE CARDS
+============================================================
+
+The current colourful cards are visually interesting,
+but should become more functional.
+
+A resource card should communicate:
+
+TYPE
+TITLE
+SUBJECT / TOPIC
+small useful metadata
+progress/status
+primary action
+
+Example:
+
+VIDEO
+Fractions — Like Parts
+
+Mathematics
+12 min
+
+72% watched
+
+[Continue]
+
+Avoid giant descriptions.
+
+============================================================
+13. RESOURCE ACTIONS
+============================================================
+
+Depending on resource type:
+
+Open
+Continue
+Mark complete
+Bookmark
+Add to planner
+Start quiz
+Add to flashcards
+Share where permitted
+
+Do not show every action simultaneously.
+
+Use:
+
+primary action
+secondary menu
+
+============================================================
+14. "FOR YOU"
+============================================================
+
+The current screenshot has:
+
+For You
+
+Upgrade this into a genuinely useful personalized recommendation layer.
+
+Recommendations should be derived from actual data.
+
+Possible logic:
+
+• unfinished resources
+• weak subjects
+• recently studied topics
+• upcoming exams
+• saved resources
+• spaced repetition schedule
+• study goals
+
+Example:
+
+"Revise Fractions"
+
+Because your recent practice shows lower accuracy.
+
+Only show such insight if the underlying data exists.
+
+Never fabricate personalization.
+
+============================================================
+15. FLASHCARDS — COMPLETE REBUILD
+============================================================
+
+Flashcards should become a serious study tool.
+
+Not merely:
+
+"Card 1 of 10"
+
+with a large question.
+
+It should support:
+
+Decks
+Cards
+Subjects
+Topics
+Tags
+Difficulty
+Spaced repetition
+Review history
+Mastery
+Bookmarks
+Notes
+Images where supported
+
+============================================================
+16. FLASHCARD HOME
+============================================================
+
+Show:
+
+Due today
+New cards
+Learning
+Mastered
+
+Example:
+
+DUE TODAY
+18 cards
+
+NEW
+7
+
+LEARNING
+12
+
+MASTERED
+86
+
+[Start Review]
+
+Then:
+
+Your decks
+
+Mathematics
+Science
+English
+Custom decks
+
+============================================================
+17. SPACED REPETITION
+============================================================
+
+Implement a real review workflow.
+
+After answering/revealing a card:
+
+Again
+Hard
+Good
+Easy
+
+The scheduling engine should determine the next review date.
+
+Do not fake spaced repetition with a static counter.
+
+If the project already has a learning scheduler,
+reuse it.
+
+If not, design a proper extensible service.
+
+Keep the algorithm abstracted so it can evolve later.
+
+============================================================
+18. FLASHCARD SESSION
+============================================================
+
+The actual study experience should be distraction-free.
+
+Show:
+
+Topic
+Progress
+Question
+Reveal answer
+Answer quality
+
+Support:
+
+keyboard shortcuts on desktop
+touch gestures where appropriate
+tap to reveal on mobile/tablet
+
+After answer:
+
+Again
+Hard
+Good
+Easy
+
+At session completion:
+
+Cards reviewed
+Accuracy
+Mastered
+Needs review
+
+[Review weak cards]
+[Done]
+
+============================================================
+19. FLASHCARD CREATION
+============================================================
+
+"New Card" should support:
+
+Question
+Answer
+Subject
+Topic
+Tags
+Difficulty
+Optional image
+Optional explanation
+
+Also allow:
+
+Create from note
+Create from resource
+Create from highlighted content
+
+if technically supported.
+
+============================================================
+20. NOTES
+============================================================
+
+Do not treat "Notes" as merely another resource type.
+
+Provide a lightweight personal notes system.
+
+Students should be able to:
+
+Create note
+Edit
+Organize by subject/topic
+Pin
+Search
+Tag
+Link to resource
+Link to flashcard/deck
+Archive
+
+Keep the editor extremely clean.
+
+Do not build an unnecessarily complex word processor.
+
+============================================================
+21. STUDY PLANNER — MAJOR FEATURE
+============================================================
+
+This should become one of Scholario's strongest student tools.
+
+Not just a task list.
+
+It should combine:
+
+To-do
+Study goals
+Calendar
+Study sessions
+Focus timer
+Deadlines
+Revision schedule
+Exam preparation
+Habits
+Progress
+
+============================================================
+22. STUDY PLANNER — TODAY
+============================================================
+
+The default screen should be:
+
+TODAY
+
+Good morning / relevant greeting only when appropriate.
+
+Today's study goal:
+
+45 / 60 min
+
+Then:
+
+TODAY'S PLAN
+
+08:00
+Mathematics — Fractions
+25 min
+
+10:30
+English — Reading
+20 min
+
+18:00
+Science revision
+30 min
+
+Each item:
+
+status
+subject
+topic
+duration
+priority
+
+[Start]
+
+Keep it compact.
+
+============================================================
+23. TO-DO SYSTEM
+============================================================
+
+Create a genuinely useful study task system.
+
+Tasks support:
+
+Title
+Subject
+Topic
+Due date
+Priority
+Estimated duration
+Notes
+Tags
+Repeat
+Goal linkage
+
+Statuses:
+
+Not started
+In progress
+Completed
+Skipped
+
+Do NOT make users fill 15 fields just to create a task.
+
+Quick add:
+
+"Revise fractions tomorrow 30 min"
+
+should be possible.
+
+Advanced details can be optional.
+
+============================================================
+24. SMART TASK CREATION
+============================================================
+
+If AI functionality is already available in the project,
+the planner may intelligently parse natural language.
+
+Example:
+
+"Study maths for 30 minutes tomorrow evening"
+
+could become:
+
+Subject: Mathematics
+Duration: 30 min
+Date: tomorrow
+Time: evening
+
+But:
+
+DO NOT add fake AI.
+
+If AI is not configured, use a clean normal form.
+
+============================================================
+25. STUDY CALENDAR
+============================================================
+
+Provide:
+
+Today
+Week
+Month
+
+views where useful.
+
+Study sessions should appear alongside:
+
+exam dates
+school events
+planned study
+deadlines
+
+Only use actual school calendar data if available.
+
+Do not invent events.
+
+============================================================
+26. STUDY GOALS
+============================================================
+
+Students should be able to create goals.
+
+Examples:
+
+"Finish Mathematics Chapter 4"
+
+"Study 5 hours this week"
+
+"Revise before Mid Term"
+
+"Complete 30 flashcards"
+
+Goal types:
+
+Time
+Tasks
+Resources
+Topics
+Exams
+
+Show:
+
+current progress
+target
+deadline
+remaining
+
+============================================================
+27. EXAM PREPARATION
+============================================================
+
+This is an important advanced feature.
+
+Allow a student to create an exam preparation plan.
+
+Example:
+
+Mid Term Examination
+
+18 Aug
+
+Subjects:
+
+Mathematics
+English
+Science
+
+Then generate a study schedule from actual configured
+syllabus/topics/resources where possible.
+
+The system should distribute study sessions across
+available days.
+
+If automatic planning is not possible yet,
+provide manual planning.
+
+Do NOT create fake syllabus integration.
+
+============================================================
+28. REVISION ENGINE
+============================================================
+
+Learning should connect Results + Flashcards + Planner.
+
+Example:
+
+Student performs poorly in:
+
+Fractions
+
+Learning can recommend:
+
+"Revise Fractions"
+
+Then:
+
+[Add to today's plan]
+
+The recommendation should be based on real performance data
+when available.
+
+This is where Scholario becomes more than a collection of pages.
+
+============================================================
+29. STUDY TIMER — NEXT LEVEL
+============================================================
+
+Create a serious Focus / Study Timer.
+
+Not just:
+
+25:00
+
+Start.
+
+It should support:
+
+Pomodoro
+Custom duration
+Short break
+Long break
+Number of sessions
+Auto-start break
+Auto-start next session
+Pause
+Resume
+Skip
+Stop
+
+============================================================
+30. TIMER MODES
+============================================================
+
+Presets:
+
+Focus 25
+Focus 45
+Focus 60
+
+Custom
+
+Also allow school/student configurable defaults.
+
+============================================================
+31. TIMER CONTEXT
+============================================================
+
+Before starting:
+
+"What are you studying?"
+
+Select:
+
+Task
+Subject
+Topic
+
+or:
+
+Quick session
+
+If linked to a task:
+
+show:
+
+Mathematics
+Fractions
+30 min
+
+[Start Focus]
+
+When complete:
+
+automatically update:
+
+study time
+task progress
+goal progress
+daily streak
+subject activity
+
+ONLY if these metrics are actually designed and persisted.
+
+============================================================
+32. FOCUS MODE
+============================================================
+
+When timer starts:
+
+enter distraction-free focus mode.
+
+Reduce UI noise.
+
+Show:
+
+remaining time
+subject/topic
+current session
+pause
+finish
+
+Optional:
+
+ambient sound
+
+if supported later.
+
+Do not clutter focus mode with dashboards.
+
+============================================================
+33. STUDY SESSION RECORD
+============================================================
+
+Each completed study session may store:
+
+student
+school
+subject
+topic
+task
+duration
+start time
+end time
+completion state
+
+Use this for:
+
+study analytics
+goals
+progress
+recommendations
+
+Ensure strict tenant/user authorization.
+
+============================================================
+34. STUDY ANALYTICS
+============================================================
+
+Do not turn Learning into a giant analytics dashboard.
+
+But provide useful insights.
+
+Examples:
+
+Study time this week
+Most studied subject
+Consistency
+Goal progress
+Focus sessions
+Best study time
+
+Use small visualizations.
+
+Do not show meaningless graphs.
+
+============================================================
+35. STREAKS
+============================================================
+
+If streaks are implemented:
+
+define exactly what counts.
+
+For example:
+
+A study streak is earned when
+at least one qualifying study activity
+is completed on a day.
+
+Do not increment streaks just because the page opened.
+
+Avoid manipulative gamification.
+
+============================================================
+36. STUDY GROUPS
+============================================================
+
+The current screenshot shows:
+
+Study Groups
+Q&A Forum
+Shared Resources
+
+Keep the concept, but make it much more useful.
+
+Study Groups should support:
+
+group discovery
+join/leave
+members
+group subject/topic
+group description
+group rules
+group activity
+shared resources
+discussion
+scheduled study sessions
+
+============================================================
+37. STUDY GROUP PRIVACY
+============================================================
+
+Very important.
+
+Students must not be able to freely communicate
+with every student in the school.
+
+Study groups must respect:
+
+school policy
+class membership
+age/safety rules
+teacher/admin moderation
+visibility settings
+
+All communication must be authenticated and authorized.
+
+============================================================
+38. GROUP CREATION
+============================================================
+
+If school policy allows students to create groups:
+
+Create Group:
+
+Name
+Subject
+Topic
+Description
+Visibility
+
+Example:
+
+Math Masters
+Mathematics
+Fractions
+
+Do not expose unrestricted school-wide communication
+unless explicitly configured.
+
+============================================================
+39. Q&A FORUM
+============================================================
+
+Questions should support:
+
+Title
+Question
+Subject
+Topic
+Optional attachment
+Tags
+
+Responses:
+
+Answer
+Helpful
+Report
+
+Student identity should follow school privacy policy.
+
+Provide moderation controls.
+
+============================================================
+40. REPORT / MODERATION
+============================================================
+
+Study Groups and Q&A require safety controls.
+
+Allow:
+
+Report content
+Report user
+Mute where appropriate
+Moderator review
+Remove content
+Lock question
+
+Do not allow students to delete other users' content.
+
+============================================================
+41. SHARED RESOURCES
+============================================================
+
+Students can share resources where school policy allows.
+
+But sharing must be permission-controlled.
+
+Possible:
+
+Share with group
+Save to collection
+Report resource
+
+Do not expose private student notes
+or private documents accidentally.
+
+============================================================
+42. LEARNING + MESSAGES
+============================================================
+
+Do NOT create a second messaging system.
+
+Learning may have contextual links such as:
+
+Ask a question
+Discuss with group
+Contact teacher
+
+but reuse Scholario's existing communication architecture.
+
+============================================================
+43. TEACHER CONNECTION
+============================================================
+
+If the existing teacher communication system allows it:
+
+From a learning resource:
+
+"Ask your teacher"
+
+should open the existing secure communication system.
+
+The student should be routed to an appropriate authorized teacher.
+
+Do not expose teachers outside the student's authorized scope.
+
+============================================================
+44. LEARNING + RESULTS
+============================================================
+
+Where appropriate, Learning should consume actual academic data.
+
+For example:
+
+Results indicate:
+Mathematics 72%
+
+Learning may surface:
+
+"Recommended revision"
+
+But do not expose sensitive comparative student data
+unless authorized.
+
+Do not create fake recommendations.
+
+============================================================
+45. LEARNING + ATTENDANCE
+============================================================
+
+Do not over-integrate unrelated data.
+
+Attendance should not dominate Learning.
+
+Only use attendance information when it genuinely affects
+a student's learning workflow.
+
+============================================================
+46. PERSONALIZATION
+============================================================
+
+Learning should understand:
+
+student
+class
+subjects
+school configuration
+actual activity
+bookmarks
+study sessions
+results
+available resources
+
+But personalization must be permission-safe.
+
+A student must only receive recommendations from resources
+they are authorized to access.
+
+============================================================
+47. SCHOOL CONTENT VS PERSONAL CONTENT
+============================================================
+
+Clearly distinguish:
+
+SCHOOL RESOURCES
+
+from:
+
+MY NOTES
+MY FLASHCARDS
+MY TASKS
+MY STUDY PLANS
+
+Students should immediately understand what belongs
+to the school and what they created themselves.
+
+============================================================
+48. DATA MODEL PRINCIPLE
+============================================================
+
+Before creating new tables/models:
+
+inspect the existing Prisma schema.
+
+Reuse existing entities.
+
+Do not create duplicate concepts.
+
+Potential concepts may include:
+
+LearningResource
+ResourceProgress
+Bookmark
+Note
+FlashcardDeck
+Flashcard
+FlashcardReview
+StudyTask
+StudySession
+StudyGoal
+StudyPlan
+StudyGroup
+GroupMembership
+Discussion
+DiscussionReply
+
+BUT:
+
+These are conceptual possibilities, NOT instructions to blindly
+create every model.
+
+Design only what the actual application requires.
+
+Every student-owned record must have strict ownership.
+
+Every school-related record must have schoolId where appropriate.
+
+============================================================
+49. SECURITY
+============================================================
+
+Learning is not exempt from security.
+
+Enforce:
+
+authenticated access
+school tenancy
+student ownership
+role permissions
+group permissions
+resource permissions
+
+Never trust:
+
+studentId
+schoolId
+role
+
+from the client.
+
+Resolve identity from authenticated server context.
+
+A student must never be able to:
+
+read another student's notes
+read another student's private planner
+modify another student's flashcards
+access private study sessions
+join unauthorized groups
+access restricted school resources
+
+============================================================
+50. RLS / TENANCY
+============================================================
+
+Respect Scholario's multi-tenant architecture.
+
+Every query must be properly scoped.
+
+Where applicable:
+
+schoolId
+studentId
+resourceId
+groupId
+
+must be authorization-checked server-side.
+
+Never depend only on frontend filtering.
+
+============================================================
+51. SEARCH
+============================================================
+
+Use the existing global Student Workspace search.
+
+Do NOT create another permanent global search bar
+inside every Learning section.
+
+Within Learning, contextual search is acceptable for:
+
+resources
+flashcards
+notes
+tasks
+groups
+
+But keep it compact.
+
+============================================================
+52. NAVIGATION
+============================================================
+
+The Learning header should have a clean section switcher:
+
+Learning Hub
+Flashcards
+Study Planner
+Study Groups
+
+Do not add ten tabs.
+
+Advanced functionality should live inside each section.
+
+For example:
+
+Study Planner
+
+Today
+Tasks
+Calendar
+Goals
+Focus
+
+These can be compact local tabs/chips if needed.
+
+============================================================
+53. MOBILE / TABLET
+============================================================
+
+The screenshots clearly show tablet usage.
+
+Treat tablet as a first-class layout.
+
+Do not simply scale desktop down.
+
+For iPad/tablet:
+
+comfortable cards
+touch targets
+clean columns
+no cramped tables
+no excessive whitespace
+no horizontal scrolling where avoidable
+
+For mobile:
+
+stack intelligently.
+
+For desktop:
+
+use available width effectively.
+
+============================================================
+54. RESPONSIVE LEARNING GRID
+============================================================
+
+Resource grids should adapt:
+
+desktop:
+3–4 columns where appropriate
+
+tablet:
+2–3 columns
+
+mobile:
+1 column
+
+But card readability is more important than forcing a specific
+column count.
+
+============================================================
+55. PERFORMANCE
+============================================================
+
+Learning may eventually contain hundreds/thousands of resources.
+
+Do NOT load everything initially.
+
+Use:
+
+pagination
+server-side filtering
+lazy loading
+proper indexes
+selective queries
+caching where safe
+
+The Learning Hub should load quickly.
+
+============================================================
+56. LOADING STATES
+============================================================
+
+Use stable skeletons.
+
+Do not show giant spinners.
+
+Cards should not jump around while loading.
+
+============================================================
+57. EMPTY STATES
+============================================================
+
+Examples:
+
+No saved resources
+
+"Nothing saved yet."
+
+No flashcards due
+
+"You're all caught up."
+
+No study tasks
+
+"Your day is clear."
+
+No study groups
+
+"No groups available yet."
+
+No notes
+
+"Create your first note."
+
+Keep these short.
+
+============================================================
+58. ERROR STATES
+============================================================
+
+Errors must be useful.
+
+Examples:
+
+Unable to load resources
+Unable to save note
+Study session could not be recorded
+Unable to join group
+
+Provide:
+
+what happened
+what to do next
+
+No technical stack traces.
+
+============================================================
+59. ACCESSIBILITY
+============================================================
+
+Use:
+
+semantic controls
+keyboard support
+visible focus
+proper labels
+accessible contrast
+screen-reader friendly status
+
+Never rely on colour alone.
+
+Example:
+
+✓ Completed
+
+not merely:
+
+green dot.
+
+============================================================
+60. GAMIFICATION — USE CAREFULLY
+============================================================
+
+Scholario can be motivating without becoming childish.
+
+Possible:
+
+streak
+milestones
+study goals
+completion rings
+achievement moments
+
+But do not put:
+
+XP
+leaderboard
+coins
+badges
+
+everywhere.
+
+My Progress already owns the gamification experience.
+
+Learning should primarily be about:
+
+learning.
+
+============================================================
+61. NO FAKE STATISTICS
+============================================================
+
+This is CRITICAL.
+
+Do not populate the UI with arbitrary values such as:
+
+248 resources
+42 hours
+88% accuracy
+12 streak
+75% mastery
+
+unless those values come from actual data.
+
+If demo data is required during development,
+use the existing Demo School seed architecture
+and clearly maintain it as legitimate seeded tenant data.
+
+Never hardcode fake statistics into production components.
+
+============================================================
+62. NO DEAD BUTTONS
+============================================================
+
+Every visible action must work.
+
+Examples:
+
+New Card
+Start Review
+Add Task
+Start Focus
+Bookmark
+Create Note
+Join Group
+Ask Question
+Add to Planner
+Download
+Continue
+
+If functionality is not implemented,
+do not present a misleading active button.
+
+============================================================
+63. DESIGN LANGUAGE
+============================================================
+
+The current screenshots contain useful ideas:
+
+rounded cards
+soft borders
+subtle shadows
+compact pills
+colour-coded icons
+strong typography
+large numerical values
+clean navigation
+
+Preserve the design DNA.
+
+But improve:
+
+spacing
+hierarchy
+density
+colour balance
+interaction
+information architecture
+
+Avoid:
+
+giant empty areas
+repeated subtitles
+too many cards
+too many pills
+excessive gradients
+excessive purple
+excessive green
+unnecessary descriptions
+
+============================================================
+64. ICONOGRAPHY
+============================================================
+
+Use the existing icon system consistently.
+
+Do not mix random icon styles.
+
+Icons should communicate meaning.
+
+Do not place decorative icons everywhere.
+
+============================================================
+65. MICRO-INTERACTIONS
+============================================================
+
+Use subtle premium interaction:
+
+hover
+press
+expand
+complete
+bookmark
+timer transitions
+card reveal
+progress update
+
+Animations must be:
+
+fast
+purposeful
+subtle
+
+No distracting animation.
+
+============================================================
+66. LEARNING DASHBOARD SHOULD NOT BE A KPI WALL
+============================================================
+
+The current screenshots sometimes feel like:
+
+four statistics cards
++
+large gradient banner
++
+more cards.
+
+Do not repeat that pattern mechanically.
+
+Learning should prioritize:
+
+ACTION
+CONTEXT
+PROGRESS
+DISCOVERY
+
+over:
+
+STATISTICS.
+
+Use metrics only when they help the student.
+
+============================================================
+67. RECOMMENDED LEARNING HUB STRUCTURE
+============================================================
+
+A polished final Learning Hub could be:
+
+LEARNING
+
+[Search]
+
+----------------------------------
+
+CONTINUE LEARNING
+
+[Resource / Topic]
+
+----------------------------------
+
+TODAY'S FOCUS
+
+45 min
+3 planned items
+
+[Start Study]
+
+----------------------------------
+
+SUBJECTS
+
+Math
+English
+Science
+Hindi
+...
+
+----------------------------------
+
+RECOMMENDED
+
+Based on recent activity / actual data
+
+----------------------------------
+
+RECENT
+
+compact activity
+
+----------------------------------
+
+SAVED
+
+bookmarks
+
+Do not add every section if there is insufficient data.
+
+============================================================
+68. RECOMMENDED STUDY PLANNER STRUCTURE
+============================================================
+
+STUDY PLANNER
+
+Today | Calendar | Goals | Focus
+
+----------------------------------
+
+TODAY'S GOAL
+
+45 / 60 min
+
+----------------------------------
+
+TODAY
+
+08:00
+Maths — Fractions
+25 min
+[Start]
+
+10:30
+English — Reading
+20 min
+[Start]
+
+----------------------------------
+
+UPCOMING
+
+Tomorrow
+Science Revision
+30 min
+
+----------------------------------
+
+[+ Add Task]
+
+[Start Focus]
+
+============================================================
+69. RECOMMENDED FLASHCARD STRUCTURE
+============================================================
+
+FLASHCARDS
+
+Due Today
+18
+
+New
+7
+
+Learning
+12
+
+Mastered
+86
+
+[Start Review]
+
+----------------------------------
+
+YOUR DECKS
+
+Mathematics
+Science
+English
+
+----------------------------------
+
+RECENTLY REVIEWED
+
+...
+
+[+ New Card]
+
+============================================================
+70. RECOMMENDED STUDY GROUP STRUCTURE
+============================================================
+
+STUDY GROUPS
+
+[+ Create Group]
+
+Your Groups
+
+Math Masters
+Science Explorers
+
+----------------------------------
+
+DISCOVER
+
+...
+
+----------------------------------
+
+Q&A
+
+Latest questions
+
+----------------------------------
+
+SHARED RESOURCES
+
+...
+
+============================================================
+71. INTERCONNECTED ACTIONS
+============================================================
+
+This is one of the most important requirements.
+
+A student should be able to:
+
+Resource
+→ Bookmark
+
+Resource
+→ Add to Planner
+
+Resource
+→ Start Study
+
+Resource
+→ Create Flashcard
+
+Resource
+→ Take Quiz
+
+Weak Result
+→ Recommended Revision
+
+Revision
+→ Add to Planner
+
+Planner Task
+→ Start Timer
+
+Timer
+→ Record Study Session
+
+Study Session
+→ Update Goal
+
+Goal
+→ Update Progress
+
+Flashcard Review
+→ Update Mastery
+
+This is the architecture that makes Learning feel like
+one product instead of four pages.
+
+============================================================
+72. SCHOOL SETTINGS
+============================================================
+
+Learning should respect School Settings.
+
+Potential configurable elements:
+
+subjects
+classes
+sections
+academic session
+resource availability
+study groups
+student communication
+teacher access
+content visibility
+allowed resource types
+student-created content permissions
+study group policy
+
+Do not hardcode school configuration.
+
+============================================================
+73. FUTURE-READY ARCHITECTURE
+============================================================
+
+The Learning architecture should remain extensible for future:
+
+AI Tutor
+AI Study Planner
+AI Quiz Generator
+AI Flashcard Generator
+AI Notes Summarizer
+Adaptive Learning
+Learning Analytics
+Exam Preparation
+Personalized Recommendations
+Learning Marketplace
+School Content Library
+
+BUT:
+
+Do not build fake AI functionality now.
+
+Create clean service boundaries so these capabilities
+can be introduced later.
+
+============================================================
+74. AI SHOULD BE AN ENHANCEMENT, NOT THE FOUNDATION
+============================================================
+
+Do not add:
+
+"AI-powered"
+
+to every card.
+
+When AI becomes available, it should solve real problems.
+
+Examples:
+
+"Turn these notes into flashcards"
+
+"Create a revision plan"
+
+"Explain this topic"
+
+"Generate practice questions"
+
+"Find my weak topics"
+
+But only implement these when the project's AI infrastructure
+actually supports them.
+
+============================================================
+75. ADMIN / TEACHER COMPATIBILITY
+============================================================
+
+Student Learning must remain compatible with future/actual
+school-side content management.
+
+A teacher should eventually be able to publish:
+
+resource
+quiz
+study material
+recommended revision
+
+and students should receive it according to:
+
+school
+class
+section
+subject
+permissions
+
+Do not build an isolated student-only content database
+that cannot integrate with school content later.
+
+============================================================
+76. DATA OWNERSHIP
+============================================================
+
+Clearly distinguish:
+
+SCHOOL CONTENT
+→ owned/managed by school
+
+STUDENT CONTENT
+→ owned by student
+
+GROUP CONTENT
+→ governed by group/school policy
+
+SYSTEM CONTENT
+→ platform-owned
+
+This is important for security and future deletion/export policies.
+
+============================================================
+77. PRIVACY
+============================================================
+
+Student private learning information includes:
+
+notes
+study history
+planner
+personal goals
+flashcards
+private bookmarks
+
+Do not expose these to teachers or other students
+unless the student explicitly shares them
+and school policy allows it.
+
+============================================================
+78. EXPORT
+============================================================
+
+Where appropriate, future-ready the architecture for:
+
+Export notes
+Export flashcards
+Export study history
+
+Do not necessarily implement all exports now.
+
+============================================================
+79. FINAL QUALITY BAR
+============================================================
+
+The Learning module should feel comparable in polish to
+a modern premium productivity/education product.
+
+It should NOT feel like:
+
+a school ERP
+a spreadsheet
+a static dashboard
+a collection of fake cards
+a generic AI-generated UI
+
+It should feel:
+
+intentional
+fast
+colourful
+smart
+calm
+motivating
+deep
+useful
+
+============================================================
+80. IMPLEMENTATION ORDER
+============================================================
+
+DO NOT attempt to blindly rewrite everything at once.
+
+First inspect the existing implementation.
+
+Then execute in this order:
+
+PHASE 1
+Safely decommission Student Workspace Classwork.
+
+PHASE 2
+Audit existing Learning implementation.
+
+PHASE 3
+Establish/refine Learning design system.
+
+PHASE 4
+Rebuild Learning Hub.
+
+PHASE 5
+Rebuild Flashcards + Notes.
+
+PHASE 6
+Rebuild Study Planner + To-Do.
+
+PHASE 7
+Build advanced Study Timer / Focus Mode.
+
+PHASE 8
+Upgrade Study Groups / Q&A / Shared Resources.
+
+PHASE 9
+Connect Learning with Results, resources,
+planner and study sessions.
+
+PHASE 10
+Security + authorization + RLS verification.
+
+PHASE 11
+Responsive/tablet/mobile optimization.
+
+PHASE 12
+Performance + accessibility + empty/error/loading states.
+
+PHASE 13
+Final architecture and regression audit.
+
+============================================================
+81. BEFORE WRITING CODE
+============================================================
+
+Inspect:
+
+ARCHITECTURE_CONSTITUTION_v1.md
+
+Prisma schema
+
+Supabase policies
+
+Student Workspace layout
+
+navigation
+
+search
+
+authentication
+
+permissions
+
+School Settings
+
+Results
+
+Attendance
+
+Messages
+
+Notifications
+
+existing Learning routes
+
+existing Learning components
+
+existing Learning database models
+
+existing seed/demo data
+
+Do not duplicate existing abstractions.
+
+============================================================
+82. ABSOLUTE RULE: REAL FUNCTIONALITY
+============================================================
+
+Do not confuse:
+
+"beautiful UI"
+
+with:
+
+"finished feature."
+
+A feature is complete only when:
+
+UI
++
+state
++
+backend
++
+database
++
+authorization
++
+error handling
++
+loading
++
+empty state
+
+are appropriately implemented.
+
+For features that are intentionally UI-only at this stage,
+clearly keep them non-destructive and do not pretend they work.
+
+============================================================
+83. FINAL STUDENT EXPERIENCE
+============================================================
+
+When a student opens Learning, the feeling should be:
+
+"I know what to study."
+
+"I can continue where I stopped."
+
+"I can plan my day."
+
+"I can focus."
+
+"I can revise."
+
+"I can make notes."
+
+"I can use flashcards."
+
+"I can find resources."
+
+"I can study with classmates safely."
+
+"I can see my progress."
+
+"I don't need five different apps."
+
+That is the goal.
+
+============================================================
+84. FINAL PRODUCT PHILOSOPHY
+============================================================
+
+SCHOLARIO LEARNING IS NOT:
+
+Resources + Flashcards + Planner + Groups.
+
+It is:
+
+A PERSONAL LEARNING OS.
+
+The student comes in with a goal.
+
+Scholario helps them:
+
+DISCOVER
+→ PLAN
+→ STUDY
+→ PRACTICE
+→ REVISE
+→ FOCUS
+→ TRACK
+→ IMPROVE
+
+Everything should support this loop.
+
+============================================================
+85. FINAL CHECKLIST
+============================================================
+
+CLASSWORK
+
+[ ] Removed from Student Workspace navigation
+[ ] Routes safely decommissioned
+[ ] Dead imports removed
+[ ] Dead UI references removed
+[ ] Search references removed
+[ ] Shared infrastructure preserved
+[ ] No broken navigation
+[ ] No fake Classwork page
+
+LEARNING
+
+[ ] Learning Hub redesigned
+[ ] Resource discovery improved
+[ ] Subject experience improved
+[ ] Flashcards rebuilt
+[ ] Spaced repetition supported
+[ ] Notes supported
+[ ] Study Planner rebuilt
+[ ] To-do supported
+[ ] Goals supported
+[ ] Calendar supported where appropriate
+[ ] Study Timer implemented properly
+[ ] Focus Mode implemented
+[ ] Study sessions persisted
+[ ] Study Groups improved
+[ ] Q&A improved
+[ ] Shared resources improved
+[ ] Moderation/security considered
+[ ] Cross-module connections implemented
+[ ] No duplicate messaging system
+[ ] Results integration only where justified
+[ ] School Settings respected
+[ ] Real data used
+[ ] No hardcoded fake statistics
+[ ] No dead buttons
+[ ] No unnecessary text
+[ ] No repeated class/session information
+[ ] Colourful but premium
+[ ] Tablet optimized
+[ ] Mobile optimized
+[ ] Desktop optimized
+[ ] Loading states
+[ ] Empty states
+[ ] Error states
+[ ] Accessibility
+[ ] Performance
+[ ] RLS/authorization
+[ ] Tenant isolation
+[ ] Student privacy
+[ ] Future AI architecture remains possible
+
+============================================================
+FINAL INSTRUCTION
+============================================================
+
+DO NOT simply redesign the screenshots.
+
+Use them to understand what currently exists.
+
+Then build the better product.
+
+Do not make Learning "look advanced".
+
+Make Learning genuinely advanced underneath,
+while keeping the student's experience extremely simple.
+
+Hide complexity behind excellent UX.
+
+The interface should be:
+
+COLOURFUL
+PREMIUM
+CLEAN
+FAST
+INTUITIVE
+MOTIVATING
+FUNCTIONALLY DEEP
+
+without becoming:
+
+CLUTTERED
+TEXT-HEAVY
+CHILDISH
+OVER-GAMIFIED
+OVER-ANIMATED
+OVER-DESIGNED
+
+The golden rule:
+
+MORE CAPABILITY UNDER THE HOOD.
+LESS COGNITIVE LOAD ON THE STUDENT.
+
+Build Scholario Learning as a true Student Learning OS.

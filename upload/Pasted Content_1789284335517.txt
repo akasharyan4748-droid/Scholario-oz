@@ -1,0 +1,1922 @@
+SCHOLARIO-OS — STUDENT WORKSPACE
+MODULE: FEES
+FULL PRODUCTION-GRADE REDESIGN + FUNCTIONALITY UPGRADE
+
+IMPORTANT:
+
+You are NOT being asked to merely redesign the existing Fees page.
+
+You are being asked to evolve Fees into a complete, production-grade,
+secure, transparent and extremely easy-to-use financial experience
+inside the Scholario Student Workspace.
+
+The existing screenshot/page is a VISUAL REFERENCE and starting point.
+
+Do not blindly preserve its limitations.
+
+Study the existing application, architecture, database models,
+authentication, permissions, School Settings, existing Student Workspace,
+navigation patterns and previously implemented modules BEFORE making changes.
+
+DO NOT break existing functionality.
+
+DO NOT create fake backend functionality merely to make the UI look complete.
+
+Everything that appears actionable must either:
+1. work end-to-end, or
+2. clearly communicate that the capability is not configured/enabled.
+
+Never simulate successful payments, receipts, balances, messages or financial records.
+
+========================================================
+1. PRODUCT PRINCIPLE
+========================================================
+
+Fees should feel like:
+
+A premium digital school finance desk.
+
+Not:
+
+"a page showing ₹9,500".
+
+The student/parent should be able to understand their financial position
+within seconds.
+
+The system should answer:
+
+• What do I owe?
+• What have I already paid?
+• What is due now?
+• What is due later?
+• What exactly is each charge for?
+• Was any concession/discount applied?
+• When was the payment made?
+• What payment method was used?
+• Where is my receipt?
+• What happens if I cannot pay online?
+• Who can I contact?
+• What is the status of my request?
+• Is there any pending action?
+• Can I safely raise a question/dispute?
+• Can I download official documents?
+
+The experience must maximize:
+
+TRANSPARENCY
+SECURITY
+CLARITY
+ACCOUNTABILITY
+EASE OF USE
+
+while minimizing:
+
+TEXT
+CLUTTER
+CONFUSION
+UNNECESSARY CLICKS
+UNNECESSARY FORMS
+REPEATED INFORMATION
+
+========================================================
+2. DO NOT OVER-REPEAT CONTEXT
+========================================================
+
+One of the biggest problems in the current Student Workspace is
+repeated text such as:
+
+Class 2-A
+Section A
+AY 2026–2027
+School name
+
+appearing repeatedly in every module.
+
+STOP doing this.
+
+The global Student Workspace already knows:
+
+student
+school
+class
+section
+academic year
+
+Use that context intelligently.
+
+Fees should primarily say:
+
+"My Fees"
+
+and then show the relevant financial period.
+
+For example:
+
+My Fees
+2026–27
+
+Instead of:
+
+My Fees
+Academic Year 2026–2027 · Demo School of Scholario
+Class 2-A · Section A · AY 2026–2027
+
+Do not waste valuable visual space repeating information
+the workspace already establishes.
+
+========================================================
+3. VISUAL DIRECTION
+========================================================
+
+The existing Student Workspace has established a premium visual language.
+
+Timetable is the benchmark for:
+
+• spacing
+• hierarchy
+• readability
+• information density
+• card geometry
+• interaction quality
+
+My Progress is the benchmark for:
+
+• tasteful colourfulness
+• student-friendly personality
+• visual richness
+• multi-accent design
+
+Fees should combine BOTH.
+
+Do NOT make the entire Fees module green.
+
+Green may represent:
+
+PAID
+SUCCESS
+CONFIRMED
+HEALTHY FINANCIAL STATUS
+
+but it must not dominate every surface.
+
+Use a controlled financial colour system:
+
+GREEN / EMERALD
+→ Paid
+→ Successful
+→ Cleared
+
+VIOLET
+→ Financial information
+→ statements
+→ account/ledger insights
+
+AMBER / ORANGE
+→ Due soon
+→ upcoming payment
+→ attention
+
+CORAL / RED
+→ overdue
+→ failed
+→ disputed
+→ action required
+
+CYAN / BLUE
+→ information
+→ support
+→ payment methods
+→ informational states
+
+NEUTRAL
+→ normal content
+→ inactive
+→ future
+→ background
+
+The overall interface should remain:
+
+~70% neutral
+~15% primary/positive
+~15% contextual accents
+
+Do not turn it into a rainbow interface.
+
+========================================================
+4. FEES HOME — INFORMATION HIERARCHY
+========================================================
+
+The top of the page should immediately communicate the student's
+financial state.
+
+Recommended structure:
+
+MY FEES
+
+2026–27
+
+[Financial period selector if multiple periods exist]
+
+------------------------------------------------
+
+TOTAL PAYABLE
+₹9,500
+
+PAID
+₹4,750
+
+BALANCE DUE
+₹4,750
+
+DUE NEXT
+₹2,000
+18 Sep
+
+------------------------------------------------
+
+A visual payment progress indicator:
+
+₹4,750 paid
+50% complete
+
+₹4,750 remaining
+
+The balance should be the most important actionable figure.
+
+Do NOT create four huge equal cards if the information hierarchy
+does not justify it.
+
+The interface should clearly distinguish:
+
+TOTAL
+PAID
+DUE
+OVERDUE
+
+========================================================
+5. FINANCIAL STATUS
+========================================================
+
+Create an intelligent financial status state.
+
+Examples:
+
+ALL CLEAR
+No payment currently due.
+
+PAYMENT DUE
+A payment is approaching.
+
+DUE SOON
+Payment due within configured reminder period.
+
+OVERDUE
+Payment deadline has passed.
+
+PARTIALLY PAID
+Some amount has been paid.
+
+PAYMENT UNDER REVIEW
+A payment has been submitted but not yet reconciled.
+
+PAYMENT FAILED
+A payment attempt failed.
+
+DISPUTE OPEN
+A fee/payment issue is under review.
+
+These states must be database-driven.
+
+Never hardcode them.
+
+School fee policies and due dates must come from the school's
+configured financial settings.
+
+========================================================
+6. FEE BREAKDOWN
+========================================================
+
+Students/parents must be able to see EXACTLY what they are being charged.
+
+Create a clean expandable:
+
+FEE BREAKDOWN
+
+Tuition Fee                         ₹4,000
+Transport                          ₹1,500
+Annual Charges                     ₹1,000
+Development Fee                   ₹1,000
+Books                              ₹1,000
+Computer / Lab Fee                ₹1,000
+
+Subtotal                           ₹9,500
+
+Concession                         -₹500
+
+TOTAL                              ₹9,000
+
+The actual items must come from the school's fee configuration.
+
+Do not invent categories.
+
+Do not hardcode fees.
+
+Each line should optionally expose:
+
+• fee category
+• billing period
+• quantity if applicable
+• original amount
+• concession
+• final amount
+• due date
+• status
+
+========================================================
+7. CONCESSIONS / DISCOUNTS
+========================================================
+
+Financial transparency is extremely important.
+
+If a concession exists, clearly show it.
+
+Example:
+
+Sibling concession
+-₹500
+
+However, respect school configuration.
+
+The school may configure:
+
+SHOW_DISCOUNT_BREAKDOWN = true/false
+
+If disabled:
+
+Do NOT expose confidential/internal discount details.
+
+Instead show:
+
+Adjusted total
+₹9,000
+
+This must be controlled through School Settings.
+
+Never leak internal financial information.
+
+========================================================
+8. INSTALLMENTS
+========================================================
+
+Support structured installment schedules.
+
+Example:
+
+TERM 1
+₹3,000
+Paid
+
+TERM 2
+₹3,000
+Due 15 Sep
+
+TERM 3
+₹3,000
+Upcoming
+
+Each installment should show:
+
+amount
+due date
+status
+payment date if paid
+receipt if available
+
+Use a timeline or compact payment schedule.
+
+Do NOT make the student scroll through enormous tables
+for simple installment information.
+
+========================================================
+9. PAYMENT ACTION
+========================================================
+
+If online payments are configured:
+
+Show:
+
+PAY NOW
+
+Then present a clean payment flow.
+
+Step 1:
+Select payable item/installment.
+
+Step 2:
+Review amount.
+
+Step 3:
+Select configured payment method.
+
+Step 4:
+Secure payment gateway.
+
+Step 5:
+Payment result.
+
+Step 6:
+Receipt.
+
+Do not ask users to manually enter information that Scholario
+already knows.
+
+Never expose sensitive gateway information unnecessarily.
+
+Never store card credentials.
+
+Use the configured payment provider.
+
+========================================================
+10. PAYMENT STATES
+========================================================
+
+Handle every realistic state:
+
+idle
+initiated
+processing
+success
+failed
+cancelled
+expired
+pending
+under_review
+refunded
+
+The UI must NOT say "Paid" merely because a payment button
+was clicked.
+
+Only confirmed/reconciled backend state can mark a transaction
+as successful.
+
+If the gateway reports uncertain status:
+
+PAYMENT PROCESSING
+
+and explain briefly:
+
+"We're confirming your payment. You don't need to pay again."
+
+Avoid duplicated payments.
+
+========================================================
+11. ONLINE PAYMENTS NOT CONFIGURED
+========================================================
+
+The screenshot currently shows:
+
+Online payments unavailable.
+
+This is acceptable IF the school genuinely has no payment
+gateway configured.
+
+But improve the experience.
+
+Instead of a dead informational box:
+
+ONLINE PAYMENTS UNAVAILABLE
+
+Online payments are currently not enabled by your school.
+
+Then show:
+
+HOW TO PAY
+
+configured offline methods from School Settings.
+
+Examples:
+
+Cash
+School Office
+Bank Transfer
+UPI
+Cheque
+
+Only show methods actually configured.
+
+If the school provides instructions:
+
+Office timing
+office location
+bank details
+UPI information
+
+display them securely.
+
+Never fabricate payment information.
+
+========================================================
+12. OFFLINE PAYMENT REQUEST
+========================================================
+
+If the school supports offline payment reporting,
+allow:
+
+"Report a payment"
+
+The student/parent can submit:
+
+amount
+date
+method
+reference number
+optional proof/document
+
+Status:
+
+Submitted
+Under Review
+Verified
+Rejected
+
+The student cannot mark their own payment as "paid".
+
+Only an authorized school financial/admin role can verify it.
+
+========================================================
+13. PAYMENT HISTORY
+========================================================
+
+Payment History should be highly polished.
+
+Each transaction should show:
+
+Receipt No.
+Date
+Purpose
+Amount
+Method
+Status
+
+But optimize for scanning.
+
+Example:
+
+₹4,750
+Term 1 Fees
+10 Jul 2026
+UPI
+SUCCESS
+
+[View receipt]
+
+Avoid giant spreadsheet-like tables on smaller screens.
+
+Desktop may use table layout.
+
+Tablet/mobile should transform into compact transaction cards.
+
+========================================================
+14. RECEIPTS
+========================================================
+
+Every confirmed payment should have an official receipt
+when the school configuration requires one.
+
+Receipt actions:
+
+View
+Download
+Print
+
+The receipt must be generated from the official school
+document/template system.
+
+Include appropriate:
+
+School identity
+Receipt number
+Student
+Financial period
+Payment date
+Amount
+Purpose
+Payment method
+Transaction/reference number
+Authorized information
+
+Do not expose unnecessary personal data.
+
+Receipt numbers must be immutable.
+
+Students cannot edit receipts.
+
+========================================================
+15. STATEMENT
+========================================================
+
+Add:
+
+VIEW FEE STATEMENT
+
+This should provide a chronological financial statement.
+
+Example:
+
+Opening balance
+Charges
+Concessions
+Payments
+Adjustments
+Refunds
+Closing balance
+
+Allow:
+
+Download PDF
+Print
+
+The statement must reflect the actual ledger.
+
+Never calculate a separate fake balance in the frontend.
+
+========================================================
+16. FINANCIAL TIMELINE
+========================================================
+
+Create a compact timeline for transparency.
+
+Example:
+
+10 Jul
+₹4,750 payment received
+✓ Reconciled
+
+01 Jul
+Term 1 fee posted
+₹4,750
+
+15 Jun
+Sibling concession applied
+-₹500
+
+This gives the student/parent confidence that
+the ledger is explainable.
+
+========================================================
+17. DUE DATES & REMINDERS
+========================================================
+
+Show only useful reminders.
+
+Example:
+
+DUE IN 3 DAYS
+Term 2 fee · ₹3,000
+
+Do not spam the user.
+
+Reminder frequency must respect school settings.
+
+Students/parents should see:
+
+Upcoming
+Due today
+Overdue
+
+Do not repeatedly display the same warning everywhere.
+
+========================================================
+18. DIRECT COMMUNICATION
+========================================================
+
+THIS IS A MAJOR REQUIREMENT.
+
+Students must be able to connect with the appropriate
+authorized school personnel.
+
+Do NOT simply expose a generic "Contact us" button.
+
+Create contextual communication.
+
+Example:
+
+Question about this fee?
+
+[Ask about this payment]
+
+The system should route the conversation based on
+configured responsibility.
+
+Possible recipients:
+
+Accounts Office
+Class Teacher
+Principal
+School Admin
+Authorized Fee Officer
+
+IMPORTANT:
+
+Do not automatically route every financial question to
+the class teacher.
+
+Use responsibility rules.
+
+Examples:
+
+Fee amount / ledger / receipt
+→ Accounts / authorized finance staff
+
+Fee concession request
+→ Authorized school admin / principal
+
+General student concern
+→ Class Teacher
+
+Escalated unresolved issue
+→ Principal / designated authority
+
+========================================================
+19. STUDENT ↔ CLASS TEACHER
+========================================================
+
+The student should be able to communicate with their
+currently assigned Class Teacher through Scholario's
+existing secure messaging system.
+
+However:
+
+Do NOT create a second messaging system inside Fees.
+
+Reuse the central Messages/Communication architecture.
+
+Fees should create contextual entry points.
+
+Example:
+
+"Ask my Class Teacher"
+
+This opens the existing secure conversation system
+with context attached:
+
+Subject:
+Fee question
+
+Context:
+Term 2 fee
+
+Student:
+[student]
+
+The teacher should not receive sensitive financial information
+that they are not authorized to see.
+
+Only minimum necessary information should be exposed.
+
+========================================================
+20. STUDENT ↔ PRINCIPAL
+========================================================
+
+Provide an escalation pathway.
+
+Do NOT put a giant "Message Principal" button everywhere.
+
+Use:
+
+Need further help?
+
+[Request school review]
+
+The request should follow the school's configured workflow.
+
+Example:
+
+Student
+↓
+Accounts / designated staff
+↓
+Escalation if unresolved
+↓
+Principal
+
+The student should be able to see:
+
+Request ID
+Submitted
+Assigned to
+Current status
+Last update
+Expected next action
+
+This is critical for transparency.
+
+========================================================
+21. FEE QUERY / DISPUTE
+========================================================
+
+Allow students/parents to raise a structured issue.
+
+Example:
+
+"Something doesn't look right"
+
+Form should be minimal:
+
+Issue type:
+• Incorrect amount
+• Payment missing
+• Receipt issue
+• Concession issue
+• Duplicate charge
+• Other
+
+Related transaction/fee:
+[automatically selected]
+
+Message:
+[short field]
+
+Attachment:
+optional
+
+Submit.
+
+Then provide a case timeline.
+
+Status:
+
+OPEN
+ASSIGNED
+UNDER REVIEW
+WAITING FOR INFORMATION
+RESOLVED
+CLOSED
+
+The user must never wonder:
+
+"Did the school receive my complaint?"
+
+========================================================
+22. SECURITY
+========================================================
+
+This is financial information.
+
+Treat Fees as a HIGH-SENSITIVITY module.
+
+Implement strict authorization.
+
+Student can:
+
+VIEW own fees
+VIEW own payments
+VIEW own receipts
+MAKE authorized payment
+REPORT offline payment
+RAISE issue
+VIEW own requests
+
+Student CANNOT:
+
+edit fee amounts
+edit ledger
+delete payments
+modify receipts
+verify own payment
+change concessions
+change due dates
+view another student's fees
+view school-wide financial information
+access internal accounting notes
+
+Parent:
+
+Only authorized children/wards.
+
+Teacher:
+
+Only financial information explicitly required
+for their role.
+
+Class Teacher should NOT automatically receive:
+
+full fee ledger
+payment method
+bank reference
+concession details
+financial history
+
+unless school policy explicitly grants permission.
+
+Principal:
+
+Broader visibility according to school permissions.
+
+Finance/Admin:
+
+Full financial workflows according to permission.
+
+Super Admin:
+
+Platform-level controls only.
+Do not mix school financial data casually.
+
+========================================================
+23. TENANCY
+========================================================
+
+Every financial query MUST be scoped to:
+
+schoolId
+studentId
+academicSessionId
+
+where applicable.
+
+Never rely on frontend filtering for tenant isolation.
+
+Every server-side query must enforce authorization.
+
+Never trust:
+
+schoolId
+studentId
+role
+
+coming directly from the client.
+
+Resolve identity server-side from authenticated context.
+
+========================================================
+24. AUDIT LOGGING
+========================================================
+
+Financial operations require auditability.
+
+Log important events:
+
+fee_created
+fee_updated
+fee_assigned
+concession_applied
+payment_initiated
+payment_success
+payment_failed
+payment_reconciled
+offline_payment_submitted
+offline_payment_verified
+offline_payment_rejected
+receipt_generated
+receipt_downloaded if policy requires
+refund_created
+dispute_created
+dispute_updated
+dispute_resolved
+
+Audit records should capture:
+
+actor
+role
+school
+timestamp
+action
+target
+relevant metadata
+
+Never allow normal users to alter audit records.
+
+========================================================
+25. ROLE-AWARE EXPERIENCE
+========================================================
+
+The same Fees module must adapt to the authenticated role.
+
+STUDENT:
+
+"My Fees"
+
+View
+Pay
+Receipts
+Statement
+Raise issue
+Ask for help
+
+PARENT:
+
+Children selector
+Per-child financial view
+Pay
+Receipts
+Statements
+Issues
+
+CLASS TEACHER:
+
+Only relevant student fee signals if authorized.
+
+Example:
+
+"3 students have fee-related communication pending"
+
+Do not expose financial details unnecessarily.
+
+PRINCIPAL:
+
+Financial overview appropriate to their school-level permissions.
+
+Examples:
+
+Outstanding
+Collections
+Pending verification
+Disputes
+Escalations
+
+FINANCE / SCHOOL ADMIN:
+
+Full fee ledger
+fee structures
+payments
+reconciliation
+receipts
+concessions
+refunds
+disputes
+reports
+
+SUPER ADMIN:
+
+Platform controls only.
+
+========================================================
+26. SCHOOL SETTINGS INTEGRATION
+========================================================
+
+DO NOT hardcode financial configuration.
+
+Fees must consume School Settings.
+
+Possible configuration sources:
+
+Fee categories
+Fee templates
+Academic sessions
+Installment schedules
+Due dates
+Late fee rules
+Concession types
+Payment methods
+Payment gateway
+Offline payment instructions
+Reminder policy
+Receipt templates
+Statement templates
+Financial permissions
+Escalation workflow
+
+If a configuration is disabled,
+the corresponding feature should disappear or become
+clearly unavailable.
+
+Do not show empty fake functionality.
+
+========================================================
+27. LATE FEES
+========================================================
+
+If the school has a late-fee policy:
+
+Show:
+
+Original amount
+Late fee
+Current payable
+
+Example:
+
+Term 2 fee             ₹3,000
+Late fee                 ₹150
+Current due             ₹3,150
+
+Explain briefly why the amount changed.
+
+Do not silently add charges.
+
+The backend must calculate the authoritative amount.
+
+========================================================
+28. REFUNDS / ADJUSTMENTS
+========================================================
+
+If applicable, show:
+
+Refund
+Adjustment
+Credit
+
+clearly.
+
+Example:
+
+Refund issued
+₹500
+12 Sep 2026
+
+Do not treat refunds as negative payments without explanation.
+
+========================================================
+29. SEARCH
+========================================================
+
+Use the existing Student Workspace global search architecture.
+
+Do not add a second large search system inside Fees.
+
+Search should be able to find relevant:
+
+receipt numbers
+transactions
+fee categories
+statements
+payment requests
+
+only within the user's authorized scope.
+
+========================================================
+30. RESPONSIVE DESIGN
+========================================================
+
+The application is being viewed on an iPad/tablet.
+
+But design responsively for:
+
+desktop
+tablet
+mobile
+
+Do not simply shrink desktop tables.
+
+At tablet/mobile:
+
+convert complex tables into structured cards.
+
+Maintain:
+
+clear hierarchy
+touch-friendly targets
+comfortable spacing
+no horizontal scrolling wherever avoidable.
+
+========================================================
+31. ACCESSIBILITY
+========================================================
+
+Use:
+
+semantic buttons
+proper labels
+keyboard navigation
+visible focus
+sufficient contrast
+accessible status indicators
+
+Never communicate financial status using colour alone.
+
+For example:
+
+green + "Paid"
+
+not merely:
+
+green dot.
+
+========================================================
+32. EMPTY STATES
+========================================================
+
+Create excellent meaningful empty states.
+
+No fees:
+
+"No fees have been posted yet."
+
+No transactions:
+
+"No payments recorded yet."
+
+No receipt:
+
+"Receipt will appear once the payment is reconciled."
+
+No upcoming dues:
+
+"You're all clear for now."
+
+No disputes:
+
+"No open requests."
+
+Never show fake zero-data charts.
+
+========================================================
+33. ERROR STATES
+========================================================
+
+Design real error states.
+
+Examples:
+
+Unable to load fees
+Payment failed
+Receipt unavailable
+Statement generation failed
+Offline payment submission failed
+
+Every error should tell the user:
+
+what happened
+what they can do next
+
+without technical jargon.
+
+========================================================
+34. LOADING STATES
+========================================================
+
+Use elegant skeleton states.
+
+Do not use giant spinners.
+
+Layout should remain stable while loading.
+
+========================================================
+35. NO OVER-TEXTING
+========================================================
+
+This is extremely important.
+
+Do NOT turn every card into a paragraph.
+
+Prefer:
+
+Title
+value
+small context
+action
+
+Example:
+
+BALANCE DUE
+₹4,750
+Due 18 Sep
+
+[Pay now]
+
+NOT:
+
+"You currently have an outstanding balance of ₹4,750 which is
+due on September 18, 2026 and you can make your payment..."
+
+Keep text short.
+
+========================================================
+36. MICRO-INTERACTIONS
+========================================================
+
+Use subtle premium interactions:
+
+hover
+press
+expand/collapse
+success feedback
+copy receipt number
+download feedback
+payment processing state
+
+No excessive animations.
+
+No flashy effects.
+
+No glassmorphism.
+
+No neon.
+
+No unnecessary gradients.
+
+========================================================
+37. COLOURFUL BUT PREMIUM
+========================================================
+
+Use colour strategically.
+
+Example:
+
+Total Fees
+neutral + violet accent
+
+Paid
+soft emerald
+
+Balance Due
+soft amber
+
+Overdue
+soft coral
+
+Receipt
+cyan
+
+Financial support
+violet
+
+Payment success
+emerald
+
+This should feel closer to:
+
+Linear
+Stripe Dashboard
+Apple-quality productivity UI
+premium modern education platform
+
+than a traditional school ERP.
+
+========================================================
+38. FINANCIAL DASHBOARD — OPTIONAL INTELLIGENCE
+========================================================
+
+If enough real data exists, provide subtle insights.
+
+Examples:
+
+"50% of this year's fees are paid."
+
+"Next payment due in 6 days."
+
+"All previous payments are reconciled."
+
+"₹1,500 remains after this month's payment."
+
+Do NOT fabricate insights when data is insufficient.
+
+========================================================
+39. DATA INTEGRITY
+========================================================
+
+CRITICAL.
+
+Never derive authoritative financial information
+from static frontend arrays.
+
+The backend/database is the source of truth.
+
+Frontend only displays authorized data.
+
+Use proper server-side validation.
+
+Use decimal-safe monetary handling.
+
+Do not use floating-point arithmetic carelessly for currency.
+
+Store/display currency correctly.
+
+Currency should be school-configured,
+with INR as the expected default for this deployment.
+
+========================================================
+40. PAYMENT SECURITY
+========================================================
+
+Never store:
+
+card numbers
+CVV
+UPI PIN
+bank passwords
+gateway credentials
+
+in Scholario's application database.
+
+Use the payment provider's secure flow.
+
+Secrets must remain server-side.
+
+Never expose service-role keys or gateway secrets
+to client components.
+
+========================================================
+41. PERFORMANCE
+========================================================
+
+The Fees module must be fast.
+
+Avoid loading:
+
+all transactions
+all receipts
+all statements
+all school financial records
+
+on initial render.
+
+Use:
+
+pagination
+server-side fetching
+lazy loading
+appropriate caching
+selective queries
+
+Only load what the student needs.
+
+========================================================
+42. DOCUMENT GENERATION
+========================================================
+
+Receipts and statements must integrate with
+Scholario's existing official document/template architecture.
+
+Do not create random one-off PDF designs inside Fees.
+
+School branding should come from:
+
+School Settings
+Branding
+Document Templates
+
+Respect:
+
+logo
+school name
+address
+configured signatures
+seal
+document numbering
+
+========================================================
+43. NOTIFICATIONS
+========================================================
+
+Integrate with the existing notification architecture.
+
+Relevant events:
+
+fee posted
+payment due
+payment successful
+payment failed
+receipt available
+offline payment verified
+offline payment rejected
+dispute update
+refund issued
+
+Notifications must be configurable.
+
+Avoid notification spam.
+
+========================================================
+44. TRANSPARENCY PRINCIPLE
+========================================================
+
+At every financial interaction, the user should be able to answer:
+
+WHAT
+HOW MUCH
+WHY
+WHEN
+STATUS
+WHAT NEXT
+
+Example:
+
+TERM 2 TUITION
+₹3,000
+Due 18 Sep
+Unpaid
+
+[Pay ₹3,000]
+
+That's better than a paragraph explaining the same thing.
+
+========================================================
+45. PRINCIPAL / CLASS TEACHER CONNECTION
+========================================================
+
+This requirement must be implemented architecturally,
+not merely visually.
+
+Student should have a trusted communication path.
+
+Example:
+
+FEE SUPPORT
+
+Accounts Office
+For payment, ledger and receipt questions
+
+Class Teacher
+For class-related concerns
+
+School Review
+For escalation
+
+Principal
+For authorized escalation
+
+But do not necessarily show all four as giant buttons.
+
+Use progressive disclosure.
+
+Primary:
+
+[Get help]
+
+Then:
+
+Payment / receipt
+→ Accounts
+
+Class-related
+→ Class Teacher
+
+Need escalation
+→ School Review
+
+Principal becomes an escalation endpoint where configured.
+
+Reuse the central Messages system.
+
+========================================================
+46. ADMIN-SIDE COMPATIBILITY
+========================================================
+
+Do not design Student Fees in isolation.
+
+Any student-facing action must map cleanly
+to corresponding school-side workflows.
+
+For example:
+
+Student raises dispute
+→ Finance/Admin sees case
+→ staff responds
+→ student sees response
+
+Offline payment submitted
+→ Finance/Admin reviews
+→ verifies
+→ ledger updates
+→ receipt becomes available
+
+Concession applied
+→ authorized staff action
+→ audit entry
+→ student sees adjusted amount
+
+Payment successful
+→ gateway
+→ webhook/backend verification
+→ ledger reconciliation
+→ receipt
+→ notification
+
+The student UI must represent the REAL workflow.
+
+========================================================
+47. DO NOT CREATE DUPLICATE SYSTEMS
+========================================================
+
+Do not create:
+
+another messaging system
+another notification system
+another document system
+another permission system
+another school settings system
+another audit system
+
+Reuse the existing Scholario architecture.
+
+Fees is a module,
+not a separate application.
+
+========================================================
+48. IMPLEMENTATION PROCESS
+========================================================
+
+Before coding:
+
+1. Inspect the existing repository.
+
+2. Read ARCHITECTURE_CONSTITUTION_v1.md.
+
+3. Inspect current Prisma schema.
+
+4. Inspect Supabase policies.
+
+5. Inspect Student Workspace layout.
+
+6. Inspect existing Messages architecture.
+
+7. Inspect School Settings.
+
+8. Inspect existing document/PDF architecture.
+
+9. Inspect existing role/permission system.
+
+10. Inspect existing notification system.
+
+11. Inspect existing Fee-related models/API/routes if present.
+
+12. Identify what already works.
+
+13. Preserve working functionality.
+
+14. Refactor only where necessary.
+
+Do not duplicate existing abstractions.
+
+========================================================
+49. DATABASE / BACKEND
+========================================================
+
+If existing fee models are insufficient,
+design proper normalized financial entities.
+
+Potential concepts:
+
+FeeTemplate
+FeeStructure
+FeeAssignment
+FeeComponent
+Installment
+Concession
+Payment
+PaymentAllocation
+Receipt
+Refund
+FeeAdjustment
+PaymentRequest
+FeeDispute
+FinancialStatement
+PaymentMethod
+FeeNotification
+
+BUT:
+
+Do not blindly create all of these.
+
+First inspect the existing schema.
+
+Reuse existing models where appropriate.
+
+Every model must support strict school tenancy.
+
+Every financial record should have appropriate immutable identifiers.
+
+========================================================
+50. API / SERVER ACTIONS
+========================================================
+
+All financial operations must be server-authorized.
+
+Examples:
+
+getStudentFeeSummary
+getStudentFeeBreakdown
+getInstallmentSchedule
+getPaymentHistory
+getReceipt
+getFeeStatement
+createPaymentIntent
+verifyPayment
+submitOfflinePayment
+raiseFeeIssue
+getFeeSupportContacts
+
+Names should follow the existing project conventions.
+
+Do not invent a parallel API style.
+
+========================================================
+51. AUTHORIZATION
+========================================================
+
+Implement authorization at the server boundary.
+
+Do not rely on:
+
+hidden buttons
+frontend role checks
+URL obscurity
+
+A student manually calling an endpoint must still only receive
+their own authorized financial data.
+
+========================================================
+52. FINAL UX STRUCTURE
+========================================================
+
+Preferred high-level layout:
+
+MY FEES
+2026–27
+
+[Period / relevant filter]
+
+----------------------------------------
+
+FINANCIAL OVERVIEW
+
+Total
+₹9,500
+
+Paid
+₹4,750
+
+Balance
+₹4,750
+
+[Progress]
+
+----------------------------------------
+
+NEXT PAYMENT
+
+Term 2
+₹3,000
+Due 18 Sep
+
+[Pay now]
+
+----------------------------------------
+
+FEE BREAKDOWN
+
+Tuition
+Transport
+Books
+Other configured charges
+
+----------------------------------------
+
+PAYMENT HISTORY
+
+10 Jul
+₹4,750
+Term 1
+UPI
+Paid
+
+[Receipt]
+
+----------------------------------------
+
+STATEMENT
+
+[View statement]
+[Download]
+
+----------------------------------------
+
+NEED HELP?
+
+[Get help]
+
+----------------------------------------
+
+Only add additional sections when real data
+or enabled school functionality justifies them.
+
+========================================================
+53. VISUAL QUALITY BAR
+========================================================
+
+The final page must feel:
+
+PREMIUM
+CALM
+TRUSTWORTHY
+COLOURFUL
+INTELLIGENT
+MODERN
+FAST
+SECURE
+STUDENT-FRIENDLY
+
+It should NOT feel:
+
+cheap
+crowded
+childish
+generic ERP
+finance spreadsheet
+green everywhere
+text-heavy
+over-designed
+
+========================================================
+54. FINAL DESIGN SYSTEM RULE
+========================================================
+
+Timetable = benchmark for structure.
+
+My Progress = benchmark for colourfulness.
+
+Results = benchmark for academic sophistication.
+
+Attendance = benchmark for status-driven colour.
+
+Fees = benchmark for transparency + trust.
+
+All modules must look like they belong to ONE
+Scholario Student Workspace.
+
+Do not make every module identical.
+
+They should share the same design system
+while having their own visual personality.
+
+========================================================
+55. QUALITY CHECK BEFORE COMPLETION
+========================================================
+
+Before declaring the module complete, verify:
+
+[ ] Student sees only own authorized financial data.
+[ ] Parent sees only authorized children.
+[ ] Teacher access follows permissions.
+[ ] Principal access follows permissions.
+[ ] Every financial operation is server-authorized.
+[ ] Tenant isolation is enforced.
+[ ] RLS/policies are respected.
+[ ] No financial data is trusted from client input.
+[ ] No fake payment success exists.
+[ ] No fake receipt exists.
+[ ] Offline payment workflow is real if enabled.
+[ ] Payment states are handled correctly.
+[ ] Fee breakdown comes from database.
+[ ] Concessions respect school configuration.
+[ ] Due dates come from configuration.
+[ ] Late fees are calculated authoritatively.
+[ ] Receipts use official document architecture.
+[ ] Statements reflect actual ledger data.
+[ ] Disputes have trackable status.
+[ ] Student can reach appropriate authorized support.
+[ ] Class Teacher does not see unauthorized financial data.
+[ ] Principal escalation is permission-controlled.
+[ ] Messages architecture is reused.
+[ ] Notifications architecture is reused.
+[ ] School Settings is the source of configuration.
+[ ] No duplicated systems were introduced.
+[ ] No unnecessary repeated Class/Section/Session text.
+[ ] No excessive explanatory paragraphs.
+[ ] Tablet experience is excellent.
+[ ] Mobile experience is usable.
+[ ] Desktop experience is polished.
+[ ] Loading states exist.
+[ ] Empty states exist.
+[ ] Error states exist.
+[ ] Accessibility is considered.
+[ ] Currency calculations are safe.
+[ ] Sensitive payment credentials are never stored.
+[ ] Secrets remain server-side.
+[ ] Audit logging exists for sensitive operations.
+[ ] Performance is optimized.
+[ ] Existing modules are not broken.
+
+========================================================
+FINAL INSTRUCTION
+========================================================
+
+Do not rush into implementation.
+
+First understand the existing Scholario architecture.
+
+Then produce the best possible production implementation.
+
+Do not make the page merely LOOK advanced.
+
+Make the underlying workflow advanced.
+
+Do not make the UI complicated in the name of advanced functionality.
+
+Hide complexity behind excellent UX.
+
+The user should experience:
+
+"Everything is clear.
+Everything is accounted for.
+I know what I owe.
+I know what I paid.
+I know where my receipt is.
+I know who to contact.
+I know what happens next."
+
+That is the standard.
+
+Build Fees as a serious financial product inside
+Scholario — not as a traditional school ERP page.

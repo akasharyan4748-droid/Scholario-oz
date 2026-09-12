@@ -3,14 +3,17 @@
 /**
  * results/trend — PERFORMANCE TREND (§11, gen 2 — interactive).
  *
- * A refined academic trend visualization in the Student's green primary:
- * soft area fill, crisp line, clear points — and every point is a REAL
- * control. Tapping (or keyboard-focusing) an assessment point reveals its
- * facts: assessment, percentage, grade and the true change from the
- * previous point. The y-domain adapts to the real marks band so honest
- * differences stay readable; values are the full unrounded percentages
- * from the canonical results. With < 2 published assessments the section
- * explains itself instead of inventing history (§44).
+ * The Results trend speaks VIOLET — the academic/analysis colour — so
+ * the chart's personality is distinct from Attendance's emerald trend
+ * while both belong to the same workspace: module-level identity through
+ * one deliberate colour choice, everything else stays neutral. Soft area
+ * fill, crisp line, clear points — and every point is a REAL control.
+ * Tapping (or keyboard-focusing) an assessment point reveals its facts:
+ * assessment, percentage, grade and the true change from the previous
+ * point. The y-domain adapts to the real marks band so honest differences
+ * stay readable; values are the full unrounded percentages from the
+ * canonical results. With < 2 published assessments the section explains
+ * itself instead of inventing history (§44).
  */
 
 import { useState } from 'react'
@@ -49,7 +52,10 @@ export function Trend({ points }: TrendProps) {
   return (
     <GlassCard hover={false} className="on-card p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-        <h3 className="text-sm font-bold tracking-tight text-foreground">Performance Trend</h3>
+        <h3 className="flex items-center gap-2 text-sm font-bold tracking-tight text-foreground">
+          <span className="h-1.5 w-1.5 rounded-full bg-violet-500" aria-hidden />
+          Performance Trend
+        </h3>
         <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
           All assessments
         </span>
@@ -82,8 +88,8 @@ export function Trend({ points }: TrendProps) {
             <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
               <defs>
                 <linearGradient id="resTrendArea" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.18" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.16" />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
                 </linearGradient>
               </defs>
               {areaPath && <path d={areaPath} fill="url(#resTrendArea)" />}
@@ -91,7 +97,7 @@ export function Trend({ points }: TrendProps) {
                 <path
                   d={linePath}
                   fill="none"
-                  stroke="#10b981"
+                  stroke="#8b5cf6"
                   strokeWidth={2.5}
                   strokeLinejoin="round"
                   strokeLinecap="round"
@@ -118,15 +124,15 @@ export function Trend({ points }: TrendProps) {
                   >
                     <span
                       className={cn(
-                        'block rounded-full bg-emerald-500 ring-[3px] ring-background transition-all',
-                        isSel ? 'h-3.5 w-3.5 shadow-sm ring-emerald-500/25' : 'h-2.5 w-2.5 group-hover:h-3 group-hover:w-3',
+                        'block rounded-full bg-violet-500 ring-[3px] ring-background transition-all',
+                        isSel ? 'h-3.5 w-3.5 shadow-sm ring-violet-500/25' : 'h-2.5 w-2.5 group-hover:h-3 group-hover:w-3',
                       )}
                     />
                   </button>
                   <span
                     className={cn(
                       'pointer-events-none absolute bottom-full left-1/2 mb-0.5 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold tabular-nums transition-colors',
-                      isSel ? 'text-emerald-600' : 'text-foreground/60',
+                      isSel ? 'text-violet-600' : 'text-foreground/60',
                     )}
                   >
                     {fmtPct(p.pct)}%
@@ -171,7 +177,7 @@ export function Trend({ points }: TrendProps) {
                 aria-live="polite"
               >
                 <p className="text-xs font-semibold text-foreground">{selected.fullLabel}</p>
-                <p className="text-xs font-bold tabular-nums text-emerald-600">{fmtPct(selected.pct)}%</p>
+                <p className="text-xs font-bold tabular-nums text-violet-600 dark:text-violet-500">{fmtPct(selected.pct)}%</p>
                 <p className="text-xs font-medium text-muted-foreground">Grade {selected.grade}</p>
                 {delta != null && Math.abs(delta) >= 0.05 && (
                   <span

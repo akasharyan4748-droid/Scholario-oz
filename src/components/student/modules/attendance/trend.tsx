@@ -1,14 +1,22 @@
 'use client'
 
 /**
- * attendance/trend — the "improving or declining?" curve (§25/§26, gen 2).
+ * attendance/trend — the "improving or declining?" curve (§25/§26, gen 2,
+ * final colour refinement).
  *
- * A visual, dependency-free weekly chart in the Student's green primary:
- * soft area, crisp line, clear markers — and every marker is a real
- * control. Tapping (or keyboard-focusing) a week reveals its facts
- * (week of · rate · change vs previous week) in a compact detail strip.
- * Points come EXCLUSIVELY from the canonical weekly aggregation — weeks
- * without records simply do not exist on this chart (no synthetic
+ * The Attendance trend speaks EMERALD — present/confirmed is green in
+ * the workspace philosophy, and the pairing with Results' violet trend
+ * gives each module its own personality inside one shared design
+ * system. Around the emerald line the chart stays disciplined:
+ *   · the school's EXCELLENT threshold (95%) — a quiet neutral dashed
+ *     reference line, labelled once on the axis
+ *   · the school's MINIMUM threshold (85%) — an amber dashed reference
+ *     line, the line that actually matters when a week dips
+ * so the graph is informative without filling with green. Every marker
+ * is a real control: tapping (or keyboard-focusing) a week reveals its
+ * facts (week of · rate · change vs previous week) in a compact detail
+ * strip. Points come EXCLUSIVELY from the canonical weekly aggregation —
+ * weeks without records simply do not exist on this chart (no synthetic
  * history). The insight derives from the same real aggregation, with
  * semantic tone (green improved, rose dropped); with fewer than two
  * weeks the section shows an intentional empty state (§44).
@@ -24,7 +32,13 @@ import { cn } from '@/lib/utils'
 const X_MIN = 4
 const X_SPAN = 92
 
-export function Trend({ points }: { points: { name: string; v: number }[] }) {
+interface TrendProps {
+  points: { name: string; v: number }[]
+  /** The school's attendance policy — rendered as reference lines (null → none). */
+  thresholds: { excellent: number; needsAttention: number } | null
+}
+
+export function Trend({ points, thresholds }: TrendProps) {
   const n = points.length
   const [selectedIdx, setSelectedIdx] = useState(n > 0 ? n - 1 : -1)
   const xAt = (i: number) => (n > 1 ? X_MIN + (i / (n - 1)) * X_SPAN : 50)
@@ -57,7 +71,10 @@ export function Trend({ points }: { points: { name: string; v: number }[] }) {
   return (
     <GlassCard hover={false} className="on-card p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-        <h3 className="text-sm font-bold tracking-tight text-foreground">Attendance Trend</h3>
+        <h3 className="flex items-center gap-2 text-sm font-bold tracking-tight text-foreground">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+          Attendance Trend
+        </h3>
         <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
           {n > 0 ? `Weekly rate · ${n} week${n === 1 ? '' : 's'}` : 'Weekly rate'}
         </span>
@@ -76,11 +93,34 @@ export function Trend({ points }: { points: { name: string; v: number }[] }) {
           <div
             className="relative mx-1 h-44 sm:h-48"
             role="img"
-            aria-label={`Weekly attendance trend: ${points.map((p) => `${p.name} ${p.v}%`).join(', ')}`}
+            aria-label={`Weekly attendance trend: ${points.map((p) => `${p.name} ${p.v}%`).join(', ')}${thresholds ? ` · school policy: excellent ${thresholds.excellent}%, minimum ${thresholds.needsAttention}%` : ''}`}
           >
             {[25, 50, 75].map((v) => (
               <div key={v} className="absolute inset-x-0 border-t border-dashed border-border/70" style={{ bottom: `${v}%` }} aria-hidden />
             ))}
+            {/* School policy reference lines — neutral "excellent", amber "minimum" */}
+            {thresholds && (
+              <div
+                className="absolute inset-x-0 border-t border-dashed border-muted-foreground/35"
+                style={{ bottom: `${thresholds.excellent}%` }}
+                aria-hidden
+              >
+                <span className="absolute -top-2 left-0 whitespace-nowrap text-[9px] font-medium tabular-nums text-muted-foreground/55">
+                  {thresholds.excellent}% excellent
+                </span>
+              </div>
+            )}
+            {thresholds && (
+              <div
+                className="absolute inset-x-0 border-t border-dashed border-amber-500/50"
+                style={{ bottom: `${thresholds.needsAttention}%` }}
+                aria-hidden
+              >
+                <span className="absolute -top-2 left-0 whitespace-nowrap text-[9px] font-semibold tabular-nums text-amber-600/85">
+                  {thresholds.needsAttention}% minimum
+                </span>
+              </div>
+            )}
             <div className="absolute inset-x-0 bottom-0 border-t border-border" aria-hidden />
 
             <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>

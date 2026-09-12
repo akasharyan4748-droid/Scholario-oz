@@ -36,7 +36,7 @@ export function MonthRecords({ cursor, records, workingDays, selected, onSelect 
   return (
     <GlassCard hover={false} className="on-card flex flex-col p-4 sm:p-5">
       <div className="mb-1 flex items-center gap-2">
-        <CalendarCheck className="h-4 w-4 text-primary" aria-hidden />
+        <CalendarCheck className="h-4 w-4 text-muted-foreground" aria-hidden />
         <h3 className="text-sm font-bold tracking-tight text-foreground">Records</h3>
         <span className="ml-auto text-[11px] font-medium tabular-nums text-muted-foreground">
           {monthLabel(cursor)} · {records.length}/{workingDays}

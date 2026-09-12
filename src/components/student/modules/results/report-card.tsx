@@ -243,9 +243,9 @@ export function ReportCard(props: ReportCardProps) {
   }
 
   return (
-    <section aria-label="Official report card" className="flex h-full flex-col rounded-xl border border-border/70 bg-gradient-to-b from-primary/[0.035] to-transparent p-5">
+    <section aria-label="Official report card" className="flex h-full flex-col rounded-xl border border-border/70 bg-gradient-to-b from-violet-500/[0.04] to-transparent p-5">
       <div className="flex items-start gap-3.5">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/[0.08] text-primary" aria-hidden>
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-violet-500/25 bg-violet-500/[0.08] text-violet-600 dark:text-violet-400" aria-hidden>
           <FileBadge2 className="h-5 w-5" />
         </span>
         <div className="min-w-0">
