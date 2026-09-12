@@ -282,16 +282,7 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
   }
 
   return (
-    <div
-      className={cn(
-        'flex h-screen w-full overflow-hidden bg-background text-foreground',
-        // STUDENT VISUAL IDENTITY — the student shell re-scopes the
-        // interactive token layer (primary / ring / accent) to the Student
-        // violet at the design-system level. Every module rendered inside
-        // this subtree inherits the identity; green stays semantic-only.
-        role === 'student' && 'student-theme'
-      )}
-    >
+    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
       {/* Sidebar Overlay */}
       <AnimatePresence>
         {mobileOpen && (
@@ -305,8 +296,9 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
         )}
       </AnimatePresence>
 
-      {/* Student Role gets its OWN rebuilt sidebar (violet identity,
-          personal workspace structure); other roles keep the shared one. */}
+      {/* Student Role gets its OWN rebuilt sidebar (premium green
+          identity, personal workspace structure); other roles keep the
+          shared one. */}
       {role === 'student' ? (
         <StudentSidebar
           collapsed={collapsed}

@@ -4,7 +4,7 @@
  * attendance/trend — the "improving or declining?" answer (§14, §15).
  *
  * A custom, dependency-free area chart in the Student's visual identity:
- * soft violet area (the student accent — colour = identity, NOT "doing
+ * soft GREEN area (the student accent — colour = identity, NOT "doing
  * well"), crisp 2px line (non-scaling stroke), one dot + value per
  * recorded week. Points come EXCLUSIVELY from the canonical weekly
  * aggregation — weeks without records simply do not exist on this chart
@@ -77,8 +77,8 @@ export function Trend({ points }: { points: { name: string; v: number }[] }) {
             <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
               <defs>
                 <linearGradient id="attTrendArea" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.16" />
-                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.16" />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
                 </linearGradient>
               </defs>
               {areaPath && <path d={areaPath} fill="url(#attTrendArea)" />}
@@ -86,7 +86,7 @@ export function Trend({ points }: { points: { name: string; v: number }[] }) {
                 <path
                   d={linePath}
                   fill="none"
-                  stroke="#8b5cf6"
+                  stroke="#10b981"
                   strokeWidth={2}
                   strokeLinejoin="round"
                   strokeLinecap="round"
@@ -102,7 +102,7 @@ export function Trend({ points }: { points: { name: string; v: number }[] }) {
                 style={{ left: `${xAt(i)}%`, bottom: `${p.v}%`, transform: 'translate(-50%, 50%)' }}
                 aria-hidden
               >
-                <span className="block h-2 w-2 rounded-full bg-violet-500 ring-2 ring-background" />
+                <span className="block h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-background" />
                 <span className="absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold tabular-nums text-foreground/70">
                   {p.v}%
                 </span>

@@ -5,7 +5,8 @@ import {
 } from 'lucide-react'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { formatINR } from '@/lib/format'
-import { homeworks, examResults } from '@/lib/mock/academics'
+import { homeworks } from '@/lib/mock/academics'
+import { useMyResults } from '@/lib/store/student-results-store'
 import { useAttendanceSnapshot } from './data'
 
 interface KpiGridProps {
@@ -17,6 +18,12 @@ interface KpiGridProps {
 export function KpiGrid({ attendancePct, pendingHomeworkCount, feePending }: KpiGridProps) {
   // STU-ATT — sparkline + week delta derive from the canonical records.
   const attendance = useAttendanceSnapshot()
+  // STU-RES — latest published result from the canonical results store
+  // (the SAME source the Results module reads — one result source, §34).
+  const results = useMyResults()
+  const latest = results.latest
+  const prevPct = results.trend.length >= 2 ? results.trend[results.trend.length - 2].pct : null
+  const lastExamDelta = latest && prevPct != null ? Math.round((latest.totals.pct - prevPct) * 10) / 10 : undefined
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
       <KpiCard
@@ -33,13 +40,13 @@ export function KpiGrid({ attendancePct, pendingHomeworkCount, feePending }: Kpi
       />
       <KpiCard
         label="Last Exam Score"
-        value={examResults.percentage}
+        value={latest ? latest.totals.pct : 0}
         suffix="%"
         decimals={1}
         icon={<Award className="h-5 w-5" />}
-        trend={3.2}
-        trendLabel="Unit Test 3"
-        accent="violet"
+        trend={lastExamDelta}
+        trendLabel={latest ? latest.assessment.name : 'Awaiting results'}
+        accent="emerald"
         delay={0.05}
       />
       <KpiCard

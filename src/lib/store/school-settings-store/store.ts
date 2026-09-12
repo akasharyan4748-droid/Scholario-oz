@@ -36,8 +36,15 @@ export const useSchoolSettingsStore = create<SchoolSettingsState>()(
       // entries and patches the existing ones' names/types to match
       // the new seed WITHOUT losing any user-edited catalogue entries
       // they may have added on top.
-      version: 7,
+      version: 8,
       migrate: (persistedState: any, fromVersion: number) => {
+        // ─── v8 — RESULTS / GRADING CONFIGURATION (Student Results) ────
+        // Appends the school-configured grading scale + result-privacy
+        // policy + report-card composition to persisted profiles that
+        // predate it (existing user state is untouched).
+        if (fromVersion < 8 && persistedState && !persistedState.results) {
+          persistedState.results = initialState.results
+        }
         // ─── v7 — IDENTITY-CARD SYSTEM (Student ID Card §27–28) ────────
         // Appends the school-configured ID-card template to persisted
         // profiles that predate it (existing user state is untouched).

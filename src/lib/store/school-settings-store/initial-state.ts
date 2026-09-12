@@ -61,6 +61,7 @@ interface SchoolSettingsActions {
   addWaiverAudit: SchoolSettingsState['addWaiverAudit']
   updateFacilities: SchoolSettingsState['updateFacilities']
   updateIdCard: SchoolSettingsState['updateIdCard']
+  updateResults: SchoolSettingsState['updateResults']
 }
 
 // Initial non-action state for the School Settings store. Splitting this out
@@ -248,6 +249,30 @@ export const initialState: StateShape = {
   facilities: {
     hasHostelFacility: true,
     hasTransportFacility: true,
+  },
+
+  // RESULTS / GRADING CONFIGURATION (Student Results §11/§15/§16/§20) —
+  // the school's grading scale + result-privacy policy + report-card
+  // composition. Grades, rank visibility, Class Top 5 and the printable
+  // document all derive from HERE — the Student UI never hardcodes
+  // academic behaviour.
+  results: {
+    gradeScale: [
+      { threshold: 90, grade: 'A+' },
+      { threshold: 80, grade: 'A' },
+      { threshold: 70, grade: 'B' },
+      { threshold: 60, grade: 'C' },
+      { threshold: 50, grade: 'D' },
+      { threshold: 0, grade: 'E' },
+    ],
+    showRank: true,
+    showClassTop: true,
+    showComparison: true,
+    reportCard: {
+      includeAttendance: true,
+      includePrincipalRemark: true,
+      includeSealNote: true,
+    },
   },
 
   // IDENTITY-CARD SYSTEM — the school's configured card template (§27–28).

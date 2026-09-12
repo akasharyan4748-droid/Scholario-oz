@@ -1,21 +1,23 @@
 'use client'
 
 /**
- * StudentSidebar — the Student Role's own navigation shell (rebuilt from
- * scratch; NOT a recolor of the shared school sidebar).
+ * StudentSidebar — the Student Role's own navigation shell.
  *
- * Design language (Student visual identity):
- *   · violet primary — the student accent, never the school's green
+ * Design language (Student visual identity — GREEN IS BACK, locked):
+ *   · premium GREEN primary accent — the student's personal accent,
+ *     used with discipline: identity marks, the active row, the search
+ *     trigger. Never giant green surfaces or ERP-green capsules.
  *   · clean light surface with the app's glass border language
  *   · compact brand header + personal identity block ("my workspace")
  *   · uppercase section labels · refined soft-tint active state with a
- *     subtle accent indicator (no giant coloured capsules)
+ *     subtle hairline rail indicator (token-driven → green in light AND
+ *     dark mode with zero duplicated colour logic)
  *   · badges ONLY for real derived counts — never decorative numbers
  *   · collapsed state keeps icons, tooltips, active state and hierarchy
  *
- * The interactive tokens (primary / ring) resolve through the shell's
- * `.student-theme` scope, so every state below is violet in light mode
- * AND dark mode with zero duplicated colour logic.
+ * The shell reads like "my personal school workspace", not a school
+ * administration panel: quiet surfaces, generous section rhythm, and
+ * one clear accent colour.
  */
 
 import { ChevronLeft, ChevronRight, X, Search } from 'lucide-react'
@@ -77,7 +79,7 @@ export function StudentSidebar({
         )}
       >
         <div className={cn('flex items-center gap-2.5 overflow-hidden', collapsed && 'flex-col gap-0')}>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 font-display text-sm font-bold text-white shadow-xs ring-1 ring-violet-500/25">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 font-display text-sm font-bold text-white shadow-xs ring-1 ring-emerald-500/25">
             S
           </div>
           {!collapsed && (
@@ -85,7 +87,7 @@ export function StudentSidebar({
               <span className="font-display text-base font-bold leading-none tracking-tight text-foreground">
                 SCHOLARIO
               </span>
-              <span className="mt-1 text-[10px] font-medium uppercase tracking-[0.16em] text-violet-600 dark:text-violet-400">
+              <span className="mt-1 text-[10px] font-medium uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-400">
                 Student Workspace
               </span>
             </div>
@@ -112,7 +114,7 @@ export function StudentSidebar({
       </div>
 
       {/* ── Personal identity block — "my space", opens my profile ────── */}
-      <div className={cn('shrink-0 border-b border-border/40', collapsed ? 'px-2 py-3' : 'px-3.5 py-3.5')}>
+      <div className={cn('shrink-0 border-b border-border/40', collapsed ? 'px-2 py-3' : 'px-3.5 py-4')}>
         <button
           onClick={() => {
             onNavigate('profile')
@@ -128,7 +130,7 @@ export function StudentSidebar({
           <span className="relative shrink-0">
             <span
               className={cn(
-                'flex items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 font-display font-bold text-white',
+                'flex items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 font-display font-bold text-white',
                 collapsed ? 'h-9 w-9 text-xs' : 'h-10 w-10 text-sm'
               )}
             >
@@ -156,14 +158,14 @@ export function StudentSidebar({
 
       {/* ── Global search trigger ─────────────────────────────────────── */}
       {!collapsed ? (
-        <div className="px-3.5 pt-3 shrink-0">
+        <div className="px-3.5 pt-3.5 shrink-0">
           <button
             onClick={() => { setCmdOpen(true); setMobileOpen(false) }}
-            className="w-full flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-muted/25 hover:bg-muted/60 hover:border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-all cursor-pointer shadow-2xs group focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="w-full flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-muted/25 hover:bg-muted/60 hover:border-border px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-all cursor-pointer shadow-2xs group focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title="Global search (⌘K)"
           >
             <span className="flex items-center gap-2 truncate">
-              <Search className="h-3.5 w-3.5 shrink-0 text-violet-600 dark:text-violet-400 transition-transform group-hover:scale-110" />
+              <Search className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400 transition-transform group-hover:scale-110" />
               <span className="truncate font-medium">Search…</span>
             </span>
             <kbd className="shrink-0 rounded-md border border-border/60 bg-background/80 px-1.5 py-0.5 text-[9px] font-mono font-semibold text-muted-foreground/80 shadow-2xs">
@@ -172,10 +174,10 @@ export function StudentSidebar({
           </button>
         </div>
       ) : (
-        <div className="flex justify-center px-2 pt-3 shrink-0">
+        <div className="flex justify-center px-2 pt-3.5 shrink-0">
           <button
             onClick={() => { setCmdOpen(true); setMobileOpen(false) }}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/50 bg-muted/25 text-violet-600 dark:text-violet-400 transition-all hover:bg-muted/60 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/50 bg-muted/25 text-emerald-600 dark:text-emerald-400 transition-all hover:bg-muted/60 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title="Global search (⌘K)"
             aria-label="Global search (⌘K)"
           >
@@ -186,18 +188,18 @@ export function StudentSidebar({
 
       {/* ── Navigation — sections with refined active states ─────────── */}
       <nav
-        className={cn('flex-1 overflow-y-auto no-scrollbar', collapsed ? 'px-2 py-3' : 'px-3.5 py-3 space-y-4')}
+        className={cn('flex-1 overflow-y-auto no-scrollbar', collapsed ? 'px-2 py-3' : 'px-3.5 py-4 space-y-5')}
         aria-label="Student navigation"
       >
         {groups.map((group) => (
           <div key={group.label}>
             {!collapsed && (
-              <h3 className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/55">
+              <h3 className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/55">
                 {group.label}
               </h3>
             )}
-            {collapsed && <div className="mx-auto mb-1.5 mt-2.5 h-px w-8 bg-border/60" aria-hidden />}
-            <div className="space-y-0.5">
+            {collapsed && <div className="mx-auto mb-2 mt-3 h-px w-8 bg-border/60" aria-hidden />}
+            <div className="space-y-1">
               {group.items.map((item) => {
                 const isActive = activeKey === item.key
                 return (
@@ -213,9 +215,9 @@ export function StudentSidebar({
                     className={cn(
                       'relative flex w-full items-center rounded-[10px] text-left transition-all duration-150 cursor-pointer',
                       'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      collapsed ? 'justify-center h-9 w-9 mx-auto' : 'gap-3 px-3 py-2 text-xs',
+                      collapsed ? 'justify-center h-9 w-9 mx-auto' : 'gap-3 px-3 py-2.5 text-xs',
                       isActive
-                        ? 'bg-primary/[0.09] font-semibold text-foreground'
+                        ? 'bg-primary/[0.08] font-semibold text-foreground'
                         : 'font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     )}
                   >
@@ -239,7 +241,7 @@ export function StudentSidebar({
                     </span>
                     {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
                     {!collapsed && item.badge != null && item.badge > 0 && (
-                      <span className="ml-auto shrink-0 rounded-full bg-primary/[0.14] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary">
+                      <span className="ml-auto shrink-0 rounded-full bg-primary/[0.12] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary">
                         {item.badge > 99 ? '99+' : item.badge}
                       </span>
                     )}

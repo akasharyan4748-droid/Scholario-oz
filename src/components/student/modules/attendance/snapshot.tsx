@@ -4,7 +4,7 @@
  * attendance/snapshot — the "How am I doing?" answer (brief §5–§7, §16, §24).
  *
  * One card, one hierarchy: the overall percentage is dominant (with a
- * subtle violet progress arc — the STUDENT accent, never a green "doing
+ * subtle green progress arc — the STUDENT accent, never a "doing
  * well" wash), the four counted statuses sit beside it as quiet facts,
  * and today's status closes the card. No icon tiles, no repeated
  * percentage (§24) — every number derives from the canonical records via
@@ -12,7 +12,7 @@
  * configured thresholds only.
  *
  * Colour = meaning (Student design system): the arc/ring carries the
- * violet student identity; status colours stay semantic (green present,
+ * green student identity; status colours stay semantic (green present,
  * amber late, rose absent, cyan leave).
  */
 
@@ -34,7 +34,7 @@ interface SnapshotProps {
   today: TodayStatus
 }
 
-/** Subtle progress arc — violet student accent, percent-proportional. */
+/** Subtle progress arc — green student accent, percent-proportional. */
 function ProgressArc({ percent }: { percent: number }) {
   const size = 64
   const stroke = 6
@@ -91,7 +91,7 @@ export function Snapshot({ stats, windowLabel, thresholds, today }: SnapshotProp
   return (
     <GlassCard hover={false} className="on-card p-5 sm:p-6">
       <div className="flex flex-col gap-6 lg:flex-row lg:gap-0">
-        {/* ── Dominant: overall percentage + subtle violet arc ─────────── */}
+        {/* ── Dominant: overall percentage + subtle green arc ─────────── */}
         <div className="lg:flex lg:min-w-[260px] lg:flex-col lg:justify-center lg:pr-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Overall · {windowLabel}

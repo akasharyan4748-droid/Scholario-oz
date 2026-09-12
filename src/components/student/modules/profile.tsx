@@ -36,7 +36,7 @@ import { useFeeStore } from '@/lib/store/fee-store'
 import { useLibraryStore } from '@/lib/store/library-store'
 import { useCertificatesStore } from '@/lib/store/certificates-store'
 import { POSITION_DEFS } from '@/lib/student-positions'
-import { examResults } from '@/lib/mock/academics'
+import { useMyResults, fmtPct } from '@/lib/store/student-results-store'
 import { DEMO_STUDENT_ID } from './applications/student'
 import { formatDate, formatINR } from '@/lib/format'
 import { ACTIVE_SESSION_ID, formatSessionLabel } from '@/lib/academic-session'
@@ -396,14 +396,19 @@ function RecordsTab({ student: s, certCount, openIssues, overdueFine, onNavigate
     value: string
   }[] = []
 
-  // Latest published result (real mock/academics record for this student)
-  rows.push({
-    key: 'results',
-    icon: <ClipboardList className="h-4 w-4" />,
-    iconClass: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
-    title: 'Academic Records',
-    value: `${examResults.grade} · ${examResults.percentage}% · Rank #${examResults.rank}`,
-  })
+  // Latest published result (canonical results store — same source as
+  // the Results module; rank only when the school's policy allows it)
+  const results = useMyResults()
+  const latest = results.latest
+  if (latest) {
+    rows.push({
+      key: 'results',
+      icon: <ClipboardList className="h-4 w-4" />,
+      iconClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+      title: 'Academic Records',
+      value: `${latest.grade} · ${fmtPct(latest.totals.pct)}%${latest.rank != null ? ` · Rank #${latest.rank}` : ''} · ${latest.assessment.name}`,
+    })
+  }
 
   // Certificates — only if issued
   if (certCount > 0) {

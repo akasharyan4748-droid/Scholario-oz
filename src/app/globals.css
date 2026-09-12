@@ -403,38 +403,17 @@
 }
 
 /* ============================================================
-   STUDENT ROLE THEME — violet identity (design-system level).
-   The Student workspace must NOT inherit the school's emerald
-   primary. Scoping the shell root with `.student-theme` re-maps
-   the interactive-token layer (primary / ring / accent) to the
-   Student violet for every descendant — shadcn/ui components,
-   focus rings, selected states and `text-primary` accents all
-   inherit it with zero per-component overrides. Green remains
-   available for SEMANTIC meaning only (present / success /
-   paid / live) via explicit emerald utilities.
+   STUDENT ROLE THEME — premium GREEN identity (design-system level).
+   GREEN IS THE STUDENT PRIMARY ACCENT (locked): the student
+   workspace inherits the school's refined emerald primary rather
+   than overriding it, so every interactive token — focus rings,
+   selected states, `text-primary` accents — resolves to the same
+   sophisticated green in light AND dark mode. Discipline: green is
+   an ACCENT (primary actions, active navigation, positive states,
+   key highlights) — never giant green surfaces or ERP-green blocks.
+   Subject colours (violet / orange / pink / teal / cyan) keep
+   ACADEMIC identity duties inside modules (see Timetable).
    ============================================================ */
-.student-theme {
-  --primary: oklch(0.54 0.2 295);
-  --primary-foreground: oklch(0.985 0.008 295);
-  --ring: oklch(0.54 0.2 295);
-  --accent: oklch(0.955 0.022 295);
-  --accent-foreground: oklch(0.36 0.1 295);
-}
-.dark .student-theme {
-  --primary: oklch(0.7 0.16 295);
-  --primary-foreground: oklch(0.17 0.02 295);
-  --ring: oklch(0.7 0.16 295);
-  --accent: oklch(0.29 0.05 295);
-  --accent-foreground: oklch(0.9 0.06 295);
-}
-/* White-card scope interplay: `.dark .on-card` re-scopes --primary to
-   light-theme EMERALD for readability on white cards — inside the student
-   shell it must re-scope to the light-theme STUDENT VIOLET instead. */
-.dark .student-theme .on-card {
-  --primary: oklch(0.54 0.2 295);
-  --primary-foreground: oklch(0.985 0.008 295);
-  --ring: oklch(0.54 0.2 295);
-}
 
 /* ============================================================
    ID CARD PRINTING — when the student prints their school ID,

@@ -1,0 +1,2063 @@
+SCHOLARIO-OS
+STUDENT ROLE — RESULTS MODULE
+PREMIUM UI/UX + COMPLETE FUNCTIONAL EVOLUTION
+
+IMPORTANT CONTEXT:
+
+The Student Timetable module is currently the visual quality benchmark for the Student Role.
+
+It feels:
+
+- premium
+- clean
+- modern
+- colourful but controlled
+- highly readable
+- information-dense without being crowded
+- polished
+- genuinely useful
+- appropriate for a real school product
+
+Now I want the RESULTS module to reach the SAME level of quality.
+
+Do NOT make Results look like a generic ERP table.
+
+Do NOT merely recolor the existing Results page.
+
+This is a COMPLETE Results module redesign and functional evolution.
+
+Before writing code, inspect the current Results implementation, existing database schema, result APIs, exam/assessment models, student enrollment, academic session, subjects, grading configuration, School Settings, permissions, PDF/report-card functionality and existing routes.
+
+Then design the module around the actual architecture.
+
+============================================================
+0. IMPORTANT VISUAL DECISION — GREEN IS BACK
+============================================================
+
+The previous attempt changed too much of the Student Role toward violet/purple.
+
+Do NOT continue that direction.
+
+The previous GREEN Student UI was actually better.
+
+LOCK THIS:
+
+GREEN remains the primary Student Role accent.
+
+But make it PREMIUM.
+
+Do not use:
+
+- giant green blocks
+- green everywhere
+- green pills on every element
+- excessive emerald surfaces
+- generic ERP green
+
+Instead use green intelligently:
+
+Primary actions
+Active navigation
+Important positive states
+Selected controls
+Success
+Published/confirmed states
+Key highlights
+
+Use very soft green-tinted surfaces where appropriate.
+
+The Timetable's subject colors remain an important visual reference:
+
+pink
+violet
+orange
+teal
+blue
+magenta
+
+These colors can be used for subject identity and visual differentiation.
+
+But the GLOBAL Student identity should remain sophisticated green + neutral surfaces.
+
+============================================================
+1. STUDENT ROLE SIDEBAR — DO NOT MAKE IT PURPLE
+============================================================
+
+The current screenshot shows a purple Student Workspace sidebar.
+
+Do NOT preserve that purple treatment.
+
+Return the Student Role toward the earlier green identity, BUT improve the sidebar UI itself.
+
+The sidebar needs to feel different from the old school ERP sidebar.
+
+Do NOT simply restore the old sidebar.
+
+Redesign it with:
+
+- refined hierarchy
+- cleaner student identity area
+- better section spacing
+- elegant active-state treatment
+- subtle green accent
+- modern iconography
+- premium typography
+- less visual noise
+- better use of whitespace
+
+The sidebar should feel like:
+
+"my personal school workspace"
+
+not:
+
+"school administration panel."
+
+The active navigation item should use a sophisticated soft-green treatment rather than a large aggressive green capsule.
+
+The sidebar must work perfectly across:
+
+Desktop
+iPad
+Tablet
+Mobile
+
+Do not break the excellent Timetable experience while changing the shared shell.
+
+============================================================
+2. RESULTS MUST FEEL LIKE A COMPLETE ACADEMIC RECORD
+============================================================
+
+Results should not simply mean:
+
+"marks table."
+
+The module represents the student's academic performance over time.
+
+It should answer:
+
+- What exams/results are available?
+- How did I perform?
+- What are my marks?
+- Which subjects are strong?
+- Which need improvement?
+- What is my percentage?
+- What is my grade?
+- What is my rank, if the school permits showing it?
+- How am I progressing?
+- What did my teacher say?
+- Can I download my official report card?
+- Are some results still pending?
+- What exams have not yet been published?
+
+Everything should be understandable immediately.
+
+============================================================
+3. TOP-LEVEL RESULTS EXPERIENCE
+============================================================
+
+The primary page should feel similar in quality to the Student Timetable.
+
+Suggested hierarchy:
+
+MY RESULTS
+
+Class 2-A · Section A
+AY 2026–2027
+
+Then an elegant exam/assessment selector.
+
+For example:
+
+[Unit Test 1]
+[Unit Test 2]
+[Mid Term]
+[Unit Test 3]
+[Final Examination]
+
+Only show exams that actually exist for the student's school/session.
+
+Do NOT hardcode these examples.
+
+If the school uses different assessment names:
+
+use those.
+
+If only one published assessment exists:
+
+do not create unnecessary selectors.
+
+============================================================
+4. RESULT STATUS
+============================================================
+
+Results have lifecycle states.
+
+Support states such as:
+
+Draft
+Scheduled
+In Progress
+Awaiting Marks
+Under Review
+Published
+Locked
+Archived
+
+Students should only see states that are appropriate for the Student Role.
+
+Example:
+
+Upcoming
+"Result will be published after 20 September"
+
+or:
+
+"Result pending"
+
+or:
+
+"Published on 11 September 2026"
+
+Do not reveal internal administrative information that students should not see.
+
+Never expose teacher/admin workflow internals unnecessarily.
+
+============================================================
+5. HERO RESULT SUMMARY
+============================================================
+
+Once a published result is selected, create a premium result summary.
+
+Example structure:
+
+MY RESULTS
+
+Unit Test 3
+Class 2-A · AY 2026–2027
+
+--------------------------------
+
+91.3%
+Overall Percentage
+
+274 / 300
+Total Marks
+
+A+
+Overall Grade
+
+#3
+Class Rank
+
+--------------------------------
+
+Strong performance across all subjects.
+
+BUT:
+
+Every value must come from actual result data.
+
+No hardcoded:
+
+91.3%
+274/300
+A+
+#3
+
+Those values are only examples from the current mock/demo UI.
+
+============================================================
+6. RESULT HERO SHOULD BE VISUALLY SPECIAL
+============================================================
+
+The selected result should have a visual hierarchy similar to the excellent Timetable cards.
+
+Possible composition:
+
+Left:
+Assessment identity
+
+Center:
+Overall percentage / score
+
+Right:
+Grade / rank
+
+Use:
+
+white card
+subtle border
+soft green accent
+excellent typography
+small supporting metadata
+
+Do NOT use an enormous purple gradient banner like the current screenshot.
+
+Avoid:
+
+AI-looking gradients
+huge decorative backgrounds
+unnecessary glow
+overly flashy cards.
+
+This is an official academic record.
+
+It should feel prestigious and trustworthy.
+
+============================================================
+7. SUBJECT-WISE RESULTS
+============================================================
+
+This is the core of Results.
+
+Create a premium subject performance section.
+
+Example:
+
+SUBJECT PERFORMANCE
+
+Subject        Max    Obtained    Performance    Grade
+
+English         50       46        ━━━━━━━ 92%    A+
+Mathematics     50       48        ━━━━━━━ 96%    A+
+Science         50       44        ━━━━━━━ 88%    A
+Social Studies  50       42        ━━━━━━━ 84%    A
+Hindi           50       45        ━━━━━━━ 90%    A+
+Computer Sci.   50       49        ━━━━━━━ 98%    A+
+
+But improve this substantially from the current screenshot.
+
+Each subject should have subtle identity.
+
+Use the same subject-color philosophy established in Timetable.
+
+For example:
+
+Mathematics → violet
+Science → orange
+English → teal
+Hindi → pink
+Computer Science → green/cyan
+etc.
+
+Do NOT hardcode subject colors permanently.
+
+Ideally derive them from subject configuration/theme metadata where available, with safe fallback colors.
+
+============================================================
+8. SUBJECT DETAIL
+============================================================
+
+Clicking/tapping a subject should open a detail view.
+
+Example:
+
+MATHEMATICS
+
+48 / 50
+96%
+A+
+
+Assessment breakdown:
+
+Written
+40 / 40
+
+Classwork
+5 / 5
+
+Practical
+3 / 5
+
+etc.
+
+BUT:
+
+Only show components that actually exist in the assessment.
+
+Do not invent:
+
+Written
+Practical
+Internal
+Project
+
+if the school does not use them.
+
+The component structure must be dynamic.
+
+============================================================
+9. ASSESSMENT COMPONENTS
+============================================================
+
+Support schools that use:
+
+Written Exam
+Practical
+Project
+Internal Assessment
+Classwork
+Notebook
+Oral
+Activity
+Viva
+Assignment
+Lab
+Continuous Assessment
+
+BUT:
+
+these must come from the actual result schema/configuration.
+
+Do not hardcode a universal academic structure.
+
+Different schools follow different assessment systems.
+
+============================================================
+10. RESULT BREAKDOWN
+============================================================
+
+Where meaningful, show:
+
+Maximum Marks
+Obtained Marks
+Percentage
+Grade
+Grade Point
+Weightage
+
+depending on what the school actually configures.
+
+Do not show meaningless empty columns.
+
+If Grade Point is not configured:
+
+do not show it.
+
+If percentage is not meaningful for a particular assessment:
+
+do not fake it.
+
+============================================================
+11. GRADING SYSTEM
+============================================================
+
+The grading system must come from School Settings / academic configuration.
+
+Do NOT hardcode:
+
+90 = A+
+80 = A
+etc.
+
+Different schools may use:
+
+A+
+A
+B+
+B
+C
+D
+E
+
+or numerical grading.
+
+The Student UI should adapt automatically.
+
+============================================================
+12. PERFORMANCE TREND
+============================================================
+
+This is one of the most important sections.
+
+Create a beautiful:
+
+MY PERFORMANCE TREND
+
+chart.
+
+Show actual published assessments over time.
+
+Example:
+
+Unit Test 1
+Unit Test 2
+Mid Term
+Unit Test 3
+Final
+
+with actual percentages.
+
+The chart should use the Student green primary accent.
+
+Subject-specific colors can appear in supporting visualizations.
+
+DO NOT create fake chart points.
+
+DO NOT use:
+
+const data = [...]
+
+inside the component.
+
+Use actual result records.
+
+============================================================
+13. TREND INSIGHT
+============================================================
+
+Where enough data exists, derive an intelligent but simple insight.
+
+Examples:
+
+"Your overall performance improved by 7% compared with the previous assessment."
+
+"Mathematics has been your strongest subject across the last 3 assessments."
+
+"Science improved consistently across the last two assessments."
+
+"Your overall performance has remained stable."
+
+These statements MUST be mathematically/data derived.
+
+Do not generate generic motivational filler.
+
+If insufficient historical data exists:
+
+show:
+
+"Performance trend will appear after more assessments are published."
+
+============================================================
+14. SUBJECT STRENGTHS
+============================================================
+
+If enough data exists, provide a compact:
+
+SUBJECT SNAPSHOT
+
+Strongest
+Mathematics · 96%
+
+Needs attention
+Social Studies · 84%
+
+Most improved
+Science · +8%
+
+Again:
+
+calculate from real data.
+
+Do not arbitrarily label subjects.
+
+Avoid making a student feel negatively judged.
+
+Use respectful academic language.
+
+============================================================
+15. CLASS RANK
+============================================================
+
+Rank must be treated carefully.
+
+Some schools may allow students to see:
+
+Class Rank
+Class Top 5
+
+Others may not.
+
+Therefore:
+
+School Settings / result privacy configuration must control whether rank is visible.
+
+If disabled:
+
+do NOT show rank.
+
+If enabled:
+
+show it elegantly.
+
+Example:
+
+#3 of 18
+
+Do NOT expose unnecessary information about every student's marks.
+
+============================================================
+16. CLASS PERFORMANCE / TOP STUDENTS
+============================================================
+
+The current UI has:
+
+CLASS TOP 5
+
+This can be retained ONLY if the school's privacy settings explicitly allow it.
+
+Do not expose other students' detailed academic data by default.
+
+If enabled, display minimal information such as:
+
+Rank
+Student first name / configured display name
+Percentage
+
+Do not show:
+
+detailed subject marks
+personal information
+attendance
+family information
+etc.
+
+If privacy configuration disallows this:
+
+remove the entire section.
+
+Do not leave an empty card.
+
+============================================================
+17. PERSONAL COMPARISON
+============================================================
+
+If enabled by school policy, allow the student to compare:
+
+Current assessment
+Previous assessment
+
+Example:
+
+Overall
+91.3%
+↑ 7%
+
+Mathematics
+96%
+↑ 3%
+
+Science
+88%
+↑ 6%
+
+This is much more useful than comparing against random classmates.
+
+Prioritize self-progress over competition.
+
+============================================================
+18. TEACHER REMARKS
+============================================================
+
+Show teacher/class teacher remarks when published.
+
+Example:
+
+CLASS TEACHER'S REMARK
+
+"Excellent performance. Consistent across all subjects. Keep it up!"
+
+— Rohan Mehta
+Class Teacher · 2-A
+
+But:
+
+use actual published remarks.
+
+If there is no remark:
+
+do not show a fake remark.
+
+Possible empty state:
+
+"No teacher remark has been added for this assessment."
+
+============================================================
+19. ACHIEVEMENTS
+============================================================
+
+Do NOT automatically fabricate achievements from random numbers.
+
+Achievements should exist only if there is a real achievement system or properly derived academic milestone.
+
+Possible real examples:
+
+Top 3 in Class
+Perfect Attendance
+Subject Excellence
+Highest Score
+Most Improved
+etc.
+
+But:
+
+these must be derived from actual school data or an actual achievement record.
+
+Do not show:
+
+"Star Reader"
+
+simply because a static mock object says 12 books.
+
+============================================================
+20. OFFICIAL REPORT CARD
+============================================================
+
+The Student should have a prominent action:
+
+Download Report Card
+
+This must generate/use the official school-configured report-card document.
+
+The report card must NOT be a screenshot of the UI.
+
+It should be an actual printable institutional document.
+
+Include, where configured:
+
+School logo
+School name
+Address
+Academic year
+Student photo
+Student name
+Admission number
+Roll number
+Class
+Section
+Assessment/exam name
+Subject-wise marks
+Maximum marks
+Grades
+Overall result
+Rank, if allowed
+Attendance, if configured
+Teacher remarks
+Principal remarks, if configured
+Signatures
+School seal
+QR verification, if configured
+
+Do not include fields that do not exist.
+
+============================================================
+21. REPORT CARD DESIGN
+============================================================
+
+The PDF/report card must look like a real school document.
+
+Not:
+
+dashboard exported to PDF.
+
+Not:
+
+UI screenshot.
+
+Not:
+
+generic invoice.
+
+It should have:
+
+excellent typography
+institutional hierarchy
+clean table
+school branding
+proper spacing
+print-safe layout
+A4 support
+professional footer/header
+
+The report-card template must eventually be configurable by School/Admin.
+
+Student can only view/download.
+
+Student cannot alter official result data.
+
+============================================================
+22. REPORT CARD ACTIONS
+============================================================
+
+Student may have:
+
+View Report Card
+Download PDF
+Print
+
+If supported by the architecture:
+
+Share/Export
+
+But never allow editing official marks.
+
+============================================================
+23. RESULT HISTORY
+============================================================
+
+Create a clean:
+
+RESULT HISTORY
+
+section.
+
+Example:
+
+Unit Test 3
+91.3%
+A+
+Published 11 Sep 2026
+
+Mid Term
+88.7%
+A
+Published 24 Aug 2026
+
+Unit Test 2
+84.2%
+A
+Published 10 Aug 2026
+
+etc.
+
+Each row should be clickable.
+
+Selecting an assessment opens its complete result.
+
+Do not force the student to return to a separate page every time.
+
+============================================================
+24. EXAM SELECTOR UX
+============================================================
+
+Do not use giant dropdowns.
+
+A refined segmented/selector control is preferred.
+
+Possible:
+
+[All Results] [Current] [Previous]
+
+or:
+
+Assessment selector with compact cards.
+
+The exact interaction should depend on the number of assessments.
+
+If there are 3–5 assessments:
+
+horizontal selector is fine.
+
+If there are 20:
+
+use a searchable/selectable control.
+
+Do not create horizontal overflow on iPad.
+
+============================================================
+25. FILTERS
+============================================================
+
+Keep filtering minimal.
+
+Useful filters:
+
+Academic Year
+Assessment / Exam
+Term
+Subject
+
+But do not display 10 filter controls permanently.
+
+Progressive disclosure is preferred.
+
+Most students only need:
+
+Academic Year
+Assessment
+
+============================================================
+26. CURRENT RESULT
+============================================================
+
+Clearly identify the current/latest published result.
+
+Use:
+
+CURRENT
+or
+LATEST
+
+subtle badge.
+
+Do not use giant decorative indicators.
+
+============================================================
+27. UPCOMING / UNPUBLISHED RESULTS
+============================================================
+
+If an exam exists but results are not published:
+
+show it appropriately.
+
+Example:
+
+Final Examination
+
+Result pending
+
+"Marks are being finalized."
+
+Do not reveal private administrative workflow.
+
+Do not show:
+
+teacher hasn't entered marks
+
+principal hasn't approved
+
+internal moderation pending
+
+unless the school explicitly wants students to see such workflow states.
+
+============================================================
+28. ABSENT / EXEMPT / NOT APPLICABLE
+============================================================
+
+Results need more than normal marks.
+
+Support states such as:
+
+Absent
+Exempt
+Not Applicable
+Withheld
+Pending
+
+Do not convert these to zero.
+
+For example:
+
+Absent
+
+must NOT become:
+
+0 / 50
+
+unless the school explicitly records it as zero.
+
+============================================================
+29. FAILED / LOW PERFORMANCE STATES
+============================================================
+
+Do not use aggressive red UI that makes the student experience hostile.
+
+Use calm semantic design.
+
+Example:
+
+Needs attention
+
+rather than:
+
+FAILURE!!!
+
+The academic fact must remain accurate.
+
+Never hide poor performance.
+
+But present it professionally.
+
+============================================================
+30. STUDENT ROLE PERMISSIONS
+============================================================
+
+Student is READ-ONLY.
+
+Student may:
+
+view published results
+view result history
+view subject details
+view performance trend
+view permitted rank
+view teacher remarks
+download report card
+print report card
+view permitted achievements
+
+Student may NOT:
+
+edit marks
+edit grades
+publish results
+delete results
+change rank
+change teacher remarks
+upload official marks
+modify report card
+change academic session
+change grading configuration
+
+Do not rely only on hidden buttons.
+
+Enforce permissions server-side.
+
+============================================================
+31. RE-EVALUATION / RECHECK REQUEST
+============================================================
+
+If the school supports result review/recheck requests:
+
+show a contextual action such as:
+
+Request Review
+
+Only when:
+
+- enabled by School Settings
+- the assessment is eligible
+- request window is open
+
+The student should never directly edit marks.
+
+Workflow:
+
+Student submits request
+↓
+Reason
+↓
+Confirmation
+↓
+School reviews
+↓
+Status
+
+Possible statuses:
+
+Submitted
+Under Review
+Resolved
+Rejected
+Closed
+
+If this feature does not exist in the backend:
+
+do not fake it in the UI.
+
+============================================================
+32. RESULT ACKNOWLEDGEMENT
+============================================================
+
+If school policy requires student acknowledgement:
+
+allow:
+
+"I have viewed this result"
+
+with timestamp.
+
+Only implement if supported by actual product architecture.
+
+Do not invent workflow merely for UI completeness.
+
+============================================================
+33. NOTIFICATIONS
+============================================================
+
+When a result is published, the Student should be able to receive a notification through the existing notification system.
+
+Example:
+
+"Unit Test 3 results are now available."
+
+Clicking notification:
+
+→ opens the relevant result.
+
+Do not create a separate notification mechanism.
+
+Use existing global notification architecture.
+
+============================================================
+34. DASHBOARD INTEGRATION
+============================================================
+
+If Student Dashboard contains academic summary:
+
+Results should provide the source of truth.
+
+Dashboard can show:
+
+Latest percentage
+Latest grade
+Latest assessment
+Performance trend
+
+But Dashboard must NOT maintain separate hardcoded values.
+
+One result source.
+
+============================================================
+35. DATA CONSISTENCY
+============================================================
+
+This is NON-NEGOTIABLE.
+
+If:
+
+Subject marks = 274 / 300
+
+then:
+
+Percentage = 91.33%
+
+and displayed rounding must be consistent.
+
+Class rank must come from the same published result set.
+
+Trend must use the same published assessments.
+
+Subject performance must use the same assessment.
+
+No contradictory numbers across:
+
+Hero
+Subject table
+Trend
+History
+Report Card
+Dashboard
+
+============================================================
+36. ROUNDING
+============================================================
+
+Define a consistent academic rounding strategy.
+
+Example:
+
+274 / 300 = 91.33%
+
+If UI displays:
+
+91.3%
+
+then PDF should follow the configured academic rounding rule.
+
+Do not let different components independently round numbers.
+
+Centralize formatting.
+
+============================================================
+37. ACADEMIC SESSION
+============================================================
+
+Results must always respect:
+
+school
++
+student
++
+academic session.
+
+Do not accidentally mix:
+
+2024
+2025
+2026
+2027
+
+data.
+
+The current screenshot contains:
+
+"November 2024"
+
+while showing:
+
+"AY 2026–2027"
+
+This is exactly the kind of inconsistency that MUST be eliminated.
+
+Demo data must be internally consistent.
+
+If current demo school is in:
+
+AY 2026–2027
+
+then demo assessments/dates must belong to that academic context.
+
+============================================================
+38. SCHOOL TENANCY
+============================================================
+
+Results must resolve through:
+
+authenticated user
+→ student profile
+→ enrollment
+→ school
+→ academic session
+→ published assessments/results.
+
+A student from School A must never be able to access:
+
+School B results
+School B students
+School B ranks
+School B assessments.
+
+RLS and server-side authorization must enforce this.
+
+============================================================
+39. SCHOOL SETTINGS
+============================================================
+
+Do not hardcode academic behavior.
+
+Results should respect School Settings for:
+
+Academic Session
+Classes
+Subjects
+Assessment types
+Grading system
+Grade thresholds
+Maximum marks
+Weightage
+Rank visibility
+Report card configuration
+Result publication
+Re-evaluation
+Result acknowledgement
+Attendance inclusion
+School branding
+
+School Settings is the source of truth.
+
+============================================================
+40. SUBJECT COLORS
+============================================================
+
+Use subject colors as a visual aid.
+
+The same subject should feel visually consistent across:
+
+Timetable
+Results
+Learning
+Classwork
+other academic modules
+
+For example:
+
+Mathematics → violet
+Science → orange
+English → teal
+Hindi → pink
+
+But:
+
+do not hardcode these names/colors directly into Results.
+
+Use a centralized subject visual identity system if available.
+
+Fallback safely if a subject has no assigned color.
+
+============================================================
+41. RESULTS PAGE LAYOUT
+============================================================
+
+A high-quality possible hierarchy:
+
+--------------------------------------------
+
+MY RESULTS
+Class 2-A · Section A
+AY 2026–2027
+
+[Assessment Selector]
+
+--------------------------------------------
+
+LATEST / SELECTED RESULT
+
+Assessment Name
+Published date
+
+91.3%      A+      #3/18
+274 / 300
+
+--------------------------------------------
+
+SUBJECT PERFORMANCE
+
+[beautiful subject rows]
+
+--------------------------------------------
+
+PERFORMANCE TREND
+
+[clean chart]
+
+--------------------------------------------
+
+SUBJECT SNAPSHOT
+
+Strongest
+Needs Attention
+Most Improved
+
+--------------------------------------------
+
+TEACHER REMARK
+
+--------------------------------------------
+
+RESULT HISTORY
+
+--------------------------------------------
+
+REPORT CARD
+
+[View] [Download] [Print]
+
+--------------------------------------------
+
+Do not force every section to appear if there is insufficient real data.
+
+============================================================
+42. RESULT PAGE SHOULD NOT FEEL LIKE A LONG DASHBOARD
+============================================================
+
+This is important.
+
+Avoid:
+
+card
+card
+card
+card
+card
+card
+
+Instead create visual rhythm.
+
+Use:
+
+large information section
+→ detailed section
+→ analytical section
+→ history
+→ document action
+
+Timetable works because each section has a clear purpose.
+
+Results should follow the same philosophy.
+
+============================================================
+43. MOBILE / IPAD EXPERIENCE
+============================================================
+
+This product is heavily used on tablets/iPads.
+
+Design specifically for touch.
+
+Do not simply shrink desktop.
+
+Subject table should become:
+
+responsive cards
+or
+controlled horizontal table
+
+depending on available width.
+
+Do not make tiny text.
+
+Do not create microscopic progress bars.
+
+Minimum touch targets should remain comfortable.
+
+Charts must remain readable.
+
+Assessment selector must not overflow.
+
+============================================================
+44. ACCESSIBILITY
+============================================================
+
+Ensure:
+
+sufficient contrast
+keyboard accessibility
+screen-reader labels
+focus states
+semantic headings
+button labels
+meaningful status indicators
+
+Do not communicate status through color alone.
+
+Example:
+
+Present
++ green
++ text
+
+not:
+
+green alone.
+
+============================================================
+45. EMPTY STATES
+============================================================
+
+Build intentional empty states.
+
+Examples:
+
+No published results yet.
+
+"Your school hasn't published any results for this academic session."
+
+No historical data:
+
+"Your performance trend will appear after more assessments are published."
+
+No teacher remark:
+
+"No remark has been added."
+
+No report card:
+
+"Your official report card will become available after the result is published."
+
+Do not show empty white boxes.
+
+============================================================
+46. LOADING STATES
+============================================================
+
+Use elegant skeleton loading.
+
+Do NOT show:
+
+blank page
+spinner in the middle forever
+layout jumping.
+
+Skeleton should resemble the actual final layout.
+
+============================================================
+47. ERROR STATES
+============================================================
+
+If result loading fails:
+
+show a clean error state.
+
+Example:
+
+"Results couldn't be loaded."
+
+[Try Again]
+
+Do not expose raw:
+
+Supabase
+PostgreSQL
+API
+server
+stack trace
+
+to students.
+
+============================================================
+48. NO FAKE DATA
+============================================================
+
+This is NON-NEGOTIABLE.
+
+Do not put:
+
+const results = [...]
+const subjects = [...]
+const rank = 3
+const percentage = 91.3
+
+inside UI components.
+
+Do not fabricate:
+
+classmates
+marks
+remarks
+achievements
+trend data
+exam dates
+publication dates.
+
+If Demo School requires data:
+
+seed it properly through the existing data architecture.
+
+The UI should consume real records.
+
+============================================================
+49. DEMO DATA QUALITY
+============================================================
+
+The Demo School should contain a coherent academic dataset.
+
+If using:
+
+Class 2-A
+Aarav Sharma
+Roll 18
+AY 2026–2027
+
+then:
+
+assessment dates
+academic session
+subjects
+marks
+rank
+teacher
+remarks
+
+must all logically belong to that same dataset.
+
+Never mix old 2024 demo records with current 2026–2027 UI.
+
+============================================================
+50. REPORT CARD / RESULT SECURITY
+============================================================
+
+Students must only download their own report cards.
+
+Do not trust a client-provided:
+
+studentId
+resultId
+schoolId
+
+without server-side validation.
+
+Every result request must validate:
+
+authenticated user
+→ student identity
+→ enrollment
+→ school
+→ result ownership.
+
+============================================================
+51. PRINT EXPERIENCE
+============================================================
+
+If the student prints the Results page itself:
+
+create a clean print stylesheet.
+
+Hide:
+
+sidebar
+navigation
+buttons
+interactive controls
+unnecessary UI.
+
+Keep:
+
+student identity
+assessment
+marks
+performance
+important academic information.
+
+But the official Report Card should remain the preferred printable document.
+
+============================================================
+52. GLOBAL SEARCH
+============================================================
+
+Results should integrate with the existing role-aware global search.
+
+Examples:
+
+"Unit Test 3"
+"Math result"
+"Mid Term"
+"Report Card"
+"Mathematics marks"
+
+Search results must be limited to the authenticated student's permitted results.
+
+Do not expose another student's result through search.
+
+============================================================
+53. URL / ROUTING
+============================================================
+
+Use clean route structure consistent with the existing architecture.
+
+Possible conceptual structure:
+
+/results
+/results/[assessmentId]
+
+But inspect the existing routing architecture first.
+
+Do not create duplicate routes unnecessarily.
+
+Deep links should work.
+
+Refreshing the result page should preserve the selected assessment.
+
+============================================================
+54. INTERACTION QUALITY
+============================================================
+
+The module should feel alive but restrained.
+
+Use subtle:
+
+hover
+focus
+selection
+chart transitions
+assessment transitions
+subject detail transitions
+
+Do NOT use:
+
+bouncy animations
+large parallax
+confetti everywhere
+constant movement
+slow transitions
+
+Academic software should feel calm and trustworthy.
+
+============================================================
+55. ICONOGRAPHY
+============================================================
+
+Use the existing icon system consistently.
+
+Avoid emoji as primary UI icons.
+
+Do not put an icon inside every single tiny element.
+
+Icons should communicate meaning.
+
+For example:
+
+Results
+Report Card
+Trend
+Download
+Rank
+Achievement
+
+Use consistent stroke weight.
+
+============================================================
+56. TYPOGRAPHY
+============================================================
+
+Match the quality of the approved Timetable.
+
+Use:
+
+strong hierarchy
+large but controlled metrics
+clear section titles
+small uppercase contextual labels
+comfortable body text
+muted metadata.
+
+Do not make every heading huge.
+
+Do not make every value bold.
+
+Typography should create hierarchy naturally.
+
+============================================================
+57. SIDEBAR + RESULTS ACTIVE STATE
+============================================================
+
+Results active state should be:
+
+subtle green-tinted background
+green accent
+dark readable label
+appropriate results icon.
+
+Do NOT use the current purple active state.
+
+But do not turn the whole sidebar green.
+
+Green is an accent, not the entire surface.
+
+============================================================
+58. DO NOT REGRESS TIMETABLE
+============================================================
+
+The current Timetable is APPROVED.
+
+DO NOT redesign its actual timetable experience.
+
+Preserve:
+
+My Class / School
+day selector
+Full Week
+vertical timeline
+subject colors
+period cards
+breaks
+NOW / NEXT states
+spacing
+typography
+overall visual quality.
+
+Only ensure it works perfectly with the refined shared Student shell.
+
+============================================================
+59. DO NOT BREAK EXISTING STUDENT MODULES
+============================================================
+
+After implementing Results, verify:
+
+Dashboard
+My Profile
+Timetable
+Attendance
+Classwork
+Results
+Learning
+My Progress
+My Wellbeing
+Messages
+Notices
+Fees
+Documents
+ID Card
+
+No broken routes.
+
+No missing navigation.
+
+No duplicate sidebar entries.
+
+No inconsistent active states.
+
+============================================================
+60. REUSABLE STUDENT DESIGN SYSTEM
+============================================================
+
+Where useful, establish reusable components.
+
+Examples:
+
+StudentSidebar
+StudentNavItem
+StudentPageHeader
+StudentSectionHeader
+StudentMetric
+StudentStatus
+StudentSegmentControl
+StudentSubjectRow
+StudentPerformanceChart
+StudentResultCard
+StudentResultHistory
+StudentRemark
+StudentDocumentAction
+
+Do not create abstractions for the sake of abstractions.
+
+Create reusable primitives only where they genuinely help future Student modules.
+
+============================================================
+61. FUTURE MODULE COMPATIBILITY
+============================================================
+
+The Result design should provide a foundation for future modules:
+
+Classwork
+Learning
+Progress
+Wellbeing
+Certificates
+Achievements
+Assignments
+Exams
+Documents
+
+The visual language should be reusable.
+
+Do not create a Results-only visual universe.
+
+============================================================
+62. WHAT "PREMIUM" MEANS HERE
+============================================================
+
+Do NOT interpret premium as:
+
+more gradients
+more shadows
+more colors
+more icons
+larger cards.
+
+Premium means:
+
+excellent hierarchy
++
+purposeful whitespace
++
+beautiful typography
++
+consistent color
++
+real information
++
+predictable interactions
++
+fast performance
++
+clean responsive behavior
++
+institutional credibility.
+
+The Timetable already demonstrates this.
+
+Results must reach that same standard.
+
+============================================================
+63. FINAL VISUAL DIRECTION
+============================================================
+
+Use this hierarchy:
+
+GREEN
+→ Student primary accent / active / positive
+
+SUBJECT COLORS
+→ academic identity and differentiation
+
+WHITE / SOFT NEUTRALS
+→ surfaces
+
+DARK NAVY / CHARCOAL
+→ primary typography
+
+SLATE / GREY
+→ metadata
+
+ORANGE
+→ warning / attention
+
+RED / PINK
+→ negative semantic status
+
+BLUE / CYAN
+→ informational states
+
+Do not allow any single color to dominate the entire page.
+
+============================================================
+64. FINAL UX PRINCIPLE
+============================================================
+
+When a student opens Results, the first impression should be:
+
+"I can immediately understand how I performed."
+
+Within a few seconds they should know:
+
+current assessment
+overall percentage
+grade
+total marks
+rank if permitted
+subject performance
+trend
+teacher feedback
+report card availability
+
+Then they can progressively explore deeper information.
+
+Do NOT make students hunt through multiple screens to understand their result.
+
+============================================================
+65. IMPLEMENTATION WORKFLOW
+============================================================
+
+Before coding:
+
+1. Inspect current Results route.
+2. Inspect current Results components.
+3. Inspect result database schema.
+4. Inspect assessment/exam schema.
+5. Inspect marks structure.
+6. Inspect grading configuration.
+7. Inspect School Settings.
+8. Inspect student enrollment.
+9. Inspect academic session.
+10. Inspect rank calculation.
+11. Inspect teacher remarks.
+12. Inspect report-card generation.
+13. Inspect notification architecture.
+14. Inspect RLS.
+15. Inspect Student permissions.
+16. Inspect existing Student shell/sidebar.
+17. Inspect Timetable components for visual consistency.
+18. Identify reusable components.
+19. Identify obsolete mock data.
+20. Identify duplicated logic.
+
+Only then implement.
+
+============================================================
+66. ENGINEERING QUALITY
+============================================================
+
+After implementation verify:
+
+No TypeScript errors
+No console errors
+No hydration errors
+No broken imports
+No broken routes
+No duplicate API requests
+No N+1 queries
+No unnecessary client-side fetching
+No fake data
+No hardcoded academic values
+No cross-tenant leakage
+No unauthorized access
+No unauthorized mutations
+No broken report downloads
+No broken print layout.
+
+============================================================
+67. VISUAL QA
+============================================================
+
+Test:
+
+Desktop
+iPad
+Tablet
+Mobile
+
+Check:
+
+sidebar
+header
+result hero
+assessment selector
+subject rows
+subject detail
+trend chart
+rank
+teacher remarks
+history
+report-card buttons
+loading
+empty state
+error state
+long names
+many subjects
+many assessments
+small screens
+large screens.
+
+============================================================
+68. FINAL ACCEPTANCE CRITERIA
+============================================================
+
+Do NOT consider this complete merely because:
+
+"The page looks better."
+
+It is complete only when:
+
+✓ Results has the same polish level as Timetable.
+
+✓ Student Role uses premium green identity.
+
+✓ Sidebar is refined and distinctly student-oriented.
+
+✓ Results are fully data-driven.
+
+✓ Assessment history works.
+
+✓ Subject details work.
+
+✓ Trend is real.
+
+✓ Rank respects privacy settings.
+
+✓ Teacher remarks are real.
+
+✓ Report card is functional.
+
+✓ School Settings control academic behavior.
+
+✓ Student permissions are enforced.
+
+✓ Multi-tenancy is secure.
+
+✓ Empty states are intentional.
+
+✓ Loading/error states are polished.
+
+✓ Responsive behavior is excellent.
+
+✓ Print/PDF output is institutional quality.
+
+✓ Existing Student modules continue working.
+
+============================================================
+FINAL INSTRUCTION
+============================================================
+
+Do not patch the existing Results screen.
+
+EVOLVE IT.
+
+Treat Results as one of the flagship Student Role modules.
+
+Use the APPROVED TIMETABLE as the benchmark for:
+
+spacing
+typography
+interaction
+visual rhythm
+subject colors
+card quality
+information density
+responsiveness.
+
+But Results should have its own information architecture appropriate for academic performance.
+
+And remember:
+
+GREEN IS THE STUDENT PRIMARY ACCENT AGAIN.
+
+The goal is NOT:
+
+"purple student ERP."
+
+The goal is:
+
+"premium personal academic workspace."
+
+Build the complete experience.

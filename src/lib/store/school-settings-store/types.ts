@@ -135,6 +135,41 @@ export interface HouseConfig {
   viceCaptain?: string
 }
 
+/**
+ * RESULTS / GRADING CONFIGURATION — the school-configured academic
+ * behaviour behind the Student "My Results" module. THE source of
+ * truth for the grading scale, result-privacy visibility and the
+ * official report-card composition (Student Results §11/§15/§16/§20):
+ *
+ *   gradeScale   — ordered bands (desc). Student UI grades derive
+ *                  from THIS scale — never hardcoded thresholds.
+ *   showRank     — may the student see their own class rank?
+ *   showClassTop — may the student see the Class Top 5 list?
+ *                  (minimal fields only: rank, name, percentage)
+ *   showComparison — may the student compare current vs previous
+ *                  assessment (personal progress, not competition)?
+ *   reportCard   — which optional blocks print on the official
+ *                  document (attendance summary, principal remark,
+ *                  seal/signature note).
+ */
+export interface ResultsGradeBand {
+  /** Minimum percentage for the band (inclusive). */
+  threshold: number
+  grade: string
+}
+
+export interface ResultsSettings {
+  gradeScale: ResultsGradeBand[]
+  showRank: boolean
+  showClassTop: boolean
+  showComparison: boolean
+  reportCard: {
+    includeAttendance: boolean
+    includePrincipalRemark: boolean
+    includeSealNote: boolean
+  }
+}
+
 export interface AdmissionFormFieldRule {
   fieldKey: string
   label: string
@@ -293,6 +328,9 @@ export interface SchoolSettingsState {
   // House System
   houses: HouseConfig[]
 
+  // Results / Grading configuration (Student Results module §11/§15/§16/§20)
+  results: ResultsSettings
+
   // Facilities
   facilities: {
     hasHostelFacility: boolean
@@ -379,4 +417,5 @@ export interface SchoolSettingsState {
   addWaiverAudit: (entry: Omit<WaiverAuditEntry, 'id' | 'timestamp'>) => void
   updateFacilities: (data: Partial<SchoolSettingsState['facilities']>) => void
   updateIdCard: (data: Partial<SchoolSettingsState['idCard']>) => void
+  updateResults: (data: Partial<SchoolSettingsState['results']>) => void
 }
