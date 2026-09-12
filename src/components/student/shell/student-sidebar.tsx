@@ -194,7 +194,7 @@ export function StudentSidebar({
         {groups.map((group) => (
           <div key={group.label}>
             {!collapsed && (
-              <h3 className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/55">
+              <h3 className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/65">
                 {group.label}
               </h3>
             )}
@@ -213,11 +213,11 @@ export function StudentSidebar({
                     aria-current={isActive ? 'page' : undefined}
                     aria-label={item.label}
                     className={cn(
-                      'relative flex w-full items-center rounded-[10px] text-left transition-all duration-150 cursor-pointer',
+                      'relative flex w-full items-center rounded-[10px] text-left transition-all duration-150 cursor-pointer group/icon',
                       'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                       collapsed ? 'justify-center h-9 w-9 mx-auto' : 'gap-3 px-3 py-2.5 text-xs',
                       isActive
-                        ? 'bg-primary/[0.08] font-semibold text-foreground'
+                        ? 'bg-primary/[0.09] font-semibold text-foreground'
                         : 'font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     )}
                   >
@@ -234,7 +234,7 @@ export function StudentSidebar({
                     <span
                       className={cn(
                         'flex shrink-0 items-center justify-center transition-colors',
-                        isActive ? 'text-primary' : 'text-muted-foreground/75'
+                        isActive ? 'text-primary' : 'text-muted-foreground group-hover/icon:text-foreground/70'
                       )}
                     >
                       {item.icon}

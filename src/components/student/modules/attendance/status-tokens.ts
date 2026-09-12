@@ -1,14 +1,20 @@
 /**
  * attendance/status-tokens — THE single status vocabulary for the Student
- * Attendance module (brief §12 + §38).
+ * Attendance module (gen 2 §12/§21/§38).
  *
- * Every surface (snapshot, calendar, day detail, record list, trend
+ * Every surface (hero, calendar, day detail, record list, trend
  * insight, aria labels) renders status through THESE tokens, so the same
  * record can never appear as different words or colors in two places.
  *
- * Accessibility (§36): status is NEVER colour alone — each token carries
- * a text label (chip/aria), a dot, and (where it aids comprehension) an
- * icon for the detail panel.
+ * Attendance is where colour is SIGNIFICANTLY stronger than elsewhere in
+ * the Student experience (§21/§29) — the calendar is the visual object:
+ *   Present soft green · Late soft amber · Absent soft pink · Leave soft
+ *   blue · Holiday soft violet · Weekend/no-record neutral.
+ * Tints stay SOFT (never solid blocks) and status is NEVER colour alone
+ * (§46) — every token carries a text label, a dot and a detail icon.
+ *
+ * Dark-mode note: these render INSIDE on-card (white) surfaces in dark
+ * mode, so light-scope text colours are correct in both themes.
  */
 
 import {
@@ -27,7 +33,7 @@ export interface StatusToken {
   aria: string
   /** Small status dot (calendar cells, stat rows). */
   dot: string
-  /** Calendar cell treatment — soft tint, never a solid block (§10). */
+  /** Calendar cell treatment — a confident soft tint (§21). */
   cell: string
   /** Compact chip (lists, detail panel). */
   chip: string
@@ -40,7 +46,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     label: 'Present',
     aria: 'Present',
     dot: 'bg-emerald-500',
-    cell: 'bg-emerald-500/[0.12] text-emerald-800',
+    cell: 'bg-emerald-500/[0.16] text-emerald-900',
     chip: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
     icon: CheckCircle2,
   },
@@ -48,7 +54,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     label: 'Late',
     aria: 'Late arrival',
     dot: 'bg-amber-500',
-    cell: 'bg-amber-500/[0.14] text-amber-800',
+    cell: 'bg-amber-500/[0.18] text-amber-900',
     chip: 'border-amber-500/30 bg-amber-500/10 text-amber-700',
     icon: Clock,
   },
@@ -56,7 +62,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     label: 'Absent',
     aria: 'Absent',
     dot: 'bg-rose-500',
-    cell: 'bg-rose-500/[0.10] text-rose-800',
+    cell: 'bg-rose-500/[0.13] text-rose-900',
     chip: 'border-rose-500/30 bg-rose-500/10 text-rose-700',
     icon: XCircle,
   },
@@ -64,7 +70,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     label: 'Approved Leave',
     aria: 'Approved leave',
     dot: 'bg-cyan-600',
-    cell: 'bg-cyan-600/[0.12] text-cyan-800',
+    cell: 'bg-cyan-500/[0.15] text-cyan-900',
     chip: 'border-cyan-600/30 bg-cyan-600/10 text-cyan-700',
     icon: Plane,
   },
@@ -72,7 +78,7 @@ const TOKENS: Record<DayKind, StatusToken> = {
     label: 'Holiday',
     aria: 'School holiday',
     dot: 'bg-violet-500/70',
-    cell: 'bg-violet-500/[0.09] text-violet-800',
+    cell: 'bg-violet-500/[0.12] text-violet-900',
     chip: 'border-violet-500/30 bg-violet-500/10 text-violet-700',
     icon: PartyPopper,
   },

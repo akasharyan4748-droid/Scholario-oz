@@ -1,15 +1,16 @@
 'use client'
 
 /**
- * attendance/calendar-view — the primary attendance experience (§8–§11, §31).
+ * attendance/calendar-view — the primary attendance experience (§21–§24, gen 2).
  *
- * A premium month calendar in the Timetable's visual language: soft status
- * tints (never solid blocks), Monday-first school week, month navigation
- * bounded by the real record history, and a compact day-detail panel that
- * opens inline (never a modal) showing ONLY fields the record actually has.
- *
- * Day resolution honours the school calendar (§31): holidays render as
- * HOLIDAY, unrecorded school days as NO RECORD — never silently Absent.
+ * The calendar IS the attendance page's visual object: each school day
+ * carries its meaning as a confident soft tint (present green, late
+ * amber, absent pink, leave blue, holiday violet — §21), the month
+ * opens with a compact colour-coded summary strip (§24) instead of
+ * repeated sentences, and month navigation stays bounded by the real
+ * record history with a smooth transition (§23). Tapping a day opens a
+ * compact inline detail panel (never a modal) showing ONLY the fields
+ * the record actually carries (§22).
  */
 
 import { motion, AnimatePresence } from 'framer-motion'
@@ -48,8 +49,8 @@ export function CalendarView({
 
   return (
     <GlassCard hover={false} className="on-card p-4 sm:p-5">
-      {/* ── Month navigation — subtle, bounded by real history (§9) ── */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      {/* ── Month navigation — smooth, bounded by real history (§23) ── */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold tracking-tight text-foreground">{monthLabel(cursor)}</h3>
@@ -59,11 +60,6 @@ export function CalendarView({
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {monthStats.total > 0
-              ? `${workingDays} school days · ${monthStats.total} recorded · ${monthStats.percent}% attended`
-              : `${workingDays} school days · no records yet`}
-          </p>
         </div>
         <div className="flex items-center gap-1.5">
           <Button
@@ -89,7 +85,43 @@ export function CalendarView({
         </div>
       </div>
 
-      {/* ── Grid: Monday-first school week ── */}
+      {/* ── Month summary — compact colour-coded facts, not sentences (§24) ── */}
+      <div className="mb-3.5 flex flex-wrap items-center gap-1.5 rounded-lg bg-muted/30 px-2.5 py-1.5">
+        <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums text-foreground/80">
+          {monthStats.total} / {workingDays} recorded
+        </span>
+        {monthStats.total > 0 ? (
+          <>
+            <span aria-hidden className="text-border">·</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums text-emerald-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+              {monthStats.percent}%
+            </span>
+            <span aria-hidden className="text-border">·</span>
+            <span className="inline-flex items-center gap-2 text-[11px] font-medium tabular-nums text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+                {monthStats.present}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+                {monthStats.late}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" aria-hidden />
+                {monthStats.absent}
+              </span>
+            </span>
+          </>
+        ) : (
+          <>
+            <span aria-hidden className="text-border">·</span>
+            <span className="px-2 py-0.5 text-[11px] font-medium text-muted-foreground">No records yet</span>
+          </>
+        )}
+      </div>
+
+      {/* ── Grid: Monday-first school week — the visual object (§21) ── */}
       <div className="grid grid-cols-7 gap-1 sm:gap-1.5" role="grid" aria-label={`Attendance calendar — ${monthLabel(cursor)}`}>
         {WEEKDAYS.map((d) => (
           <div key={d} className="pb-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">
@@ -120,11 +152,12 @@ export function CalendarView({
                   aria-pressed={isSelected || undefined}
                   title={cell.holidayName ?? undefined}
                   className={cn(
-                    'relative flex aspect-square flex-col items-center justify-center gap-[3px] rounded-lg text-xs font-semibold transition-shadow',
+                    'relative flex aspect-square flex-col items-center justify-center gap-[3px] rounded-lg text-xs font-semibold transition-all',
                     'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     token.cell,
-                    isToday && !isSelected && 'ring-1 ring-primary/50',
-                    isSelected && 'ring-2 ring-primary ring-offset-1 ring-offset-background',
+                    !isSelected && 'hover:brightness-[0.97]',
+                    isToday && !isSelected && 'ring-1 ring-primary/60',
+                    isSelected && 'z-[1] scale-[1.06] ring-2 ring-primary ring-offset-1 ring-offset-background shadow-sm',
                   )}
                 >
                   <span className="tabular-nums leading-none">{cell.day}</span>
@@ -136,7 +169,7 @@ export function CalendarView({
         </AnimatePresence>
       </div>
 
-      {/* ── Legend — status is never colour alone (§36) ── */}
+      {/* ── Legend — status is never colour alone (§46) ── */}
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/70 pt-3.5 text-[10px] font-medium text-muted-foreground">
         {(['present', 'late', 'absent', 'leave', 'holiday', 'norecord'] as const).map((kind) => (
           <span key={kind} className="flex items-center gap-1.5">
@@ -146,7 +179,7 @@ export function CalendarView({
         ))}
       </div>
 
-      {/* ── Day detail — inline, only actual fields (§11, §23) ── */}
+      {/* ── Day detail — compact, inline, only actual fields (§22) ── */}
       <AnimatePresence mode="wait">
         {selectedCell && (
           <DayDetail key={selectedCell.iso} cell={selectedCell} todayIso={todayIso} classLabel={classLabel} />
@@ -156,7 +189,7 @@ export function CalendarView({
   )
 }
 
-/* ── Inline day detail panel ─────────────────────────────────────── */
+/* ── Inline day detail panel — the record's own facts ─────────────── */
 
 function DayDetail({ cell, todayIso, classLabel }: { cell: DayCell; todayIso: string; classLabel: string }) {
   const token = statusToken(cell.kind)
@@ -205,7 +238,7 @@ function DayDetail({ cell, todayIso, classLabel }: { cell: DayCell; todayIso: st
         </span>
       </div>
 
-      {/* Only fields the record actually carries (§11) */}
+      {/* Only fields the record actually carries (§22) */}
       {r && (
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
           {r.markedBy && <span>Marked by <span className="font-medium text-foreground/80">{r.markedBy}</span></span>}

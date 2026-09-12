@@ -1,25 +1,24 @@
 'use client'
 
 /**
- * attendance/snapshot — the "How am I doing?" answer (brief §5–§7, §16, §24).
+ * attendance/snapshot — the "How am I doing?" hero (§20, gen 2).
  *
- * One card, one hierarchy: the overall percentage is dominant (with a
- * subtle green progress arc — the STUDENT accent, never a "doing
- * well" wash), the four counted statuses sit beside it as quiet facts,
- * and today's status closes the card. No icon tiles, no repeated
- * percentage (§24) — every number derives from the canonical records via
- * computeStats, and the performance label comes from the SCHOOL'S
- * configured thresholds only.
+ * The percentage IS the hero: a beautiful compact arc beside the big
+ * number, with the performance label from the SCHOOL's thresholds. The
+ * four counted statuses follow as soft colour-coded fact tiles — each
+ * one meaningful colour (green present, amber late, rose absent, cyan
+ * leave), never decoration (§29). Policy appears as ONE compact chip
+ * (§27 — "95%+ Excellent", never the full sentence). Today closes the
+ * card: the fastest answer a student needs.
  *
- * Colour = meaning (Student design system): the arc/ring carries the
- * green student identity; status colours stay semantic (green present,
- * amber late, rose absent, cyan leave).
+ * Every number derives from the canonical records via computeStats.
  */
 
+import { CheckCircle2, Clock, Plane, Sun, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GlassCard } from '@/components/shared/ui'
 import type { AttendanceStats, StudentAttendanceRecord } from '@/lib/store/student-attendance-store'
-import { COUNTED_STATUSES, statusToken, type DayKind } from './status-tokens'
+import { statusToken, type DayKind } from './status-tokens'
 
 export interface TodayStatus {
   kind: DayKind
@@ -34,9 +33,9 @@ interface SnapshotProps {
   today: TodayStatus
 }
 
-/** Subtle progress arc — green student accent, percent-proportional. */
+/** Compact progress arc — the student's green identity, percent-proportional. */
 function ProgressArc({ percent }: { percent: number }) {
-  const size = 64
+  const size = 68
   const stroke = 6
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
@@ -74,8 +73,21 @@ function ProgressArc({ percent }: { percent: number }) {
   )
 }
 
+/** The four counted statuses as soft tinted fact tiles (§20/§29). */
+const FACTS: {
+  kind: 'present' | 'late' | 'absent' | 'leave'
+  icon: typeof CheckCircle2
+  surface: string
+  text: string
+}[] = [
+  { kind: 'present', icon: CheckCircle2, surface: 'border-emerald-500/25 bg-emerald-500/[0.08]', text: 'text-emerald-700' },
+  { kind: 'late', icon: Clock, surface: 'border-amber-500/30 bg-amber-500/[0.09]', text: 'text-amber-700' },
+  { kind: 'absent', icon: XCircle, surface: 'border-rose-500/25 bg-rose-500/[0.07]', text: 'text-rose-700' },
+  { kind: 'leave', icon: Plane, surface: 'border-cyan-500/25 bg-cyan-500/[0.08]', text: 'text-cyan-700' },
+]
+
 export function Snapshot({ stats, windowLabel, thresholds, today }: SnapshotProps) {
-  // Performance label — ONLY from the school's configured policy (§7).
+  // Performance label — ONLY from the school's configured policy (§27).
   const label =
     thresholds && stats.total > 0
       ? stats.percent >= thresholds.excellent
@@ -86,68 +98,83 @@ export function Snapshot({ stats, windowLabel, thresholds, today }: SnapshotProp
       : null
 
   const todayToken = statusToken(today.kind)
-  const TodayIcon = todayToken.icon
+  const TodayIcon = today.record ? todayToken.icon : today.kind === 'weekend' ? Sun : todayToken.icon
 
   return (
-    <GlassCard hover={false} className="on-card p-5 sm:p-6">
-      <div className="flex flex-col gap-6 lg:flex-row lg:gap-0">
-        {/* ── Dominant: overall percentage + subtle green arc ─────────── */}
-        <div className="lg:flex lg:min-w-[260px] lg:flex-col lg:justify-center lg:pr-8">
+    <GlassCard hover={false} className="on-card overflow-hidden p-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(250px,0.9fr)_1.35fr]">
+        {/* ── The percentage — dominant, with its arc ─────────────────── */}
+        <div className="bg-primary/[0.04] p-5 sm:p-6 lg:border-r lg:border-border/70">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Overall · {windowLabel}
           </p>
-          <div className="mt-2 flex items-center gap-4 sm:gap-5">
+          <div className="mt-2.5 flex items-center gap-4 sm:gap-5">
             <ProgressArc percent={stats.percent} />
             <div className="min-w-0">
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <p className="text-5xl font-bold tabular-nums tracking-tight text-foreground">
-                  {stats.percent}
-                  <span className="ml-0.5 text-2xl font-semibold text-muted-foreground/70">%</span>
-                </p>
-                {label && (
+              <p className="text-[2.9rem] font-bold leading-none tabular-nums tracking-tight text-foreground sm:text-5xl">
+                {stats.percent}
+                <span className="ml-0.5 text-2xl font-semibold text-muted-foreground/60">%</span>
+              </p>
+              {label && (
+                <span
+                  className={cn(
+                    'mt-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
+                    label === 'Excellent' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
+                    label === 'Good' && 'border-sky-500/30 bg-sky-500/10 text-sky-700',
+                    label === 'Needs Attention' && 'border-rose-500/30 bg-rose-500/10 text-rose-700',
+                  )}
+                >
                   <span
                     className={cn(
-                      'rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
-                      label === 'Excellent' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
-                      label === 'Good' && 'border-sky-500/30 bg-sky-500/10 text-sky-700',
-                      label === 'Needs Attention' && 'border-rose-500/30 bg-rose-500/10 text-rose-700',
+                      'h-1.5 w-1.5 rounded-full',
+                      label === 'Excellent' ? 'bg-emerald-500' : label === 'Good' ? 'bg-sky-500' : 'bg-rose-500',
                     )}
-                  >
-                    {label}
-                  </span>
-                )}
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {stats.attended} of {stats.total} recorded school day{stats.total === 1 ? '' : 's'} attended
-              </p>
+                    aria-hidden
+                  />
+                  {label}
+                </span>
+              )}
             </div>
           </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            {stats.attended} of {stats.total} recorded school day{stats.total === 1 ? '' : 's'} attended
+          </p>
+          {/* Policy — one compact contextual chip, never the sentence (§27) */}
           {thresholds && (
-            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground/80">
-              School policy: {thresholds.needsAttention}%+ required · {thresholds.excellent}%+ excellent
-            </p>
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-background/70 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                <span className="h-1 w-1 rounded-full bg-emerald-500" aria-hidden />
+                {thresholds.excellent}%+ Excellent
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-background/70 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                <span className="h-1 w-1 rounded-full bg-muted-foreground/50" aria-hidden />
+                School threshold · {thresholds.needsAttention}%
+              </span>
+            </div>
           )}
         </div>
 
-        {/* ── Quiet facts: the four counted statuses ── */}
-        <div className="grid grid-cols-2 gap-x-8 gap-y-4 border-border/70 lg:flex-1 lg:grid-cols-2 lg:border-l lg:pl-8">
-          {COUNTED_STATUSES.map((s) => {
-            const value = stats[s.kind]
+        {/* ── The counted statuses — soft tinted fact tiles ───────────── */}
+        <div className="grid grid-cols-2 items-stretch gap-2.5 p-5 sm:grid-cols-4 sm:p-6 lg:grid-cols-2 xl:grid-cols-4">
+          {FACTS.map((f) => {
+            const value = stats[f.kind]
+            const Icon = f.icon
             return (
-              <div key={s.kind} className="flex items-center gap-2.5">
-                <span className={cn('h-2 w-2 shrink-0 rounded-full', s.dot)} aria-hidden />
-                <div className="min-w-0">
-                  <p className="text-xl font-bold tabular-nums leading-none text-foreground">{value}</p>
-                  <p className={cn('mt-1 truncate text-[11px] font-medium', s.text)}>{s.label}</p>
+              <div key={f.kind} className={cn('flex flex-col justify-between rounded-xl border px-3.5 py-3', f.surface)}>
+                <div className="flex items-center justify-between gap-1.5">
+                  <Icon className={cn('h-3.5 w-3.5 shrink-0', f.text)} aria-hidden />
+                  <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', statusToken(f.kind).dot)} aria-hidden />
                 </div>
+                <p className={cn('mt-2.5 text-2xl font-bold leading-none tabular-nums tracking-tight', f.text)}>{value}</p>
+                <p className="mt-1 text-[11px] font-semibold text-foreground/70">{statusToken(f.kind).label}</p>
               </div>
             )
           })}
         </div>
       </div>
 
-      {/* ── Today — the fastest answer (§46) ── */}
-      <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/70 pt-4">
+      {/* ── Today — the fastest answer (§50) ── */}
+      <div className="mt-0 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/70 bg-muted/[0.15] px-5 py-3.5">
         <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Today</span>
         <span
           className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', todayToken.chip)}

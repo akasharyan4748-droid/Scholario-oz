@@ -1,26 +1,28 @@
 'use client'
 
 /**
- * results/report-card — the OFFICIAL report card (§20/§21/§22).
+ * results/report-card — the OFFICIAL REPORT CARD (§18/§20–§22, gen 2).
  *
- * Not a dashboard screenshot: a genuine institutional document —
- * school letterhead (from School Settings, the branding source of
- * truth), student particulars, the subject-wise marks table with the
- * school's grading scale, totals, rank (only when permitted),
- * attendance (only when configured), the published teacher remark and
- * signature/seal furniture. Composition follows the school's
- * configured report-card flags; fields that don't exist never print.
+ * A premium document section — not a dashboard button: the trigger reads
+ * like the school-issued record it represents (document icon, official
+ * title, quiet provenance line, two clear actions). The document itself
+ * is a genuine institutional artifact — school letterhead (from School
+ * Settings, the branding source of truth), student particulars, the
+ * subject-wise marks table with the school's grading scale, totals, rank
+ * (only when permitted), attendance (only when configured), the published
+ * teacher remark and signature/seal furniture. Composition follows the
+ * school's configured report-card flags; fields that don't exist never
+ * print.
  *
  * Actions: in-app PREVIEW (A4 paper dialog), DOWNLOAD (real file) and
- * PRINT (the document itself — the preferred printable form, §51).
- * The student can never alter official marks — this module is read-only.
+ * PRINT (the document itself — the preferred printable form). The
+ * student can never alter official marks — this module is read-only.
  */
 
 import { useRef } from 'react'
-import { FileText, Download, Printer, Eye } from 'lucide-react'
+import { FileBadge2, Download, Printer, Eye } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { GlassCard } from '@/components/shared/ui'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { downloadHTMLFile, safeFileName } from '@/lib/download-file'
@@ -241,30 +243,32 @@ export function ReportCard(props: ReportCardProps) {
   }
 
   return (
-    <GlassCard hover={false} className="on-card p-4 sm:p-5">
-      <div className="mb-3">
-        <h3 className="text-sm font-bold tracking-tight text-foreground">Official Report Card</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">{props.assessment.name} · issued by your school</p>
-      </div>
-
-      <div className="rounded-xl border border-border/70 bg-muted/15 p-3.5">
-        <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
-          <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/70" aria-hidden />
-          The school-issued document with your marks, grade, attendance and teacher&apos;s remark — generated from the
-          official published result.
-        </p>
-        <div className="mt-3.5 flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => setOpen(true)} className="h-8 gap-1.5 text-xs">
-            <Eye className="h-3.5 w-3.5" /> View
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleDownload} className="h-8 gap-1.5 text-xs">
-            <Download className="h-3.5 w-3.5" /> Download
-          </Button>
-          <Button size="sm" variant="outline" onClick={handlePrint} className="h-8 gap-1.5 text-xs">
-            <Printer className="h-3.5 w-3.5" /> Print
-          </Button>
+    <section aria-label="Official report card" className="flex h-full flex-col rounded-xl border border-border/70 bg-gradient-to-b from-primary/[0.035] to-transparent p-5">
+      <div className="flex items-start gap-3.5">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/[0.08] text-primary" aria-hidden>
+          <FileBadge2 className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold tracking-tight text-foreground">Official Report Card</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">Your school-issued academic record</p>
+          <p className="mt-1.5 truncate text-[11px] font-medium text-foreground/75">
+            {props.assessment.name} · {getActiveAcademicSessionLabel()}
+          </p>
         </div>
       </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 sm:flex-nowrap">
+        <Button size="sm" onClick={() => setOpen(true)} className="h-8 flex-1 gap-1.5 text-xs">
+          <Eye className="h-3.5 w-3.5" /> View Report Card
+        </Button>
+        <Button size="sm" variant="outline" onClick={handleDownload} className="h-8 flex-1 gap-1.5 text-xs">
+          <Download className="h-3.5 w-3.5" /> Download
+        </Button>
+      </div>
+      <p className="mt-2.5 text-[10px] leading-relaxed text-muted-foreground/70">
+        Marks, grade{props.reportCardConfig.includeAttendance ? ', attendance' : ''}
+        {props.result.remark ? ' and the teacher\'s remark' : ''} — exactly as published by your school.
+      </p>
 
       {/* In-app preview — the institutional document on an A4 sheet */}
       <Dialog open={open} onOpenChange={setOpen}>
@@ -291,8 +295,8 @@ export function ReportCard(props: ReportCardProps) {
               <Download className="h-3.5 w-3.5" /> Download
             </Button>
           </div>
-        </DialogContent>
+      </DialogContent>
       </Dialog>
-    </GlassCard>
+    </section>
   )
 }

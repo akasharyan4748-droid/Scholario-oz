@@ -1,11 +1,11 @@
 'use client'
 
 /**
- * results/assessment-selector — the one prominent control (§3/§24).
+ * results/assessment-selector — the one prominent control (gen 2 §3/§24).
  *
  * A refined wrap-safe selector (never a giant dropdown): published
  * assessments are selectable chips in publish order, the latest carries
- * a subtle LATEST tag (§26), and upcoming assessments appear in their
+ * a subtle LATEST tag, and upcoming assessments appear in their
  * chronological place as quiet "pending" chips so the student always
  * sees the full session shape. Wrapping (not scrolling) keeps iPad and
  * mobile safe from horizontal overflow at any assessment count.
@@ -65,7 +65,7 @@ export function AssessmentSelector({ published, upcoming, selectedId, onSelect }
                 ? 'cursor-pointer'
                 : 'cursor-default border-dashed border-border/70 bg-transparent text-muted-foreground/70',
               published && !isSelected && 'border-border bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
-              isSelected && 'border-primary/40 bg-primary/[0.08] font-semibold text-foreground shadow-2xs'
+              isSelected && 'border-primary/40 bg-primary/[0.09] font-semibold text-foreground shadow-2xs'
             )}
           >
             {published ? (
