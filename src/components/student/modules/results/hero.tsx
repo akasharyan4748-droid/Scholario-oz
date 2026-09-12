@@ -1,26 +1,31 @@
 'use client'
 
 /**
- * results/hero — the selected result's headline (§7/§8, second generation).
+ * results/hero — the selected result's headline (§7/§8, second generation,
+ * final colour refinement).
  *
- * An academic record with visual personality — NOT a flat white banner:
- *   · a soft green identity zone (left) carries the assessment itself
- *   · the score composition (right) gives each metric its own meaning:
- *       percentage  → the primary metric, large, student green
- *       marks       → a quiet supporting fact in neutral ink
- *       grade       → a distinct academic badge (grade-tone tint)
- *       rank        → a medal treatment (amber), privacy-gated
+ * An academic record with a CONTROLLED MULTI-ACCENT personality — not a
+ * green banner, not a gradient banner:
+ *   · LEFT — a subtle WARM neutral academic surface (the zone reads as
+ *     paper, not as colour) carrying the assessment with its own
+ *     assessment-type crest (Unit Test sky · Mid Term violet · Final amber
+ *     — the same type language as the history timeline)
+ *   · RIGHT — neutral white, where each metric has its own meaning:
+ *       percentage → emerald (THE primary metric, student green)
+ *       marks     → neutral ink
+ *       grade     → violet academic badge (attention grades stay semantic)
+ *       rank      → amber medal, privacy-gated
  *   · one derived closing line (real delta / real band — never filler)
  *
  * Every value flows from the published result and the school's privacy
  * policy; rank disappears entirely when hidden (§15).
  */
 
-import { CalendarRange, CheckCircle2, Medal, TrendingDown, TrendingUp } from 'lucide-react'
+import { Award, CalendarRange, CheckCircle2, FileCheck2, GraduationCap, Medal, TrendingDown, TrendingUp } from 'lucide-react'
 import { GlassCard } from '@/components/shared/ui'
 import { cn } from '@/lib/utils'
-import { fmtPct, type AssessmentDef, type AssessmentTotals } from '@/lib/store/student-results-store'
-import { gradeTone } from './grade-tone'
+import { fmtPct, type AssessmentDef, type AssessmentTotals, type AssessmentType } from '@/lib/store/student-results-store'
+import { heroGradeBadge } from './grade-tone'
 
 const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
@@ -55,6 +60,22 @@ function bandLine(pct: number): string {
   return 'A fresh assessment is a fresh chance'
 }
 
+/** Assessment-type crest — one icon + colour per assessment kind, shared language with the history timeline (§16). */
+const TYPE_CREST: Record<AssessmentType, { icon: typeof GraduationCap; tile: string }> = {
+  'Unit Test': {
+    icon: FileCheck2,
+    tile: 'border-sky-500/25 bg-sky-500/[0.08] text-sky-600 dark:text-sky-400',
+  },
+  'Mid Term': {
+    icon: GraduationCap,
+    tile: 'border-violet-500/25 bg-violet-500/[0.09] text-violet-600 dark:text-violet-400',
+  },
+  Final: {
+    icon: Award,
+    tile: 'border-amber-500/30 bg-amber-500/[0.10] text-amber-600 dark:text-amber-400',
+  },
+}
+
 interface HeroProps {
   assessment: AssessmentDef
   totals: AssessmentTotals
@@ -68,26 +89,37 @@ interface HeroProps {
 }
 
 export function Hero({ assessment, totals, grade, rank, classSize, isLatest, delta, previousName }: HeroProps) {
-  const tone = gradeTone(grade)
+  const crest = TYPE_CREST[assessment.type] ?? TYPE_CREST['Unit Test']
+  const CrestIcon = crest.icon
   const topPct = rank != null && classSize > 1 ? Math.max(1, Math.round((rank / classSize) * 100)) : null
 
   return (
     <GlassCard hover={false} className="on-card overflow-hidden p-0">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(230px,0.85fr)_1.35fr]">
-        {/* ── Identity zone — the assessment, on a soft green surface ── */}
-        <div className="relative bg-primary/[0.045] p-5 sm:p-6 lg:border-r lg:border-border/70">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-border/80 bg-background/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {assessment.term} · {assessment.type}
+        {/* ── Identity zone — warm academic paper, the assessment's own crest ── */}
+        <div className="relative bg-amber-500/[0.04] p-5 sm:p-6 lg:border-r lg:border-border/70">
+          <div className="flex items-center gap-3">
+            <span
+              className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border', crest.tile)}
+              aria-hidden
+            >
+              <CrestIcon className="h-5 w-5" />
             </span>
-            {isLatest && (
-              <span className="rounded-full border border-primary/30 bg-primary/[0.09] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-primary">
-                Latest
-              </span>
-            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-border/80 bg-background/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {assessment.term} · {assessment.type}
+                </span>
+                {isLatest && (
+                  <span className="rounded-full border border-primary/30 bg-primary/[0.09] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-primary">
+                    Latest
+                  </span>
+                )}
+              </div>
+              <h2 className="mt-1.5 truncate text-xl font-bold tracking-tight text-foreground sm:text-[1.35rem]">{assessment.name}</h2>
+            </div>
           </div>
-          <h2 className="mt-2.5 text-xl font-bold tracking-tight text-foreground sm:text-[1.35rem]">{assessment.name}</h2>
-          <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <p className="mt-3.5 flex items-center gap-1.5 text-xs text-muted-foreground">
             <CalendarRange className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" aria-hidden />
             {rangeLabel(assessment.conductedFrom, assessment.conductedTo)}
           </p>
@@ -99,10 +131,10 @@ export function Hero({ assessment, totals, grade, rank, classSize, isLatest, del
           )}
         </div>
 
-        {/* ── Score zone — each metric with its own visual meaning ── */}
+        {/* ── Score zone — neutral white, each metric with its own colour meaning ── */}
         <div className="flex flex-col p-5 sm:p-6">
           <div className="flex flex-wrap items-start gap-x-10 gap-y-5 sm:gap-x-12">
-            {/* Percentage — THE primary metric */}
+            {/* Percentage — THE primary metric, student green */}
             <div className="min-w-[150px]">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Overall</p>
               <p className="mt-1 text-[2.9rem] font-bold leading-none tabular-nums tracking-tight text-primary sm:text-5xl">
@@ -115,13 +147,13 @@ export function Hero({ assessment, totals, grade, rank, classSize, isLatest, del
               </p>
             </div>
 
-            {/* Grade — a distinct academic badge */}
+            {/* Grade — the violet academic badge (attention grades keep their warning tone) */}
             <div className="flex flex-col items-center">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Grade</p>
               <span
                 className={cn(
                   'mt-1.5 inline-flex h-12 min-w-[3.4rem] items-center justify-center rounded-2xl border px-3 text-xl font-bold tracking-tight',
-                  tone.badge,
+                  heroGradeBadge(grade),
                 )}
               >
                 {grade}

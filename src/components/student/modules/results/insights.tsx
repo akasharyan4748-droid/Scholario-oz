@@ -17,7 +17,7 @@
  */
 
 import { useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, ChevronDown, Focus, Minus, TrendingUp } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, ChevronDown, Focus, Minus, TrendingUp, Trophy } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { fmtPct } from '@/lib/store/student-results-store'
@@ -110,11 +110,12 @@ export function Insights({ snapshot, overallDelta, previousName, classPosition, 
     const topPct = Math.max(1, Math.round((classPosition.rank / classPosition.classSize) * 100))
     tiles.push({
       key: 'position',
-      icon: TrendingUp,
+      icon: Trophy,
       label: 'Class position',
       value: `Top ${topPct}%`,
       sub: `#${classPosition.rank} of ${classPosition.classSize}`,
-      tone: { surface: 'border-cyan-500/25 bg-cyan-500/[0.07] dark:bg-cyan-500/[0.12]', text: 'text-cyan-700 dark:text-cyan-400' },
+      // Rank is achievement → gold/amber (the same medal language as the hero).
+      tone: { surface: 'border-amber-400/40 bg-amber-400/[0.09] dark:bg-amber-400/[0.13]', text: 'text-amber-700 dark:text-amber-400' },
     })
   }
 

@@ -156,8 +156,11 @@ export function CalendarView({
                     'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     token.cell,
                     !isSelected && 'hover:brightness-[0.97]',
-                    isToday && !isSelected && 'ring-1 ring-primary/60',
-                    isSelected && 'z-[1] scale-[1.06] ring-2 ring-primary ring-offset-1 ring-offset-background shadow-sm',
+                    // Today — a NEUTRAL ink outline so it reads on any status tint
+                    isToday && !isSelected && 'ring-1 ring-foreground/40',
+                    // Selected — the day's OWN status colour, never a generic green
+                    isSelected && 'z-[1] scale-[1.06] ring-2 ring-offset-1 ring-offset-background shadow-sm',
+                    isSelected && token.ring,
                   )}
                 >
                   <span className="tabular-nums leading-none">{cell.day}</span>
