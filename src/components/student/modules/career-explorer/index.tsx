@@ -1,148 +1,142 @@
 'use client'
 
-import { useState } from 'react'
+/**
+ * CareerExplorerModule — the Careers tab of "My Progress".
+ *
+ * The biggest conceptual change of the rebuild: for a PRIMARY school
+ * student (the demo student is in Class 2-A) this is an INTERESTS,
+ * ACTIVITIES and CURIOSITY surface — career awareness, never stream
+ * selection, invented scores, entrance exams or future-planning
+ * ladders. The old mock-backed module (a fake subject-stream hero,
+ * made-up score KPIs, a lying session-booking toast and
+ * higher-secondary planning tabs) is gone — the legacy mock career
+ * file has zero importers.
+ *
+ * Structure: one header + a compact live fact strip (catalog size,
+ * saved count, honest distinct-career explored count) + a persistent
+ * search + three views (Explore · My Interests · Saved). The module
+ * owns the career detail dialog; opening a career records a REAL
+ * view into the persisted career store.
+ */
+
+import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Compass, Rocket, TrendingUp, Target, Sparkles, Bookmark, GraduationCap } from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
-import { KpiCard } from '@/components/shared/kpi-card'
-import { ChartCard, BarTrend } from '@/components/shared/charts'
-import { careerStats, type CareerPath } from '@/lib/mock/career'
+import { Compass, Bookmark, Eye, Lightbulb } from 'lucide-react'
+import { StudentPageHeader } from '@/components/student/shell/page-header'
+import {
+  CAREER_CATALOG,
+  exploreCountOf,
+  useStudentCareerStore,
+  type CareerEntry,
+} from '@/lib/store/student-career-store'
+import { ExploreView } from './explore-view'
+import { InterestsView } from './interests-view'
+import { SavedView } from './saved-view'
+import { CareerDetail } from './career-detail'
+import { FooterPolicyLine } from './shared'
 import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
-import { type Tab } from './shared'
-import { ExploreTab } from './explore-tab'
-import { StreamsTab } from './streams-tab'
-import { RoadmapTab } from './roadmap-tab'
-import { CareerDetailModal } from './career-detail-modal'
+
+type View = 'explore' | 'interests' | 'saved'
+
+const VIEWS: Array<{ key: View; label: string }> = [
+  { key: 'explore', label: 'Explore' },
+  { key: 'interests', label: 'My Interests' },
+  { key: 'saved', label: 'Saved' },
+]
+
+function FactChip({ icon: Icon, children }: { icon: typeof Compass; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-muted/40 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+      <Icon className="h-3 w-3 shrink-0 text-primary" aria-hidden />
+      {children}
+    </span>
+  )
+}
 
 export function CareerExplorerModule() {
-  const [tab, setTab] = useState<Tab>('explore')
-  const [selected, setSelected] = useState<CareerPath | null>(null)
-  const [saved, setSaved] = useState<Set<string>>(new Set(['CP01', 'CP04']))
+  const saved = useStudentCareerStore((s) => s.saved)
+  const viewed = useStudentCareerStore((s) => s.viewed)
+  const recordView = useStudentCareerStore((s) => s.recordView)
 
-  const toggleSave = (id: string) => {
-    setSaved((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-        toast.info('Removed from saved')
-      } else {
-        next.add(id)
-        toast.success('Career saved! 🔖', { description: 'Added to your wishlist' })
-      }
-      return next
-    })
+  const [view, setView] = useState<View>('explore')
+  // The search query is module state — it persists across view switches.
+  const [query, setQuery] = useState('')
+  const [detailId, setDetailId] = useState<string | null>(null)
+
+  const explored = useMemo(() => exploreCountOf(viewed), [viewed])
+
+  function openCareer(career: CareerEntry) {
+    recordView(career.id)
+    setDetailId(career.id)
+  }
+
+  function switchCareer(careerId: string) {
+    // Swapping the detail to a related career is a real open, too.
+    recordView(careerId)
+    setDetailId(careerId)
   }
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Career Explorer"
-        subtitle="Discover careers, explore streams & plan your future"
-        icon={<Compass className="h-5 w-5" />}
-        action={
-          <button
-            onClick={() => toast.success('Counselor session booked', { description: `Next: ${careerStats.nextSession}` })}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-violet-500/20"
-          >
-            <Sparkles className="h-3.5 w-3.5" /> Book Counselor
-          </button>
-        }
-      />
+      <StudentPageHeader title="Career Explorer" subtitle="Find out what jobs are like" />
 
-      {/* Hero aptitude card */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 p-6 text-white shadow-premium-lg"
-      >
-        <div className="absolute inset-0 bg-grid opacity-20" />
-        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="relative">
-              <div className="absolute inset-0 rounded-full bg-white/20 blur-md animate-pulse" />
-              <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-white/15 backdrop-blur ring-4 ring-white/30">
-                <Rocket className="h-9 w-9" />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 text-violet-50 text-xs font-medium mb-1">
-                <Target className="h-3.5 w-3.5 text-amber-300" /> Recommended Stream
-              </div>
-              <h2 className="font-display text-2xl font-extrabold tracking-tight">{careerStats.streamRecommendation}</h2>
-              <p className="text-violet-50/90 text-sm mt-0.5">Aptitude score: {careerStats.aptitudeScore}/100 · {careerStats.confidenceLevel}% confident</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <div className="rounded-2xl bg-white/10 backdrop-blur px-5 py-3 text-center">
-              <p className="text-2xl font-bold">{careerStats.careersExplored}</p>
-              <p className="text-[11px] text-violet-50">Explored</p>
-            </div>
-            <div className="rounded-2xl bg-white/10 backdrop-blur px-5 py-3 text-center">
-              <p className="text-2xl font-bold">{saved.size}</p>
-              <p className="text-[11px] text-violet-50">Saved</p>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard label="Careers Explored" value={careerStats.careersExplored} icon={<Compass className="h-5 w-5" />} accent="violet" trend={4} trendLabel="this month" delay={0} />
-        <KpiCard label="Saved Careers" value={saved.size} icon={<Bookmark className="h-5 w-5" />} accent="amber" trendLabel="your wishlist" delay={0.05} />
-        <KpiCard label="Aptitude Score" value={careerStats.aptitudeScore} suffix="/100" icon={<Target className="h-5 w-5" />} accent="emerald" trend={6} trendLabel="strong match" delay={0.1} />
-        <KpiCard label="Confidence" value={careerStats.confidenceLevel} suffix="%" icon={<TrendingUp className="h-5 w-5" />} accent="cyan" trend={8} trendLabel="growing!" delay={0.15} />
+      {/* Live fact strip — every number derived at render time */}
+      <div className="flex flex-wrap items-center gap-2">
+        <FactChip icon={Compass}>
+          {CAREER_CATALOG.length} careers to explore
+        </FactChip>
+        <FactChip icon={Bookmark}>{saved.length} saved</FactChip>
+        <FactChip icon={Eye}>{explored} explored</FactChip>
       </div>
 
-      {/* Interest areas chart */}
-      <ChartCard title="Your Interest Areas" subtitle="Based on aptitude test & activities">
-        <BarTrend data={careerStats.interestAreas} xKey="name" yKey="value" color="oklch(0.6 0.2 300)" height={200} horizontal />
-      </ChartCard>
-
-      {/* Tabs */}
-      <div className="flex gap-2">
-        {[
-          { id: 'explore' as Tab, label: 'Explore Careers', icon: <Compass className="h-3.5 w-3.5" /> },
-          { id: 'streams' as Tab, label: 'Stream Guidance', icon: <GraduationCap className="h-3.5 w-3.5" /> },
-          { id: 'roadmap' as Tab, label: 'My Roadmap', icon: <Rocket className="h-3.5 w-3.5" /> },
-        ].map((t) => (
+      {/* View switch */}
+      <div className="flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Career Explorer views">
+        {VIEWS.map((v) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={v.key}
+            type="button"
+            role="tab"
+            aria-selected={view === v.key}
+            onClick={() => setView(v.key)}
             className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-              tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
+              'rounded-full px-3.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
+              view === v.key
+                ? 'bg-violet-500/[0.1] text-violet-700 dark:text-violet-300'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
             )}
           >
-            {t.icon}
-            {t.label}
+            {v.key === 'interests' && <Lightbulb className="mr-1 inline h-3 w-3 align-[-1px]" aria-hidden />}
+            {v.label}
           </button>
         ))}
       </div>
 
       <AnimatePresence mode="wait">
-        {tab === 'explore' && (
-          <ExploreTab saved={saved} onToggleSave={toggleSave} onSelect={setSelected} />
-        )}
-
-        {tab === 'streams' && <StreamsTab />}
-
-        {tab === 'roadmap' && <RoadmapTab />}
+        <motion.div
+          key={view}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.2 }}
+        >
+          {view === 'explore' && (
+            <ExploreView
+              query={query}
+              onQueryChange={setQuery}
+              onOpen={openCareer}
+              onGoInterests={() => setView('interests')}
+            />
+          )}
+          {view === 'interests' && <InterestsView onOpen={openCareer} />}
+          {view === 'saved' && <SavedView onOpen={openCareer} />}
+        </motion.div>
       </AnimatePresence>
 
-      {/* Career detail modal */}
-      <AnimatePresence>
-        {selected && (
-          <CareerDetailModal
-            selected={selected}
-            saved={saved}
-            onToggleSave={toggleSave}
-            onClose={() => setSelected(null)}
-          />
-        )}
-      </AnimatePresence>
+      {/* The age-honest policy line */}
+      <FooterPolicyLine />
+
+      {/* The detail dialog (opening a career records a real view) */}
+      <CareerDetail careerId={detailId} onClose={() => setDetailId(null)} onSwitch={switchCareer} />
     </div>
   )
 }

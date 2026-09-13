@@ -1,11 +1,5 @@
 'use client'
 
-/**
- * ProgressModule — Achievements + Portfolio + Career Explorer consolidated
- * into ONE "My Progress" destination (gamification, showcase, future
- * planning — one growth area instead of three sidebar entries).
- */
-
 import { AchievementsModule } from './achievements'
 import { PortfolioModule } from './portfolio'
 import { CareerExplorerModule } from './career-explorer'

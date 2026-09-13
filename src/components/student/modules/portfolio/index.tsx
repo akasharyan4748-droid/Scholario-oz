@@ -1,141 +1,183 @@
 'use client'
 
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Trophy, Award, Star, TrendingUp, Target, Share2, Palette,
-  Crown,
-} from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
-import { KpiCard } from '@/components/shared/kpi-card'
-import { portfolioStats, type PortfolioAchievement } from '@/lib/mock/portfolio'
-import { cn } from '@/lib/utils'
+/**
+ * PortfolioModule — the Portfolio tab of "My Progress".
+ *
+ * A showcase surface, deliberately distinct from Achievements: NO score
+ * gauges, NO rank, NO share links — just the work. Featured (up to 2,
+ * the store's rule) → My work (kind-filtered grid, filters derived from
+ * the store) → Skills as evidence (skillsWithEvidence, no scores) →
+ * Recent (last 3). Every action is real: add / edit / feature / visibility
+ * / remove write to the canonical growth store; "Download" opens a real
+ * print-window document (portfolio-html.ts + openPrintWindow).
+ *
+ * The old mock-backed module (fake score gauges, class-rank hero,
+ * fake share-link toast, purple gradient wall) is gone — the legacy mock
+ * portfolio file now has zero importers.
+ */
+
+import { useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
+import { Plus, Download, LayoutGrid, Tags } from 'lucide-react'
+import { StudentPageHeader } from '@/components/student/shell/page-header'
+import { GlassCard } from '@/components/shared/ui'
 import { toast } from 'sonner'
-import { type Tab } from './data'
-import { ShowcaseTab } from './showcase-tab'
-import { SkillsTab } from './skills-tab'
-import { JourneyTab } from './journey-tab'
-import { ActivitiesTab } from './activities-tab'
-import { AchievementModal } from './achievement-modal'
+import { openPrintWindow } from '@/lib/download-file'
+import {
+  useStudentGrowthStore,
+  skillsWithEvidence,
+  GROWTH_DEMO_STUDENT,
+  type PortfolioItem,
+} from '@/lib/store/student-growth-store'
+import { useStudentsStore } from '@/lib/store/students-store'
+import { DEMO_STUDENT_ID } from '../applications/student'
+import { FeaturedSection } from './featured-section'
+import { WorkSection } from './work-section'
+import { SkillsSection } from './skills-section'
+import { RecentSection } from './recent-section'
+import { ItemDetail } from './item-detail'
+import { ItemFormDialog, type ItemFormState } from './item-form-dialog'
+import { buildPortfolioHTML, portfolioFileName } from './portfolio-html'
+import { BTN_OUTLINE, BTN_PRIMARY, PortfolioEmptyState } from './shared'
+
+function todayISO(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export function PortfolioModule() {
-  const [tab, setTab] = useState<Tab>('showcase')
-  const [selected, setSelected] = useState<PortfolioAchievement | null>(null)
+  const items = useStudentGrowthStore((s) => s.portfolioItems)
+  const achievements = useStudentGrowthStore((s) => s.achievements)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [form, setForm] = useState<ItemFormState | null>(null)
+
+  // The roster's canonical record for the demo student (fees-module
+  // precedent) — the print document carries the real name / class once.
+  const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
+
+  const skills = useMemo(() => skillsWithEvidence({ achievements, portfolioItems: items }), [achievements, items])
+  const featured = useMemo(
+    () =>
+      items
+        .filter((i) => i.featured)
+        .sort((a, b) => (a.dateISO < b.dateISO ? 1 : a.dateISO > b.dateISO ? -1 : 0)),
+    [items],
+  )
+  // Subjects for the add/edit form — derived from the store (items ∪
+  // achievements), never a hardcoded list.
+  const subjects = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [
+            ...items.map((i) => i.subject),
+            ...achievements.map((a) => a.subject),
+          ].filter((s): s is string => !!s),
+        ),
+      ).sort((a, b) => a.localeCompare(b)),
+    [items, achievements],
+  )
+
+  function openAdd() {
+    setForm({ mode: 'add' })
+  }
+
+  function handleEdit(item: PortfolioItem) {
+    setDetailId(null)
+    setForm({ mode: 'edit', item })
+  }
+
+  function handleDownload() {
+    const name = student?.name ?? GROWTH_DEMO_STUDENT
+    const classSection = student ? `${student.className}-${student.section}` : 'Class 2-A'
+    const html = buildPortfolioHTML({
+      student: {
+        name,
+        classSection,
+        admissionNo: student?.admissionNo,
+        rollNo: student?.rollNo,
+      },
+      items,
+      achievements,
+      skills,
+      asOn: todayISO(),
+    })
+    const w = openPrintWindow(html, portfolioFileName(name))
+    if (w) {
+      toast.success('Portfolio print view opened', {
+        description: 'Use your browser’s print dialog to print it or save it as a PDF.',
+      })
+    } else {
+      toast.error('Print window blocked', {
+        description: 'Allow pop-ups for this page, then try again.',
+      })
+    }
+  }
+
+  const empty = items.length === 0
 
   return (
     <div className="space-y-5">
-      <SectionHeading
+      <StudentPageHeader
         title="My Portfolio"
-        subtitle="Your achievements, skills & growth journey — all in one place"
-        icon={<Trophy className="h-5 w-5" />}
-        action={
-          <button
-            onClick={() => toast.success('Portfolio shared', { description: 'Shareable link copied to clipboard' })}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-violet-500/20"
-          >
-            <Share2 className="h-3.5 w-3.5" /> Share
-          </button>
+        subtitle="Work you're proud to show"
+        chips={
+          empty
+            ? undefined
+            : [
+                { label: `${items.length} ${items.length === 1 ? 'item' : 'items'}`, icon: LayoutGrid },
+                { label: `${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`, icon: Tags },
+              ]
         }
       />
 
-      {/* Hero portfolio card */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 p-6 sm:p-8 text-white shadow-premium-lg"
-      >
-        <div className="absolute inset-0 bg-grid opacity-20" />
-        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="relative">
-              <div className="absolute inset-0 rounded-full bg-white/20 blur-md animate-pulse" />
-              <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-white/15 backdrop-blur text-2xl font-display font-bold ring-4 ring-white/30">
-                AS
-              </div>
-              <div className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-xs font-bold shadow-lg ring-2 ring-white/40">
-                #{portfolioStats.rankInClass}
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 text-violet-100 text-xs font-medium mb-1">
-                <Crown className="h-3.5 w-3.5 text-amber-300" />
-                Grade {portfolioStats.overallGrade} · Rank #{portfolioStats.rankInClass} of {portfolioStats.totalStudents}
-              </div>
-              <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight">Aarav Sharma</h2>
-              <p className="text-violet-100/90 text-sm mt-0.5">Class 2-A · Demo School of Scholario</p>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                <span className="rounded-md bg-white/15 backdrop-blur px-2 py-0.5 text-[10px] font-medium">🌟 {portfolioStats.totalAchievements} Achievements</span>
-                <span className="rounded-md bg-white/15 backdrop-blur px-2 py-0.5 text-[10px] font-medium">🏅 {portfolioStats.badges} Badges</span>
-                <span className="rounded-md bg-white/15 backdrop-blur px-2 py-0.5 text-[10px] font-medium">🎨 {portfolioStats.extracurriculars} Activities</span>
-              </div>
-            </div>
-          </div>
-          {/* Portfolio score gauge */}
-          <div className="flex flex-col items-center">
-            <div className="relative">
-              <svg className="h-24 w-24 -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="8" />
-                <motion.circle
-                  cx="50" cy="50" r="42" fill="none" stroke="white" strokeWidth="8" strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 42}
-                  initial={{ strokeDashoffset: 2 * Math.PI * 42 }}
-                  animate={{ strokeDashoffset: 2 * Math.PI * 42 * (1 - portfolioStats.portfolioScore / portfolioStats.maxScore) }}
-                  transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-display text-2xl font-bold">{portfolioStats.portfolioScore}</span>
-                <span className="text-[9px] text-violet-100">/ {portfolioStats.maxScore}</span>
-              </div>
-            </div>
-            <p className="text-[10px] text-violet-100/80 mt-1">Portfolio Score</p>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard label="Achievements" value={portfolioStats.totalAchievements} icon={<Trophy className="h-5 w-5" />} accent="amber" trend={25} trendLabel="this year" delay={0} />
-        <KpiCard label="Certificates" value={portfolioStats.certificates} icon={<Award className="h-5 w-5" />} accent="violet" trendLabel="earned" delay={0.05} />
-        <KpiCard label="Skills Avg" value={portfolioStats.skillsAvg} suffix="/100" icon={<Target className="h-5 w-5" />} accent="emerald" trend={6} trendLabel="across 8 skills" delay={0.1} />
-        <KpiCard label="Growth Score" value={portfolioStats.growthScore} suffix="/100" icon={<TrendingUp className="h-5 w-5" />} accent="cyan" trend={4} trendLabel="vs last year" delay={0.15} />
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {[
-          { id: 'showcase' as Tab, label: 'Achievement Showcase', icon: <Trophy className="h-3.5 w-3.5" /> },
-          { id: 'skills' as Tab, label: 'Skills & Aptitude', icon: <Target className="h-3.5 w-3.5" /> },
-          { id: 'journey' as Tab, label: 'Growth Journey', icon: <TrendingUp className="h-3.5 w-3.5" /> },
-          { id: 'activities' as Tab, label: 'Extracurriculars', icon: <Palette className="h-3.5 w-3.5" /> },
-        ].map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-              tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.icon}
-            {t.label}
+      {/* Toolbar — the module's two real actions */}
+      {!empty && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button type="button" onClick={openAdd} className={BTN_OUTLINE}>
+            <Plus className="h-4 w-4" aria-hidden />
+            Add
           </button>
-        ))}
-      </div>
+          <button
+            type="button"
+            onClick={handleDownload}
+            aria-label="Download portfolio as PDF"
+            title="Opens a print view — save it as PDF from the print dialog"
+            className={BTN_PRIMARY}
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            Download
+          </button>
+        </div>
+      )}
 
-      <AnimatePresence mode="wait">
-        {tab === 'showcase' && <ShowcaseTab onSelect={setSelected} />}
-        {tab === 'skills' && <SkillsTab />}
-        {tab === 'journey' && <JourneyTab />}
-        {tab === 'activities' && <ActivitiesTab />}
-      </AnimatePresence>
+      {empty ? (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+          <GlassCard hover={false} className="on-card">
+            <PortfolioEmptyState
+              title="Your portfolio is waiting for your first project."
+              note="Add work you're proud of — projects, artwork, activities — and feature your strongest pieces."
+              action={
+                <button type="button" onClick={openAdd} className={BTN_PRIMARY}>
+                  <Plus className="h-4 w-4" aria-hidden />
+                  Add work
+                </button>
+              }
+            />
+          </GlassCard>
+        </motion.div>
+      ) : (
+        <>
+          <FeaturedSection items={featured} onOpen={setDetailId} />
+          <WorkSection items={items} onOpen={setDetailId} />
+          <SkillsSection achievements={achievements} portfolioItems={items} />
+          <RecentSection items={items} onOpen={setDetailId} />
+        </>
+      )}
 
-      {/* Achievement detail modal */}
-      <AnimatePresence>
-        {selected && <AchievementModal selected={selected} onClose={() => setSelected(null)} />}
-      </AnimatePresence>
+      {/* Dialogs */}
+      <ItemDetail itemId={detailId} onClose={() => setDetailId(null)} onEdit={handleEdit} />
+      <ItemFormDialog form={form} subjects={subjects} onClose={() => setForm(null)} />
     </div>
   )
 }

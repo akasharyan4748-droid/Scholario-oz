@@ -1,0 +1,2034 @@
+SCHOLARIO-OS
+STUDENT WORKSPACE
+MY PROGRESS — COMPLETE PRODUCT ARCHITECTURE + UX/UI REDESIGN
+
+============================================================
+0. OBJECTIVE
+============================================================
+
+Rebuild the entire Student Workspace "My Progress" module
+into a premium, meaningful, data-driven Student Growth & Progress
+experience.
+
+The current implementation contains:
+
+• Achievements
+• Portfolio
+• Careers
+
+The existing screenshots are REFERENCE MATERIAL ONLY.
+
+Do NOT simply reproduce the screenshots.
+
+Understand the existing Scholario design language and then
+build a much more mature, cohesive and useful product.
+
+The final module should feel like:
+
+"Everything meaningful about my growth as a student,
+in one place."
+
+It must NOT feel like:
+
+• a generic school ERP
+• a leaderboard-only page
+• a fake gamification dashboard
+• a collection of colourful KPI cards
+• an AI-generated template
+• a career quiz website disconnected from school data
+
+============================================================
+1. FIRST: AUDIT THE EXISTING IMPLEMENTATION
+============================================================
+
+Before changing code, inspect:
+
+ARCHITECTURE_CONSTITUTION_v1.md
+
+Prisma schema
+
+Supabase schema
+
+RLS policies
+
+Student Workspace
+
+Student profile
+
+Results
+
+Attendance
+
+Learning
+
+Notifications
+
+Messages
+
+School Settings
+
+Teacher systems
+
+Certificates
+
+Achievements
+
+existing My Progress routes
+
+existing My Progress components
+
+existing APIs/server actions
+
+existing seed/demo data
+
+existing permissions
+
+existing navigation/search integration
+
+Do NOT create duplicate models or duplicate services.
+
+Reuse existing abstractions wherever appropriate.
+
+============================================================
+2. MY PROGRESS — PRODUCT DEFINITION
+============================================================
+
+My Progress should represent:
+
+ACHIEVEMENT
++
+GROWTH
++
+PORTFOLIO
++
+SKILLS
++
+INTERESTS
++
+CAREER EXPLORATION
+
+It should answer:
+
+What have I achieved?
+
+What am I good at?
+
+How am I improving?
+
+What have I created?
+
+What skills am I developing?
+
+What activities have I participated in?
+
+What certificates have I earned?
+
+What careers/areas interest me?
+
+What can I show others?
+
+What should I explore next?
+
+============================================================
+3. DO NOT REPEAT THE LEARNING MODULE
+============================================================
+
+Learning already owns:
+
+study planning
+tasks
+study sessions
+flashcards
+resources
+revision
+study activity
+
+My Progress should NOT duplicate these.
+
+Instead, My Progress may consume meaningful outcomes from Learning.
+
+Example:
+
+Learning:
+Student completed a project.
+
+My Progress:
+Project appears in portfolio/activity.
+
+Learning:
+Student completed a learning milestone.
+
+My Progress:
+Milestone contributes to growth history.
+
+But do not show another Study Planner inside My Progress.
+
+============================================================
+4. CORE SECTIONS
+============================================================
+
+Keep the conceptual sections:
+
+Achievements
+Portfolio
+Careers
+
+But redesign each deeply.
+
+Possible future-ready sections:
+
+Achievements
+Portfolio
+Careers
+
+Do NOT add more top-level tabs unless there is a genuine
+product requirement.
+
+Keep navigation simple.
+
+============================================================
+5. REMOVE REPETITIVE CONTEXT TEXT
+============================================================
+
+This is a HARD REQUIREMENT.
+
+Do not repeatedly display:
+
+Class 2-A
+Section A
+AY 2026–2027
+School name
+
+on every screen.
+
+The Student Workspace already knows the student's context.
+
+Use context only where it provides actual value.
+
+Example:
+
+GOOD:
+
+My Portfolio
+
+BAD:
+
+My Portfolio
+Class 2-A · Section A · Academic Year 2026–2027 · Demo School...
+
+The current UI has too much explanatory text.
+
+Reduce it substantially.
+
+============================================================
+6. VISUAL DESIGN DIRECTION
+============================================================
+
+My Progress should be more expressive than:
+
+Results
+Attendance
+Fees
+
+because this is the student's personal growth space.
+
+However, it must remain premium.
+
+Use:
+
+• Emerald
+• Violet
+• Blue/Cyan
+• Amber
+• Coral/Pink
+
+as semantic accents.
+
+Do NOT make the entire module purple.
+
+Do NOT make everything green.
+
+Do NOT use gradients everywhere.
+
+Use rich colour where it communicates:
+
+achievement
+skill
+growth
+exploration
+milestone
+creative work
+
+The design should feel:
+
+premium
+optimistic
+modern
+personal
+aspirational
+clean
+
+NOT:
+
+childish
+over-gamified
+neon
+social-media-like
+overdecorated
+
+============================================================
+7. STOP USING THE SAME HERO PATTERN EVERYWHERE
+============================================================
+
+The current product repeatedly uses:
+
+large gradient hero
++
+four KPI cards
++
+large sections
+
+Do NOT mechanically repeat this pattern.
+
+Each page should have a layout appropriate to its purpose.
+
+Achievements:
+→ achievement-focused
+
+Portfolio:
+→ showcase-focused
+
+Careers:
+→ exploration-focused
+
+============================================================
+8. ACHIEVEMENTS
+============================================================
+
+Achievements should represent meaningful accomplishments.
+
+Potential sources:
+
+academic achievements
+school competitions
+sports
+arts
+clubs
+leadership
+certificates
+attendance milestones
+learning milestones
+teacher-awarded achievements
+school-awarded achievements
+platform achievements
+
+BUT:
+
+Only show categories that actually exist in the system.
+
+Do not fabricate achievement types.
+
+============================================================
+9. ACHIEVEMENT HOME
+============================================================
+
+The top of Achievements should provide a concise personal overview.
+
+Example:
+
+Achievements
+
+[10 earned] [6 badges] [3 milestones]
+
+Then:
+
+RECENT ACHIEVEMENTS
+
+cards/timeline
+
+Then:
+
+CATEGORIES
+
+Academic
+Sports
+Arts
+Leadership
+Participation
+Learning
+
+where applicable.
+
+Do NOT turn every category into a huge card.
+
+============================================================
+10. ACHIEVEMENT CARDS
+============================================================
+
+Each achievement should communicate:
+
+Title
+Category
+Date
+Awarded by
+Level/scope
+Short context
+Certificate availability
+
+Example:
+
+Mathematics Excellence
+
+Academic
+
+Mid Term Examination
+
+Class level
+
+11 Sep 2026
+
+[View]
+
+Keep metadata compact.
+
+============================================================
+11. ACHIEVEMENT DETAIL
+============================================================
+
+Clicking an achievement should open a proper detail view.
+
+Include:
+
+achievement title
+description
+date
+category
+awarded by
+scope
+evidence
+certificate if available
+related activity
+
+Actions:
+
+View certificate
+Download certificate
+Add to portfolio
+
+Only show actions that are actually implemented.
+
+============================================================
+12. ACHIEVEMENT SOURCES
+============================================================
+
+Differentiate between:
+
+School awarded
+Teacher awarded
+System milestone
+Competition
+Student-created accomplishment
+
+This is important for credibility.
+
+Do not make a self-created item look like an official
+school award.
+
+============================================================
+13. BADGES
+============================================================
+
+Badges can exist, but do not over-gamify the experience.
+
+Badges should represent meaningful milestones.
+
+Examples:
+
+Consistent Learner
+Reading Milestone
+Science Explorer
+
+Only create badges through real rules.
+
+Never hardcode:
+
+"6/12 badges"
+
+unless the backend actually contains six earned badges
+and twelve available badges.
+
+============================================================
+14. ACHIEVEMENT TIMELINE
+============================================================
+
+Introduce an optional timeline view.
+
+Example:
+
+SEP 2026
+• Mathematics Excellence
+• Science Project Completed
+
+AUG 2026
+• Reading Milestone
+
+etc.
+
+Timeline should be compact.
+
+This can become the student's growth history.
+
+============================================================
+15. PORTFOLIO
+============================================================
+
+Portfolio should be much more serious than the current screenshot.
+
+It should represent:
+
+"What have I done that I am proud to show?"
+
+Portfolio items may include:
+
+Projects
+Certificates
+Achievements
+Artwork
+Presentations
+Competition entries
+School activities
+Sports achievements
+Leadership activities
+Community/service activities
+Selected academic work
+
+Only support actual content types implemented in the backend.
+
+============================================================
+16. PORTFOLIO ≠ PROFILE
+============================================================
+
+Student Profile contains identity.
+
+Portfolio contains evidence of growth.
+
+Do NOT duplicate:
+
+name
+class
+roll number
+email
+etc.
+
+Portfolio should focus on:
+
+work
+skills
+achievements
+evidence
+interests
+
+============================================================
+17. PORTFOLIO HOME
+============================================================
+
+Use a visually rich showcase layout.
+
+Possible structure:
+
+MY PORTFOLIO
+
+[Add to Portfolio]
+
+--------------------------------
+
+FEATURED
+
+One or two strongest items
+
+--------------------------------
+
+MY WORK
+
+Projects
+Achievements
+Certificates
+Activities
+
+--------------------------------
+
+SKILLS
+
+selected demonstrated skills
+
+--------------------------------
+
+RECENT
+
+timeline/grid
+
+Do not fill the page with four generic KPI cards.
+
+============================================================
+18. PORTFOLIO ITEMS
+============================================================
+
+Each portfolio item should support, where appropriate:
+
+Title
+Category
+Description
+Date
+Subject
+Skills
+Attachments
+Images
+Links
+Achievement relation
+Certificate relation
+Visibility
+
+Example:
+
+Science Model — Water Filtration
+
+Science
+
+Project · 2026
+
+Skills:
+Research
+Experimentation
+Presentation
+
+[View]
+
+============================================================
+19. PORTFOLIO PRIVACY
+============================================================
+
+This is extremely important.
+
+Every portfolio item should have visibility settings
+where appropriate.
+
+Possible:
+
+Private
+School
+Class
+Public/shareable
+
+But only expose options actually supported by school policy.
+
+Never assume student content can be public.
+
+For younger students, school policy/guardian controls may
+restrict sharing.
+
+============================================================
+20. PORTFOLIO SHARING
+============================================================
+
+The current UI has a "Share" button.
+
+Do NOT make this a generic social-sharing feature.
+
+Create a secure Scholario share experience.
+
+Example:
+
+Share Portfolio
+
+[School only]
+[Private link]
+[Public] — only if allowed
+
+If link sharing is implemented:
+
+• tokenized link
+• expiration where appropriate
+• revocation
+• permission checks
+• no exposure of private student data
+
+Never expose:
+
+phone
+email
+private notes
+attendance
+fees
+private academic records
+
+through a portfolio link.
+
+============================================================
+21. PORTFOLIO EXPORT
+============================================================
+
+Future-ready the architecture for:
+
+Download Portfolio PDF
+Download selected certificates
+Print portfolio
+
+If implemented, produce an institutional-quality document.
+
+Do not create a generic webpage screenshot PDF.
+
+============================================================
+22. PORTFOLIO SKILLS
+============================================================
+
+Skills should be meaningful.
+
+Potential sources:
+
+teacher assessments
+school activities
+projects
+competitions
+student-selected interests
+learning outcomes
+
+Do NOT invent skill scores.
+
+Avoid meaningless:
+
+"Skills Avg 88/100"
+
+unless the school has a real assessment methodology
+behind it.
+
+If skill scoring is not actually supported:
+
+show skill tags instead.
+
+Example:
+
+Research
+Communication
+Problem Solving
+Leadership
+
+This is more credible.
+
+============================================================
+23. SKILL EVIDENCE
+============================================================
+
+A skill should ideally be backed by evidence.
+
+Example:
+
+Communication
+
+Evidence:
+
+• Debate Competition
+• Presentation — Science Project
+• School Assembly
+
+This makes the portfolio meaningful.
+
+============================================================
+24. GROWTH JOURNEY
+============================================================
+
+Instead of a fake "Growth Score", use actual growth signals.
+
+Potential:
+
+Achievements over time
+Skills acquired
+Projects completed
+Certificates earned
+Activities participated in
+
+If sufficient real data exists, show a timeline/chart.
+
+If not:
+
+do not fabricate a score.
+
+============================================================
+25. CAREER EXPLORER
+============================================================
+
+This needs the biggest conceptual improvement.
+
+The current:
+
+Recommended Stream
+Aptitude Score
+Confidence
+Careers Explored
+
+looks impressive but can easily become meaningless
+if the underlying data is not real.
+
+Career Explorer should be an exploration tool,
+NOT a deterministic career prediction engine.
+
+============================================================
+26. CAREER EXPLORER — PURPOSE
+============================================================
+
+It should help students:
+
+discover interests
+understand career fields
+explore educational pathways
+compare options
+save careers
+identify skills
+understand possible school subjects
+plan exploration
+
+It should NOT say:
+
+"You should become X."
+
+Instead:
+
+"Explore X"
+
+"Your interests may align with X"
+
+"Learn more"
+
+============================================================
+27. AGE / CLASS AWARENESS
+============================================================
+
+Career guidance must adapt to the student's age/class.
+
+For younger students:
+
+focus on:
+
+interests
+activities
+curiosity
+career awareness
+
+Do NOT push premature stream decisions.
+
+For senior students:
+
+stream selection
+subject combinations
+career pathways
+entrance exams
+higher education routes
+
+may become more relevant.
+
+School configuration should control the experience.
+
+============================================================
+28. CAREER HOME
+============================================================
+
+Suggested structure:
+
+CAREER EXPLORER
+
+[Search careers]
+
+--------------------------------
+
+EXPLORE BY INTEREST
+
+Technology
+Science
+Design
+Business
+Healthcare
+Arts
+Sports
+etc.
+
+--------------------------------
+
+RECENTLY EXPLORED
+
+...
+
+--------------------------------
+
+SAVED FOR LATER
+
+...
+
+--------------------------------
+
+RECOMMENDED TO EXPLORE
+
+Recommendations based on actual available data.
+
+============================================================
+29. CAREER SEARCH
+============================================================
+
+Students should be able to search:
+
+doctor
+engineer
+designer
+architect
+scientist
+teacher
+lawyer
+pilot
+entrepreneur
+etc.
+
+Search should be fast and contextual.
+
+============================================================
+30. CAREER DETAIL
+============================================================
+
+A career page should answer:
+
+What is this career?
+
+What do people in this career do?
+
+Important skills
+
+Relevant school subjects
+
+Typical education pathway
+
+Possible study routes
+
+Related careers
+
+What can I explore next?
+
+Use concise sections.
+
+Do not produce giant walls of text.
+
+============================================================
+31. CAREER COMPARISON
+============================================================
+
+Allow students to compare saved careers.
+
+Example:
+
+Career A
+Career B
+
+Compare:
+
+Interest areas
+Relevant subjects
+Skills
+Education path
+Work environment
+Related fields
+
+Keep the comparison understandable.
+
+============================================================
+32. CAREER SAVING
+============================================================
+
+Students should be able to:
+
+Save career
+
+Remove from saved
+
+Add notes
+
+Mark as exploring
+
+Track exploration
+
+No fake "12 explored" counter.
+
+Calculate it from actual interaction data.
+
+============================================================
+33. INTEREST EXPLORATION
+============================================================
+
+Instead of immediately forcing an aptitude score,
+provide an Interest Explorer.
+
+Example:
+
+What do you enjoy?
+
+Building things
+Solving problems
+Helping people
+Creating art
+Explaining ideas
+Working with technology
+Working outdoors
+
+The result should produce:
+
+interest areas
+
+NOT:
+
+a guaranteed career.
+
+============================================================
+34. APTITUDE DATA
+============================================================
+
+If the project has a genuine aptitude assessment system:
+
+use its real results.
+
+If it does not:
+
+DO NOT hardcode:
+
+88/100 aptitude
+72% confidence
+Recommended Stream: PCM
+
+Do not pretend the system has psychological validity
+that it does not possess.
+
+Architecture may support future assessments.
+
+============================================================
+35. CAREER RECOMMENDATIONS
+============================================================
+
+Recommendations should be explainable.
+
+Example:
+
+"Explore Architecture"
+
+because:
+
+• strong interest in Design
+• enjoys Mathematics
+• saved related projects
+
+Only show these reasons if backed by actual data.
+
+Do not make opaque AI predictions.
+
+============================================================
+36. STREAM EXPLORATION
+============================================================
+
+For relevant classes, allow:
+
+Science
+Commerce
+Humanities
+Vocational
+etc.
+
+BUT:
+
+streams must come from School Settings / actual school
+configuration where the school is controlling stream options.
+
+Do not hardcode Indian streams everywhere.
+
+============================================================
+37. STREAM DETAIL
+============================================================
+
+A stream page should show:
+
+subjects
+possible subject combinations
+related fields
+example careers
+skills
+future education pathways
+
+Keep it informative and concise.
+
+============================================================
+38. CAREER ROADMAP
+============================================================
+
+For senior students, where relevant:
+
+Career
+
+↓
+
+School subjects
+
+↓
+
+Higher secondary choices
+
+↓
+
+Higher education
+
+↓
+
+Specialization
+
+↓
+
+Possible roles
+
+Represent this visually.
+
+Do not present it as the only possible route.
+
+Career pathways are not always linear.
+
+============================================================
+39. CAREER COUNSELLOR
+============================================================
+
+The current screenshot contains:
+
+"Book Counsellor"
+
+Do NOT show this button unless an actual counselling
+workflow exists.
+
+If implemented:
+
+student requests counselling
+
+↓
+
+available counsellor
+
+↓
+
+appointment slots
+
+↓
+
+booking
+
+↓
+
+confirmation
+
+↓
+
+notification
+
+↓
+
+appointment
+
+This must be a real feature.
+
+Otherwise remove the button.
+
+============================================================
+40. MY PROGRESS + RESULTS
+============================================================
+
+My Progress may consume Results data.
+
+Examples:
+
+academic achievement
+subject improvement
+exam milestone
+
+But:
+
+do not expose unnecessary marks.
+
+Do not duplicate the Results module.
+
+Example:
+
+Results owns:
+91.3%
+274/300
+subject marks
+
+My Progress may show:
+"Mid Term — Academic Achievement"
+
+with a link:
+
+View result
+
+============================================================
+41. MY PROGRESS + LEARNING
+============================================================
+
+Use meaningful learning outcomes.
+
+Examples:
+
+completed project
+learning milestone
+resource completion
+skill evidence
+
+Do not duplicate:
+
+study timer
+flashcards
+planner
+resource library
+
+============================================================
+42. MY PROGRESS + ACTIVITIES
+============================================================
+
+Where school data supports it:
+
+clubs
+sports
+competitions
+events
+leadership
+extracurriculars
+
+can contribute to portfolio/achievement history.
+
+Do not fabricate activities.
+
+============================================================
+43. MY PROGRESS + CERTIFICATES
+============================================================
+
+Certificates should be official records.
+
+Clearly distinguish:
+
+Official School Certificate
+
+from:
+
+Student-created portfolio item.
+
+Certificate detail:
+
+certificate title
+issued date
+issuer
+certificate number if appropriate
+scope
+download/view
+
+No fake certificate numbers.
+
+============================================================
+44. GAMIFICATION BOUNDARY
+============================================================
+
+This is important.
+
+My Progress can contain:
+
+badges
+milestones
+streak achievements
+
+But the main purpose is:
+
+REAL GROWTH.
+
+Do not turn it into:
+
+XP farming
+coin farming
+leaderboard obsession
+
+The main gamification dashboard already exists
+inside Achievements where appropriate.
+
+Portfolio and Careers should be more mature.
+
+============================================================
+45. NO FAKE METRICS
+============================================================
+
+ABSOLUTE RULE:
+
+Never hardcode demo-looking values into production UI.
+
+Examples that must NOT be invented:
+
+10 achievements
+6 certificates
+88/100 skill score
+91/100 growth score
+12 careers explored
+72% confidence
+
+If real Demo School seed data exists:
+
+use it.
+
+Otherwise:
+
+show a proper empty state.
+
+============================================================
+46. EMPTY STATES
+============================================================
+
+Portfolio empty:
+
+"Your portfolio is waiting for your first project."
+
+[Add Project]
+
+Achievements empty:
+
+"Your achievements will appear here."
+
+Careers empty:
+
+"Start exploring areas that interest you."
+
+Keep copy short.
+
+============================================================
+47. NO OVER-TEXTING
+============================================================
+
+Remove unnecessary subtitles everywhere.
+
+Do NOT write:
+
+"Your achievements, skills & growth journey — all in one place"
+
+on every screen.
+
+Use typography and layout to communicate hierarchy.
+
+Prefer:
+
+My Portfolio
+
+over:
+
+My Portfolio
+Your achievements, skills & growth journey — all in one place.
+
+============================================================
+48. DESIGN SYSTEM
+============================================================
+
+Maintain Scholario's existing design language:
+
+• rounded surfaces
+• subtle borders
+• restrained shadows
+• strong typography
+• compact pills
+• semantic colours
+• clean whitespace
+• responsive grids
+
+But make My Progress more personal and expressive.
+
+Use:
+
+Violet
+for exploration / creative identity
+
+Emerald
+for growth / accomplishment
+
+Amber
+for achievement / recognition
+
+Blue
+for skills / information
+
+Coral
+for milestones where appropriate
+
+Neutral
+for structure
+
+============================================================
+49. HERO DESIGN
+============================================================
+
+Do not use a giant purple gradient hero on all three tabs.
+
+Achievements:
+may use a compact achievement summary.
+
+Portfolio:
+may use a visual profile/showcase header.
+
+Careers:
+may use an exploration-focused header.
+
+Each should feel distinct.
+
+============================================================
+50. INFORMATION DENSITY
+============================================================
+
+Prioritize:
+
+high information value
+
+with:
+
+low cognitive load.
+
+Avoid:
+
+huge cards containing three words.
+
+Avoid:
+
+four KPI cards just because there is room.
+
+Avoid:
+
+long paragraphs.
+
+Avoid:
+
+repeating labels.
+
+============================================================
+51. RESPONSIVE DESIGN
+============================================================
+
+The provided screenshots are tablet/iPad-like.
+
+Treat tablet as a first-class layout.
+
+Desktop:
+use horizontal composition effectively.
+
+Tablet:
+maintain readable 2-column structures where appropriate.
+
+Mobile:
+stack intelligently.
+
+Never create:
+
+tiny text
+horizontal overflow
+cramped cards
+unusable charts
+tiny buttons
+
+============================================================
+52. ACCESSIBILITY
+============================================================
+
+Use:
+
+semantic controls
+keyboard support
+visible focus
+accessible contrast
+ARIA labels where needed
+non-colour status indicators
+
+Do not rely on colour alone.
+
+============================================================
+53. PERFORMANCE
+============================================================
+
+Do not load the entire achievement/portfolio/career dataset
+at once.
+
+Use:
+
+server-side filtering
+pagination
+lazy loading
+selective queries
+proper indexes
+
+Only fetch what the page needs.
+
+============================================================
+54. SECURITY
+============================================================
+
+My Progress contains sensitive student information.
+
+Enforce:
+
+authentication
+student ownership
+school tenancy
+RLS
+server-side authorization
+
+Never trust client-provided:
+
+studentId
+schoolId
+role
+
+A student must not be able to:
+
+view another student's portfolio
+edit another student's achievements
+access private portfolio items
+modify career exploration data
+access private certificates
+create fake official achievements
+
+============================================================
+55. SCHOOL VS STUDENT OWNERSHIP
+============================================================
+
+Official achievements:
+
+School-controlled.
+
+Official certificates:
+
+School-controlled.
+
+Student portfolio:
+
+Student-controlled subject to school policy.
+
+Career exploration:
+
+Student-owned private data.
+
+Badges:
+
+System/school-controlled.
+
+Clearly separate these ownership models.
+
+============================================================
+56. EDIT PERMISSIONS
+============================================================
+
+Student should be able to edit:
+
+their portfolio items
+their interests
+their saved careers
+their private notes
+
+Student should NOT be able to edit:
+
+official school achievements
+official certificates
+teacher-awarded records
+
+unless the workflow explicitly permits corrections.
+
+============================================================
+57. AUDITABILITY
+============================================================
+
+Important actions should be auditable where applicable.
+
+Examples:
+
+achievement awarded
+achievement revoked
+certificate issued
+portfolio visibility changed
+portfolio shared
+counselling booked
+
+Do not create a second audit system.
+
+Use Scholario's existing audit architecture.
+
+============================================================
+58. SEARCH INTEGRATION
+============================================================
+
+Integrate with the existing global Student Workspace search.
+
+Search can surface:
+
+Achievements
+Portfolio items
+Skills
+Saved careers
+
+Do NOT create another giant global search interface.
+
+============================================================
+59. MICRO-INTERACTIONS
+============================================================
+
+Use subtle premium interactions:
+
+achievement reveal
+portfolio hover
+save career
+add portfolio item
+certificate opening
+timeline transitions
+
+No excessive animation.
+
+No gimmicks.
+
+============================================================
+60. DATA-DRIVEN PERSONALIZATION
+============================================================
+
+Where real data exists, personalize.
+
+Example:
+
+Recent achievement
+
+Strongest skill
+
+Recently explored career
+
+Portfolio activity
+
+But do not create fake personalized insights.
+
+============================================================
+61. FUTURE AI ARCHITECTURE
+============================================================
+
+Keep clean extension points for future:
+
+AI Career Explorer
+AI Portfolio Assistant
+AI Skill Extraction
+AI Project Reflection
+AI Career Pathway Assistant
+AI Interest Analysis
+
+BUT:
+
+Do NOT implement fake AI now.
+
+Do not add "AI-powered" labels everywhere.
+
+AI should eventually provide useful assistance,
+not decoration.
+
+============================================================
+62. CAREER SAFETY / RESPONSIBILITY
+============================================================
+
+Career recommendations should always be exploratory.
+
+Never tell a student:
+
+"You are definitely suited for X."
+
+Never present a generated score as a psychological diagnosis.
+
+Use language such as:
+
+Explore
+Possible fit
+Related interests
+Consider learning more
+
+where appropriate.
+
+============================================================
+63. PRODUCT RELATIONSHIP
+============================================================
+
+The final architecture should be:
+
+LEARNING
+→ student learns
+
+RESULTS
+→ academic performance
+
+ATTENDANCE
+→ attendance record
+
+MY PROGRESS
+→ growth and accomplishments
+
+PORTFOLIO
+→ evidence of work
+
+CAREERS
+→ future exploration
+
+These modules must complement one another.
+
+They must NOT become copies of one another.
+
+============================================================
+64. RECOMMENDED FINAL EXPERIENCE
+============================================================
+
+ACHIEVEMENTS
+
+Achievements
+
+[Recent]
+[Milestones]
+[Badges]
+
+Recent achievements
+
+Achievement timeline
+
+Categories
+
+--------------------------------
+
+PORTFOLIO
+
+My Portfolio
+
+[+ Add]
+
+Featured work
+
+Projects
+Certificates
+Achievements
+Activities
+
+Skills
+
+Recent work
+
+--------------------------------
+
+CAREERS
+
+Career Explorer
+
+[Search]
+
+Explore by interest
+
+Recently explored
+
+Saved
+
+Recommended
+
+Career details
+
+============================================================
+65. DO NOT FORCE A KPI DASHBOARD
+============================================================
+
+This rule is extremely important.
+
+If a number is not useful,
+do not show it.
+
+A beautiful interface does NOT need:
+
+4 statistics cards
++
+hero banner
++
+chart
+
+on every page.
+
+Use:
+
+timeline
+gallery
+cards
+comparison
+progress indicators
+chips
+lists
+
+according to the content.
+
+============================================================
+66. NO "PORTFOLIO SCORE" UNLESS VALID
+============================================================
+
+The current screenshot contains:
+
+Portfolio Score 4.6 / 5
+
+Remove this unless Scholario has a clearly defined,
+transparent scoring methodology.
+
+A student's portfolio should not receive an arbitrary
+AI-looking score.
+
+Instead show:
+
+Featured work
+Skills
+Achievements
+Projects
+
+These are more meaningful.
+
+============================================================
+67. NO "GROWTH SCORE" UNLESS VALID
+============================================================
+
+Similarly:
+
+91/100 Growth Score
+
+must not exist unless there is an actual documented,
+data-backed methodology.
+
+If a growth metric is eventually introduced:
+
+document:
+
+what it measures
+how it is calculated
+what data contributes
+how often it updates
+
+Otherwise remove it.
+
+============================================================
+68. NO "CONFIDENCE %" FOR CAREERS WITHOUT VALID MODEL
+============================================================
+
+Remove:
+
+72% confident
+
+unless there is a legitimate validated assessment/model
+behind it.
+
+Do not create false precision.
+
+"Strong match based on your interests" is preferable
+to a fake numerical confidence score.
+
+============================================================
+69. CURRENT SCREENSHOT DATA
+============================================================
+
+Treat values shown in the provided screenshots as
+DEMO/REFERENCE data unless they already exist as legitimate
+Demo School seeded records.
+
+Do not copy them into production hardcoded components.
+
+The screenshots demonstrate:
+
+• current visual style
+• current navigation
+• current information architecture
+• current content concepts
+
+They do NOT define what the final data model must be.
+
+============================================================
+70. IMPLEMENTATION ORDER
+============================================================
+
+PHASE 1
+Audit existing My Progress.
+
+PHASE 2
+Audit existing schema and relationships.
+
+PHASE 3
+Define official achievement architecture.
+
+PHASE 4
+Rebuild Achievements.
+
+PHASE 5
+Build proper Portfolio.
+
+PHASE 6
+Build Skills/Evidence layer.
+
+PHASE 7
+Build Career Explorer.
+
+PHASE 8
+Connect Results / Learning / Activities /
+Certificates where real relationships exist.
+
+PHASE 9
+Implement permissions + RLS.
+
+PHASE 10
+Responsive optimization.
+
+PHASE 11
+Performance optimization.
+
+PHASE 12
+Accessibility.
+
+PHASE 13
+Remove fake metrics / dead UI.
+
+PHASE 14
+Final regression audit.
+
+============================================================
+71. COMPLETION CHECKLIST
+============================================================
+
+ACHIEVEMENTS
+
+[ ] Real achievement records
+[ ] Categories
+[ ] Timeline
+[ ] Achievement details
+[ ] Official vs system achievement distinction
+[ ] Badges where supported
+[ ] Certificate relationship
+[ ] No fake counts
+[ ] No fake scores
+
+PORTFOLIO
+
+[ ] Projects
+[ ] Certificates
+[ ] Achievements
+[ ] Activities
+[ ] Skills
+[ ] Evidence
+[ ] Student ownership
+[ ] Visibility controls
+[ ] Secure sharing
+[ ] No private data leakage
+[ ] No fake portfolio score
+
+CAREERS
+
+[ ] Career discovery
+[ ] Search
+[ ] Interest exploration
+[ ] Saved careers
+[ ] Career detail
+[ ] Career comparison
+[ ] Stream exploration where appropriate
+[ ] Age/class-aware experience
+[ ] Explainable recommendations
+[ ] No fake aptitude score
+[ ] No fake confidence percentage
+[ ] No deterministic career prediction
+[ ] Counselling only if real workflow exists
+
+SYSTEM
+
+[ ] Multi-tenancy
+[ ] schoolId
+[ ] RLS
+[ ] Server authorization
+[ ] Student ownership
+[ ] School-controlled official records
+[ ] Audit logging
+[ ] Existing navigation integration
+[ ] Existing search integration
+[ ] No duplicate systems
+[ ] No dead buttons
+[ ] No hardcoded production statistics
+[ ] Responsive
+[ ] Accessible
+[ ] Fast
+
+UX
+
+[ ] No excessive text
+[ ] No repeated class/session information
+[ ] No giant KPI wall
+[ ] No repetitive purple hero
+[ ] Premium colour system
+[ ] Meaningful visual hierarchy
+[ ] Clear actions
+[ ] Progressive disclosure
+[ ] Empty states
+[ ] Loading states
+[ ] Error states
+[ ] Touch friendly
+[ ] Tablet optimized
+[ ] Mobile optimized
+
+============================================================
+72. FINAL PRODUCT PHILOSOPHY
+============================================================
+
+My Progress should feel like the student's:
+
+GROWTH RECORD
++
+SHOWCASE
++
+FUTURE EXPLORATION SPACE.
+
+Learning answers:
+
+"What am I learning?"
+
+Results answers:
+
+"How did I perform?"
+
+Attendance answers:
+
+"Was I present?"
+
+My Progress answers:
+
+"What have I achieved?"
+"What am I becoming good at?"
+"What have I created?"
+"What interests me?"
+"What could I explore next?"
+
+That distinction must be visible in both
+architecture and UX.
+
+============================================================
+FINAL INSTRUCTION
+============================================================
+
+Do not merely make the current screenshots prettier.
+
+Re-evaluate the product.
+
+Remove features that look impressive but have no trustworthy
+data or methodology.
+
+Replace fake sophistication with genuine functionality.
+
+Use colour, but use it intentionally.
+
+Use gamification, but only where meaningful.
+
+Use numbers only when they actually mean something.
+
+Hide complexity behind simple UX.
+
+The final My Progress module should feel like a premium,
+modern Student Growth OS inside Scholario.
+
+CAPABILITY SHOULD BE DEEP.
+
+THE INTERFACE SHOULD REMAIN SIMPLE.

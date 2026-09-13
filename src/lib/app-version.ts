@@ -7,7 +7,7 @@
  * (e.g. a Preview Panel that has held an old in-memory SPA across a
  * server restart) so users always land on the latest build.
  */
-export const APP_VERSION = "2.6.0";
+export const APP_VERSION = "2.7.0";
 
 /** Compact label for sidebar footers / login stamp, e.g. "SCHOLARIO v2.5". */
 export const APP_VERSION_LABEL = `SCHOLARIO v${APP_VERSION.split(".").slice(0, 2).join(".")}`;
