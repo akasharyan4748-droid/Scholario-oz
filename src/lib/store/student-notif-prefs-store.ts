@@ -14,7 +14,7 @@ import { createTenantScopedStorage } from '@/lib/tenant/tenant-storage'
 
 /** Channel switches — rendered in Settings → Notification Preferences. */
 export interface StudentNotifPrefs {
-  homework: boolean
+  learning: boolean
   exams: boolean
   fees: boolean
   library: boolean
@@ -37,7 +37,7 @@ export const useStudentNotifPrefsStore = create<StudentNotifPrefsState>()(
   persist(
     (set) => ({
       readIds: [],
-      prefs: { homework: true, exams: true, fees: true, library: true, messages: true, announcements: true },
+      prefs: { learning: true, exams: true, fees: true, library: true, messages: true, announcements: true },
       privacy: { showAchievements: true },
 
       markRead: (id) =>
@@ -53,9 +53,21 @@ export const useStudentNotifPrefsStore = create<StudentNotifPrefsState>()(
         set((s) => ({ privacy: { showAchievements: value } })),
     }),
     {
-      name: 'scholario-student-notif-prefs-v1',
-      storage: createTenantScopedStorage('scholario-student-notif-prefs-v1'),
-      version: 1,
+      name: 'scholario-student-notif-prefs-v2',
+      storage: createTenantScopedStorage('scholario-student-notif-prefs-v2'),
+      version: 2,
+      migrate: (persisted) => {
+        // v1 → v2: the homework channel retired with the Classwork module;
+        // its setting carries over to the learning channel.
+        const p = persisted as { prefs?: Record<string, boolean> } | undefined
+        if (p?.prefs && 'homework' in p.prefs && !('learning' in p.prefs)) {
+          const rest: Record<string, boolean> = { ...p.prefs }
+          const homework = rest.homework
+          delete rest.homework
+          return { ...p, prefs: { ...rest, learning: homework } }
+        }
+        return persisted
+      },
       partialize: (s) => ({
         readIds: s.readIds,
         prefs: s.prefs,

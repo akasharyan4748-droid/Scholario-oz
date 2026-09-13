@@ -1,120 +1,198 @@
 'use client'
 
-import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Star, Download, Bookmark, BookmarkCheck, FileQuestion, Eye } from 'lucide-react'
+/**
+ * ResourceDetail — the accessible resource dialog (spec §10/§13/§59).
+ *
+ * Full metadata + live progress + the same working actions as the grid
+ * (bookmark / add to planner / mark complete) + a Study primary button
+ * that calls studyResource() and reports the REAL resulting percentage.
+ * Quizzes, PDFs and videos are uniformly treated as study materials —
+ * no fake quiz engine, no fake video player (§10/§82).
+ *
+ * Dialog conventions follow the Student workspace shells: role=dialog +
+ * aria-modal, Escape closes (useDismissOnEscape), backdrop click closes,
+ * bottom sheet on mobile / centered from sm up.
+ */
+
+import { AnimatePresence, motion } from 'framer-motion'
+import { BookOpen, Bookmark, BookmarkCheck, CalendarPlus, CheckCircle2, X } from 'lucide-react'
+import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
+import { subjectColor } from '../timetable/subject-colors'
 import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
-import type { Resource } from '@/lib/mock/resources'
-import { typeConfig } from './data'
+import { formatDate } from '@/lib/format'
+import { useStudentLearningStore } from '@/lib/store/student-learning-store'
+import { DifficultyPill, TypeChip, BTN_VIOLET, BTN_OUTLINE } from './type-meta'
+import { useResourceActions } from './actions'
 
 interface ResourceDetailProps {
-  selected: Resource | null
-  bookmarked: Set<string>
-  onToggleBookmark: (id: string) => void
+  resourceId: string | null
   onClose: () => void
 }
 
-export function ResourceDetail({ selected, bookmarked, onToggleBookmark, onClose }: ResourceDetailProps) {
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5">
+      <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 truncate text-[13px] font-semibold">{value}</dd>
+    </div>
+  )
+}
+
+export function ResourceDetail({ resourceId, onClose }: ResourceDetailProps) {
+  // Hooks first — never conditional (resourceId gates the render, not the hooks).
+  const resource = useStudentLearningStore((s) => (resourceId ? s.resources.find((r) => r.id === resourceId) ?? null : null))
+  const progressEntry = useStudentLearningStore((s) => (resourceId ? s.progress[resourceId] : undefined))
+  const isSaved = useStudentLearningStore((s) => (resourceId ? s.bookmarks.includes(resourceId) : false))
+  const actions = useResourceActions()
+  useDismissOnEscape(onClose, resourceId != null)
+
+  const pct = progressEntry?.pct ?? 0
+  const completed = pct >= 100
+  const sc = resource ? subjectColor(resource.subject) : null
+
   return (
     <AnimatePresence>
-      {selected && (
+      {resource && sc && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={resource.title}
           onClick={onClose}
         >
-          <div className="absolute inset-0 bg-background/60 backdrop-blur-md" />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 16 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 16 }}
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-[calc(100vw-1.5rem)] sm:max-w-lg overflow-hidden rounded-2xl border border-border glass-strong shadow-premium-lg"
+            className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-background shadow-premium-lg sm:max-w-lg sm:rounded-2xl"
           >
-            {/* Header banner */}
-            <div className={cn('relative h-40 bg-gradient-to-br flex items-center justify-center', selected.thumbnailColor)}>
-              <div className="absolute inset-0 bg-grid opacity-20" />
-              {selected.type === 'video' ? (
-                <motion.div whileHover={{ scale: 1.1 }} className="relative flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur ring-4 ring-white/40 cursor-pointer">
-                  <Play className="h-7 w-7 text-white fill-white ml-1" />
-                </motion.div>
-              ) : (
-                <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 backdrop-blur ring-4 ring-white/40 text-white">
-                  {typeConfig[selected.type].icon}
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-border/60 px-4 pb-4 pt-4 sm:px-5 sm:pt-5">
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <TypeChip type={resource.type} />
+                  <DifficultyPill difficulty={resource.difficulty} />
+                  {isSaved && (
+                    <span className="flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      <BookmarkCheck className="h-3.5 w-3.5" aria-hidden />
+                      Saved
+                    </span>
+                  )}
                 </div>
-              )}
-              <button onClick={onClose} className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 backdrop-blur hover:bg-white/30 transition-colors text-white">✕</button>
-              <span className={cn('absolute top-3 left-3 rounded-md px-2 py-0.5 text-[10px] font-semibold backdrop-blur bg-white/85', typeConfig[selected.type].color.split(' ')[1])}>
-                {typeConfig[selected.type].label}
-              </span>
+                <h2 className="text-base font-semibold leading-snug">{resource.title}</h2>
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', sc.dot)} aria-hidden />
+                  {resource.subject} · {resource.topic}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close resource details"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:h-9 sm:w-9"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
             </div>
 
-            <div className="p-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-primary">{selected.subject}</span>
-                <span className="flex items-center gap-0.5 text-[11px] text-amber-500">
-                  <Star className="h-3 w-3 fill-amber-400" /> {selected.rating}
-                </span>
-                <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <Download className="h-3 w-3" /> {selected.downloads} downloads
-                </span>
-              </div>
-              <h2 className="font-display text-lg font-bold leading-tight">{selected.title}</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">{selected.description}</p>
+            {/* Body — full metadata + live progress */}
+            <div className="space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+              <dl className="grid grid-cols-2 gap-2.5">
+                <Meta
+                  label={resource.type === 'video' ? 'Length' : resource.type === 'quiz' ? 'Questions' : 'Pages'}
+                  value={
+                    resource.durationMin
+                      ? `${resource.durationMin} min`
+                      : String(resource.pages ?? resource.questions ?? '—')
+                  }
+                />
+                <Meta label="Difficulty" value={resource.difficulty.charAt(0).toUpperCase() + resource.difficulty.slice(1)} />
+                <Meta label="Source" value={resource.source} />
+                <Meta label="Added" value={formatDate(resource.addedOn)} />
+              </dl>
 
-              <div className="grid grid-cols-3 gap-2 py-3 border-y border-border">
-                {selected.duration && (
-                  <div className="text-center">
-                    <p className="text-[10px] text-muted-foreground">Duration</p>
-                    <p className="text-sm font-semibold">{selected.duration}</p>
-                  </div>
-                )}
-                {selected.pages && (
-                  <div className="text-center">
-                    <p className="text-[10px] text-muted-foreground">Pages</p>
-                    <p className="text-sm font-semibold">{selected.pages}</p>
-                  </div>
-                )}
-                {selected.questions && (
-                  <div className="text-center">
-                    <p className="text-[10px] text-muted-foreground">Questions</p>
-                    <p className="text-sm font-semibold">{selected.questions}</p>
-                  </div>
-                )}
-                <div className="text-center">
-                  <p className="text-[10px] text-muted-foreground">Uploaded</p>
-                  <p className="text-sm font-semibold">{new Date(selected.uploadedOn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Progress</span>
+                  {completed ? (
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                      Completed
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
+                      {pct > 0 ? `${pct}%` : 'Not started'}
+                    </span>
+                  )}
                 </div>
-                <div className="text-center">
-                  <p className="text-[10px] text-muted-foreground">By</p>
-                  <p className="text-sm font-semibold truncate">{selected.uploadedBy.split(' ')[0]}</p>
-                </div>
+                {pct > 0 && (
+                  <div
+                    className="h-2 overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-valuenow={pct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`${resource.title} progress`}
+                  >
+                    <motion.div
+                      className={cn('h-full rounded-full', completed ? 'bg-emerald-500' : 'bg-violet-500')}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pct}%` }}
+                      transition={{ duration: 0.4, ease: 'easeOut' }}
+                    />
+                  </div>
+                )}
               </div>
+            </div>
 
-              <div className="flex gap-2">
+            {/* Actions — every button works against the store */}
+            <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => { toast.success(selected.type === 'video' ? 'Playing video…' : selected.type === 'quiz' ? 'Starting quiz…' : 'Opening resource…'); onClose() }}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 py-2.5 text-sm font-semibold text-white shadow-md"
+                  type="button"
+                  onClick={() => actions.bookmark(resource)}
+                  className={BTN_OUTLINE}
+                  aria-pressed={isSaved}
                 >
-                  {selected.type === 'video' ? <Play className="h-4 w-4" /> : selected.type === 'quiz' ? <FileQuestion className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  {selected.type === 'video' ? 'Watch Now' : selected.type === 'quiz' ? 'Start Quiz' : 'Open'}
+                  {isSaved ? (
+                    <BookmarkCheck className="h-3.5 w-3.5 text-amber-500" aria-hidden />
+                  ) : (
+                    <Bookmark className="h-3.5 w-3.5" aria-hidden />
+                  )}
+                  {isSaved ? 'Saved' : 'Save'}
                 </button>
-                <button
-                  onClick={() => { toast.success('Downloaded', { description: `${selected.title} saved to your device` }) }}
-                  className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card/50 px-4 py-2.5 text-sm font-medium hover:bg-accent transition-colors"
-                >
-                  <Download className="h-4 w-4" />
+                <button type="button" onClick={() => actions.addToPlanner(resource)} className={BTN_OUTLINE}>
+                  <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
+                  Add to plan
                 </button>
-                <button
-                  onClick={() => onToggleBookmark(selected.id)}
-                  className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card/50 px-4 py-2.5 text-sm font-medium hover:bg-accent transition-colors"
-                >
-                  {bookmarked.has(selected.id) ? <BookmarkCheck className="h-4 w-4 text-amber-500 fill-amber-400" /> : <Bookmark className="h-4 w-4" />}
-                </button>
+                {!completed && (
+                  <button type="button" onClick={() => actions.complete(resource)} className={BTN_OUTLINE}>
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                    Mark complete
+                  </button>
+                )}
               </div>
+              {completed ? (
+                <span className="inline-flex h-11 items-center justify-center gap-1.5 rounded-lg bg-emerald-500/10 px-4 text-xs font-semibold text-emerald-600 dark:text-emerald-400 sm:h-9">
+                  <CheckCircle2 className="h-4 w-4" aria-hidden />
+                  Completed
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => actions.study(resource)}
+                  className={cn(BTN_VIOLET, 'w-full sm:w-auto')}
+                >
+                  <BookOpen className="h-3.5 w-3.5" aria-hidden />
+                  Study
+                </button>
+              )}
             </div>
           </motion.div>
         </motion.div>

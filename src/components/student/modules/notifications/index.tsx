@@ -4,16 +4,17 @@
  * StudentNotificationsModule — a data-driven notification feed DERIVED
  * from real sources (no fabricated random items):
  *
- *   Homework due     → mock academics `homeworks` (Active)
- *   Assignments      → mock academics `assignments` (Pending)
- *   Exams            → mock academics `exams` (Scheduled)
- *   Fee reminder     → students-store STU-58 (feeStatus ≠ Paid)
- *   Library overdue  → library-store issues (borrower STU-58, Overdue)
- *   New messages     → student-messaging store unread conversations
- *   School news      → mock operations `announcements` (first 3)
- *   Timetable        → timetable-store publications (≤72h, affects the
+ *   Learning review   → learning store due cards (standing, while due > 0)
+ *   Exams             → mock academics `exams` (Scheduled)
+ *   Fee reminder      → students-store STU-58 (feeStatus ≠ Paid)
+ *   Library overdue   → library-store issues (borrower STU-58, Overdue)
+ *   New messages      → student-messaging store unread conversations
+ *   School news       → mock operations `announcements` (first 3)
+ *   Timetable         → timetable-store publications (≤72h, affects the
  *                      student's class) — one notification per publication,
  *                      so the same event is never duplicated.
+ *
+ * (Homework/assignment items were retired with the Classwork module.)
  *
  * Read state + "Mark all read" persist in the shared student-notif-prefs
  * store (the channel switches live in Settings). `onNavigate` (optional)
@@ -22,15 +23,15 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Bell, BookOpen, ClipboardList, Award, IndianRupee, Library, MessageCircle,
-  Megaphone, CheckCheck, ChevronRight, Inbox, CalendarDays,
+  Bell, Award, IndianRupee, Library, MessageCircle,
+  Megaphone, CheckCheck, ChevronRight, Inbox, CalendarDays, Sparkles,
 } from 'lucide-react'
 import { GlassCard, SectionHeading, StatusBadge } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime, formatDate, formatINR } from '@/lib/format'
-import { homeworks, assignments, exams } from '@/lib/mock/academics'
+import { exams } from '@/lib/mock/academics'
 import { announcements } from '@/lib/mock/operations'
 import { useStudentsStore, type StudentRecord } from '@/lib/store/students-store'
 import { useLibraryStore, type IssueRecord } from '@/lib/store/library-store'
@@ -39,6 +40,7 @@ import {
   type StudentConversation,
 } from '@/lib/store/student-messaging-store'
 import { useStudentNotifPrefsStore } from '@/lib/store/student-notif-prefs-store'
+import { useStudentLearningStore, dueStatsOf } from '@/lib/store/student-learning-store'
 import { useTimetableStore, getRecentChangesForClass, type PublishedVersion } from '@/lib/store/timetable-store'
 import { toast } from 'sonner'
 import { DEMO_STUDENT_ID } from '../applications/student'
@@ -46,11 +48,11 @@ import { DEMO_STUDENT_ID } from '../applications/student'
 // ─── Types ───────────────────────────────────────────────────────────
 
 export type StudentNotificationTarget =
-  | 'homework' | 'assignments' | 'results' | 'fees'
+  | 'learning' | 'results' | 'fees'
   | 'my-library' | 'messages' | 'announcements' | 'timetable'
 
 export type StudentNotificationKind =
-  | 'homework' | 'assignment' | 'exam' | 'fee' | 'library' | 'message' | 'announcement' | 'timetable'
+  | 'learning' | 'exam' | 'fee' | 'library' | 'message' | 'announcement' | 'timetable'
 
 export interface StudentNotificationItem {
   id: string
@@ -70,11 +72,12 @@ interface BuildDeps {
   conversations: StudentConversation[]
   seenAt: Record<string, string>
   publications: PublishedVersion[]
+  dueCards: number
 }
 
 // ─── Derivation (single source of truth for feed + badge) ───────────
 
-export function buildStudentNotifications({ student, issues, conversations, seenAt, publications }: BuildDeps): StudentNotificationItem[] {
+export function buildStudentNotifications({ student, issues, conversations, seenAt, publications, dueCards }: BuildDeps): StudentNotificationItem[] {
   const items: StudentNotificationItem[] = []
 
   // Timetable — ONE notification per recent publication (≤72h) whose
@@ -102,27 +105,16 @@ export function buildStudentNotifications({ student, issues, conversations, seen
     }
   }
 
-  // Homework due — Active homework
-  for (const h of homeworks.filter((x) => x.status === 'Active')) {
+  // Learning — flashcards due for review (standing while the queue is
+  // non-empty; the count is the scheduling engine's real due number).
+  if (dueCards > 0) {
     items.push({
-      id: `hw-${h.id}`,
-      kind: 'homework',
-      title: `Homework due — ${h.subject}`,
-      description: `${h.title} · due ${formatDate(h.dueDate)} · by ${h.assignedBy}`,
-      at: h.assignedOn,
-      target: 'homework',
-    })
-  }
-
-  // Assignments — Pending
-  for (const a of assignments.filter((x) => x.status === 'Pending')) {
-    items.push({
-      id: `asg-${a.id}`,
-      kind: 'assignment',
-      title: `Assignment due — ${a.subject}`,
-      description: `${a.title} · due ${formatDate(a.dueDate)} · ${a.marks} marks`,
-      at: a.dueDate,
-      target: 'assignments',
+      id: 'learn-due-cards',
+      kind: 'learning',
+      title: `${dueCards} flashcard${dueCards === 1 ? '' : 's'} ready for review`,
+      description: 'Your spaced-repetition queue — keep the streak alive',
+      standing: 'Today',
+      target: 'learning',
     })
   }
 
@@ -205,18 +197,18 @@ export function useUnreadStudentNotificationCount(): number {
   const conversations = useStudentMessagingStore((s) => s.conversations)
   const seenAt = useStudentMessagingStore((s) => s.seenAt)
   const publications = useTimetableStore((s) => s.publications)
+  const cards = useStudentLearningStore((s) => s.cards)
   const readIds = useStudentNotifPrefsStore((s) => s.readIds)
   return useMemo(() => {
-    const items = buildStudentNotifications({ student, issues, conversations, seenAt, publications })
+    const items = buildStudentNotifications({ student, issues, conversations, seenAt, publications, dueCards: dueStatsOf(cards).due })
     return items.filter((i) => !readIds.includes(i.id)).length
-  }, [student, issues, conversations, seenAt, publications, readIds])
+  }, [student, issues, conversations, seenAt, publications, cards, readIds])
 }
 
 // ─── Presentation meta ───────────────────────────────────────────────
 
 const KIND_META: Record<StudentNotificationKind, { icon: typeof Bell; gradient: string; label: string }> = {
-  homework: { icon: BookOpen, gradient: 'from-emerald-500 to-teal-600', label: 'Homework' },
-  assignment: { icon: ClipboardList, gradient: 'from-violet-500 to-purple-600', label: 'Assignment' },
+  learning: { icon: Sparkles, gradient: 'from-emerald-500 to-teal-600', label: 'Learning' },
   exam: { icon: Award, gradient: 'from-amber-500 to-orange-600', label: 'Exam' },
   fee: { icon: IndianRupee, gradient: 'from-rose-500 to-pink-600', label: 'Fees' },
   library: { icon: Library, gradient: 'from-teal-600 to-emerald-700', label: 'Library' },
@@ -233,13 +225,14 @@ export function StudentNotificationsModule({ onNavigate }: { onNavigate?: (key: 
   const publications = useTimetableStore((s) => s.publications)
   const conversations = useStudentMessagingStore((s) => s.conversations)
   const seenAt = useStudentMessagingStore((s) => s.seenAt)
+  const cards = useStudentLearningStore((s) => s.cards)
   const readIds = useStudentNotifPrefsStore((s) => s.readIds)
   const markRead = useStudentNotifPrefsStore((s) => s.markRead)
   const markAllRead = useStudentNotifPrefsStore((s) => s.markAllRead)
 
   const items = useMemo(
-    () => buildStudentNotifications({ student, issues, conversations, seenAt, publications }),
-    [student, issues, conversations, seenAt, publications],
+    () => buildStudentNotifications({ student, issues, conversations, seenAt, publications, dueCards: dueStatsOf(cards).due }),
+    [student, issues, conversations, seenAt, publications, cards],
   )
   const unreadItems = items.filter((i) => !readIds.includes(i.id))
 
@@ -257,7 +250,7 @@ export function StudentNotificationsModule({ onNavigate }: { onNavigate?: (key: 
     <div className="space-y-6">
       <SectionHeading
         title="Notifications"
-        subtitle="Everything that needs your attention — homework, fees, library & school news"
+        subtitle="Everything that needs your attention — learning, fees, library & school news"
         icon={<Bell className="h-5 w-5" />}
         action={
           <div className="flex items-center gap-2">

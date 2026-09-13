@@ -1,21 +1,20 @@
 'use client'
 
 import {
-  CalendarCheck, BookOpen, Award, IndianRupee,
+  CalendarCheck, Award, IndianRupee, Layers,
 } from 'lucide-react'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { formatINR } from '@/lib/format'
-import { homeworks } from '@/lib/mock/academics'
+import { useStudentLearningStore, dueStatsOf } from '@/lib/store/student-learning-store'
 import { useMyResults } from '@/lib/store/student-results-store'
 import { useAttendanceSnapshot } from './data'
 
 interface KpiGridProps {
   attendancePct: number
-  pendingHomeworkCount: number
   feePending: number
 }
 
-export function KpiGrid({ attendancePct, pendingHomeworkCount, feePending }: KpiGridProps) {
+export function KpiGrid({ attendancePct, feePending }: KpiGridProps) {
   // STU-ATT — sparkline + week delta derive from the canonical records.
   const attendance = useAttendanceSnapshot()
   // STU-RES — latest published result from the canonical results store
@@ -24,6 +23,10 @@ export function KpiGrid({ attendancePct, pendingHomeworkCount, feePending }: Kpi
   const latest = results.latest
   const prevPct = results.trend.length >= 2 ? results.trend[results.trend.length - 2].pct : null
   const lastExamDelta = latest && prevPct != null ? Math.round((latest.totals.pct - prevPct) * 10) / 10 : undefined
+  // LEARNING-OS — the flashcards-due KPI is the real due count from the
+  // learning store's scheduling engine (replaces the retired homework KPI).
+  const cards = useStudentLearningStore((s) => s.cards)
+  const due = dueStatsOf(cards)
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
       <KpiCard
@@ -50,11 +53,11 @@ export function KpiGrid({ attendancePct, pendingHomeworkCount, feePending }: Kpi
         delay={0.05}
       />
       <KpiCard
-        label="Pending Homework"
-        value={pendingHomeworkCount}
-        icon={<BookOpen className="h-5 w-5" />}
-        trendLabel={`of ${homeworks.length} assigned`}
-        accent="amber"
+        label="Flashcards Due"
+        value={due.due}
+        icon={<Layers className="h-5 w-5" />}
+        trendLabel={due.due > 0 ? 'Ready for review' : 'You’re all caught up'}
+        accent="violet"
         delay={0.1}
       />
       <KpiCard

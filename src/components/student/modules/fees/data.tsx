@@ -11,15 +11,11 @@ import { DEFAULT_PAYMENT_MODES } from '@/lib/store/fee-store-data'
 // of duplicating it here. Only active ONLINE rails (UPI / Card / Net
 // Banking) are offered; offline modes (Cash / Bank Transfer) are office
 // channels handled by the school, and Cheque is deprecated.
-
-// Aarav's fee breakdown — mirrors the CANONICAL Class 2 (C05) fee structure
-// from the fee engine: Tuition ₹250 × 12 + Management & Maintenance ₹500 +
-// Transport ₹500 × 12 (opted in). ₹4,750 of ₹9,500 paid (Term 1 instalment).
-export const feeBreakdown = [
-  { name: 'Tuition Fee', amount: 3000, paid: 3000 },
-  { name: 'Management & Maintenance', amount: 500, paid: 500 },
-  { name: 'Transport Fee', amount: 6000, paid: 1250 },
-]
+//
+// FEES-R — the previously hardcoded `feeBreakdown` array was RETIRED: the
+// breakdown is now derived live from the school's configured class fee
+// structure (see derive.ts → deriveApplicableHeads + allocateToHeads).
+// Every head, amount and per-head paid status comes from the ledger.
 
 /** Shape consumed by payment-form-stage.tsx (unchanged). */
 export interface StudentPaymentMethod {

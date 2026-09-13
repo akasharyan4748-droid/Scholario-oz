@@ -1,0 +1,861 @@
+     1→'use client'
+     2→
+     3→/**
+     4→ * fee-receipt-a5 — THE canonical school fee receipt (PAY-REWORK-1).
+     5→ *
+     6→ * Physical formats (ReceiptSettings.paperSize):
+     7→ *   • A5 LANDSCAPE — 210 × 148 mm — ONE student per page, TWO copies
+     8→ *     side-by-side (STUDENT COPY left · SCHOOL COPY right) separated by a
+     9→ *     subtle tear line.
+    10→ *   • A4 PORTRAIT — 210 × 297 mm — TWO students per page, each student's
+    11→ *     complete dual-copy receipt occupying one A5-landscape area (4 copies
+    12→ *     on the sheet; a student's two copies are never split across pages).
+    13→ *   (SaaS-STAGE-1: the legacy 80mm thermal renderer was consolidated into
+    14→ *   this canonical design; '80mm' persisted settings migrate to 'A5'.)
+    15→ *
+    16→ * Layout rules (final UI/UX spec §1): the copy fills the printable area
+    17→ * NATURALLY — sections distribute leftover height evenly between them
+    18→ * (justify-content: space-between), so there are no giant blank gaps, the
+    19→ * signatures always sit at the foot, long fee lists fit via density tiers
+    20→ * and short fee lists never pool space into one hole. Fonts are NOT the
+    21→ * fix — the geometry is.
+    22→ *
+    23→ * Data rules (spec §15):
+    24→ *   - EVERY value is derived from the canonical payment record + school
+    25→ *     profile + student record. Nothing is hardcoded.
+    26→ *   - Fields that do not exist for a payment are simply not rendered
+    27→ *     (e.g. gateway ref on a cash payment, UPI id on a card payment).
+    28→ *   - Balance Dues Remaining comes from the SAME account computation the
+    29→ *     Student Accounts / Transactions surfaces use — the receipt can never
+    30→ *     contradict the ledger.
+    31→ *
+    32→ * Lifecycle rules (spec §11):
+    33→ *   - 'Under Verification' → the sheet carries an honest PENDING
+    34→ *     VERIFICATION notice and is NOT presented as an official receipt.
+    35→ *   - 'Failed' → NOT-A-COMPLETED-PAYMENT notice, never a receipt.
+    36→ *   - 'Success' → official receipt, identical from every authorised role.
+    37→ *
+    38→ * Print engine (spec §18): standalone HTML document with
+    39→ *   @page { size: A5 landscape | A4 portrait; margin: 0 }
+    40→ * No CDN dependencies (no Tailwind/Google Fonts/Lucide) — the printable
+    41→ * markup carries its own inline CSS. The on-screen preview is the same
+    42→ * layout rendered as DOM and scaled to fit its container.
+    43→ *
+    44→ * Deliberately NOT here: printer toolbars, browser instructions, grey
+    45→ * backdrops (spec §19). Actions live in the calling UI.
+    46→ */
+    47→
+    48→import { useEffect, useRef, useState } from 'react'
+    49→import { Printer, Download, X, Receipt as ReceiptIcon } from 'lucide-react'
+    50→import { Button } from '@/components/ui/button'
+    51→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+    52→import { school } from '@/lib/mock/school'
+    53→import { formatINR, formatDate, amountInWordsINR } from '@/lib/format'
+    54→import { useStudentsStore } from '@/lib/store/students-store'
+    55→import { useFeeStore, getStudentBalanceDue, type FeeTransaction, type ReceiptSettings } from '@/lib/store/fee-store'
+    56→import { cn } from '@/lib/utils'
+    57→
+    58→// ─── Public types ─────────────────────────────────────────────────────
+    59→
+    60→export interface ReceiptLine {
+    61→  particulars: string
+    62→  period?: string
+    63→  amount: number
+    64→}
+    65→
+    66→export interface ReceiptContext {
+    67→  /** Balance remaining AFTER this payment (canonical account outstanding). */
+    68→  balanceDue?: number | null
+    69→  /** Discount / concession applied to the obligation (rendered only when > 0). */
+    70→  discount?: number
+    71→  /** Extra fee rows (defaults to the payment's own fee head). */
+    72→  lines?: ReceiptLine[]
+    73→}
+    74→
+    75→// ─── Data assembly (shared by preview + print/download) ──────────────
+    76→
+    77→/** Build the receipt's fee rows from the canonical payment. One payment =
+    78→ *  one obligation in the ledger model, so the default is a single row;
+    79→ *  `lines` overrides when a caller aggregates several heads. */
+    80→export function buildReceiptLines(t: FeeTransaction, ctx?: ReceiptContext): ReceiptLine[] {
+    81→  if (ctx?.lines?.length) return ctx.lines
+    82→  return [{ particulars: t.feeHead, amount: t.amount }]
+    83→}
+    84→
+    85→function resolveStudent(t: FeeTransaction) {
+    86→  return useStudentsStore.getState().students.find((s) => s.id === t.studentId)
+    87→    ?? useStudentsStore.getState().students.find((s) => s.admissionNo === t.admissionNo)
+    88→    ?? null
+    89→}
+    90→
+    91→function resolveBalanceDue(t: FeeTransaction, ctx?: ReceiptContext): number | null {
+    92→  if (ctx && ctx.balanceDue !== undefined) return ctx.balanceDue
+    93→  return getStudentBalanceDue(t.studentId)
+    94→}
+    95→
+    96→function paymentRef(t: FeeTransaction): string | null {
+    97→  return t.gatewayPaymentId ?? t.utr ?? t.referenceNo ?? null
+    98→}
+    99→
+   100→function modeDetail(t: FeeTransaction): string | null {
+   101→  if (t.meta?.upiId) return t.meta.upiId
+   102→  if (t.meta?.chequeNumber) return `Cheque ${t.meta.chequeNumber}`
+   103→  if (t.meta?.cardLast4) return `Card ****${t.meta.cardLast4}`
+   104→  if (t.meta?.bankName) return t.meta.bankName
+   105→  return null
+   106→}
+   107→
+   108→function dateLabel(iso: string): string {
+   109→  const d = new Date(iso)
+   110→  if (Number.isNaN(d.getTime())) return iso
+   111→  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
+   112→}
+   113→
+   114→function shortSession(t: FeeTransaction): string {
+   115→  // "2025-2026" → "25-26" for the Period column; already-short values pass through.
+   116→  const ay = t.academicYear
+   117→  const m = ay.match(/(\d{4})\D(\d{4})/)
+   118→  if (m) return `${m[1].slice(2)}-${m[2].slice(2)}`
+   119→  return ay
+   120→}
+   121→
+   122→// ─── Copy data model ──────────────────────────────────────────────────
+   123→
+   124→interface CopyData {
+   125→  designation: 'STUDENT COPY' | 'SCHOOL COPY'
+   126→  notes: string[]
+   127→}
+   128→
+   129→function copyData(t: FeeTransaction, settings: ReceiptSettings, designation: CopyData['designation']): CopyData {
+   130→  if (designation === 'SCHOOL COPY') {
+   131→    return {
+   132→      designation,
+   133→      notes: [
+   134→        'Office audit record — for accounts ledger reconciliation.',
+   135→        `${settings.footerMessage}`,
+   136→      ],
+   137→    }
+   138→  }
+   139→  return {
+   140→    designation,
+   141→    notes: [
+   142→      'Fees once paid are non-refundable. Please retain this receipt.',
+   143→      `${settings.footerMessage}`,
+   144→    ],
+   145→  }
+   146→}
+   147→
+   148→// ─── Preview (DOM, scaled) ────────────────────────────────────────────
+   149→
+   150→export function FeeReceiptA5Preview({
+   151→  transaction: t,
+   152→  settings,
+   153→  ctx,
+   154→  onPrint,
+   155→  onDownload,
+   156→  onClose,
+   157→}: {
+   158→  transaction: FeeTransaction
+   159→  settings: ReceiptSettings
+   160→  ctx?: ReceiptContext
+   161→  onPrint?: () => void
+   162→  onDownload?: () => void
+   163→  onClose?: () => void
+   164→}) {
+   165→  const wrapRef = useRef<HTMLDivElement>(null)
+   166→  const [scale, setScale] = useState(0.8)
+   167→
+   168→  // Fit the 210mm × 148mm (≈794×561px) sheet into BOTH the available width
+   169→  // and a comfortable fraction of the viewport height — responsive,
+   170→  // proportional scaling; never crop (spec §33).
+   171→  useEffect(() => {
+   172→    const el = wrapRef.current
+   173→    if (!el) return
+   174→    const update = () => {
+   175→      const w = el.clientWidth
+   176→      const h = Math.max(300, window.innerHeight * 0.58)
+   177→      setScale(Math.min(1, Math.max(0.28, Math.min((w - 8) / 794, h / 561))))
+   178→    }
+   179→    update()
+   180→    const ro = new ResizeObserver(update)
+   181→    ro.observe(el)
+   182→    return () => ro.disconnect()
+   183→  }, [])
+   184→
+   185→  return (
+   186→    <div className="flex flex-col items-center w-full">
+   187→      {(onPrint || onDownload || onClose) && (
+   188→        <div className="flex items-center justify-between w-full mb-2.5">
+   189→          <p className="text-[11px] font-semibold text-muted-foreground">Receipt</p>
+   190→          <div className="flex items-center gap-1">
+   191→            {onPrint && (
+   192→              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onPrint}>
+   193→                <Printer className="h-3 w-3" /> Print
+   194→              </Button>
+   195→            )}
+   196→            {onDownload && (
+   197→              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onDownload}>
+   198→                <Download className="h-3 w-3" /> Download
+   199→              </Button>
+   200→            )}
+   201→            {onClose && (
+   202→              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onClose} aria-label="Close receipt preview">
+   203→                <X className="h-3.5 w-3.5" />
+   204→              </Button>
+   205→            )}
+   206→          </div>
+   207→        </div>
+   208→      )}
+   209→
+   210→      <div ref={wrapRef} className="w-full overflow-hidden" data-testid="a5-receipt-preview">
+   211→        {/* Outer box reserves the SCALED size so surrounding layout flows
+   212→            correctly; the inner node scales the exact mm-sized sheet. */}
+   213→        <div style={{ width: 794 * scale, height: 561 * scale, margin: '0 auto' }}>
+   214→          <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: 794, height: 561 }}>
+   215→            <A5Sheet transaction={t} settings={settings} ctx={ctx} />
+   216→          </div>
+   217→        </div>
+   218→      </div>
+   219→    </div>
+   220→  )
+   221→}
+   222→
+   223→// ─── The A5 sheet (DOM version) ───────────────────────────────────────
+   224→
+   225→export function A5Sheet({ transaction: t, settings, ctx }: { transaction: FeeTransaction; settings: ReceiptSettings; ctx?: ReceiptContext }) {
+   226→  const student = resolveStudent(t)
+   227→  const balanceDue = resolveBalanceDue(t, ctx)
+   228→  const lines = buildReceiptLines(t, ctx)
+   229→  return (
+   230→    <div
+   231→      data-testid="a5-receipt-sheet"
+   232→      className="bg-white text-slate-950 grid"
+   233→      style={{
+   234→        width: '210mm',
+   235→        height: '148mm',
+   236→        padding: '4mm 5mm',
+   237→        gridTemplateColumns: '1fr 8px 1fr',
+   238→        gridTemplateRows: '1fr',
+   239→        gap: '3mm',
+   240→        fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+   241→        fontSize: '9px',
+   242→        lineHeight: 1.25,
+   243→      }}
+   244→    >
+   245→      <ReceiptCopy transaction={t} settings={settings} ctx={{ ...ctx, balanceDue }} student={student} lines={lines} data={copyData(t, settings, 'STUDENT COPY')} />
+   246→      <TearLine />
+   247→      <ReceiptCopy transaction={t} settings={settings} ctx={{ ...ctx, balanceDue }} student={student} lines={lines} data={copyData(t, settings, 'SCHOOL COPY')} />
+   248→    </div>
+   249→  )
+   250→}
+   251→
+   252→function TearLine() {
+   253→  return (
+   254→    <div className="flex flex-col items-center justify-center select-none" style={{ borderLeft: '1px dashed #94a3b8' }} aria-hidden>
+   255→      <span
+   256→        className="whitespace-nowrap font-bold text-slate-400"
+   257→        style={{ writingMode: 'vertical-rl', fontSize: '6px', letterSpacing: '0.18em', fontFamily: 'ui-monospace, monospace' }}
+   258→      >
+   259→        ✂ CUT HERE
+   260→      </span>
+   261→    </div>
+   262→  )
+   263→}
+   264→
+   265→/** Vertical-fit tier (spec: long lists must still fit safely, short lists
+   266→ *  must not pool leftover space into one giant gap). The copy lays its
+   267→ *  sections out with `justify-content: space-between` so ANY remaining
+   268→ *  height distributes EVENLY between sections instead of collecting above
+   269→ *  the signatures; the density tiers below shrink the fee table when a
+   270→ *  receipt aggregates many heads so it never overflows the 148 mm sheet. */
+   271→function fitTier(lineCount: number): 0 | 1 | 2 {
+   272→  if (lineCount > 12) return 2
+   273→  if (lineCount > 6) return 1
+   274→  return 0
+   275→}
+   276→
+   277→const TIER = {
+   278→  0: { table: 9, cellPad: '3.5px 5px', det: 9.5, detPad: '5px 7px', notes: 7.5, sigPad: 24 },
+   279→  1: { table: 8, cellPad: '2.5px 4px', det: 9, detPad: '4px 6px', notes: 7, sigPad: 14 },
+   280→  2: { table: 7.5, cellPad: '1.5px 4px', det: 8.5, detPad: '3px 6px', notes: 6.5, sigPad: 10 },
+   281→} as const
+   282→
+   283→function ReceiptCopy({
+   284→  transaction: t,
+   285→  settings,
+   286→  ctx,
+   287→  student,
+   288→  lines,
+   289→  data,
+   290→}: {
+   291→  transaction: FeeTransaction
+   292→  settings: ReceiptSettings
+   293→  ctx: ReceiptContext
+   294→  student: ReturnType<typeof resolveStudent>
+   295→  lines: ReceiptLine[]
+   296→  data: CopyData
+   297→}) {
+   298→  const ref = paymentRef(t)
+   299→  const md = modeDetail(t)
+   300→  const official = t.status === 'Success'
+   301→  const balance = ctx.balanceDue
+   302→  const tier = TIER[fitTier(lines.length)]
+   303→
+   304→  return (
+   305→    <div
+   306→      className="flex flex-col"
+   307→      style={{
+   308→        border: '1.2px solid #0f172a',
+   309→        borderRadius: '3px',
+   310→        padding: '7px 9px',
+   311→        gap: '4px',
+   312→        // THE blank-space fix: sections keep natural heights and any
+   313→        // leftover space spreads EVENLY between them — the sheet fills
+   314→        // naturally, signatures sit at the bottom, and a short fee list
+   315→        // never produces one huge hole above the footer.
+   316→        justifyContent: 'space-between',
+   317→        background: '#fff',
+   318→        minHeight: 0,
+   319→        overflow: 'hidden',
+   320→      }}
+   321→    >
+   322→      {/* Header */}
+   323→      <div style={{ textAlign: 'center', borderBottom: '1.2px solid #0f172a', paddingBottom: '4px' }}>
+   324→        <div className="flex items-center justify-between">
+   325→          <div className="text-left font-semibold text-slate-600" style={{ fontSize: '7.5px', lineHeight: 1.25 }}>
+   326→            <p>{school.affiliation}</p>
+   327→            <p style={{ marginTop: '1px' }}>Code: {school.code}</p>
+   328→          </div>
+   329→          <div>
+   330→            <p className="font-black uppercase" style={{ fontSize: '14px', letterSpacing: '0.04em', lineHeight: 1.1 }}>{school.name}</p>
+   331→            <p className="font-medium text-slate-600" style={{ fontSize: '8px', marginTop: '1.5px' }}>
+   332→              {school.address} • Ph: {school.phone}
+   333→            </p>
+   334→          </div>
+   335→          <div className="text-right">
+   336→            <span
+   337→              className="inline-block font-extrabold uppercase text-white"
+   338→              style={{ background: '#0f172a', fontSize: '7px', padding: '2px 5px', borderRadius: '2px', letterSpacing: '0.08em' }}
+   339→            >
+   340→              {data.designation}
+   341→            </span>
+   342→          </div>
+   343→        </div>
+   344→      </div>
+   345→
+   346→      {/* Honest lifecycle state (spec §11) — never present a pending/rejected
+   347→          payment as an official receipt. */}
+   348→      {!official && (
+   349→        <div
+   350→          className="font-bold"
+   351→          style={{
+   352→            fontSize: '8px',
+   353→            padding: '3px 6px',
+   354→            borderRadius: '2px',
+   355→            border: '0.8px solid',
+   356→            ...(t.status === 'Failed'
+   357→              ? { background: '#fef2f2', borderColor: '#fca5a5', color: '#b91c1c' }
+   358→              : { background: '#fffbeb', borderColor: '#fcd34d', color: '#b45309' }),
+   359→          }}
+   360→        >
+   361→          {t.status === 'Failed'
+   362→            ? 'PAYMENT NOT COMPLETED — this is not a receipt. No money was recorded.'
+   363→            : 'PENDING VERIFICATION — becomes an official receipt once the school office verifies this payment.'}
+   364→        </div>
+   365→      )}
+   366→
+   367→      {/* Details */}
+   368→      <div
+   369→        className="grid font-medium"
+   370→        style={{ gridTemplateColumns: '1fr 1fr', background: '#f8fafc', padding: tier.detPad, borderRadius: '2px', border: '0.8px solid #e2e8f0', fontSize: tier.det, columnGap: '10px', rowGap: '1.5px' }}
+   371→      >
+   372→        <div>
+   373→          <p><span className="text-slate-500 font-normal">Receipt No:</span> <strong>{t.receiptNo}</strong></p>
+   374→          <p><span className="text-slate-500 font-normal">Student:</span> <strong>{t.studentName}</strong></p>
+   375→          <p><span className="text-slate-500 font-normal">Adm No:</span> <strong>{t.admissionNo}</strong>{student?.rollNo ? <span> | Roll: {student.rollNo}</span> : null}</p>
+   376→        </div>
+   377→        <div className="text-right">
+   378→          <p><span className="text-slate-500 font-normal">Date:</span> <strong>{dateLabel(t.date)}</strong></p>
+   379→          <p><span className="text-slate-500 font-normal">Class:</span> <strong>{t.className}{student?.section ? ` - ${student.section}` : ''}</strong></p>
+   380→          {(student?.fatherName || student?.guardianName) && (
+   381→            <p><span className="text-slate-500 font-normal">Father:</span> <strong>{student.fatherName || student.guardianName}</strong></p>
+   382→          )}
+   383→        </div>
+   384→      </div>
+   385→
+   386→      {/* Fee table */}
+   387→      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: tier.table }}>
+   388→        <thead style={{ background: '#f1f5f9', fontWeight: 700, color: '#1e293b' }}>
+   389→          <tr>
+   390→            <th className="text-left" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1' }}>Particulars</th>
+   391→            <th className="text-center" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1' }}>Period</th>
+   392→            <th className="text-right" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1' }}>Amount (₹)</th>
+   393→          </tr>
+   394→        </thead>
+   395→        <tbody>
+   396→          {lines.map((l, i) => (
+   397→            <tr key={i}>
+   398→              <td style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1' }}>{l.particulars}</td>
+   399→              <td className="text-center text-slate-500" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1' }}>{l.period ?? shortSession(t)}</td>
+   400→              <td className="text-right font-medium" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1' }}>{formatINR(l.amount, true)}</td>
+   401→            </tr>
+   402→          ))}
+   403→        </tbody>
+   404→        <tfoot style={{ fontWeight: 700 }}>
+   405→          {ctx.discount != null && ctx.discount > 0 && (
+   406→            <tr>
+   407→              <td colSpan={2} className="text-right text-slate-600" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1' }}>Discount / Concession:</td>
+   408→              <td className="text-right" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1', color: '#e11d48' }}>- {formatINR(ctx.discount, true)}</td>
+   409→            </tr>
+   410→          )}
+   411→          <tr style={{ background: '#f1f5f9', fontSize: tier.table + 1 }}>
+   412→            <td colSpan={2} className="text-right font-extrabold" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1' }}>Total Paid Amount:</td>
+   413→            <td className="text-right font-black" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1' }}>₹ {formatINR(t.amount, true)}</td>
+   414→          </tr>
+   415→          {balance != null && (
+   416→            <tr className="text-slate-500" style={{ fontSize: tier.table - 0.5 }}>
+   417→              <td colSpan={2} className="text-right font-normal" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1' }}>Balance Dues Remaining:</td>
+   418→              <td className="text-right font-bold" style={{ padding: tier.cellPad, border: '0.8px solid #cbd5e1', color: '#047857' }}>
+   419→                {balance <= 0 ? '₹ 0.00 (NIL)' : `₹ ${formatINR(balance, true)}`}
+   420→              </td>
+   421→            </tr>
+   422→          )}
+   423→        </tfoot>
+   424→      </table>
+   425→
+   426→      {/* Amount in words */}
+   427→      <div style={{ background: '#f8fafc', padding: '3px 6px', borderRadius: '2px', border: '0.8px solid #e2e8f0', fontSize: '8.5px' }}>
+   428→        <span className="text-slate-500">In Words:</span>{' '}
+   429→        <strong className="italic font-semibold text-slate-900">{amountInWordsINR(t.amount)}</strong>
+   430→      </div>
+   431→
+   432→      {/* Payment info */}
+   433→      <div className="flex justify-between items-center" style={{ background: '#f8fafc', padding: '3px 6px', borderRadius: '2px', border: '0.8px solid #e2e8f0', fontSize: '8px' }}>
+   434→        <span>Mode: <strong>{t.mode.toUpperCase()}</strong>{md ? ` (${md})` : ''}</span>
+   435→        {ref && <span>Txn Ref: <strong className="font-mono">{ref}</strong></span>}
+   436→        <span>{data.designation === 'SCHOOL COPY' ? 'Verified By:' : 'Received By:'} <strong>{official ? (t.verifiedBy ?? t.collectedBy) : '—'}</strong></span>
+   437→      </div>
+   438→
+   439→      {/* Notes */}
+   440→      <div className="text-slate-500" style={{ fontSize: tier.notes, borderTop: '0.8px solid #e2e8f0', paddingTop: '2.5px', lineHeight: 1.4 }}>
+   441→        {data.notes.map((n, i) => (
+   442→          <p key={i}>{i + 1}. {n}</p>
+   443→        ))}
+   444→        {t.status === 'Under Verification' && (
+   445→          <p>{data.notes.length + 1}. Collected by {t.collectedBy} — verification by the school office is pending.</p>
+   446→        )}
+   447→      </div>
+   448→
+   449→      {/* Signatures — the LAST flex child: with space-between they always sit
+   450→          at the foot of the sheet with a comfortable signing gap. */}
+   451→      <div className="grid text-center" style={{ gridTemplateColumns: '1fr 1fr', columnGap: '20px', fontSize: '8px', paddingTop: '2px' }}>
+   452→        <div>
+   453→          <p style={{ borderTop: '1px solid #94a3b8', paddingTop: `${tier.sigPad}px`, color: '#475569', fontWeight: 500 }}>Parent / Depositor Sign</p>
+   454→        </div>
+   455→        {settings.showAuthorizedSignature ? (
+   456→          <div>
+   457→            <p style={{ borderTop: '1px solid #94a3b8', paddingTop: `${tier.sigPad}px`, fontWeight: 700 }}>Cashier / Authorized Seal</p>
+   458→          </div>
+   459→        ) : (
+   460→          <div />
+   461→        )}
+   462→      </div>
+   463→    </div>
+   464→  )
+   465→}
+   466→
+   467→// ─── Print / download engine (standalone HTML — no CDNs) ─────────────
+   468→
+   469→/** Escape user-derived values for safe interpolation into the HTML doc. */
+   470→function esc(v: string | number | null | undefined): string {
+   471→  if (v == null) return ''
+   472→  return String(v)
+   473→    .replace(/&/g, '&amp;')
+   474→    .replace(/</g, '&lt;')
+   475→    .replace(/>/g, '&gt;')
+   476→    .replace(/"/g, '&quot;')
+   477→}
+   478→
+   479→function receiptCopyHTML(
+   480→  t: FeeTransaction,
+   481→  settings: ReceiptSettings,
+   482→  ctx: ReceiptContext,
+   483→  data: CopyData,
+   484→): string {
+   485→  const ref = paymentRef(t)
+   486→  const md = modeDetail(t)
+   487→  const official = t.status === 'Success'
+   488→  const lines = buildReceiptLines(t, ctx)
+   489→  const balance = ctx.balanceDue
+   490→  const tier = TIER[fitTier(lines.length)]
+   491→  const rowsHTML = lines.map((l) => `
+   492→        <tr>
+   493→          <td>${esc(l.particulars)}</td>
+   494→          <td class="c mut">${esc(l.period ?? '')}</td>
+   495→          <td class="r med">${esc(formatINR(l.amount, true))}</td>
+   496→        </tr>`).join('')
+   497→
+   498→  return `
+   499→      <div class="copy">
+   500→        <div class="hdr">
+   501→          <div class="hdr-l">
+   502→            <p>${esc(school.affiliation)}</p>
+   503→            <p>Code: ${esc(school.code)}</p>
+   504→          </div>
+   505→          <div class="hdr-c">
+   506→            <h2>${esc(school.name)}</h2>
+   507→            <p>${esc(school.address)} &bull; Ph: ${esc(school.phone)}</p>
+   508→          </div>
+   509→          <div class="hdr-r"><span class="pill">${esc(data.designation)}</span></div>
+   510→        </div>
+   511→        ${official ? '' : t.status === 'Failed'
+   512→          ? '<div class="notice fail">PAYMENT NOT COMPLETED — this is not a receipt. No money was recorded.</div>'
+   513→          : '<div class="notice pend">PENDING VERIFICATION — becomes an official receipt once the school office verifies this payment.</div>'}
+   514→        <div class="det" style="font-size:${tier.det}px; padding:${tier.detPad};">
+   515→          <div>
+   516→            <p><span>Receipt No:</span> <strong>${esc(t.receiptNo)}</strong></p>
+   517→            <p><span>Student:</span> <strong>${esc(t.studentName)}</strong></p>
+   518→            <p><span>Adm No:</span> <strong>${esc(t.admissionNo)}</strong></p>
+   519→          </div>
+   520→          <div class="r">
+   521→            <p><span>Date:</span> <strong>${esc(dateLabel(t.date))}</strong></p>
+   522→            <p><span>Class:</span> <strong>${esc(t.className)}</strong></p>
+   523→          </div>
+   524→        </div>
+   525→        <table style="font-size:${tier.table}px;">
+   526→          <thead>
+   527→            <tr><th class="l">Particulars</th><th class="c">Period</th><th class="r">Amount (&#8377;)</th></tr>
+   528→          </thead>
+   529→          <tbody>${rowsHTML}</tbody>
+   530→          <tfoot>
+   531→            ${ctx.discount != null && ctx.discount > 0 ? `
+   532→            <tr><td colspan="2" class="r mut">Discount / Concession:</td><td class="r disc">- ${esc(formatINR(ctx.discount, true))}</td></tr>` : ''}
+   533→            <tr class="total"><td colspan="2" class="r">Total Paid Amount:</td><td class="r black">&#8377; ${esc(formatINR(t.amount, true))}</td></tr>
+   534→            ${balance != null ? `
+   535→            <tr class="bal"><td colspan="2" class="r">Balance Dues Remaining:</td><td class="r green">${balance <= 0 ? '&#8377; 0.00 (NIL)' : '&#8377; ' + esc(formatINR(balance, true))}</td></tr>` : ''}
+   536→          </tfoot>
+   537→        </table>
+   538→        <div class="words"><span>In Words:</span> <strong>${esc(amountInWordsINR(t.amount))}</strong></div>
+   539→        <div class="pay">
+   540→          <span>Mode: <strong>${esc(t.mode.toUpperCase())}</strong>${md ? ` (${esc(md)})` : ''}</span>
+   541→          ${ref ? `<span>Txn Ref: <strong class="mono">${esc(ref)}</strong></span>` : ''}
+   542→          <span>${data.designation === 'SCHOOL COPY' ? 'Verified By:' : 'Received By:'} <strong>${official ? esc(t.verifiedBy ?? t.collectedBy) : '—'}</strong></span>
+   543→        </div>
+   544→        <div class="notes" style="font-size:${tier.notes}px;">
+   545→          ${data.notes.map((n, i) => `<p>${i + 1}. ${esc(n)}</p>`).join('')}
+   546→          ${t.status === 'Under Verification' ? `<p>${data.notes.length + 1}. Collected by ${esc(t.collectedBy)} — verification by the school office is pending.</p>` : ''}
+   547→        </div>
+   548→        <div class="sig" style="--sig-pad:${tier.sigPad}px;">
+   549→          <div><p class="sig-line">Parent / Depositor Sign</p></div>
+   550→          ${settings.showAuthorizedSignature ? '<div><p class="sig-line bold">Cashier / Authorized Seal</p></div>' : '<div></div>'}
+   551→        </div>
+   552→      </div>`
+   553→}
+   554→
+   555→function sheetHTML(t: FeeTransaction, settings: ReceiptSettings, ctx: ReceiptContext, student: ReturnType<typeof resolveStudent>): string {
+   556→  const bd = ctx.balanceDue
+   557→  const sharedCtx: ReceiptContext = { ...ctx, balanceDue: bd }
+   558→  return `
+   559→    <div class="sheet">
+   560→      ${receiptCopyHTML(t, settings, sharedCtx, copyData(t, settings, 'STUDENT COPY'))}
+   561→      <div class="tear"><span>&#9986; CUT HERE</span></div>
+   562→      ${receiptCopyHTML(t, settings, sharedCtx, copyData(t, settings, 'SCHOOL COPY'))}
+   563→    </div>`
+   564→}
+   565→
+   566→/** Build the complete standalone HTML document for one or MANY payments.
+   567→ *
+   568→ * Pagination follows the paper-size setting (spec §18/§21):
+   569→ *   • A5 landscape — exactly ONE student per page: Student Copy + School
+   570→ *     Copy side-by-side on a single 210 × 148 mm sheet.
+   571→ *   • A4 portrait — automatically fits TWO students' complete receipts on
+   572→ *     one 210 × 297 mm sheet: each student occupies one A5-landscape area
+   573→ *     stacked vertically (Student 1 → Student + School copy, Student 2 →
+   574→ *     Student + School copy = 4 copies), with the copies of a student
+   575→ *     NEVER split across pages.
+   576→ *
+   577→ * autoPrint opens the browser print dialog on load — used by the PRINT
+   578→ * flow only; downloads stay a plain file. */
+   579→export function generateReceiptsA5HTML(
+   580→  items: Array<{ transaction: FeeTransaction; ctx?: ReceiptContext }>,
+   581→  settings: ReceiptSettings,
+   582→  opts?: { autoPrint?: boolean },
+   583→): string {
+   584→  const a4 = settings.paperSize === 'A4'
+   585→
+   586→  // Paginate: A5 → one sheet per payment; A4 → up to two sheets per page.
+   587→  const pages: Array<Array<{ transaction: FeeTransaction; ctx?: ReceiptContext }>> = a4
+   588→    ? Array.from({ length: Math.ceil(items.length / 2) }, (_, i) => items.slice(i * 2, i * 2 + 2))
+   589→    : items.map((it) => [it])
+   590→
+   591→  const body = pages
+   592→    .map((pageItems) => {
+   593→      const sheets = pageItems
+   594→        .map(({ transaction, ctx }) => {
+   595→          const student = resolveStudent(transaction)
+   596→          const balanceDue = resolveBalanceDue(transaction, ctx)
+   597→          const lines = buildReceiptLines(transaction, ctx)
+   598→          return sheetHTML(transaction, settings, { ...ctx, balanceDue, lines }, student)
+   599→        })
+   600→        .join('\n')
+   601→      return a4 ? `<div class="page">${sheets}</div>` : sheets
+   602→    })
+   603→    .join('\n')
+   604→
+   605→  const pageCss = a4
+   606→    ? `  @page { size: A4 portrait; margin: 0; }`
+   607→    : `  @page { size: A5 landscape; margin: 0; }`
+   608→
+   609→  return `<!DOCTYPE html>
+   610→<html lang="en">
+   611→<head>
+   612→<meta charset="UTF-8" />
+   613→<title>Scholario Fee Receipt${items.length > 1 ? `s (${items.length})` : ` ${esc(items[0]?.transaction.receiptNo ?? '')}`}</title>
+   614→<style>
+   615→  ${pageCss}
+   616→  * { box-sizing: border-box; margin: 0; padding: 0;
+   617→      font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+   618→      -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+   619→  body { background: #94a3b8; display: flex; flex-direction: column; align-items: center;
+   620→         gap: 10px; padding: 15px; }
+   621→  .page { width: 210mm; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+   622→  .sheet { width: 210mm; height: 148mm; max-height: 148mm; background: #fff; padding: 4mm 5mm;
+   623→           display: grid; grid-template-columns: 1fr 8px 1fr; grid-template-rows: 1fr; gap: 3mm;
+   624→           box-shadow: 0 8px 25px rgba(0,0,0,.25); border-radius: 2px; overflow: hidden;
+   625→           flex-shrink: 0; }
+   626→  .copy { border: 1.2px solid #0f172a; border-radius: 3px; padding: 7px 9px; display: flex;
+   627→          flex-direction: column; gap: 4px; justify-content: space-between; background: #fff;
+   628→          font-size: 9px; line-height: 1.25; min-height: 0; overflow: hidden; }
+   629→  .hdr { text-align: center; border-bottom: 1.2px solid #0f172a; padding-bottom: 4px; }
+   630→  .hdr .hdr-l { text-align: left; }
+   631→  .hdr .hdr-r { text-align: right; }
+   632→  .hdr > div { display: inline-block; vertical-align: middle; width: 32%; }
+   633→  .hdr-l { font-size: 7.5px; font-weight: 600; color: #475569; line-height: 1.25; }
+   634→  .hdr-c h2 { font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; line-height: 1.1; }
+   635→  .hdr-c p { font-size: 8px; color: #475569; font-weight: 500; margin-top: 1.5px; }
+   636→  .pill { display: inline-block; background: #0f172a; color: #fff; font-weight: 800; font-size: 7px;
+   637→          text-transform: uppercase; padding: 2px 5px; border-radius: 2px; letter-spacing: .08em; }
+   638→  .notice { font-weight: 700; font-size: 8px; padding: 3px 6px; border-radius: 2px; border: .8px solid; }
+   639→  .notice.pend { background: #fffbeb; border-color: #fcd34d; color: #b45309; }
+   640→  .notice.fail { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
+   641→  .det { display: grid; grid-template-columns: 1fr 1fr; background: #f8fafc; padding: 5px 7px;
+   642→         border: .8px solid #e2e8f0; border-radius: 2px; font-size: 9.5px; font-weight: 500;
+   643→         column-gap: 10px; row-gap: 1.5px; }
+   644→  .det .r { text-align: right; }
+   645→  .det span { color: #64748b; font-weight: 400; }
+   646→  table { width: 100%; border-collapse: collapse; font-size: 9px; }
+   647→  th, td { padding: 3.5px 5px; border: .8px solid #cbd5e1; }
+   648→  th { background: #f1f5f9; font-weight: 700; color: #1e293b; }
+   649→  .l { text-align: left; } .c { text-align: center; } .r { text-align: right; }
+   650→  .mut { color: #64748b; } .med { font-weight: 500; }
+   651→  tfoot { font-weight: 700; }
+   652→  tfoot .total { background: #f1f5f9; }
+   653→  tfoot .total td.r { font-weight: 900; }
+   654→  tfoot .bal { color: #64748b; }
+   655→  .green { color: #047857; } .disc { color: #e11d48; }
+   656→  .black { font-weight: 900; }
+   657→  .words { background: #f8fafc; padding: 3px 6px; border: .8px solid #e2e8f0; border-radius: 2px;
+   658→           font-size: 8.5px; }
+   659→  .words span { color: #64748b; }
+   660→  .words strong { font-style: italic; font-weight: 600; color: #0f172a; }
+   661→  .pay { display: flex; justify-content: space-between; align-items: center; background: #f8fafc;
+   662→         padding: 3px 6px; border: .8px solid #e2e8f0; border-radius: 2px; font-size: 8px; }
+   663→  .mono { font-family: ui-monospace, 'Courier New', monospace; }
+   664→  .notes { font-size: 7.5px; color: #64748b; border-top: .8px solid #e2e8f0; padding-top: 2.5px;
+   665→           line-height: 1.4; }
+   666→  .sig { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px; text-align: center;
+   667→         font-size: 8px; padding-top: 2px; }
+   668→  .sig-line { border-top: 1px solid #94a3b8; padding-top: var(--sig-pad, 24px); color: #475569; font-weight: 500; }
+   669→  .sig-line.bold { font-weight: 700; color: #0f172a; }
+   670→  .tear { display: flex; align-items: center; justify-content: center; border-left: 1px dashed #94a3b8;
+   671→          user-select: none; }
+   672→  .tear span { writing-mode: vertical-rl; font-size: 6px; font-weight: 700; letter-spacing: .18em;
+   673→               color: #94a3b8; font-family: ui-monospace, monospace; white-space: nowrap; }
+   674→  @media print {
+   675→    html, body { background: #fff !important; padding: 0 !important;
+   676→                 margin: 0 !important; gap: 0 !important; display: block !important; overflow: hidden; }
+   677→    ${a4
+   678→      ? `body { width: 210mm !important; }
+   679→    .page { box-shadow: none !important; border-radius: 0 !important; margin: 0 !important; gap: 0 !important; }
+   680→    .page + .page { page-break-before: always !important; }
+   681→    .page:last-child { page-break-after: auto !important; }
+   682→    .sheet { box-shadow: none !important; border-radius: 0 !important; page-break-inside: avoid !important; }`
+   683→      : `html, body { width: 210mm !important; }
+   684→    .sheet { box-shadow: none !important; border-radius: 0 !important; margin: 0 !important;
+   685→             page-break-inside: avoid !important; }
+   686→    .sheet + .sheet { page-break-before: always !important; }`}
+   687→  }
+   688→</style>
+   689→</head>
+   690→<body>
+   691→${body}
+   692→${opts?.autoPrint ? "<script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });<\/script>" : ''}
+   693→</body>
+   694→</html>`
+   695→}
+   696→
+   697→// ─── Actions used across the app (format-aware, spec §20/§21) ─────────
+   698→
+   699→/** Print ONE payment's receipt. A5 landscape → one student per page;
+   700→ *  A4 portrait → the sheet reserves one A5-landscape area for this
+   701→ *  student (a second student would fill the lower half when bulk-printed). */
+   702→export function printReceiptA5(t: FeeTransaction, settings: ReceiptSettings, ctx?: ReceiptContext) {
+   703→  const html = generateReceiptsA5HTML([{ transaction: t, ctx }], settings, { autoPrint: true })
+   704→  const w = window.open('', '_blank', 'width=860,height=640')
+   705→  if (!w) {
+   706→    return false
+   707→  }
+   708→  w.document.write(html)
+   709→  w.document.close()
+   710→  return true
+   711→}
+   712→
+   713→/** Bulk print — paginated by the paper-size setting: A5 = 1 student per
+   714→ *  page, A4 = 2 students per page; a student's two copies always stay
+   715→ *  together on the same page. */
+   716→export function printReceiptsA5Bulk(items: Array<{ transaction: FeeTransaction; ctx?: ReceiptContext }>, settings: ReceiptSettings) {
+   717→  if (items.length === 0) return false
+   718→  const html = generateReceiptsA5HTML(items, settings, { autoPrint: true })
+   719→  const w = window.open('', '_blank', 'width=860,height=640')
+   720→  if (!w) return false
+   721→  w.document.write(html)
+   722→  w.document.close()
+   723→  return true
+   724→}
+   725→
+   726→/** Download ONE payment's receipt as a standalone, print-ready HTML file. */
+   727→export function downloadReceiptA5(t: FeeTransaction, settings: ReceiptSettings, ctx?: ReceiptContext) {
+   728→  const html = generateReceiptsA5HTML([{ transaction: t, ctx }], settings)
+   729→  const blob = new Blob([html], { type: 'text/html' })
+   730→  const url = URL.createObjectURL(blob)
+   731→  const a = document.createElement('a')
+   732→  a.href = url
+   733→  a.download = `${t.receiptNo}.html`
+   734→  document.body.appendChild(a)
+   735→  a.click()
+   736→  document.body.removeChild(a)
+   737→  URL.revokeObjectURL(url)
+   738→}
+   739→
+   740→/** Bulk download — one HTML file paginated exactly like the print flow. */
+   741→export function downloadReceiptsA5Bulk(items: Array<{ transaction: FeeTransaction; ctx?: ReceiptContext }>, settings: ReceiptSettings) {
+   742→  if (items.length === 0) return
+   743→  const html = generateReceiptsA5HTML(items, settings)
+   744→  const blob = new Blob([html], { type: 'text/html' })
+   745→  const url = URL.createObjectURL(blob)
+   746→  const a = document.createElement('a')
+   747→  a.href = url
+   748→  a.download = `receipts-${items.length}-${new Date().toISOString().slice(0, 10)}.html`
+   749→  document.body.appendChild(a)
+   750→  a.click()
+   751→  document.body.removeChild(a)
+   752→  URL.revokeObjectURL(url)
+   753→}
+   754→
+   755→// ─── Shared receipt-view dialog ───────────────────────────────────────
+   756→// The single "View receipt" experience used by Payments, Transactions and
+   757→// the collect wizard. Compact actions in the dialog header; the printable
+   758→// area contains ONLY the receipt (spec §19).
+   759→
+   760→export function ReceiptViewDialog({
+   761→  transaction,
+   762→  settings,
+   763→  open,
+   764→  onOpenChange,
+   765→  actor = 'Principal',
+   766→}: {
+   767→  transaction: FeeTransaction | null
+   768→  settings: ReceiptSettings
+   769→  open: boolean
+   770→  onOpenChange: (open: boolean) => void
+   771→  actor?: string
+   772→}) {
+   773→  const markReceiptHandled = useFeeStore((s) => s.markReceiptHandled)
+   774→
+   775→  const handlePrint = () => {
+   776→    if (!transaction) return
+   777→    const ok = printReceiptA5(transaction, settings)
+   778→    if (ok) {
+   779→      markReceiptHandled(transaction.id, actor)
+   780→      // toast in caller
+   781→    }
+   782→  }
+   783→  const handleDownload = () => {
+   784→    if (!transaction) return
+   785→    downloadReceiptA5(transaction, settings)
+   786→    markReceiptHandled(transaction.id, actor)
+   787→  }
+   788→
+   789→  return (
+   790→    <Dialog open={open} onOpenChange={onOpenChange}>
+   791→      <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto">
+   792→        <DialogHeader className="pb-1">
+   793→          <DialogTitle className="text-sm">Receipt {transaction?.receiptNo}</DialogTitle>
+   794→          <DialogDescription className="text-[11px]">
+   795→            {transaction?.studentName} · {formatINR(transaction?.amount ?? 0, true)} · {transaction?.mode}
+   796→            {transaction && transaction.status !== 'Success' && ' · awaiting verification'}
+   797→          </DialogDescription>
+   798→        </DialogHeader>
+   799→        {transaction && (
+   800→          <FeeReceiptA5Preview
+   801→            transaction={transaction}
+   802→            settings={settings}
+   803→            onPrint={handlePrint}
+   804→            onDownload={handleDownload}
+   805→            onClose={() => onOpenChange(false)}
+   806→          />
+   807→        )}
+   808→      </DialogContent>
+   809→    </Dialog>
+   810→  )
+   811→}
+   812→
+   813→// Compact row actions used in lists (spec §20: small icons + concise labels).
+   814→export function ReceiptRowActions({
+   815→  transaction: t,
+   816→  settings,
+   817→  onView,
+   818→  className,
+   819→}: {
+   820→  transaction: FeeTransaction
+   821→  settings: ReceiptSettings
+   822→  onView?: (t: FeeTransaction) => void
+   823→  className?: string
+   824→}) {
+   825→  const markReceiptHandled = useFeeStore((s) => s.markReceiptHandled)
+   826→  const official = t.status === 'Success'
+   827→  return (
+   828→    <div className={cn('flex items-center gap-0.5', className)}>
+   829→      {onView && (
+   830→        <Button
+   831→          size="sm" variant="ghost"
+   832→          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+   833→          title={official ? 'View receipt' : 'View payment acknowledgement'}
+   834→          aria-label={official ? `View receipt ${t.receiptNo}` : `View payment ${t.receiptNo}`}
+   835→          onClick={() => onView(t)}
+   836→        >
+   837→          <ReceiptIcon className="h-3 w-3" />
+   838→        </Button>
+   839→      )}
+   840→      <Button
+   841→        size="sm" variant="ghost"
+   842→        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+   843→        title={official ? 'Print receipt (A5)' : 'Print pending-verification slip'}
+   844→        aria-label={`Print receipt ${t.receiptNo}`}
+   845→        onClick={() => { printReceiptA5(t, settings); markReceiptHandled(t.id, 'Principal') }}
+   846→      >
+   847→        <Printer className="h-3 w-3" />
+   848→      </Button>
+   849→      <Button
+   850→        size="sm" variant="ghost"
+   851→        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+   852→        title="Download receipt"
+   853→        aria-label={`Download receipt ${t.receiptNo}`}
+   854→        onClick={() => { downloadReceiptA5(t, settings); markReceiptHandled(t.id, 'Principal') }}
+   855→      >
+   856→        <Download className="h-3 w-3" />
+   857→      </Button>
+   858→    </div>
+   859→  )
+   860→}
+   861→

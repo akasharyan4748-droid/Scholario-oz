@@ -1,7 +1,7 @@
 // Content-domain search: notices/announcements and library/resources.
 
 import { libraryBooks, notifications } from '@/lib/mock/operations'
-import { resources } from '@/lib/mock/resources'
+import { useStudentLearningStore } from '@/lib/store/student-learning-store'
 import type { SearchResultItem } from './types'
 
 export function searchContent(q: string): SearchResultItem[] {
@@ -49,19 +49,21 @@ export function searchContent(q: string): SearchResultItem[] {
     }
   })
 
-  resources.forEach((res) => {
-    if (matches(res.title) || matches(res.subject) || matches(res.description)) {
+  // Learning resources — read LIVE from the learning store so search sees
+  // the same catalogue the Learning Hub renders (deep-links to Learning).
+  useStudentLearningStore.getState().resources.forEach((res) => {
+    if (matches(res.title) || matches(res.subject) || matches(res.topic)) {
       results.push({
         id: `res-${res.id}`,
         title: res.title,
-        subtitle: `${res.subject} · ${res.type.toUpperCase()} · By ${res.uploadedBy}`,
+        subtitle: `${res.subject} · ${res.type.toUpperCase()} · ${res.topic}`,
         category: 'Library & Resources',
         type: 'book',
-        moduleKey: 'library',
+        moduleKey: 'resources',
         iconName: 'BookOpen',
         badge: res.type,
         badgeVariant: 'info',
-        keywords: `${res.title} ${res.subject} resource video notes worksheet study material`,
+        keywords: `${res.title} ${res.subject} ${res.topic} resource video notes worksheet study material learning`,
       })
     }
   })

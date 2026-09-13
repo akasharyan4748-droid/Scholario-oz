@@ -29,7 +29,10 @@ export function AnimatedCounter({
   const inView = useInView(ref, { once: true, margin: '-40px' })
   const [display, setDisplay] = useState(0)
   const motionValue = useMotionValue(0)
-  const spring = useSpring(motionValue, { duration: duration * 1000, bounce: 0 })
+  // FIX (LEARNING-OS QA): framer-motion durations are SECONDS — the old
+  // `duration * 1000` made every counter animate over ~23 minutes, so KPI
+  // and streak values appeared stuck at 0. Seconds it is.
+  const spring = useSpring(motionValue, { duration, bounce: 0 })
 
   // Animate on first mount (when in view) AND on subsequent value changes
   // (Brief §17: data-driven animation — KPI numbers re-count when data changes).

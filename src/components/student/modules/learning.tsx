@@ -5,6 +5,10 @@
  * Groups consolidated into ONE "Learning" destination. Each tab keeps its
  * full existing module (resources library, spaced repetition, planner,
  * study groups) — consolidation of navigation, not of functionality.
+ *
+ * The Learning Hub tab receives the tab `select` function as `goToTab` so
+ * it can deep-navigate cross-tab (Today's Focus → planner / flashcards)
+ * without any page round-trip.
  */
 
 import { LearningResourcesModule } from './resources'
@@ -29,8 +33,8 @@ export function LearningModule({ initialTab, onTabChange }: {
     <div className="space-y-5">
       <ModuleTabBar tabs={TABS} active={tab} onSelect={select} ariaLabel="Learning sections" />
       <ModuleTabPanel tabKey={tab}>
-        {tab === 'resources' && <LearningResourcesModule />}
-        {tab === 'flashcards' && <FlashcardsModule />}
+        {tab === 'resources' && <LearningResourcesModule goToTab={select} />}
+        {tab === 'flashcards' && <FlashcardsModule goToTab={select} />}
         {tab === 'planner' && <StudyPlannerModule />}
         {tab === 'peer' && <PeerCollaborationModule />}
       </ModuleTabPanel>

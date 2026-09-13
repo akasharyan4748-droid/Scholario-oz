@@ -3,27 +3,25 @@
 import { useStudentsStore } from '@/lib/store/students-store'
 import { useFeeStore } from '@/lib/store/fee-store'
 import { DEMO_STUDENT_ID } from '../applications/student'
-import { homeworks, assignments } from '@/lib/mock/academics'
 import { useAttendanceSnapshot } from './data'
 import { WelcomeBanner } from './welcome-banner'
 import { KpiGrid } from './kpi-grid'
 import { SmartUpNext } from './smart-up-next'
 import { StudyStreak } from './study-streak'
 import { TodayClasses } from './today-classes'
-import { HomeworkSection } from './homework-section'
+import { StudyBrief } from './study-brief'
 import { ChartsRow } from './charts-row'
 import { SchoolNotices } from './school-notices'
 import { ClassResponsibilityBanner } from './class-responsibility-banner'
 
 /**
  * StudentDashboard — a DAILY COMMAND CENTER, not a report (final
- * simplification pass). Flow: TODAY (focus queue, timetable, homework,
- * KPIs) → PROGRESS (trend charts, streak) → NOTICES.
+ * simplification pass). Flow: TODAY (focus queue, timetable, study
+ * brief, KPIs) → PROGRESS (trend charts, streak) → NOTICES.
  *
- * Removed in the simplification pass: LearningInsights (hardcoded
- * duplicates of the KPI row), PerformanceTrend (hardcoded weekly bars
- * duplicating ChartsRow), ExamsResults (Results module + KPI already
- * cover it), and the transport card (Transport module owns that data).
+ * With the Classwork decommission (Learning OS spec §1), the homework/
+ * assignment surfaces were replaced by the Learning OS equivalents:
+ * Smart Up Next + StudyBrief derive from the student-learning store.
  */
 export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => void }) {
   // STU-B — canonical identity (one roster, every role).
@@ -41,10 +39,6 @@ export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => 
   // records (same source as the Attendance module): a teacher's correction
   // updates this number on the next render.
   const attendance = useAttendanceSnapshot()
-  const pendingHomework = homeworks.filter((h) => h.status === 'Active').slice(0, 3)
-  const dueAssignments = assignments.filter((a) => a.status === 'Pending').slice(0, 2)
-  // Display identities derived from the roster number (same convention as Profile).
-  const libraryId = student ? `LIB-${1000 + Number(student.id.replace('STU-', ''))}` : '—'
 
   if (!student) {
     return (
@@ -63,7 +57,6 @@ export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => 
 
       <KpiGrid
         attendancePct={attendance.pct}
-        pendingHomeworkCount={pendingHomework.length}
         feePending={feePending}
       />
 
@@ -72,11 +65,7 @@ export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => 
 
       <TodayClasses />
 
-      <HomeworkSection
-        pendingHomework={pendingHomework}
-        dueAssignments={dueAssignments}
-        libraryId={libraryId}
-      />
+      <StudyBrief onNavigate={onNavigate} />
 
       {/* ── PROGRESS: how you're trending ─────────────────────────────── */}
       <ChartsRow />

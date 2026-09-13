@@ -102,7 +102,7 @@ function ProfileSection() {
 // ─── b. Notification Preferences ────────────────────────────────────
 
 const PREF_ROWS: { key: keyof StudentNotifPrefs; label: string; caption: string }[] = [
-  { key: 'homework', label: 'Homework reminders', caption: 'Due dates for active homework' },
+  { key: 'learning', label: 'Learning reminders', caption: 'Flashcards due & study queue updates' },
   { key: 'exams', label: 'Exam alerts', caption: 'Exam schedules & announcements' },
   { key: 'fees', label: 'Fee reminders', caption: 'Pending fee status for the term' },
   { key: 'library', label: 'Library due', caption: 'Overdue books & fines' },

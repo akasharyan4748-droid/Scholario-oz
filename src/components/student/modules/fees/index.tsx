@@ -1,14 +1,34 @@
 'use client'
 
+/**
+ * Student Fees module — FEES-R (full production-grade redesign).
+ *
+ * A premium digital school finance desk, not "a page showing ₹9,500":
+ *   · §2  minimal header — "My Fees" + period chip + financial status chip
+ *          (no repeated school/class/session prose).
+ *   · §4-5 FINANCIAL OVERVIEW — Balance Due as the hero actionable figure,
+ *          visual payment progress, supporting figures, honest status line.
+ *   · §6-7 FEE BREAKDOWN — derived live from the configured structure.
+ *   · §13  PAYMENT HISTORY — scannable rows, official receipts.
+ *   · §15  STATEMENT — official ledger statement (view / print / download).
+ *   · §16  LEDGER TIMELINE — the story of every rupee, real dates only.
+ *   · §17  no invented due dates — honest standing line instead.
+ *   · §18-21 GET HELP + FEE REQUESTS — routed, persisted, trackable.
+ *
+ * ONE-LEDGER PRINCIPLE (preserved): every figure derives from the
+ * students-store record (feeTotal/feePaid/scholarship) + the fee store's
+ * transactions for STU-58. The payment dialog's honest two rails
+ * (gateway-confirmed vs manual 'Under Verification' + Principal alert),
+ * the structure-revision acknowledgement card, the fee_online_payments
+ * feature gate and downloadReceiptA5 are all preserved unchanged.
+ */
+
 import { useEffect, useMemo, useState } from 'react'
-import { IndianRupee, Lock, Wallet } from 'lucide-react'
-import { GlassCard, SectionHeading } from '@/components/shared/ui'
-import { Button } from '@/components/ui/button'
+import { IndianRupee } from 'lucide-react'
+import { SectionHeading } from '@/components/shared/ui'
 import { formatINR } from '@/lib/format'
 import { toast } from 'sonner'
 import { type PayStage } from './data'
-import { KpiSection } from './kpi-section'
-import { OutstandingSection } from './outstanding-section'
 import { PaymentHistory } from './payment-history'
 import { PaymentDialog } from './payment-dialog'
 // STRUCT-REV — mid-session fee-structure acknowledgement (student side).
@@ -16,19 +36,34 @@ import { FeeRevisionApprovalCard } from './fee-revision-card'
 import { DEMO_STUDENT_ID } from '../applications/student'
 import { useStudentsStore } from '@/lib/store/students-store'
 // PAY-REWORK-1 — real payment submission into the canonical fee ledger.
-import { useFeeStore, type FeeTransaction } from '@/lib/store/fee-store'
+import { useFeeStore, CURRENT_ACADEMIC_YEAR, type FeeTransaction } from '@/lib/store/fee-store'
 // SaaS-STAGE-2A §20 — the school's online-payment capability gates the
 // student self-service rails (the fee-store rejects collectorRole 'self'
 // when the sub-feature is off; the UI must never lead the student there).
 import { useFeatureGate } from '@/lib/tenant/store'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { downloadReceiptA5 } from '@/components/principal/modules/fees/fee-receipt-a5'
+// FEES-R — derived financial experience.
+import {
+  allocateToHeads,
+  concessionOf,
+  deriveApplicableHeads,
+  feeTimelineEvents,
+  financialStatusOf,
+  sessionChipLabel,
+} from './derive'
+import { FinancialOverview, STATUS_CHIP_CLASS } from './financial-overview'
+import { FeeBreakdown } from './fee-breakdown'
+import { StatementDialog } from './statement-dialog'
+import type { FeeStatementInput } from './statement-html'
+import { HelpSection } from './help-section'
+import { FeeQueriesSection } from './fee-queries-section'
 
 export function FeesModule() {
   // STU-B — the demo student IS the canonical record (STU-58, Class 2-A).
   // Every fee figure on this page derives from the one roster, at the
   // fee-engine scale (₹9,500 total: ₹3,000 tuition + ₹500 management +
-  // ₹6,000 transport).
+  // ₹6,000 transport — derived live in derive.ts, never hardcoded here).
   const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
   const canonicalStudentId = student?.id ?? ''
   const studentEmail = 'aarav.sharma@greenwood.edu.in'
@@ -47,7 +82,64 @@ export function FeesModule() {
     .filter((t) => t.status === 'Success')
     .reduce((sum, t) => sum + t.amount, 0)
   const totalPending = Math.max(0, totalFee - totalPaid)
-  const paidPct = totalFee > 0 ? Math.round((totalPaid / totalFee) * 100) : 0
+  const paidPct = totalFee > 0 ? Math.min(100, Math.round((totalPaid / totalFee) * 100)) : 0
+  const underReviewCount = myTransactions.filter((t) => t.status === 'Under Verification' || t.status === 'Pending').length
+  const failedCount = myTransactions.filter((t) => t.status === 'Failed').length
+
+  // §5 — the financial status, derived purely from the ledger state.
+  const status = useMemo(
+    () => financialStatusOf({ totalPaid, totalPending, underReviewCount }),
+    [totalPaid, totalPending, underReviewCount],
+  )
+
+  // §6-7 — fee composition + per-head paid allocation + concession,
+  // all derived from the configured structure and the real transactions.
+  const optionalHeadApplicability = useFeeStore((s) => s.optionalHeadApplicability)
+  const heads = useMemo(
+    () => (student ? deriveApplicableHeads(student, optionalHeadApplicability) : []),
+    [student, optionalHeadApplicability],
+  )
+  const paidByHead = useMemo(
+    () => allocateToHeads(heads, myTransactions),
+    [heads, myTransactions],
+  )
+  const concessions = useFeeStore((s) => s.concessions)
+  const concession = useMemo(() => {
+    if (!student) return { amount: 0, label: null }
+    // Percent-basis concessions resolve against the module's annual-heads
+    // total (the same composition the breakdown renders).
+    const base = heads.reduce((sum, h) => sum + h.annual, 0)
+    return concessionOf(student, concessions, base)
+  }, [student, concessions, heads])
+
+  // §16 — the compact ledger timeline (real dates only).
+  const timeline = useMemo(
+    () => feeTimelineEvents({ totalFee, txns: myTransactions }),
+    [totalFee, myTransactions],
+  )
+
+  // §15 — the statement snapshot (assembled from the ONE ledger; the
+  // closing balance is this module's own live derivation, never a second
+  // frontend-invented balance).
+  const statementInput = useMemo<FeeStatementInput | null>(() => {
+    if (!student) return null
+    return {
+      session: CURRENT_ACADEMIC_YEAR,
+      student: {
+        name: student.name,
+        admissionNo: student.admissionNo,
+        classSection: `${student.className}-${student.section}`,
+        rollNo: student.rollNo,
+      },
+      heads,
+      concession,
+      transactions: [...myTransactions].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+      totalFee,
+      totalPaid,
+      outstanding: totalPending,
+      asOn: new Date().toISOString().slice(0, 10),
+    }
+  }, [student, heads, concession, myTransactions, totalFee, totalPaid, totalPending])
 
   const [payOpen, setPayOpen] = useState(false)
   const [stage, setStage] = useState<PayStage>('form')
@@ -66,6 +158,11 @@ export function FeesModule() {
   const gatewayConfig = useFeeStore((s) => s.gatewayConfig)
   const addAlert = useLiveAlerts((s) => s.addAlert)
 
+  // §15 — statement dialog.
+  const [statementOpen, setStatementOpen] = useState(false)
+  // §21 — fee-request form dialog (shared with the Get-help routes).
+  const [queryFormOpen, setQueryFormOpen] = useState(false)
+
   // PAY-REWORK-1 + final spec §3 — the student/guardian submission lands in
   // the ONE fee ledger. TWO rails, honestly differentiated:
   //   • GATEWAY (connected/test_mode): the payment goes through the school's
@@ -80,8 +177,8 @@ export function FeesModule() {
   // SaaS-STAGE-2A §20 — school payment-channel policy. Student self-service
   // IS the online channel: without the fee_online_payments sub-feature there
   // are no payment rails for this student at all (offline modes are office
-  // collections), so the pay CTA and gateway flow are replaced by an
-  // intentional disabled state that still surfaces the outstanding amount.
+  // collections), so the pay CTA is replaced by an intentional disabled
+  // state that still surfaces the outstanding amount.
   const onlinePaymentsEnabled = useFeatureGate().isSubFeatureEnabled('fee_online_payments')
   const handlePay = (reference: string) => {
     const modeMap: Record<string, 'UPI' | 'Card' | 'Net Banking'> = { upi: 'UPI', card: 'Card', netbanking: 'Net Banking' }
@@ -184,20 +281,26 @@ export function FeesModule() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
+      {/* §2 — minimal header: title + period chip + financial status chip.
+          No school name, class or session prose — the workspace knows it. */}
       <SectionHeading
         title="My Fees"
-        subtitle="Academic Year 2026–2027 · Demo School of Scholario"
         icon={<IndianRupee className="h-5 w-5" />}
         action={
-          totalPending > 0 && onlinePaymentsEnabled && (
-            <Button
-              onClick={() => setPayOpen(true)}
-              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md"
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted-foreground">
+              {sessionChipLabel(CURRENT_ACADEMIC_YEAR)}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${STATUS_CHIP_CLASS[status.tone]}`}
+              role="status"
+              aria-label={`Fee status: ${status.label}`}
             >
-              <Wallet className="h-3.5 w-3.5" /> Pay Now
-            </Button>
-          )
+              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+              {status.label}
+            </span>
+          </div>
         }
       />
 
@@ -205,46 +308,53 @@ export function FeesModule() {
           fee-structure revision affecting this student's class. */}
       <FeeRevisionApprovalCard canonicalStudentId={canonicalStudentId} />
 
-      <KpiSection
+      {/* §4-5 + §16 — the financial overview (balance hero, progress,
+          supporting figures, ledger timeline) with the payment action. */}
+      <FinancialOverview
+        status={status}
         totalFee={totalFee}
         totalPaid={totalPaid}
         totalPending={totalPending}
         paidPct={paidPct}
         txnCount={myTransactions.length}
+        timeline={timeline}
+        failedCount={failedCount}
+        onlinePaymentsEnabled={onlinePaymentsEnabled}
+        onPay={() => setPayOpen(true)}
+        onViewStatement={() => setStatementOpen(true)}
       />
 
-      {onlinePaymentsEnabled ? (
-        <OutstandingSection
-          totalFee={totalFee}
-          totalPending={totalPending}
-          totalPaid={totalPaid}
-          paidPct={paidPct}
-          onPay={() => setPayOpen(true)}
-        />
-      ) : (
-        /* SaaS-STAGE-2A §20 — no online rails for this school: compact
-           disabled state (mirrors the premium empty states used across the
-           fee surfaces) with the outstanding amount still visible. */
-        <GlassCard className="p-4 border border-border">
-          <div className="flex items-start gap-3 flex-wrap">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted/50 text-muted-foreground border border-border" aria-hidden>
-              <Lock className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-[240px]">
-              <h3 className="text-sm font-semibold text-foreground">Online payments unavailable</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5 max-w-xl">
-                Online payments are not enabled for your school. Please contact the school office to pay by cash or other offline methods.
-              </p>
-            </div>
-            <div className="shrink-0 rounded-lg bg-muted/40 border border-border px-3 py-1.5 text-right">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Outstanding</p>
-              <p className="text-sm font-bold tabular-nums">{formatINR(totalPending)}</p>
-            </div>
-          </div>
-        </GlassCard>
-      )}
+      {/* §6-7 — the fee breakdown (structure-derived, honest concession). */}
+      <FeeBreakdown
+        heads={heads}
+        paidByHead={paidByHead}
+        concession={concession}
+        totalFee={totalFee}
+      />
 
-      <PaymentHistory totalPaid={totalPaid} transactions={myTransactions} receiptSettings={receiptSettings} />
+      {/* §13 — payment history (compact rows, official receipts). */}
+      <PaymentHistory
+        totalPaid={totalPaid}
+        transactions={myTransactions}
+        receiptSettings={receiptSettings}
+      />
+
+      {/* §18-19/§45 — get help (progressive disclosure, three routes). */}
+      <HelpSection onRaiseRequest={() => setQueryFormOpen(true)} />
+
+      {/* §21 — fee requests (raise + track timelines). */}
+      <FeeQueriesSection
+        transactions={myTransactions}
+        formOpen={queryFormOpen}
+        onFormOpenChange={setQueryFormOpen}
+      />
+
+      {/* §15 — the official statement document. */}
+      <StatementDialog
+        open={statementOpen}
+        onOpenChange={setStatementOpen}
+        input={statementInput}
+      />
 
       {onlinePaymentsEnabled && (
         <PaymentDialog
