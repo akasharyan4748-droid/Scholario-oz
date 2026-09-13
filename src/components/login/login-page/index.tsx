@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { useAuth, type Role } from '@/lib/store/auth-store'
 import { school } from '@/lib/mock/school'
+import { APP_VERSION_LABEL } from '@/lib/app-version'
 import { LoadingPhase } from './loading-phase'
 import { credentials, type CredentialCard } from './data'
 
@@ -480,7 +481,7 @@ function RightPane({
         </form>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          Tap a role chip above to auto-fill credentials · Demo platform
+          Tap a role chip above to auto-fill credentials · Demo platform · {APP_VERSION_LABEL}
         </p>
       </div>
 

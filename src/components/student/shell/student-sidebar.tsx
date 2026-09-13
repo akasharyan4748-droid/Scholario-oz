@@ -23,6 +23,7 @@
 import { ChevronLeft, ChevronRight, X, Search } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { APP_VERSION_LABEL } from '@/lib/app-version'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { DEMO_STUDENT_ID } from '../modules/applications/student'
 import type { NavGroup } from '@/components/shell/app-shell/types'
@@ -267,7 +268,7 @@ export function StudentSidebar({
       >
         {!collapsed ? (
           <>
-            <span className="text-[10px] font-medium text-muted-foreground/70">SCHOLARIO v2.4</span>
+            <span className="text-[10px] font-medium text-muted-foreground/70">{APP_VERSION_LABEL}</span>
             <span className="flex items-center gap-1.5" title="System online">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
               <span className="text-[10px] font-sans font-semibold text-emerald-600 dark:text-emerald-400">Live</span>

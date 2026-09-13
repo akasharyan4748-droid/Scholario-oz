@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight, X, Search, ChevronDown } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { APP_VERSION_LABEL } from '@/lib/app-version'
 import type { NavGroup } from './types'
 
 interface SidebarAsideProps {
@@ -201,7 +202,7 @@ export function SidebarAside({
       <div className="p-3 border-t border-border/40 bg-muted/10 shrink-0 flex items-center justify-between text-xs text-muted-foreground font-mono">
         {!collapsed ? (
           <>
-            <span className="text-[11px] font-medium text-muted-foreground/70">SCHOLARIO v2.4</span>
+            <span className="text-[11px] font-medium text-muted-foreground/70">{APP_VERSION_LABEL}</span>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="System Online" />
               <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-sans font-semibold">Live</span>

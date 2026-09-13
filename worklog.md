@@ -1073,3 +1073,32 @@ Stage Summary:
 - Data honesty untouched: every number still flows from student-results-store / student-attendance-store / school-settings (thresholds now VISIBLE in the trend as real policy lines); no fabricated content, privacy flags honoured.
 - Known notes: VLM hallucination risk confirmed again (one false "green trend" claim disproven by DOM audit — a11y/DOM remains the source of truth); pre-existing dev-server watchdog EADDRINUSE flaps continue (environment race, unrelated to code); subject-wise attendance & leave UI remain intentionally deferred (no backend).
 - Recommended next: adopt the warm-paper hero zone + module-dot title pattern in Timetable/Progress headers for portfolio-wide rhythm; per-subject sparklines in Results once more assessments publish; Principal-configurable "trend reference lines" toggle if schools want them optional.
+
+---
+Task ID: RESTORE-VERIFY-1 + VERSION-GUARD-1
+Agent: main-agent (session continuation)
+Task: User reported "Preview shows a too-old version — Fees/Learning improvements gone, everything rolled back". Diagnose whether code was lost, restore the latest condition, and prevent recurrence.
+
+Work Log:
+- FORENSICS (nothing was lost — user's report was a stale-browser symptom, not a rollback):
+  · Disk audit: ALL latest files present with original mtimes — fees/ (10 files, Sep 6: kpi-section, outstanding-section, payment-stages, payment-form-stage, fee-revision-card…), learning.tsx (Sep 9), results/ REFINE set (hero/trend/insights/grade-tone/remark/report-card, Sep 12 09:07-09:10), attendance/ 7-file set, student-panel (Sep 11). DB fresh (db/custom.db, Sep 12 07:57, 827KB). worklog intact through REFINE-1.
+  · Environment: container restarted by platform ~06:58 Sep 13 (server PIDs 1070→1091); one failed extra `bun run dev` wrote EADDRINUSE to dev.log and died; later the next-server was OOM-killed (~07:11, RSS 2.9GB — agent-browser session pushed the 4GB cgroup over) and a new server respawned automatically (9467→9482, Ready in 4.2s). A platform supervisor now auto-restarts the dev server — server ownership is no longer purely agent-side.
+  · Delivery path audited: Caddyfile gateway = pure reverse proxy (no cache directives), default route → localhost:3000; dev HTML served with `Cache-Control: no-store, must-revalidate` → NO layer (proxy/browser disk cache) can pin an old page. No service worker / no workbox anywhere in src.
+- ROOT CAUSE (definitive): Scholario is a single-route SPA — the user's Preview Panel browser context had an OLD app bundle in memory; module switches are client-side and never re-fetch HTML, so that tab kept rendering the old UI across all server restarts. Only a manual reload of the preview tab refreshes it.
+- E2E PROOF the server serves the latest (agent-browser, student one-tap login aarav.sharma):
+  · Fees: full FEES-1..14 design — KPI row (₹9,500 / 50% paid ₹4,750 / outstanding / 1 transaction), Outstanding section (50% progress, late-fee ₹500/mo, scholarship), Fee Breakdown (Tuition/Management/Transport), ledger-based Payment History. ✓
+  · Learning: 4-tab hub (Learning Hub/Flashcards/Study Planner/Study Groups), KPI row (248 resources / 5 bookmarked / 3 completed / 42h), Subject-wise Progress bars. ✓
+  · Results: GEN2+REFINE design — assessment selector (Mid Term LATEST selected), OVERALL 91.3% · A+ · 3rd of 18 · top 17% · +3.3%, 6-subject accordion. ✓
+  · Attendance: production rebuild — 96% Excellent ring, 24/25 days, 23/1/1/0 fact tiles, 85% threshold, Sept calendar 9/22 recorded. ✓
+  · Screenshots: qa-shots/verify-{fees,learning,results,attendance}-latest.png + verify-version-guard.png.
+- FIX SHIPPED — self-healing staleness guard (VERSION-GUARD-1):
+  · NEW src/lib/app-version.ts — APP_VERSION "2.5.0" + APP_VERSION_LABEL (single source of truth; bump on every user-visible ship).
+  · NEW src/app/api/app-version/route.ts — version beacon, no-store.
+  · NEW src/components/shared/version-guard.tsx — mounted once in root layout; checks /api/app-version 3s after load, on tab focus/visibilitychange, and every 90s; on version mismatch reloads exactly once (loop-safe ref flag, silent on fetch failure). From now on any tab holding an out-of-date in-memory SPA self-refreshes on next focus.
+  · Version stamps now data-driven: student sidebar footer + principal/teacher sidebar footer (was hardcoded "SCHOLARIO v2.4") + login screen footer ("… · Demo platform · SCHOLARIO v2.5") — the user can verify freshness at a glance, pre-login.
+- GATES: bunx tsc --noEmit 0 errors ✓ · bun run lint clean ✓ · /api/app-version 200 {"version":"2.5.0"} no-store ✓ · login footer + sidebar "SCHOLARIO v2.5" DOM-verified ✓ · no reload loop (page stable past initial+interval checks) ✓ · no console errors ✓.
+
+Stage Summary:
+- VERDICT: no rollback ever happened — code, DB, and served UI were already the latest; the user's Preview tab was a stale in-memory SPA. User must reload the Preview Panel once (or "Open in New Tab"); after that, the new VersionGuard keeps every future tab self-healing.
+- Environment lessons added: platform now supervises/auto-restarts the dev server (OOM kill → auto respawn observed); dev.log gets rewritten by each new server instance (don't rely on it for history); .next must still never be deleted.
+- Recommended next: keep bumping APP_VERSION on every ship (it is the staleness signal); optionally surface the version in Settings→About; cron reviewers should treat "preview looks old" reports as stale-tab symptoms first (check /api/app-version vs sidebar stamp) before touching code.
