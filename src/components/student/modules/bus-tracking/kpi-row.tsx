@@ -9,12 +9,15 @@ interface Props {
   speed: number
   stopsToGo: number
   currentStopIdx: number
+  /** Trip context (T4-A) — keeps the ETA schedule label honest per trip. */
+  trip: 'pickup' | 'drop'
 }
 
-export function KpiRow({ eta, speed, stopsToGo, currentStopIdx }: Props) {
+export function KpiRow({ eta, speed, stopsToGo, currentStopIdx, trip }: Props) {
+  const scheduleTime = trip === 'pickup' ? myBusRoute.pickupTime : myBusRoute.dropTime
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-      <KpiCard label="Arriving In" value={Math.ceil(eta)} suffix=" min" icon={<Clock className="h-5 w-5" />} accent="violet" trendLabel={`at ${myBusRoute.pickupTime}`} delay={0} />
+      <KpiCard label="Arriving In" value={Math.ceil(eta)} suffix=" min" icon={<Clock className="h-5 w-5" />} accent="violet" trendLabel={`at ${scheduleTime}`} delay={0} />
       <KpiCard label="Current Speed" value={Math.round(speed)} suffix=" km/h" icon={<Gauge className="h-5 w-5" />} accent="cyan" trendLabel="within limit" delay={0.05} />
       <KpiCard label="Stops to Go" value={Math.max(0, stopsToGo)} icon={<MapPin className="h-5 w-5" />} accent="amber" trendLabel={`stop ${currentStopIdx + 2} of ${myBusStops.length}`} delay={0.1} />
       <KpiCard label="On-Time Rate" value={busStats.onTimeRate} suffix="%" icon={<CheckCircle2 className="h-5 w-5" />} accent="emerald" trendLabel="this month" delay={0.15} />

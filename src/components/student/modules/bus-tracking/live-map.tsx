@@ -4,7 +4,14 @@ import { motion } from 'framer-motion'
 import { Bus, MapPin } from 'lucide-react'
 import { myBusRoute } from '@/lib/mock/bus-tracking'
 
-export function LiveMap() {
+interface LiveMapProps {
+  /** T4-C live freshness — replaces the static mock `lastUpdate` string. */
+  lastUpdatedSeconds?: number
+  /** True while the tab is hidden and tracking is paused (T4-C). */
+  paused?: boolean
+}
+
+export function LiveMap({ lastUpdatedSeconds, paused }: LiveMapProps) {
   return (
     <div className="relative h-72 sm:h-80 bg-gradient-to-br from-emerald-100 via-teal-50 to-cyan-100 dark:from-slate-800 dark:via-slate-900 dark:to-emerald-950 overflow-hidden">
       {/* Grid pattern */}
@@ -75,7 +82,13 @@ export function LiveMap() {
           <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
         </span>
         <span className="text-[10px] font-bold text-emerald-600">LIVE</span>
-        <span className="text-[10px] text-muted-foreground">· {myBusRoute.lastUpdate}</span>
+        <span className="text-[10px] text-muted-foreground">
+          · {paused
+            ? 'Tracking paused'
+            : lastUpdatedSeconds != null
+              ? `${lastUpdatedSeconds}s ago`
+              : myBusRoute.lastUpdate}
+        </span>
       </div>
 
       {/* Trip progress bar */}

@@ -6,13 +6,60 @@ import { GlassCard } from '@/components/shared/ui'
 import { myBusRoute, myBusStops } from '@/lib/mock/bus-tracking'
 import { cn } from '@/lib/utils'
 
+/** T4-B — the student's own stop status, derived from the live timeline. */
+type MyStopStatus = 'completed' | 'arrived' | 'approaching' | 'upcoming'
+
+const STATUS_LABEL: Record<MyStopStatus, string> = {
+  completed: 'Completed',
+  arrived: 'Arrived',
+  approaching: 'Approaching',
+  upcoming: 'Upcoming',
+}
+
+const STATUS_CHIP: Record<MyStopStatus, string> = {
+  completed: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  arrived: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  approaching: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  upcoming: 'bg-muted text-muted-foreground',
+}
+
+const STATUS_TEXT: Record<MyStopStatus, string> = {
+  completed: 'font-medium text-emerald-600 dark:text-emerald-400',
+  arrived: 'font-medium text-emerald-600 dark:text-emerald-400',
+  approaching: 'font-medium text-amber-600 dark:text-amber-400',
+  upcoming: 'font-medium text-foreground',
+}
+
 export function StopsTimeline() {
+  // Student's own stop — resolved once from the "Your Stop" name marker.
+  const myStopIdx = myBusStops.findIndex((s) => s.name.includes('Your Stop'))
+  const myStop = myStopIdx >= 0 ? myBusStops[myStopIdx] : undefined
+  const currentIdx = myBusStops.findIndex((s) => s.status === 'current')
+
+  const myStopStatus: MyStopStatus | null = !myStop
+    ? null
+    : myStop.status === 'completed'
+      ? 'completed'
+      : myStop.status === 'current'
+        ? 'arrived'
+        : currentIdx >= 0 && myStopIdx === currentIdx + 1
+          ? 'approaching'
+          : 'upcoming'
+
   return (
     <GlassCard className="p-3 sm:p-4 lg:p-5">
       <h3 className="font-semibold text-sm mb-1 flex items-center gap-2">
         <Navigation className="h-4 w-4 text-primary" /> Stops Timeline
       </h3>
-      <p className="text-xs text-muted-foreground mb-4">Your pickup: {myBusRoute.pickupTime}</p>
+      <p className="text-xs text-muted-foreground mb-4">
+        {myStop && myStopStatus ? (
+          <>
+            Your stop · <span className={STATUS_TEXT[myStopStatus]}>{STATUS_LABEL[myStopStatus]}</span> · scheduled {myStop.scheduledTime}
+          </>
+        ) : (
+          `Your pickup: ${myBusRoute.pickupTime}`
+        )}
+      </p>
 
       <div className="relative space-y-3">
         {/* Vertical line */}
@@ -44,17 +91,22 @@ export function StopsTimeline() {
                 {stop.status === 'upcoming' && <Circle className="h-3.5 w-3.5" />}
               </div>
               <div className="min-w-0 flex-1 pt-1">
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <p className={cn('text-sm font-medium', stop.status === 'completed' && 'text-muted-foreground line-through', stop.status === 'current' && 'text-amber-600', isMyStop && 'text-violet-600 font-semibold')}>
                     {stop.name}
                   </p>
                   {isMyStop && <MapPin className="h-3 w-3 text-violet-500" />}
+                  {isMyStop && myStopStatus && (
+                    <span className={cn('rounded px-1.5 py-0.5 text-[9px] font-bold uppercase', STATUS_CHIP[myStopStatus])}>
+                      {STATUS_LABEL[myStopStatus]}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className={cn('text-[11px]', stop.status === 'completed' ? 'text-emerald-600' : stop.status === 'current' ? 'text-amber-600 font-semibold' : 'text-muted-foreground')}>
                     {stop.actualTime ? stop.actualTime : stop.scheduledTime}
                   </span>
-                  {stop.status === 'current' && <span className="rounded bg-amber-500/15 px-1 py-0 text-[9px] font-bold text-amber-600">HERE NOW</span>}
+                  {stop.status === 'current' && !isMyStop && <span className="rounded bg-amber-500/15 px-1 py-0 text-[9px] font-bold text-amber-600">HERE NOW</span>}
                   {stop.status === 'completed' && stop.actualTime && stop.actualTime !== stop.scheduledTime && (
                     <span className="text-[9px] text-muted-foreground">({stop.scheduledTime})</span>
                   )}

@@ -31,6 +31,7 @@ import { useAcademicSession } from '@/lib/academic-session'
 import { useTransportAssignment } from '@/lib/store/transport-store'
 import { hydrateNotifPrefsFromServer } from '@/lib/store/student-notif-prefs-store'
 import { useServerNotices } from '@/lib/store/server-notices-store'
+import { useCurrentUser } from '@/lib/store/current-user-store'
 
 /**
  * STUDENT WORKSPACE NAVIGATION (Learning Experience 2.0 IA — spec §3).
@@ -197,6 +198,9 @@ export function StudentPanel() {
   // Live nav badges — ALL derived from real stores/data, zero constants.
   const unreadNotifs = useUnreadStudentNotificationCount()
   const unreadMsgs = useStudentMessagingStore((s) => countUnreadConversations(s.conversations, s.seenAt))
+  // SD-3 — server-resolved identity (name + enrollment) for the shell
+  // surfaces; falls back to the client roster while /api/auth/me loads.
+  const me = useCurrentUser((s) => s.me)
 
   // Class Captain / Monitor: the nav entry appears ONLY while the student
   // holds an ACTIVE position in the LIVE academic session — resolved
@@ -284,7 +288,7 @@ export function StudentPanel() {
       activeKey={active}
       onNavigate={navigate}
       role="student"
-      roleLabel={student ? `Student · ${student.className}-${student.section}` : 'Student · Class 2-A'}
+      roleLabel={me?.student?.classLabel ? `Student · ${me.student.classLabel}` : student ? `Student · ${student.className}-${student.section}` : 'Student'}
     >
       {active === 'dashboard' ? (
         <StudentDashboard onNavigate={navigate} />

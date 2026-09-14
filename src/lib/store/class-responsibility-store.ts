@@ -167,12 +167,61 @@ function authorize(
 
 const now = () => new Date().toISOString()
 
+// SD-3 — demo seed: staff-assigned responsibility tasks for the demo
+// Class Captain (STU-58). These are the SAME rows the My Class module
+// renders (one store, one truth); dates are computed relative to first
+// load so the demo never goes stale. Browsers with an existing persisted
+// blob keep whatever they had (persist wins — honest merge behaviour).
+const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString()
+const SEED_RESPONSIBILITY_TASKS: ResponsibilityTask[] = [
+  {
+    id: 'RT-SEED-1',
+    classId: 'C05',
+    section: 'A',
+    studentId: 'STU-58',
+    studentName: 'Aarav Sharma',
+    title: 'Coordinate science fair props for your class',
+    detail: 'Collect the project material list from team leads and submit it to the science lab by the deadline.',
+    assignedByName: 'Rohan Mehta',
+    assignedOn: inDays(-2),
+    dueOn: inDays(2),
+    done: false,
+  },
+  {
+    id: 'RT-SEED-2',
+    classId: 'C05',
+    section: 'A',
+    studentId: 'STU-58',
+    studentName: 'Aarav Sharma',
+    title: 'Assembly duty — lead the pledge',
+    detail: 'Lead the morning assembly pledge and quieten the line-up before the 8:25 AM bell.',
+    assignedByName: 'Rohan Mehta',
+    assignedOn: inDays(-4),
+    dueOn: inDays(1),
+    done: false,
+  },
+  {
+    id: 'RT-SEED-3',
+    classId: 'C05',
+    section: 'A',
+    studentId: 'STU-58',
+    studentName: 'Aarav Sharma',
+    title: 'Return the class library register',
+    detail: 'Hand the reading register to the library desk before Friday closing.',
+    assignedByName: 'Rohan Mehta',
+    assignedOn: inDays(-7),
+    dueOn: inDays(-1),
+    done: true,
+    doneOn: inDays(-1),
+  },
+]
+
 export const useClassResponsibilityStore = create<ClassResponsibilityState>()(
   persist(
     (set, get) => ({
       classUpdates: [],
       issueReports: [],
-      responsibilityTasks: [],
+      responsibilityTasks: SEED_RESPONSIBILITY_TASKS,
       teacherRequests: [],
 
       postClassUpdate: ({ actorStudentId, title, body, category }) => {

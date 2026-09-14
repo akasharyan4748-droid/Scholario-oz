@@ -1,150 +1,133 @@
 'use client'
 
 /**
- * StudentDashboard — a DAILY COMMAND CENTER, not a report.
- * Flow: TODAY (focus queue, timetable, continue learning, KPIs)
- * → PROGRESS (trend charts) → NOTICES.
+ * StudentDashboard V2 (SD-3) — a STUDENT COMMAND CENTER, not a widget wall.
  *
- * Learning Experience 2.0 (spec §51): the dashboard surfaces ONE real
- * learning element (Continue Learning, from the server aggregate) and the
- * real Flashcards-due KPI — it does NOT duplicate Learning. Classwork /
- * Homework exposure is gone (spec §1); the fake StudyStreak gamification
- * is gone (spec §13/§63 — the UI must never manufacture performance).
+ * Information hierarchy (PHASE 1/20):
+ *   1. Who am I + how am I doing          → WelcomeHero (compact, personal)
+ *   2. What should I do next              → UpNext (ranked priority queue)
+ *   3. What is happening today            → TodayClasses
+ *   4. How is my record                   → Attendance · AcademicSnapshot
+ *   5. What needs action                  → AttentionRail (messages/fees/transport)
+ *   6. Learning                           → ContinueLearning (ONE surface)
+ *   7. What did school communicate        → NoticesStrip
+ *   8. Special responsibilities           → LeadershipPanel (appointed only)
+ *
+ * ADAPTIVE (PHASE 21): every section renders from REAL data and simply
+ * disappears without any — no rows of empty metric cards. ONE server
+ * aggregation powers everything (PHASE 29); subsystem failures degrade
+ * per-section (PHASE 32); skeletons match the final layout (PHASE 33).
  */
 
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Sparkles } from 'lucide-react'
+import { AlertTriangle, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
-import { useStudentsStore } from '@/lib/store/students-store'
-import { computeAccount, useFeeStore } from '@/lib/store/fee-store'
-import { useStudentNotifPrefsStore } from '@/lib/store/student-notif-prefs-store'
-import { DEMO_STUDENT_ID } from '../applications/student'
-import { apiFetch } from '../learning/api'
-import type { LearningOverview } from '../learning/types'
-import { useAttendanceSnapshot } from './data'
-import { WelcomeBanner } from './welcome-banner'
-import { KpiGrid } from './kpi-grid'
-import { SmartUpNext } from './smart-up-next'
+import { useStudentDashboard } from './data'
+import { WelcomeHero } from './welcome-hero'
+import { UpNext } from './up-next'
 import { TodayClasses } from './today-classes'
-import { ChartsRow } from './charts-row'
-import { SchoolNotices } from './school-notices'
-import { ClassResponsibilityBanner } from './class-responsibility-banner'
+import { AttendanceCard } from './attendance-card'
+import { AcademicSnapshot } from './academic-snapshot'
+import { AttentionRail } from './attention-rail'
+import { ContinueLearning } from './continue-learning'
+import { NoticesStrip } from './notices-strip'
+import { LeadershipPanel } from './leadership-panel'
 
 export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => void }) {
-  // STU-B — canonical identity (one roster, every role).
-  const student = useStudentsStore((st) => st.students.find((x) => x.id === DEMO_STUDENT_ID))
-  // STU-F — the fee KPI derives LIVE from the SAME engine the Fees module
-  // reads (computeAccount over the ONE fee ledger — structure, concessions,
-  // late-fee rule included). The stale roster feeTotal snapshot is gone:
-  // dashboard and Fees can never disagree again.
-  const transactions = useFeeStore((s) => s.transactions)
-  const lateFeeRule = useFeeStore((s) => s.lateFeeRule)
-  const additionalCharges = useFeeStore((s) => s.additionalCharges)
-  const concessions = useFeeStore((s) => s.concessions)
-  const optionalHeadApplicability = useFeeStore((s) => s.optionalHeadApplicability)
-  const feeAccount = useMemo(
-    () => (student
-      ? computeAccount(student, transactions, lateFeeRule, additionalCharges, concessions, optionalHeadApplicability)
-      : null),
-    [student, transactions, lateFeeRule, additionalCharges, concessions, optionalHeadApplicability],
-  )
-  const feePending = feeAccount?.totalDue ?? 0
-  // STU-ATT — attendance KPI derives LIVE from the canonical attendance
-  // records (same source as the Attendance module): a teacher's correction
-  // updates this number on the next render.
-  const attendance = useAttendanceSnapshot()
+  const { data, loading, error, reload } = useStudentDashboard()
 
-  // L2D (spec §51) — ONE aggregate powers the dashboard's learning
-  // surface: Continue Learning + the real Flashcards-due count. It fails
-  // silently (the dashboard is not Learning) and hides its sections.
-  const [overview, setOverview] = useState<LearningOverview | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    apiFetch<LearningOverview>('/api/student/learning/overview')
-      .then((d) => { if (!cancelled) setOverview(d) })
-      .catch(() => { /* dashboard learning sections simply stay hidden */ })
-    return () => { cancelled = true }
-  }, [])
+  if (loading) return <DashboardSkeleton />
 
-  // SS-1 — study preferences (Settings → Study Preferences) gate the
-  // dashboard's learning reminders: flashcardReminders hides the
-  // Flashcards-due KPI + Up Next · REVIEW; plannerReminders hides
-  // Up Next · TASK. The prefs come from the same server-persisted store
-  // the Settings module writes (hydrated on panel mount).
-  const flashcardReminders = useStudentNotifPrefsStore((s) => s.learning.flashcardReminders)
-  const plannerReminders = useStudentNotifPrefsStore((s) => s.learning.plannerReminders)
-
-  if (!student) {
+  if (error || !data) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-label="Loading dashboard" />
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border bg-card/40 p-8 text-center">
+        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="h-5 w-5" aria-hidden />
+        </span>
+        <div>
+          <p className="text-sm font-semibold">Dashboard could not load</p>
+          <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+            {error ?? 'Your school data is temporarily unavailable.'}
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={reload} className="h-8 gap-1.5">
+          <RotateCw className="h-3.5 w-3.5" aria-hidden /> Try again
+        </Button>
       </div>
     )
   }
 
-  const continueCard = overview?.continueLearning ?? null
+  if (!data.student) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-card/40 p-8 text-center">
+        <p className="text-sm font-semibold">No student record linked to this account</p>
+        <p className="max-w-sm text-xs text-muted-foreground">
+          Please contact your school office — your profile is not enrolled in a class yet.
+        </p>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      <WelcomeBanner student={student} />
+    <div className="space-y-4 sm:space-y-5">
+      {/* 1 · Who am I — compact personal context */}
+      <WelcomeHero data={data} />
 
-      {/* Class Captain / Monitor responsibility strip (only while active) */}
-      <ClassResponsibilityBanner onNavigate={onNavigate} />
+      {/* 2 · What should I do next — the priority center */}
+      <UpNext data={data} onNavigate={onNavigate} />
 
-      <KpiGrid
-        attendancePct={attendance.pct}
-        dueFlashcards={flashcardReminders ? (overview?.counts.dueFlashcards ?? null) : null}
-        feePending={feePending}
-      />
+      {/* 3 + 4 · Today + Attendance */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <TodayClasses data={data} />
+        </div>
+        <AttendanceCard data={data} onNavigate={onNavigate} />
+      </div>
 
-      {/* ── TODAY: what to focus on right now ─────────────────────────── */}
-      <SmartUpNext
-        onNavigate={onNavigate}
-        continueLearning={continueCard}
-        showTaskReminder={plannerReminders}
-        showReviewReminder={flashcardReminders}
-      />
+      {/* 4 + 5 · Academics + the attention rail */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <AcademicSnapshot data={data} onNavigate={onNavigate} />
+        </div>
+        <AttentionRail data={data} onNavigate={onNavigate} />
+      </div>
 
-      <TodayClasses />
+      {/* 6 · Learning — ONE real surface */}
+      <ContinueLearning data={data} onNavigate={onNavigate} />
 
-      {/* ── ONE real learning surface (spec §51) — hidden without data ── */}
-      {overview === null ? (
-        <Skeleton className="h-24 rounded-xl" aria-label="Loading learning" />
-      ) : continueCard ? (
-        <section
-          aria-label="Continue learning"
-          className="flex flex-col gap-3 rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 to-transparent p-4 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-violet-500/25 bg-violet-500/10 text-violet-600 dark:text-violet-400">
-              <Sparkles className="h-4.5 w-4.5" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
-                Continue Learning
-              </p>
-              <p className="truncate text-sm font-semibold">{continueCard.title}</p>
-              <p className="truncate text-[11px] text-muted-foreground">
-                {continueCard.subjectName ?? 'Learning'}
-                {continueCard.lastOpenedAt
-                  ? ` · opened ${new Date(continueCard.lastOpenedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
-                  : ''}
-              </p>
-            </div>
-          </div>
-          <Button size="sm" onClick={() => onNavigate('learning')} className={cn('h-8 shrink-0 gap-1.5')}>
-            Continue <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-          </Button>
-        </section>
-      ) : null}
+      {/* 7 + 8 · School communication + leadership (appointed students) */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <NoticesStrip data={data} onNavigate={onNavigate} />
+        </div>
+        <LeadershipPanel onNavigate={onNavigate} />
+      </div>
+    </div>
+  )
+}
 
-      {/* ── PROGRESS: how you're trending ─────────────────────────────── */}
-      <ChartsRow />
-
-      {/* ── NOTICES: what the school wants you to know ────────────────── */}
-      <SchoolNotices onNavigate={onNavigate} />
+/** PHASE 33 — skeletons that match the FINAL layout (no blank page, no jump). */
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-4 sm:space-y-5" aria-busy="true" aria-label="Loading dashboard">
+      <Skeleton className="h-[104px] rounded-2xl" />
+      <Skeleton className="h-[220px] rounded-2xl" />
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
+        <Skeleton className="h-[280px] rounded-2xl lg:col-span-2" />
+        <Skeleton className="h-[280px] rounded-2xl" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
+        <Skeleton className="h-[260px] rounded-2xl lg:col-span-2" />
+        <div className="flex flex-col gap-2.5">
+          <Skeleton className="h-[56px] rounded-xl" />
+          <Skeleton className="h-[56px] rounded-xl" />
+          <Skeleton className="h-[56px] rounded-xl" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
+        <Skeleton className="h-[240px] rounded-2xl lg:col-span-2" />
+        <Skeleton className="h-[240px] rounded-2xl" />
+      </div>
     </div>
   )
 }

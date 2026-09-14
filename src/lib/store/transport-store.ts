@@ -93,6 +93,19 @@ export interface MaintenanceRecord {
   cost: number
 }
 
+/**
+ * T4-E — route-change notice. Recorded by `changeRoute` so the affected
+ * student's Transport view can show an honest "your route changed" banner
+ * (dismissed explicitly via `dismissRouteChange`). Scoped by studentId so
+ * a global store field never leaks another student's notice.
+ */
+export interface RouteChangeNotice {
+  studentId: string
+  newRouteName: string
+  effectiveDate: string
+  stop?: string
+}
+
 const SEED_VEHICLES: Vehicle[] = [
   { id: 'V01', number: 'HR-26-AB-1245', type: 'Bus', capacity: 48, driverId: 'DR-01', driverName: 'Ramesh Yadav', routeId: 'TR01', routeName: 'Route 1 — DLF Phase 1–5', status: 'Active', gps: true, lastService: '2025-10-15', nextService: '2026-01-15', insuranceExpiry: '2026-03-20' },
   { id: 'V02', number: 'HR-26-CD-2367', type: 'Bus', capacity: 48, driverId: 'DR-02', driverName: 'Mukesh Kumar', routeId: 'TR02', routeName: 'Route 2 — Sushant Lok & Sector 56', status: 'Active', gps: true, lastService: '2025-10-22', nextService: '2026-01-22', insuranceExpiry: '2026-05-10' },
@@ -157,11 +170,13 @@ interface TransportState {
   assignments: TransportAssignment[]
   maintenance: MaintenanceRecord[]
   search: string
+  routeChange: RouteChangeNotice | null
 
   setSearch: (q: string) => void
   assignStudent: (studentId: string, routeId: string, stop: string) => { success: boolean; error?: string }
   removeAssignment: (assignmentId: string) => void
   changeRoute: (assignmentId: string, newRouteId: string) => void
+  dismissRouteChange: () => void
   completeMaintenance: (maintenanceId: string) => void
 }
 
@@ -174,6 +189,7 @@ export const useTransportStore = create<TransportState>()(
   assignments: buildAssignments(),
   maintenance: SEED_MAINTENANCE,
   search: '',
+  routeChange: null,
 
   setSearch: (q) => set({ search: q }),
 
@@ -237,8 +253,18 @@ export const useTransportStore = create<TransportState>()(
         if (r.id === newRouteId) return { ...r, enrolled: r.enrolled + 1 }
         return r
       }),
+      // T4-E — record the notice for the affected student (office truth,
+      // shown in the student's Transport view until dismissed).
+      routeChange: {
+        studentId: assignment.studentId,
+        newRouteName: newRoute.name,
+        effectiveDate: new Date().toISOString().split('T')[0],
+        stop: assignment.stop || undefined,
+      },
     })
   },
+
+  dismissRouteChange: () => set({ routeChange: null }),
 
   completeMaintenance: (maintenanceId) => {
     const state = get()
@@ -265,12 +291,17 @@ export const useTransportStore = create<TransportState>()(
       storage: createTenantScopedStorage('scholario-transport-v1'),
       version: 1,
       // DATA slices only — search is UI state, actions are functions.
+      // routeChange (T4-E) persists: a real notice survives reload until the
+      // student dismisses it. Migration-safe: existing persisted blobs lack
+      // the key, and zustand's shallow merge keeps the `routeChange: null`
+      // initial value — no version bump needed for an additive field.
       partialize: (s) => ({
         vehicles: s.vehicles,
         routes: s.routes,
         drivers: s.drivers,
         assignments: s.assignments,
         maintenance: s.maintenance,
+        routeChange: s.routeChange,
       }),
     },
   ),

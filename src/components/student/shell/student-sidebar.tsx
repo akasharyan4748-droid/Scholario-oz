@@ -54,14 +54,21 @@ export function StudentSidebar({
 }: StudentSidebarProps) {
   void cmdOpen
 
-  // Personal workspace identity — the canonical enrollment record (name,
-  // class, section). Falls back to a quiet state if the roster is still
-  // hydrating. SS-1: shows the student's real profile photo (server
-  // identity) when one is set, initials otherwise.
+  // Personal workspace identity — the SERVER enrollment context
+  // (user → student → class, resolved by /api/auth/me) is the truth;
+  // the client roster is only a hydrating fallback. SS-1: shows the
+  // student's real profile photo (server identity) when one is set,
+  // initials otherwise.
   const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
+  const me = useCurrentUser((s) => s.me)
   const initials = student?.avatar ?? '·'
   const avatarUrl = useCurrentUser((s) => s.me?.avatarUrl)
-  const identityTitle = student ? `${student.name} · ${student.className}-${student.section}` : 'My Profile'
+  const displayName = me?.name || student?.name || 'My Profile'
+  const identityTitle = me?.student?.classLabel
+    ? `${displayName} · ${me.student.classLabel}`
+    : student
+      ? `${student.name} · ${student.className}-${student.section}`
+      : 'My Profile'
 
   return (
     <motion.aside
@@ -150,14 +157,17 @@ export function StudentSidebar({
               aria-label="Active student"
             />
           </span>
-          {!collapsed && student && (
+          {!collapsed && (
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13px] font-semibold leading-tight text-foreground">
-                {student.name}
+                {displayName}
               </span>
               <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                {student.className}-{student.section}
-                {student.rollNo ? ` · Roll ${student.rollNo}` : ''}
+                {me?.student?.classLabel
+                  ? `${me.student.classLabel}${me.student.rollNo ? ` · Roll ${me.student.rollNo}` : ''}`
+                  : student
+                    ? `${student.className}-${student.section}${student.rollNo ? ` · Roll ${student.rollNo}` : ''}`
+                    : ''}
               </span>
             </span>
           )}

@@ -29,6 +29,8 @@ export interface MeUser {
   avatarUrl: string | null
   phone: string | null
   status: string
+  /** SD-3 — server-resolved enrollment context (STUDENT role only). */
+  student?: { classLabel: string | null; rollNo: string | null } | null
   school?: {
     id: string
     name: string
