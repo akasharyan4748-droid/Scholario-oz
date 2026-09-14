@@ -1,8 +1,8 @@
 import {
   LayoutDashboard, CalendarDays, CalendarCheck, BookOpen, ClipboardList,
   FileText, Users, BarChart3, Megaphone, BookMarked, CalendarClock, Award,
-  FolderOpen, Shield, MessageSquareHeart, Heart, ClipboardCheck, Monitor,
-  Sparkles, Wallet, Library,
+  FolderOpen, Shield, MessageSquareHeart, Heart, ClipboardCheck,
+  Sparkles, Wallet,
 } from 'lucide-react'
 import type { NavGroup } from '@/components/shell/app-shell'
 import type { TeacherRecord, PositionAssignment } from '@/lib/store/teachers-store'
@@ -34,7 +34,6 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions }: NavRegi
         { key: 'payroll', label: 'My Salary & Payments', icon: <Wallet className="h-4.5 w-4.5" /> },
         { key: 'my-attendance', label: 'My Attendance', icon: <CalendarCheck className="h-4.5 w-4.5" /> },
         { key: 'timetable', label: 'My Timetable', icon: <CalendarDays className="h-4.5 w-4.5" /> },
-        { key: 'classroom', label: 'Classroom Resources', icon: <Monitor className="h-4.5 w-4.5" /> },
       ],
     },
     {
@@ -48,7 +47,6 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions }: NavRegi
         { key: 'proctoring', label: 'Exam Proctoring', icon: <ClipboardCheck className="h-4.5 w-4.5" />, badge: 3 },
         { key: 'students', label: 'Student Directory', icon: <Users className="h-4.5 w-4.5" /> },
         { key: 'resources', label: 'Resource Library', icon: <FolderOpen className="h-4.5 w-4.5" /> },
-        { key: 'school-library', label: 'School Library', icon: <Library className="h-4.5 w-4.5" /> },
       ],
     },
     {

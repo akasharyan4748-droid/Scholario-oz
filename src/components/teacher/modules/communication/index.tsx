@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Megaphone, Plus, MessageSquare } from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
+import { Plus, MessageSquare } from 'lucide-react'
+import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
 import { Button } from '@/components/ui/button'
 import { students } from '@/lib/mock/students'
 import { toast } from 'sonner'
@@ -73,10 +73,7 @@ export function CommunicationModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Communication"
-        subtitle="Announcements, parent messaging & notice board"
-        icon={<Megaphone className="h-5 w-5" />}
+      <ModuleToolbar
         action={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => openMessage()}>

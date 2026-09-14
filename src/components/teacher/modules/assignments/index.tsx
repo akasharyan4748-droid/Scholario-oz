@@ -8,8 +8,8 @@
 // patched in-place when the teacher submits a grade).
 
 import { useState } from 'react'
-import { ClipboardList, Plus } from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
+import { Plus } from 'lucide-react'
+import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
 import { Button } from '@/components/ui/button'
 import { assignments, type Assignment } from '@/lib/mock/academics'
 import { toast } from 'sonner'
@@ -87,10 +87,7 @@ export function AssignmentsModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Assignments"
-        subtitle="Create graded assignments, define rubrics & evaluate submissions"
-        icon={<ClipboardList className="h-5 w-5" />}
+      <ModuleToolbar
         action={
           <Button onClick={() => setCreateOpen(true)} className="bg-gradient-to-r from-emerald-600 to-teal-600">
             <Plus className="h-4 w-4" /> Create Assignment

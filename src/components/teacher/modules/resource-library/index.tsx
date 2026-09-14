@@ -4,7 +4,8 @@ import { useState, useMemo } from 'react'
 import {
   FolderOpen, Search, Upload, Download, Star, HardDrive,
 } from 'lucide-react'
-import { SectionHeading, GlassCard } from '@/components/shared/ui'
+import { GlassCard } from '@/components/shared/ui'
+import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { ChartCard, AreaTrend, Donut } from '@/components/shared/charts'
 import { teachingResources, resourceLibraryStats, type TeachingResource } from '@/lib/mock/teacher-resources'
@@ -31,14 +32,11 @@ export function TeacherResourceLibraryModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Resource Library"
-        subtitle="Teaching materials, worksheets & presentations — shared & personal"
-        icon={<FolderOpen className="h-5 w-5" />}
+      <ModuleToolbar
         action={
           <button
             onClick={() => toast.success('Upload started', { description: 'Drag & drop files to upload' })}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-amber-500/20"
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <Upload className="h-3.5 w-3.5" /> Upload
           </button>

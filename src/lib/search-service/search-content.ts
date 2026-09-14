@@ -1,9 +1,11 @@
 // Content-domain search: notices/announcements and library books.
-// Role-aware (L2D spec §50/§78): the mock "resources" block is GONE (the
-// real learning search is server-side in /api/search + the Learning
-// module's own search); library books surface only for staff roles (the
-// student Library module is retired); notices navigate students to their
-// Notices module key instead of the staff 'communication' surface.
+// Role-aware (L2D spec §50/§78 + Teacher Workspace cleanup §7): the mock
+// "resources" block is GONE (the real learning search is server-side in
+// /api/search + the Learning module's own search); library books surface
+// ONLY for the Principal (the sole role with an active Library module —
+// the Teacher "School Library" module was removed in the cleanup pass,
+// and the student Library module is retired); notices navigate students
+// to their Notices module key instead of the staff 'communication' surface.
 
 import { libraryBooks, notifications } from '@/lib/mock/operations'
 import type { SearchResultItem } from './types'
@@ -38,9 +40,9 @@ export function searchContent(q: string, role: Role = 'principal'): SearchResult
     }
   })
 
-  // LIBRARY SEARCH — staff surfaces only (students no longer have a
-  // Library module; they must not get dead-route search results).
-  if (!isStudent) {
+  // LIBRARY SEARCH — Principal only (the only role with an active Library
+  // module; everyone else would get dead-route search results).
+  if (role === 'principal') {
     libraryBooks.forEach((bk) => {
       if (matches(bk.title) || matches(bk.author) || matches(bk.category) || matches(bk.isbn)) {
         results.push({

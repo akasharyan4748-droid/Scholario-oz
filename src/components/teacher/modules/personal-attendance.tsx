@@ -21,6 +21,7 @@ import { useState, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Check, Clock, X, Coffee, CalendarOff, Calendar as CalendarIcon } from 'lucide-react'
 import { PageTransition } from '@/components/shared/ui'
+import { ModuleToolbar } from '../teacher-panel/module-toolbar'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { STAFF_DEFS } from '@/lib/mock/attendance'
 import {
@@ -143,25 +144,22 @@ export function PersonalAttendance() {
 
   return (
     <PageTransition className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">My Attendance</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {staffMember?.name} · {staffMember?.role} · {staffMember?.department}
-          </p>
-        </div>
-        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger size="sm" className="w-[170px] text-xs rounded-lg">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MONTH_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Context toolbar — top bar already identifies the module */}
+      <ModuleToolbar
+        context={`${staffMember?.name ?? ''} · ${staffMember?.role ?? ''} · ${staffMember?.department ?? ''}`}
+        action={
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger size="sm" className="w-[170px] text-xs rounded-lg">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTH_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
 
       {/* Brief PART 25: Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

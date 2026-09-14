@@ -12,8 +12,8 @@
 // state lives inside `students-grid.tsx` since it is purely local UI state.
 
 import { useState } from 'react'
-import { Users, Download } from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
+import { Download } from 'lucide-react'
+import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { Student } from '@/lib/mock/students'
@@ -42,10 +42,8 @@ export function StudentsModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Students"
-        subtitle="Class 2-A · Manage and view student profiles"
-        icon={<Users className="h-5 w-5" />}
+      <ModuleToolbar
+        context="Class 2-A · student profiles"
         action={
           <Button variant="outline" onClick={handleExport}>
             <Download className="h-4 w-4" /> Export

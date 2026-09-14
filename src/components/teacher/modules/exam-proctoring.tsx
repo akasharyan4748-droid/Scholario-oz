@@ -7,7 +7,8 @@ import {
   ChevronRight, CheckCircle2, X, MapPin, FileText, AlertTriangle,
   Download, Sparkles, Grid3x3,
 } from 'lucide-react'
-import { GlassCard, SectionHeading, StatusBadge, GradientAvatar } from '@/components/shared/ui'
+import { GlassCard, StatusBadge, GradientAvatar } from '@/components/shared/ui'
+import { ModuleToolbar } from '../teacher-panel/module-toolbar'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { ChartCard, BarTrend, Donut } from '@/components/shared/charts'
 import { AnimatedCounter } from '@/components/shared/animated-counter'
@@ -35,14 +36,11 @@ export function ExamProctoringModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Exam Proctoring"
-        subtitle="Hall tickets, seating arrangements & invigilation duties"
-        icon={<ClipboardCheck className="h-5 w-5" />}
+      <ModuleToolbar
         action={
           <button
             onClick={() => toast.success('Hall tickets generated', { description: '108 tickets ready for distribution' })}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-amber-500/20"
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <Ticket className="h-3.5 w-3.5" /> Generate Tickets
           </button>

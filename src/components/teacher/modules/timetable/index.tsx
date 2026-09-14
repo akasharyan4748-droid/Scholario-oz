@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { CalendarDays, Download } from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
+import { Download } from 'lucide-react'
+import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
 import { Button } from '@/components/ui/button'
 import { todaySchedule } from '@/lib/mock/academics'
 import { toast } from 'sonner'
@@ -18,10 +18,8 @@ export function TimetableModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Timetable"
-        subtitle="Class 2-A · Weekly schedule & your teaching periods"
-        icon={<CalendarDays className="h-5 w-5" />}
+      <ModuleToolbar
+        context="Class 2-A · your teaching periods"
         action={
           <Button variant="outline" onClick={() => toast.success('Timetable exported', { description: 'Class 2-A weekly timetable · PDF' })}>
             <Download className="h-4 w-4" /> Export PDF

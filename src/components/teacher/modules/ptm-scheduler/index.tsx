@@ -5,7 +5,7 @@ import { AnimatePresence } from 'framer-motion'
 import {
   CalendarClock, Users, Star, Circle, Plus,
 } from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
+import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { ptmSchedule, ptmEvents, ptmStats, type PTMSlot } from '@/lib/mock/ptm'
 import { toast } from 'sonner'
@@ -34,14 +34,11 @@ export function PTMSchedulerModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="PTM Scheduler"
-        subtitle="Manage parent-teacher meetings, slots & meeting notes"
-        icon={<CalendarClock className="h-5 w-5" />}
+      <ModuleToolbar
         action={
           <button
             onClick={() => toast.success('PTM scheduled', { description: 'New PTM event created & parents notified' })}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-amber-500/20"
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <Plus className="h-3.5 w-3.5" /> Schedule PTM
           </button>

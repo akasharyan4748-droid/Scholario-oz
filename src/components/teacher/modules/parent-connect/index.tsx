@@ -4,7 +4,8 @@ import { useState, useRef, useEffect } from 'react'
 import {
   MessageSquare, Send, Circle, CheckCheck, Zap,
 } from 'lucide-react'
-import { GlassCard, SectionHeading } from '@/components/shared/ui'
+import { GlassCard } from '@/components/shared/ui'
+import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { ChartCard, BarTrend, Donut } from '@/components/shared/charts'
 import { parentConversations, parentThreads, parentConnectStats, type ParentMessage } from '@/lib/mock/parent-connect'
@@ -66,14 +67,12 @@ export function ParentConnectModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Parent Connect"
-        subtitle="Direct messaging with parents of Class 2-A students"
-        icon={<MessageSquare className="h-5 w-5" />}
+      <ModuleToolbar
+        context="Parents of Class 2-A students"
         action={
           <button
             onClick={() => toast.success('Broadcast', { description: 'Message all parents' })}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-amber-500/20"
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <Zap className="h-3.5 w-3.5" /> Broadcast
           </button>

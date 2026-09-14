@@ -18,8 +18,6 @@ import { StudentBehaviorModule } from '../modules/student-behavior'
 import { ParentConnectModule } from '../modules/parent-connect'
 import { MentoringModule } from '../modules/mentoring'
 import { ExamProctoringModule } from '../modules/exam-proctoring'
-import { ClassroomResourcesModule } from '../modules/classroom-resources'
-import { TeacherMyLibraryModule } from '../modules/my-library'
 import { ApplicationReviewsModule } from '../modules/applications'
 
 interface ModuleRouterProps {
@@ -32,7 +30,6 @@ export function ModuleRouter({ active, onNavigate }: ModuleRouterProps) {
     <>
       {active === 'dashboard' && <TeacherDashboard onNavigate={onNavigate} />}
       {active === 'timetable' && <TimetableModule />}
-      {active === 'classroom' && <ClassroomResourcesModule />}
       {active === 'my-attendance' && <PersonalAttendance />}
       {active === 'attendance' && <AttendanceModule />}
       {active === 'lesson-planner' && <LessonPlannerModule />}
@@ -42,7 +39,6 @@ export function ModuleRouter({ active, onNavigate }: ModuleRouterProps) {
       {active === 'proctoring' && <ExamProctoringModule />}
       {active === 'students' && <StudentsModule />}
       {active === 'resources' && <TeacherResourceLibraryModule />}
-      {active === 'school-library' && <TeacherMyLibraryModule />}
       {active === 'app-reviews' && <ApplicationReviewsModule />}
       {active === 'ptm' && <PTMSchedulerModule />}
       {active === 'behavior' && <StudentBehaviorModule />}

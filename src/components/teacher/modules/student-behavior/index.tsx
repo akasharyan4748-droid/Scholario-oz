@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { Award, MessageSquare, Plus, Users } from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
+import { Award, MessageSquare, Plus } from 'lucide-react'
+import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
 import { behaviorRecords, behaviorSummary, type BehaviorRecord } from '@/lib/mock/behavior'
 import { cn } from '@/lib/utils'
 import { type Tab } from './data'
@@ -28,14 +28,11 @@ export function StudentBehaviorModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Student Behavior"
-        subtitle="Track conduct, record incidents & celebrate positive behavior"
-        icon={<Users className="h-5 w-5" />}
+      <ModuleToolbar
         action={
           <button
             onClick={() => setShowNew(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-amber-500/20"
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <Plus className="h-3.5 w-3.5" /> Record Behavior
           </button>

@@ -135,14 +135,11 @@ export function ApplicationReviewsModule() {
         <ApplicationReviewDetail app={openApp} onBack={() => setOpenAppId(null)} />
       ) : (
         <>
-          {/* Toolbar */}
+          {/* Context toolbar — top bar already identifies the module */}
           <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <h2 className="text-base font-bold tracking-tight text-foreground">Application Reviews</h2>
-              <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                As Application / Event In-charge
-              </p>
-            </div>
+            <p className="min-w-0 truncate text-xs font-medium text-muted-foreground">
+              As Application / Event In-charge
+            </p>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[10px] font-medium text-muted-foreground shrink-0">
               <ShieldCheck className="h-3 w-3" />
               Reviewing participation only — money is handled by the school office.

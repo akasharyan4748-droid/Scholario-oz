@@ -3,10 +3,11 @@
 import { useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  CalendarCheck, Check, X, Clock, Plane, Save, CheckCircle2, Users,
+  Check, X, Clock, Plane, Save, CheckCircle2, Users,
   Sparkles, Search,
 } from 'lucide-react'
-import { GlassCard, SectionHeading, StatusBadge, GradientAvatar } from '@/components/shared/ui'
+import { GlassCard, StatusBadge, GradientAvatar } from '@/components/shared/ui'
+import { ModuleToolbar } from '../teacher-panel/module-toolbar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -148,10 +149,8 @@ export function AttendanceModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Attendance"
-        subtitle={`Mark daily attendance · ${today}`}
-        icon={<CalendarCheck className="h-5 w-5" />}
+      <ModuleToolbar
+        context={`Mark daily attendance · ${today}`}
         action={
           <div className="flex items-center gap-2">
             <Select value={selectedClass} onValueChange={(v) => { setSelectedClass(v); reloadDraft(v) }}>

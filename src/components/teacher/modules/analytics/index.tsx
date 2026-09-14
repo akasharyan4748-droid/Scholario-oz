@@ -1,7 +1,7 @@
 'use client'
 
-import { BarChart3 } from 'lucide-react'
-import { SectionHeading, StatusBadge } from '@/components/shared/ui'
+import { StatusBadge } from '@/components/shared/ui'
+import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
 import { homeworks } from '@/lib/mock/academics'
 import { KpiRow } from './kpi-row'
 import { ChartsRow1 } from './charts-row-1'
@@ -17,10 +17,8 @@ export function TeacherAnalyticsModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Analytics"
-        subtitle="Class 2-A · Performance insights & growth metrics"
-        icon={<BarChart3 className="h-5 w-5" />}
+      <ModuleToolbar
+        context="Class 2-A · performance insights & growth metrics"
         action={<StatusBadge status="Last 6 weeks" variant="neutral" />}
       />
 

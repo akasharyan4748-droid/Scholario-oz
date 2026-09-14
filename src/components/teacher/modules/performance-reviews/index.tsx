@@ -3,10 +3,10 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Award, Star, TrendingUp, Target, MessageSquare, Eye, ClipboardCheck,
+  Star, TrendingUp, Target, MessageSquare, Eye, ClipboardCheck,
   Briefcase,
 } from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
+import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { AnimatedCounter } from '@/components/shared/animated-counter'
 import { selfEvaluation, observations, feedback, reviewStats } from '@/lib/mock/reviews'
@@ -27,14 +27,11 @@ export function PerformanceReviewsModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Performance Reviews"
-        subtitle="Self-evaluation, observations, feedback & professional growth"
-        icon={<Award className="h-5 w-5" />}
+      <ModuleToolbar
         action={
           <button
             onClick={() => toast.success('Self-evaluation submitted', { description: 'Your review has been shared with the supervisor' })}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-amber-500/20"
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <ClipboardCheck className="h-3.5 w-3.5" /> Submit Review
           </button>
