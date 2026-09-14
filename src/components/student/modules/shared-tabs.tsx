@@ -2,8 +2,8 @@
 
 /**
  * Shared tab bar for the consolidated Student modules (Classwork, Learning,
- * Notices, Progress, Wellbeing) — one pill-tab pattern everywhere so the
- * merged modules feel like ONE product decision, not five ad-hoc wrappers.
+ * Notices, Progress) — one pill-tab pattern everywhere so the merged
+ * modules feel like ONE product decision, not four ad-hoc wrappers.
  */
 
 import { useEffect, useState } from 'react'

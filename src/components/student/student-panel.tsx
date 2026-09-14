@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import {
   LayoutDashboard, User, CalendarDays, CalendarCheck, BookOpen, Award,
-  IndianRupee, Megaphone, Trophy, Library, Bus, GraduationCap, HeartPulse,
+  IndianRupee, Megaphone, Trophy, Library, Bus, GraduationCap,
   ClipboardList, ShieldCheck, Crown, MessageCircle, Settings, ScrollText,
 } from 'lucide-react'
 import { AppShell, type NavGroup } from '@/components/shell/app-shell'
@@ -14,7 +14,6 @@ import { ClassworkModule } from './modules/classwork'
 import { LearningModule } from './modules/learning'
 import { NoticesModule } from './modules/notices'
 import { ProgressModule } from './modules/progress'
-import { WellbeingModule } from './modules/wellbeing'
 import { ResultsModule } from './modules/results'
 import { FeesModule } from './modules/fees'
 import { StudentApplicationsModule } from './modules/applications'
@@ -39,7 +38,7 @@ import { homeworks, assignments } from '@/lib/mock/academics'
  * Structure mirrors how a student thinks about their school life:
  *   HOME → who am I, what's happening today
  *   SCHOOL → the official record: timetable, attendance, classwork, results
- *   LEARNING → my growth: learning hub, progress, wellbeing
+ *   LEARNING → my growth: learning hub, progress
  *   COMMUNITY → people & announcements: messages, notices
  *   RECORDS → the paperwork: fees, library, certificates, transport,
  *             applications
@@ -77,7 +76,6 @@ const navGroups: NavGroup[] = [
     items: [
       { key: 'learning', label: 'Learning', icon: <GraduationCap className="h-4.5 w-4.5" /> },
       { key: 'progress', label: 'My Progress', icon: <Trophy className="h-4.5 w-4.5" /> },
-      { key: 'wellbeing', label: 'My Wellbeing', icon: <HeartPulse className="h-4.5 w-4.5" /> },
     ],
   },
   {
@@ -121,8 +119,6 @@ const LEGACY_MODULE: Record<string, string> = {
   achievements: 'progress',
   portfolio: 'progress',
   career: 'progress',
-  diary: 'wellbeing',
-  wellness: 'wellbeing',
   notifications: 'notices',
   announcements: 'notices',
   calendar: 'notices',
@@ -141,8 +137,6 @@ const LEGACY_TAB: Record<string, string> = {
   achievements: 'achievements',
   portfolio: 'portfolio',
   career: 'career',
-  diary: 'diary',
-  wellness: 'wellbeing',
   notifications: 'notifications',
 }
 
@@ -266,8 +260,6 @@ export function StudentPanel() {
         <NoticesModule initialTab={pendingTab ?? undefined} onTabChange={setPendingTab} onNavigate={navigate} />
       ) : active === 'progress' ? (
         <ProgressModule initialTab={pendingTab ?? undefined} onTabChange={setPendingTab} />
-      ) : active === 'wellbeing' ? (
-        <WellbeingModule initialTab={pendingTab ?? undefined} onTabChange={setPendingTab} />
       ) : active === 'my-class' ? (
         <MyClassModule />
       ) : (

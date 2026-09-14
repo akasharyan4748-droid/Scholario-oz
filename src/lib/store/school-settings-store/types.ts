@@ -359,8 +359,6 @@ export interface SchoolSettingsState {
     showBloodGroup: boolean
     /** Print the session-validity line ("Valid till …"). */
     showValidUntil: boolean
-    /** Print the scannable verification QR (signed identifier only). */
-    showQr: boolean
     /** Office line printed on the card reverse/footer (return-if-found note). */
     verificationNote: string
   }

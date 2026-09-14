@@ -461,7 +461,7 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
         </div>
       </main>
 
-      <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} onNavigate={onNavigate} />
+      <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} groups={groups} role={role} onNavigate={onNavigate} />
     </div>
   )
 }

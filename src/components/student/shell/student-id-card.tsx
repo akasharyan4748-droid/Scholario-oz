@@ -14,8 +14,9 @@
  *   · identity first — school band, photo, name, class
  *   · only configured fields print (sensitive particulars are opt-in:
  *     DOB / blood group stay OFF until the school enables them)
- *   · durability & verification — QR carries a SIGNED IDENTIFIER ONLY
- *     (admission no + checksum; never name, DOB, medical or contacts)
+ *   · institution-only information — no QR codes, no verification
+ *     checksums, no tokens: the card carries exactly what a printed
+ *     school ID carries (identity + enrolment + office contact)
  *   · status + session validity in one calm footer line
  *
  * PRINTING: the card prints alone at physical proportions (the dialog
@@ -23,7 +24,6 @@
  */
 
 import { useEffect } from 'react'
-import { QRCodeSVG } from 'qrcode.react'
 import { Printer, X, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -53,29 +53,6 @@ const CARD_THEMES: Record<string, CardTheme> = {
   amber: { band: 'from-amber-500 via-orange-500 to-rose-500', soft: 'bg-amber-500/[0.05]', text: 'text-amber-700', ring: 'ring-amber-500/25' },
 }
 
-/* ── Signed verification identifier (§28 — QR security) ────────────────── */
-
-/** FNV-1a 32-bit hash → 8 hex chars. Deterministic, non-reversible. */
-function fnv1a(input: string): string {
-  let h = 0x811c9dc5
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return (h >>> 0).toString(16).padStart(8, '0')
-}
-
-/**
- * The QR payload — a signed identifier ONLY. Encodes the admission number
- * plus a checksum derived from the school's own identity; it deliberately
- * carries NO personal particulars (no name, DOB, medical, contact data).
- * A verifier resolves the code against the school's records.
- */
-function verificationPayload(student: StudentRecord, schoolName: string): { qr: string; code: string } {
-  const code = fnv1a(`${student.admissionNo}:${student.id}:${schoolName}`)
-  return { qr: `SCHOLARIO:VERIFY:${student.admissionNo}:${code}`, code }
-}
-
 /* ── The card ───────────────────────────────────────────────────────────── */
 
 export interface StudentIdCardProps {
@@ -94,7 +71,6 @@ export function StudentIdCard({ student, className }: StudentIdCardProps) {
   const sessionLabel = formatSessionLabel(sessionId)
   // Session "2026-2027" → card valid through 31 Mar of the END year.
   const validTill = `31 Mar ${sessionId.slice(5)}`
-  const { qr, code } = verificationPayload(student, school.schoolName)
   const isActive = student.status === 'Active'
 
   // Configured particulars — each prints ONLY when the school enabled it
@@ -172,7 +148,8 @@ export function StudentIdCard({ student, className }: StudentIdCardProps) {
           </div>
         </div>
 
-        {/* ── Particulars — only school-configured fields ─────────────── */}
+        {/* ── Particulars grid fills the space the QR block left —
+                          institution information only, print-balanced ───── */}
         <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2.5">
           {fields.map((f) => (
             <div key={f.label} className="min-w-0 border-b border-dashed border-border/70 pb-1.5">
@@ -183,24 +160,6 @@ export function StudentIdCard({ student, className }: StudentIdCardProps) {
             </div>
           ))}
         </div>
-
-        {/* ── Verification — signed QR, never personal data ──────────── */}
-        {idCard?.showQr && (
-          <div className="mt-4 flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3">
-            <div className="shrink-0 rounded-lg border border-border/60 bg-white p-1.5">
-              <QRCodeSVG value={qr} size={64} level="M" marginSize={0} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold text-foreground">Scan to verify</p>
-              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-                Encoded: admission no + signed checksum — carries no personal details.
-              </p>
-              <p className="mt-1.5 font-mono text-[9px] tracking-wider text-muted-foreground/70">
-                {student.admissionNo} · {code.toUpperCase()}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ── Authorisation — signature line + session validity ─────────── */}

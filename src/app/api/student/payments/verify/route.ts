@@ -1,0 +1,219 @@
+import { NextRequest } from 'next/server'
+import { db } from '@/lib/db'
+import { withUser, schoolScoped } from '@/lib/api'
+import { getPaymentProvider } from '@/lib/payments/provider'
+import { paymentMethodFor, prettyMethod } from '@/lib/payments/methods'
+
+export const runtime = 'nodejs'
+
+/// POST /api/student/payments/verify
+///
+/// Server-side checkout confirmation verification — the ONLY path that
+/// can flip a FeeTransaction to SUCCESS. The client is never trusted to
+/// declare success: it relays the checkout-handler payload
+/// { orderId, paymentId, signature } (real Razorpay checkout, or the
+/// server-minted sandbox confirmation returned by /order) and this route
+/// re-computes the HMAC_SHA256(`${orderId}|${paymentId}`, secret) with
+/// the SERVER-HELD secret (timing-safe compare). A forged payload fails.
+///
+/// Idempotent: if the transaction is already SUCCESS, the same result
+/// payload is returned — no second receipt, no duplicate Payment /
+/// Notification / WebhookEvent rows.
+///
+/// On failed verification the transaction is marked FAILED with
+/// reconciliationStatus 'exception' and the request errors 400
+/// ('SIGNATURE_VERIFICATION_FAILED').
+///
+/// On success (single logical transaction):
+///   · FeeTransaction → SUCCESS + reconciled (+ gateway ids/signature)
+///   · Payment row created (fires the live event-stream poller:
+///     Payment JOIN Fee JOIN Student JOIN User WHERE status='SUCCESS')
+///   · the student's Fee row paid/status/method/paidDate updated
+///     (or a minimal Fee row created if none exists)
+///   · Notification row created (appears in /api/notifications-feed)
+///   · WebhookEvent audit row (best-effort, duplicate-safe)
+///
+/// Body: { orderId: string, paymentId: string, signature: string }
+/// Returns:
+///   { receiptNo, amount, method, status: 'SUCCESS',
+///     gatewayPaymentId, txnId, paidAt }
+export async function POST(req: NextRequest) {
+  return withUser(
+    async (user) => {
+      const schoolId = schoolScoped(user)
+
+      const body = await req.json().catch(() => ({}))
+      const orderId = typeof body?.orderId === 'string' ? body.orderId.trim() : ''
+      const paymentId = typeof body?.paymentId === 'string' ? body.paymentId.trim() : ''
+      const signature = typeof body?.signature === 'string' ? body.signature.trim() : ''
+      if (!orderId || !paymentId || !signature) throw new Error('orderId, paymentId and signature are required')
+
+      // ── 1. Locate the transaction (RLS: same school as the session) ──
+      const txn = await db.feeTransaction.findUnique({ where: { gatewayOrderId: orderId } })
+      if (!txn) throw new Error('NOT_FOUND')
+      if (txn.schoolId !== schoolId) throw new Error('FORBIDDEN')
+
+      // ── 2. Idempotency — already verified? Return the same payload. ──
+      if (txn.status === 'SUCCESS') {
+        return {
+          receiptNo: txn.receiptNo,
+          amount: txn.amount,
+          method: prettyMethod(txn.method),
+          status: 'SUCCESS' as const,
+          gatewayPaymentId: txn.gatewayPaymentId,
+          txnId: txn.id,
+          paidAt: (txn.reconciledAt ?? txn.updatedAt).toISOString(),
+        }
+      }
+      if (txn.status !== 'PENDING') throw new Error('TRANSACTION_NOT_VERIFIABLE')
+
+      // ── 3. Verify the checkout signature (server-held secret) ──────
+      const provider = getPaymentProvider()
+      if (!provider) throw new Error('ONLINE_PAYMENTS_UNAVAILABLE')
+      const verdict = provider.verifyCheckoutConfirmation({ orderId, paymentId, signature })
+      if (!verdict.ok) {
+        await db.feeTransaction.update({
+          where: { id: txn.id },
+          data: {
+            status: 'FAILED',
+            gatewayPaymentId: paymentId,
+            gatewaySignature: signature,
+            reconciliationStatus: 'exception',
+            reconciliationNote: 'Checkout signature verification failed',
+            note: 'Checkout signature verification failed — client payload rejected',
+          },
+        })
+        throw new Error('SIGNATURE_VERIFICATION_FAILED')
+      }
+
+      // ── 4. Record the success (one logical transaction) ─────────────
+      const studentId = txn.studentId
+      if (!studentId) throw new Error('NO_STUDENT_RECORD')
+      const paymentMethod = paymentMethodFor(txn.method) // 'UPI' | 'CARD' | 'NETBANKING'
+      const paidAt = new Date()
+
+      const updatedTxn = await db.$transaction(async (tx) => {
+        const updated = await tx.feeTransaction.update({
+          where: { id: txn.id },
+          data: {
+            status: 'SUCCESS',
+            gatewayPaymentId: paymentId,
+            gatewaySignature: signature,
+            reconciliationStatus: 'reconciled',
+            reconciledAt: paidAt,
+            reconciledBy: `${provider.name}-checkout-verify`,
+            reconciliationNote: 'Verified by server-side checkout signature check',
+            note: `Paid online via ${provider.name} checkout · receipt ${txn.receiptNo}`,
+          },
+        })
+
+        // Resolve the student's Fee row: prefer an exact title match with
+        // the transaction's fee head, else the student's first fee row.
+        // If none exists, create a minimal paid Fee so the Payment row
+        // (and the event-stream JOIN) always has its Fee linkage.
+        const fee =
+          (txn.feeHeadName
+            ? await tx.fee.findFirst({
+                where: { studentId, title: txn.feeHeadName },
+                orderBy: { createdAt: 'asc' },
+              })
+            : null) ??
+          (await tx.fee.findFirst({ where: { studentId }, orderBy: { createdAt: 'asc' } }))
+
+        let feeId: string
+        if (fee) {
+          feeId = fee.id
+          const newPaid = fee.paid + txn.amount
+          await tx.fee.update({
+            where: { id: fee.id },
+            data: {
+              paid: newPaid,
+              status: newPaid >= fee.amount ? 'PAID' : 'PARTIAL',
+              method: paymentMethod,
+              paidDate: paidAt,
+            },
+          })
+        } else {
+          const created = await tx.fee.create({
+            data: {
+              schoolId: txn.schoolId,
+              studentId,
+              title: txn.feeHeadName ?? 'Student Fee Payment',
+              amount: txn.amount,
+              paid: txn.amount,
+              status: 'PAID',
+              method: paymentMethod,
+              paidDate: paidAt,
+            },
+          })
+          feeId = created.id
+        }
+
+        // Payment event row — the event-stream service polls
+        // Payment JOIN Fee JOIN Student JOIN User WHERE status='SUCCESS',
+        // so creating it fires the live "Fee payment received" stream.
+        await tx.payment.create({
+          data: {
+            feeId,
+            amount: txn.amount,
+            method: paymentMethod,
+            status: 'SUCCESS',
+            transactionId: txn.receiptNo,
+            note: txn.feeHeadName ? `Online payment · ${txn.feeHeadName}` : 'Online payment',
+          },
+        })
+
+        // School-wide notification — surfaces in /api/notifications-feed.
+        await tx.notification.create({
+          data: {
+            schoolId: txn.schoolId,
+            title: 'Fee payment received',
+            message: `${user.name} paid ₹${txn.amount} via ${prettyMethod(txn.method)} · Receipt ${txn.receiptNo}`,
+            audience: 'ALL',
+            priority: 'NORMAL',
+            senderId: user.id,
+          },
+        })
+
+        return updated
+      })
+
+      // ── 5. WebhookEvent audit row (duplicate-safe, best-effort) ─────
+      try {
+        await db.webhookEvent.create({
+          data: {
+            eventId: `verify-${txn.gatewayOrderId}`,
+            eventType: 'payment.verified',
+            gatewayName: provider.name,
+            signature,
+            rawPayload: JSON.stringify({
+              orderId,
+              paymentId,
+              amount: txn.amount,
+              method: txn.method,
+              receiptNo: txn.receiptNo,
+            }),
+            status: 'processed',
+            schoolId: txn.schoolId,
+            matchedTransactionId: updatedTxn.id,
+            processedAt: paidAt,
+          },
+        })
+      } catch {
+        // Duplicate eventId (idempotent retry) — the audit trail already
+        // exists; this must never fail the verified payment.
+      }
+
+      return {
+        receiptNo: txn.receiptNo,
+        amount: txn.amount,
+        method: prettyMethod(txn.method),
+        status: 'SUCCESS' as const,
+        gatewayPaymentId: paymentId,
+        txnId: updatedTxn.id,
+        paidAt: paidAt.toISOString(),
+      }
+    },
+    { roles: ['STUDENT'] }
+  )
+}

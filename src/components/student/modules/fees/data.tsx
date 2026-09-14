@@ -5,23 +5,23 @@ import {
   CreditCard, Smartphone, Building2,
 } from 'lucide-react'
 import { DEFAULT_PAYMENT_MODES } from '@/lib/store/fee-store-data'
-// SaaS-STAGE-2A §20 — payment-channel policy: the student online rails are
-// CHANNELS over the fee store's ONE payment-mode vocabulary, so this list is
-// DERIVED from the canonical DEFAULT_PAYMENT_MODES (fee-store-data) instead
-// of duplicating it here. Only active ONLINE rails (UPI / Card / Net
-// Banking) are offered; offline modes (Cash / Bank Transfer) are office
-// channels handled by the school, and Cheque is deprecated.
 
-// Aarav's fee breakdown — mirrors the CANONICAL Class 2 (C05) fee structure
-// from the fee engine: Tuition ₹250 × 12 + Management & Maintenance ₹500 +
-// Transport ₹500 × 12 (opted in). ₹4,750 of ₹9,500 paid (Term 1 instalment).
-export const feeBreakdown = [
-  { name: 'Tuition Fee', amount: 3000, paid: 3000 },
-  { name: 'Management & Maintenance', amount: 500, paid: 500 },
-  { name: 'Transport Fee', amount: 6000, paid: 1250 },
-]
+/**
+ * Student Fees module data — presentation metadata ONLY.
+ *
+ * EVERY financial figure in this module is derived at runtime from the
+ * canonical fee engine (`computeAccount` over the ONE fee ledger): the
+ * balance, the structure breakdown, concessions, late fees and receipts.
+ * Nothing monetary is hardcoded here — the old fabricated breakdown
+ * (₹ amounts + per-head "paid" splits that didn't tie to any ledger) is
+ * gone.
+ */
 
-/** Shape consumed by payment-form-stage.tsx (unchanged). */
+/** Online payment rails offered in the checkout — DERIVED from the
+ *  canonical DEFAULT_PAYMENT_MODES (fee-store-data) instead of duplicated
+ *  here. Only active ONLINE rails (UPI / Card / Net Banking) are offered;
+ *  offline modes (Cash / Bank Transfer) are office channels handled by the
+ *  school, and Cheque is deprecated. */
 export interface StudentPaymentMethod {
   /** Legacy lowercase form id (upi/card/netbanking) — mapped back to the
    *  canonical PaymentMode in the pay handler. */
@@ -55,12 +55,57 @@ export const paymentMethods: StudentPaymentMethod[] = DEFAULT_PAYMENT_MODES
     badge: index === 0 ? 'Recommended' : '',
   }))
 
-export type PayStage = 'form' | 'processing' | 'success' | 'receipt'
+/** Checkout stage machine — the payment flow the server owns:
+ *   amount → review → gateway (checkout sheet) → verifying (server
+ *   signature check) → success (official receipt) | failed.
+ * The client NEVER decides success; 'success' only renders after
+ * /api/student/payments/verify returned ok. */
+export type PayStage = 'amount' | 'review' | 'gateway' | 'verifying' | 'success' | 'failed'
 
 export interface PaymentStudentInfo {
   name: string
   admissionNo: string
-  email: string
   className: string
   section: string
+}
+
+// ─── Server payment API contract (see src/app/api/student/payments/*) ────
+
+export interface PaymentConfigResponse {
+  available: boolean
+  provider: 'razorpay' | 'sandbox' | null
+  mode: 'live' | 'test' | 'sandbox' | null
+  keyId: string | null
+}
+
+export interface PaymentOrderResponse {
+  orderId: string
+  receiptNo: string
+  amountPaise: number
+  currency: 'INR'
+  mode: 'live' | 'test' | 'sandbox'
+  keyId?: string | null
+  /** Sandbox mode ONLY — the server-minted confirmation the client relays
+   *  to /verify (the signature is still verified server-side). */
+  paymentId?: string
+  signature?: string
+  sandbox?: { paymentId: string; signature: string }
+  txnId: string
+}
+
+export interface PaymentVerifyResponse {
+  receiptNo: string
+  amount: number
+  method: string
+  status: string
+  gatewayPaymentId: string
+  txnId: string
+  paidAt: string
+}
+
+/** Canonical amount formatting for the flow (server amounts are rupees). */
+export const MODE_FROM_FORM_ID: Record<string, 'UPI' | 'Card' | 'Net Banking'> = {
+  upi: 'UPI',
+  card: 'Card',
+  netbanking: 'Net Banking',
 }

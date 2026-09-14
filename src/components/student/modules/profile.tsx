@@ -8,25 +8,27 @@
  * NOT a mirrored copy of the Principal's administrative record.
  *
  * Structure:
- *   1. Identity hero (name, class, roll, house, captain badge) + View School ID
- *   2. ONE academic snapshot (attendance / overall / rank / fee status)
+ *   1. Identity card (avatar, name, Active, Class · Roll · House,
+ *      View School ID) — flat institutional card, no decorative banner
+ *   2. ONE academic snapshot — every figure from the canonical stores
+ *      (attendance / results / fee ledger — never hardcoded roster
+ *      academics fields)
  *   3. Three tabs: Personal · Parents · Records
  *   4. A compact "My Responsibility" strip (only while a Captain/Monitor
  *      position is ACTIVE — permission-driven, never hardcoded)
  *
- * The QR/barcode/ID codes moved OUT of the main flow into the dedicated
- * School ID dialog (intentional feature, not profile clutter). Every
- * figure still derives from the canonical stores — no fake numbers.
+ * The module renders NO big "My Profile" title — the shell header +
+ * sidebar already say where you are (one WHERE-AM-I, never two).
  */
 
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  User, Phone, Mail, Calendar, Droplet, Heart, Crown, GraduationCap,
+  User, Phone, Mail, Calendar, Droplet, Crown, GraduationCap,
   Activity, TrendingUp, IndianRupee, IdCard, Award, Library, Bus,
   ChevronRight, ClipboardList, ShieldCheck,
 } from 'lucide-react'
-import { GlassCard, SectionHeading, StatusBadge, GradientAvatar } from '@/components/shared/ui'
+import { GlassCard, StatusBadge, GradientAvatar } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useStudentsStore } from '@/lib/store/students-store'
@@ -56,6 +58,13 @@ export function ProfileModule({ onNavigate }: { onNavigate?: (key: string) => vo
   // ── Canonical identity (one roster, every role — STU-B) ──────────────
   const student = useStudentsStore((st) => st.students.find((x) => x.id === DEMO_STUDENT_ID))
   const allPositions = useStudentsStore((st) => st.studentPositions)
+
+  // STU-RES — the ONE canonical results store (same source as the Results
+  // module + dashboard). Overall + rank derive from the LATEST PUBLISHED
+  // assessment — never from stale roster academics fields. Rank hides
+  // automatically when the school's privacy policy disables it.
+  const results = useMyResults()
+  const latestResult = results.latest
 
   // Live fee figures — the ONE fee ledger (same derivation as the Fees
   // module: Success transactions for this student).
@@ -112,66 +121,63 @@ export function ProfileModule({ onNavigate }: { onNavigate?: (key: string) => vo
 
   return (
     <div className="space-y-5 sm:space-y-6 max-w-4xl">
-      <SectionHeading
-        title="My Profile"
-        subtitle="Who you are at school"
-        icon={<User className="h-5 w-5" />}
-      />
-
-      {/* ── Identity hero (compact — one strong identity section) ─────── */}
-      <GlassCard className="p-0 overflow-hidden">
-        <div className="relative h-14 sm:h-16 bg-gradient-to-br from-violet-500/90 via-purple-500/80 to-fuchsia-500/60 overflow-hidden">
-          <div className="absolute inset-0 bg-grid opacity-15" />
-          <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/15 blur-3xl" />
-        </div>
-        <div className="px-4 sm:px-6 pb-4 sm:pb-5 -mt-8">
-          <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-            <motion.div
-              initial={{ scale: 0, rotate: -10 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: 'spring', stiffness: 200, delay: 0.15 }}
-              className="relative shrink-0"
+      {/* ── Identity card — flat institutional surface, no banner ────── */}
+      <GlassCard className="p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 18 }}
+            className="relative shrink-0 mx-auto sm:mx-0"
+          >
+            <div className="flex h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem] items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-xl sm:text-2xl font-extrabold shadow-premium-lg ring-1 ring-emerald-500/25">
+              {s.avatar}
+            </div>
+            <span
+              className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white border-[3px] border-background"
+              title="Active student"
+              aria-label="Active student"
             >
-              <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 text-white text-xl sm:text-2xl font-extrabold border-4 border-background shadow-premium-lg">
-                {s.avatar}
-              </div>
-              <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white border-2 border-background">
-                <ShieldCheck className="h-3 w-3" />
-              </div>
-            </motion.div>
-            <div className="flex-1 min-w-0 pb-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight truncate">{s.name}</h2>
-                <StatusBadge status="Active" variant="success" dot />
-                {positions.map((p) => (
-                  <span
-                    key={p.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary"
-                  >
-                    <Crown className="h-3 w-3" />
-                    {POSITION_DEFS[p.key]?.short ?? 'Monitor'}
-                  </span>
-                ))}
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                {s.className}-{s.section} · Roll #{s.rollNo} · {s.houseName} House
-              </p>
+              <ShieldCheck className="h-2.5 w-2.5" />
+            </span>
+          </motion.div>
+
+          <div className="flex-1 min-w-0 text-center sm:text-left">
+            <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
+              <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight truncate">{s.name}</h2>
+              <StatusBadge status="Active" variant="success" dot />
+              {positions.map((p) => (
+                <span
+                  key={p.id}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary"
+                >
+                  <Crown className="h-3 w-3" />
+                  {POSITION_DEFS[p.key]?.short ?? 'Monitor'}
+                </span>
+              ))}
             </div>
-            <div className="shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => setIdOpen(true)}
-              >
-                <IdCard className="h-4 w-4" /> View School ID
-              </Button>
-            </div>
+            <p className="text-sm text-muted-foreground mt-1.5">
+              {s.className}-{s.section} · Roll #{s.rollNo} · {s.houseName} House
+            </p>
+            <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+              Admission No {s.admissionNo} · {formatSessionLabel(ACTIVE_SESSION_ID)}
+            </p>
+          </div>
+
+          <div className="shrink-0 mx-auto sm:mx-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setIdOpen(true)}
+            >
+              <IdCard className="h-4 w-4" /> View School ID
+            </Button>
           </div>
         </div>
       </GlassCard>
 
-      {/* ── Academic snapshot (ONE compact card, real data) ───────────── */}
+      {/* ── Academic snapshot (ONE compact card, canonical data) ───── */}
       <GlassCard className="p-4 sm:p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -187,20 +193,40 @@ export function ProfileModule({ onNavigate }: { onNavigate?: (key: string) => vo
             color="text-emerald-600 dark:text-emerald-400"
             bg="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
           />
-          <SnapshotStat
-            label="Overall"
-            value={`${s.academics.overallPercent}% · ${s.academics.overallGrade}`}
-            icon={<GraduationCap className="h-4 w-4" />}
-            color="text-violet-600 dark:text-violet-400"
-            bg="bg-violet-500/10 text-violet-600 dark:text-violet-400"
-          />
-          <SnapshotStat
-            label="Class Rank"
-            value={`#${s.academics.rankInClass}`}
-            icon={<TrendingUp className="h-4 w-4" />}
-            color="text-amber-600 dark:text-amber-400"
-            bg="bg-amber-500/10 text-amber-600 dark:text-amber-400"
-          />
+          {latestResult ? (
+            <SnapshotStat
+              label="Last Exam"
+              value={`${fmtPct(latestResult.totals.pct)}% · ${latestResult.grade}`}
+              icon={<GraduationCap className="h-4 w-4" />}
+              color="text-violet-600 dark:text-violet-400"
+              bg="bg-violet-500/10 text-violet-600 dark:text-violet-400"
+            />
+          ) : (
+            <SnapshotStat
+              label="Last Exam"
+              value="Awaited"
+              icon={<GraduationCap className="h-4 w-4" />}
+              color="text-muted-foreground"
+              bg="bg-muted text-muted-foreground"
+            />
+          )}
+          {latestResult?.rank != null ? (
+            <SnapshotStat
+              label="Class Rank"
+              value={`#${latestResult.rank}`}
+              icon={<TrendingUp className="h-4 w-4" />}
+              color="text-amber-600 dark:text-amber-400"
+              bg="bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            />
+          ) : (
+            <SnapshotStat
+              label="Class Rank"
+              value="—"
+              icon={<TrendingUp className="h-4 w-4" />}
+              color="text-muted-foreground"
+              bg="bg-muted text-muted-foreground"
+            />
+          )}
           <SnapshotStat
             label="Fees"
             value={feeStatus}

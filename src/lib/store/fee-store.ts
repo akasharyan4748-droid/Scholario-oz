@@ -1421,6 +1421,12 @@ export interface PaymentInput {
    *  Under Verification (student/guardian manual submission — never
    *  auto-paid). */
   collectorRole?: CollectorRole
+  // ─── SERVER-AUTHORITATIVE RECEIPT (student online payments) ────────
+  /** Receipt number minted by the SERVER when it verified the payment
+   *  (RCP-2026-XXXX from /api/student/payments/verify). When present it
+   *  REPLACES the client-side counter mint — the official receipt number
+   *  always originates server-side, never from the browser. */
+  receiptNo?: string
   // ─── Gateway-confirmed payments (spec: gateway confirmations are NEVER
   // held for manual Principal verification) ───
   /** Provider that processed and CONFIRMED the payment (razorpay/cashfree/
@@ -1592,8 +1598,11 @@ export const useFeeStore = create<FeeState>()(
         return { success: false, error: `Duplicate reference number detected (${input.referenceNo}).` }
       }
     }
-    const counter = state.receiptCounter + 1
-    const receiptNo = genReceiptNo(state.receiptSettings.prefix, counter)
+    // SERVER-AUTHORITATIVE RECEIPT — a payment verified server-side carries
+    // the server-minted receipt number (RCP-2026-XXXX); the client counter
+    // is NOT advanced (the receipt was never minted here).
+    const counter = input.receiptNo ? state.receiptCounter : state.receiptCounter + 1
+    const receiptNo = input.receiptNo ?? genReceiptNo(state.receiptSettings.prefix, counter)
     // FINANCIAL CATEGORY — what obligation this payment is collected
     // against. A payment bound to an AdditionalCharge is ALWAYS 'ADDITIONAL'
     // (never silently becomes part of core fee collection); otherwise the
@@ -3923,7 +3932,7 @@ export const useFeeStore = create<FeeState>()(
 
 // ─── Helper: compute per-student fee account ─────────────────────────
 
-function computeAccount(
+export function computeAccount(
   student: StudentRecord,
   transactions: FeeTransaction[],
   lateFeeRule: LateFeeRule,

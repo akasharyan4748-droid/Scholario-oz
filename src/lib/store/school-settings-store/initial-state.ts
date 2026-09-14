@@ -284,7 +284,6 @@ export const initialState: StateShape = {
     showDob: false,
     showBloodGroup: false,
     showValidUntil: true,
-    showQr: true,
     verificationNote: 'If found, please return to the school office.',
   },
 

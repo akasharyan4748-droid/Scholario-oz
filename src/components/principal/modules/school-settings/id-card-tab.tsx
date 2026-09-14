@@ -30,7 +30,7 @@ const THEME_SWATCHES: { key: 'violet' | 'sky' | 'emerald' | 'rose' | 'amber'; la
 ]
 
 interface FieldToggle {
-  key: 'showHouse' | 'showAdmissionNo' | 'showDob' | 'showBloodGroup' | 'showValidUntil' | 'showQr'
+  key: 'showHouse' | 'showAdmissionNo' | 'showDob' | 'showBloodGroup' | 'showValidUntil'
   label: string
   hint: string
   sensitive?: boolean
@@ -40,7 +40,6 @@ const FIELD_TOGGLES: FieldToggle[] = [
   { key: 'showAdmissionNo', label: 'Admission Number', hint: 'Print the admission number on the card.' },
   { key: 'showHouse', label: 'House', hint: 'Print the student’s house (when they belong to one).' },
   { key: 'showValidUntil', label: 'Validity Line', hint: '“Valid till 31 Mar …” derived from the active session.' },
-  { key: 'showQr', label: 'Verification QR', hint: 'Signed identifier only — never personal details.' },
   { key: 'showDob', label: 'Date of Birth', hint: 'Sensitive — enable only if required.', sensitive: true },
   { key: 'showBloodGroup', label: 'Blood Group', hint: 'Medical — enable only if required.', sensitive: true },
 ]

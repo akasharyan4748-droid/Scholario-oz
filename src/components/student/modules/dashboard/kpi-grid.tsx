@@ -62,8 +62,8 @@ export function KpiGrid({ attendancePct, pendingHomeworkCount, feePending }: Kpi
         value={feePending}
         format={(n) => formatINR(n, true)}
         icon={<IndianRupee className="h-5 w-5" />}
-        trendLabel="Pay before 15 Dec"
-        accent="rose"
+        trendLabel={feePending > 0 ? 'Balance due this session' : 'All fees paid'}
+        accent={feePending > 0 ? 'amber' : 'emerald'}
         delay={0.15}
       />
     </div>
