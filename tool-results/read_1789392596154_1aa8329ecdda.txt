@@ -1,0 +1,1382 @@
+     1→// This is your Prisma schema file
+     2→
+     3→generator client {
+     4→  provider = "prisma-client-js"
+     5→}
+     6→
+     7→datasource db {
+     8→  provider = "sqlite"
+     9→  url      = env("DATABASE_URL")
+    10→}
+    11→
+    12→model School {
+    13→  id           String   @id @default(cuid())
+    14→  name         String
+    15→  slug         String   @unique
+    16→  code         String   @unique
+    17→  domain       String?
+    18→  address      String?
+    19→  city         String?
+    20→  phone        String?
+    21→  email        String?
+    22→  themeColor   String   @default("#0f766e")
+    23→  accentColor  String   @default("#f59e0b")
+    24→  logoUrl      String?
+    25→  plan         String   @default("STANDARD")
+    26→  status       String   @default("ACTIVE")
+    27→  academicYear String?
+    28→  board        String   @default("CBSE") // CBSE | UP_BOARD | ICSE | STATE | CUSTOM
+    29→  isDemo       Boolean  @default(false)
+    30→  createdAt    DateTime @default(now())
+    31→  updatedAt    DateTime @updatedAt
+    32→
+    33→  users                User[]
+    34→  teachers             Teacher[]
+    35→  students             Student[]
+    36→  classes              Class[]
+    37→  subjects             Subject[]
+    38→  exams                Exam[]
+    39→  fees                 Fee[]
+    40→  attendance           Attendance[]
+    41→  timetables           Timetable[]
+    42→  assignments          Assignment[]
+    43→  notifications        Notification[]
+    44→  libraryBooks         LibraryBook[]
+    45→  drivers              Driver[]
+    46→  routes               Route[]
+    47→  vehicles             Vehicle[]
+    48→  questionBanks        QuestionBank[]
+    49→  examPapers           ExamPaper[]
+    50→  activityLogs         ActivityLog[]
+    51→  messages             Message[]
+    52→  events               SchoolEvent[]
+    53→  examTypes            ExamTypeConfig[]
+    54→  gradeScales          GradeScale[]
+    55→  examRules            ExamRule[]
+    56→  admitCardConfigs     AdmitCardConfig[]
+    57→  reportCardConfigs    ReportCardConfig[]
+    58→  homeworks            Homework[]
+    59→  homeworkSubmissions  HomeworkSubmission[]
+    60→  homeworkAuditLogs    HomeworkAuditLog[]
+    61→  homeworkPolicies     HomeworkPolicy[]
+    62→  noHomeworkDates      NoHomeworkDate[]
+    63→  parentGrievances     ParentGrievance[]
+    64→  homeworkSurveys      HomeworkSurvey[]
+    65→  subjectAssignments   ClassSubjectAssignment[]
+    66→  masterFeeHeads       MasterFeeHead[]
+    67→  feeStructures        FeeStructure[]
+    68→  feeHeads             FeeHead[]
+    69→  feeStructureVersions FeeStructureVersion[]
+    70→  feeTransactions      FeeTransaction[]
+    71→  settlements          Settlement[]
+    72→  reconciliations      Reconciliation[]
+    73→  webhookEvents        WebhookEvent[]
+    74→}
+    75→
+    76→model User {
+    77→  id           String    @id @default(cuid())
+    78→  schoolId     String?
+    79→  school       School?   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+    80→  email        String    @unique
+    81→  passwordHash String?
+    82→  name         String?
+    83→  role         String    @default("STUDENT")
+    84→  phone        String?
+    85→  avatar       String?
+    86→  avatarUrl    String?
+    87→  status       String    @default("ACTIVE")
+    88→  lastLoginAt  DateTime?
+    89→  createdAt    DateTime  @default(now())
+    90→  updatedAt    DateTime  @updatedAt
+    91→
+    92→  teacher            Teacher?
+    93→  student            Student?
+    94→  driver             Driver?
+    95→  sessions           Session[]
+    96→  activityLogs       ActivityLog[]
+    97→  sentNotifications  Notification[]
+    98→  createdAssignments Assignment[]
+    99→  sentMessages       Message[]      @relation("MessageSender")
+   100→  receivedMessages   Message[]      @relation("MessageRecipient")
+   101→  createdEvents      SchoolEvent[]
+   102→  createdHomeworks   Homework[]
+   103→  notificationReads  NotificationRead[]
+   104→}
+   105→
+   106→model Teacher {
+   107→  id            String   @id @default(cuid())
+   108→  schoolId      String
+   109→  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   110→  userId        String   @unique
+   111→  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   112→  employeeId    String?
+   113→  department    String?
+   114→  qualification String?
+   115→  subjects      String?
+   116→  createdAt     DateTime @default(now())
+   117→}
+   118→
+   119→model Student {
+   120→  id            String   @id @default(cuid())
+   121→  schoolId      String
+   122→  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   123→  userId        String   @unique
+   124→  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   125→  classId       String?
+   126→  class         Class?   @relation(fields: [classId], references: [id])
+   127→  rollNo        String?
+   128→  admissionNo   String?
+   129→  guardianId    String?
+   130→  guardianName  String?
+   131→  guardianPhone String?
+   132→  dob           String?
+   133→  gender        String?
+   134→  bloodGroup    String?
+   135→  address       String?
+   136→  routeId       String?
+   137→  route         Route?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
+   138→  createdAt     DateTime @default(now())
+   139→
+   140→  results             Result[]
+   141→  fees                Fee[]
+   142→  attendance          Attendance[]
+   143→  bookIssues          BookIssue[]
+   144→  examMarks           ExamMark[]
+   145→  examAttendance      ExamAttendance[]
+   146→  seatAssignments     ExamSeatAssignment[]
+   147→  resultOutcomes      ExamResultOutcome[]
+   148→  homeworkSubmissions HomeworkSubmission[]
+   149→
+   150→  // L2D — Learning Experience 2.0 (student-scoped, always school-scoped too
+   151→  // via the parent rows: material/deck/group carry schoolId).
+   152→  learningActivities  LearningActivity[]
+   153→  learningBookmarks   LearningBookmark[]
+   154→  studyTasks          StudyTask[]
+   155→  studyGroupMembers   StudyGroupMember[]
+   156→  studyGroupQuestions StudyGroupQuestion[]
+   157→  flashcardReviews    FlashcardReviewState[]
+   158→  materialTargets     StudyMaterialTarget[]
+   159→}
+   160→
+   161→model Class {
+   162→  id             String   @id @default(cuid())
+   163→  schoolId       String
+   164→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   165→  name           String
+   166→  gradeLevel     String?
+   167→  section        String?
+   168→  stream         String? // Science-PCM | Science-PCB | Science-PCMB | Commerce | Humanities | General
+   169→  capacity       Int?     @default(40)
+   170→  room           String?
+   171→  classTeacherId String?
+   172→  createdAt      DateTime @default(now())
+   173→
+   174→  students           Student[]
+   175→  subjects           Subject[] // LEGACY — kept for backward-compat; new code should use subjectAssignments
+   176→  exams              Exam[]
+   177→  attendance         Attendance[]
+   178→  timetables         Timetable[]
+   179→  assignments        Assignment[]
+   180→  questionBanks      QuestionBank[]
+   181→  examClasses        ExamClass[]
+   182→  examSubjects       ExamSubjectConfig[]
+   183→  examSchedule       ExamScheduleItem[]
+   184→  examMarks          ExamMark[]
+   185→  homeworks          Homework[]
+   186→  subjectAssignments ClassSubjectAssignment[]
+   187→}
+   188→
+   189→model Subject {
+   190→  id        String    @id @default(cuid())
+   191→  schoolId  String
+   192→  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   193→  classId   String? // LEGACY — kept for backward-compat during migration; will be NULL after canonicalization. New code should use ClassSubjectAssignment.
+   194→  class     Class?    @relation(fields: [classId], references: [id])
+   195→  name      String
+   196→  code      String?
+   197→  fullMarks Int?      @default(100)
+   198→  passMarks Int?      @default(33)
+   199→  // Spec §18: subject lifecycle — Active appears in new exam creation;
+   200→  // Archived remains queryable for historical records.
+   201→  status    String    @default("Active") // Active | Archived
+   202→  createdAt DateTime  @default(now())
+   203→  updatedAt DateTime? @updatedAt
+   204→
+   205→  results          Result[]
+   206→  timetables       Timetable[]
+   207→  assignments      Assignment[]
+   208→  questionBanks    QuestionBank[]
+   209→  examSubjects     ExamSubjectConfig[]
+   210→  examSchedule     ExamScheduleItem[]
+   211→  examMarks        ExamMark[]
+   212→  homeworks        Homework[]
+   213→  examAttendances  ExamAttendance[]
+   214→  classAssignments ClassSubjectAssignment[]
+   215→
+   216→  // L2D — Learning Experience 2.0 subject-linked entities.
+   217→  flashcardDecks   FlashcardDeck[]
+   218→  studyTasks       StudyTask[]
+   219→  studyGroups      StudyGroup[]
+   220→
+   221→  // Spec §12/§32: stable canonical identity per school — one subject per code.
+   222→  // Prevents future duplicate subject creation at the database level.
+   223→  @@unique([schoolId, code])
+   224→}
+   225→
+   226→// ─── ClassSubjectAssignment (Spec §19/§20) ─────────────────────────────
+   227→// Separates the SUBJECT (canonical, school-scoped) from its ASSIGNMENT to
+   228→// a specific class (+ optional stream). One canonical "Hindi" subject can
+   229→// be assigned to many classes. Removing an assignment does NOT delete the
+   230→// canonical subject — historical records remain valid (Spec §16/§25).
+   231→model ClassSubjectAssignment {
+   232→  id           String    @id @default(cuid())
+   233→  schoolId     String
+   234→  school       School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   235→  classId      String
+   236→  class        Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+   237→  subjectId    String
+   238→  subject      Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+   239→  // Spec §34: distinguishes core/default subjects from additional/optional ones.
+   240→  isCore       Boolean   @default(true)
+   241→  // Spec §18/§35: an inactive assignment is excluded from new examinations
+   242→  // but historical records remain valid. Archived subjects are not selectable.
+   243→  isActive     Boolean   @default(true)
+   244→  // Spec §33: some subjects are examinable, others are not (e.g. PE, Music).
+   245→  examinable   Boolean   @default(true)
+   246→  // Spec §33: deterministic ordering for display.
+   247→  displayOrder Int       @default(0)
+   248→  createdAt    DateTime  @default(now())
+   249→  updatedAt    DateTime? @updatedAt
+   250→
+   251→  // Spec §12/§19: one assignment per (class, subject) — prevents duplicates.
+   252→  @@unique([classId, subjectId])
+   253→}
+   254→
+   255→model Exam {
+   256→  id             String    @id @default(cuid())
+   257→  schoolId       String
+   258→  school         School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   259→  name           String
+   260→  term           String?
+   261→  type           String    @default("Unit Test")
+   262→  session        String?   @default("2025-2026")
+   263→  classId        String?
+   264→  class          Class?    @relation(fields: [classId], references: [id])
+   265→  startDate      DateTime?
+   266→  endDate        DateTime?
+   267→  status         String    @default("Draft")
+   268→  resultStatus   String    @default("Not Started")
+   269→  passPercentage Float     @default(33)
+   270→  declaredAt     DateTime?
+   271→  declaredBy     String?
+   272→  createdBy      String?
+   273→  createdAt      DateTime  @default(now())
+   274→  updatedAt      DateTime  @default(now()) @updatedAt
+   275→
+   276→  results         Result[]
+   277→  examPapers      ExamPaper[]
+   278→  examClasses     ExamClass[]
+   279→  examSubjects    ExamSubjectConfig[]
+   280→  scheduleItems   ExamScheduleItem[]
+   281→  marks           ExamMark[]
+   282→  auditLogs       ExamAuditLog[]
+   283→  examAttendance  ExamAttendance[]
+   284→  seatAssignments ExamSeatAssignment[]
+   285→  resultOutcomes  ExamResultOutcome[]
+   286→}
+   287→
+   288→model ExamClass {
+   289→  id        String   @id @default(cuid())
+   290→  examId    String
+   291→  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+   292→  classId   String
+   293→  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+   294→  createdAt DateTime @default(now())
+   295→
+   296→  @@unique([examId, classId])
+   297→}
+   298→
+   299→model ExamSubjectConfig {
+   300→  id             String   @id @default(cuid())
+   301→  examId         String
+   302→  exam           Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+   303→  classId        String
+   304→  class          Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+   305→  subjectId      String
+   306→  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+   307→  maxMarks       Int      @default(100)
+   308→  passMarks      Float    @default(33)
+   309→  theoryMarks    Int      @default(100)
+   310→  practicalMarks Int      @default(0)
+   311→  sortOrder      Int      @default(0)
+   312→  createdAt      DateTime @default(now())
+   313→
+   314→  @@unique([examId, classId, subjectId])
+   315→}
+   316→
+   317→model ExamScheduleItem {
+   318→  id              String   @id @default(cuid())
+   319→  examId          String
+   320→  exam            Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+   321→  classId         String
+   322→  class           Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+   323→  subjectId       String
+   324→  subject         Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+   325→  date            DateTime
+   326→  startTime       String
+   327→  endTime         String
+   328→  room            String?
+   329→  invigilatorId   String?
+   330→  invigilatorName String?
+   331→  createdAt       DateTime @default(now())
+   332→
+   333→  examAttendance ExamAttendance[]
+   334→}
+   335→
+   336→model ExamMark {
+   337→  id             String    @id @default(cuid())
+   338→  examId         String
+   339→  exam           Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+   340→  classId        String
+   341→  class          Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+   342→  subjectId      String
+   343→  subject        Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+   344→  studentId      String
+   345→  student        Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   346→  marksObtained  Float?
+   347→  status         String    @default("PRESENT")
+   348→  workflowStatus String    @default("DRAFT")
+   349→  originalMarks  Float?
+   350→  graceMarks     Float     @default(0)
+   351→  graceReason    String?
+   352→  graceBy        String?
+   353→  remarks        String?
+   354→  enteredBy      String?
+   355→  verifiedBy     String?
+   356→  lockedBy       String?
+   357→  enteredAt      DateTime?
+   358→  verifiedAt     DateTime?
+   359→  createdAt      DateTime  @default(now())
+   360→  updatedAt      DateTime  @updatedAt
+   361→
+   362→  @@unique([examId, classId, subjectId, studentId])
+   363→}
+   364→
+   365→model ExamAttendance {
+   366→  id             String            @id @default(cuid())
+   367→  examId         String
+   368→  exam           Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+   369→  scheduleItemId String?
+   370→  scheduleItem   ExamScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: SetNull)
+   371→  classId        String
+   372→  studentId      String
+   373→  student        Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   374→  subjectId      String
+   375→  subject        Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+   376→  date           DateTime
+   377→  status         String            @default("PRESENT") // PRESENT, ABSENT, MEDICAL, EXEMPTED
+   378→  remarks        String?
+   379→  markedBy       String?
+   380→  createdAt      DateTime          @default(now())
+   381→  updatedAt      DateTime          @updatedAt
+   382→
+   383→  @@unique([examId, studentId, subjectId, date])
+   384→}
+   385→
+   386→model ExamSeatAssignment {
+   387→  id         String   @id @default(cuid())
+   388→  examId     String
+   389→  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+   390→  classId    String
+   391→  studentId  String
+   392→  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   393→  room       String
+   394→  seatNumber Int
+   395→  row        Int?
+   396→  column     Int?
+   397→  createdAt  DateTime @default(now())
+   398→
+   399→  @@unique([examId, classId, studentId])
+   400→  @@unique([examId, room, seatNumber])
+   401→}
+   402→
+   403→model ExamResultOutcome {
+   404→  id         String   @id @default(cuid())
+   405→  examId     String
+   406→  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+   407→  studentId  String
+   408→  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   409→  classId    String
+   410→  outcome    String   @default("PROMOTED") // PROMOTED, COMPARTMENT, RETEST, NOT_PROMOTED
+   411→  reason     String?
+   412→  overrideBy String?
+   413→  notes      String?
+   414→  createdAt  DateTime @default(now())
+   415→  updatedAt  DateTime @updatedAt
+   416→
+   417→  @@unique([examId, studentId])
+   418→}
+   419→
+   420→model ExamAuditLog {
+   421→  id        String   @id @default(cuid())
+   422→  examId    String
+   423→  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+   424→  userId    String?
+   425→  userName  String?
+   426→  action    String
+   427→  entity    String?
+   428→  entityId  String?
+   429→  oldValue  String?
+   430→  newValue  String?
+   431→  createdAt DateTime @default(now())
+   432→}
+   433→
+   434→model Result {
+   435→  id         String   @id @default(cuid())
+   436→  studentId  String
+   437→  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   438→  examId     String
+   439→  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+   440→  subjectId  String
+   441→  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+   442→  marks      Float
+   443→  totalMarks Float    @default(100)
+   444→  grade      String?
+   445→  remarks    String?
+   446→  createdAt  DateTime @default(now())
+   447→}
+   448→
+   449→model QuestionBank {
+   450→  id         String   @id @default(cuid())
+   451→  schoolId   String
+   452→  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   453→  subjectId  String?
+   454→  subject    Subject? @relation(fields: [subjectId], references: [id])
+   455→  classId    String?
+   456→  class      Class?   @relation(fields: [classId], references: [id])
+   457→  question   String
+   458→  optionA    String?
+   459→  optionB    String?
+   460→  optionC    String?
+   461→  optionD    String?
+   462→  answer     String?
+   463→  type       String   @default("MCQ")
+   464→  difficulty String   @default("MEDIUM")
+   465→  marks      Float    @default(1)
+   466→  createdAt  DateTime @default(now())
+   467→}
+   468→
+   469→model ExamPaper {
+   470→  id           String   @id @default(cuid())
+   471→  schoolId     String
+   472→  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   473→  examId       String?
+   474→  exam         Exam?    @relation(fields: [examId], references: [id])
+   475→  title        String
+   476→  content      String?
+   477→  subjectName  String?
+   478→  className    String?
+   479→  duration     Int      @default(180)
+   480→  totalMarks   Int      @default(100)
+   481→  instructions String?
+   482→  questions    String?
+   483→  createdBy    String?
+   484→  createdAt    DateTime @default(now())
+   485→}
+   486→
+   487→model Fee {
+   488→  id        String    @id @default(cuid())
+   489→  schoolId  String
+   490→  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   491→  studentId String
+   492→  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   493→  title     String
+   494→  amount    Float
+   495→  paid      Float     @default(0)
+   496→  type      String?
+   497→  dueDate   DateTime?
+   498→  status    String    @default("UNPAID")
+   499→  method    String?
+   500→  paidDate  DateTime?
+   501→  createdAt DateTime  @default(now())
+   502→
+   503→  payments Payment[]
+   504→}
+   505→
+   506→model Payment {
+   507→  id            String   @id @default(cuid())
+   508→  feeId         String?
+   509→  fee           Fee?     @relation(fields: [feeId], references: [id], onDelete: SetNull)
+   510→  amount        Float
+   511→  method        String?
+   512→  status        String   @default("SUCCESS")
+   513→  transactionId String?
+   514→  note          String?
+   515→  createdAt     DateTime @default(now())
+   516→}
+   517→
+   518→model Attendance {
+   519→  id        String   @id @default(cuid())
+   520→  schoolId  String
+   521→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   522→  studentId String
+   523→  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   524→  classId   String?
+   525→  class     Class?   @relation(fields: [classId], references: [id])
+   526→  date      DateTime
+   527→  status    String
+   528→  markedBy  String?
+   529→  createdAt DateTime @default(now())
+   530→
+   531→  @@unique([studentId, date], name: "studentId_date")
+   532→}
+   533→
+   534→model Timetable {
+   535→  id          String   @id @default(cuid())
+   536→  schoolId    String
+   537→  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   538→  classId     String
+   539→  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+   540→  subjectId   String?
+   541→  subject     Subject? @relation(fields: [subjectId], references: [id])
+   542→  day         String
+   543→  period      Int
+   544→  startTime   String?
+   545→  endTime     String?
+   546→  teacherName String?
+   547→  room        String?
+   548→  createdAt   DateTime @default(now())
+   549→}
+   550→
+   551→model Assignment {
+   552→  id          String    @id @default(cuid())
+   553→  schoolId    String
+   554→  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   555→  classId     String?
+   556→  class       Class?    @relation(fields: [classId], references: [id])
+   557→  subjectId   String?
+   558→  subject     Subject?  @relation(fields: [subjectId], references: [id])
+   559→  title       String
+   560→  description String?
+   561→  dueDate     DateTime?
+   562→  createdBy   String?
+   563→  creator     User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+   564→  createdAt   DateTime  @default(now())
+   565→  // Legacy compatibility — kept for old assignment routes
+   566→}
+   567→
+   568→// ─── Homework (richer model with full lifecycle) ──────────────────────
+   569→
+   570→model Homework {
+   571→  id                   String    @id @default(cuid())
+   572→  schoolId             String
+   573→  school               School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   574→  title                String
+   575→  description          String?
+   576→  classId              String
+   577→  class                Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+   578→  subjectId            String?
+   579→  subject              Subject?  @relation(fields: [subjectId], references: [id])
+   580→  teacherId            String?
+   581→  teacherName          String?
+   582→  topic                String?
+   583→  chapter              String?
+   584→  learningObjective    String?
+   585→  content              String?
+   586→  attachments          String? // JSON array of {name, url, type}
+   587→  maxMarks             Float?
+   588→  gradingType          String    @default("marks") // marks, grade, completion
+   589→  assignedDate         DateTime
+   590→  dueDate              DateTime
+   591→  dueTime              String    @default("23:59")
+   592→  status               String    @default("DRAFT") // DRAFT, PUBLISHED, ACTIVE, CLOSED, ARCHIVED
+   593→  allowLateSubmission  Boolean   @default(true)
+   594→  lateDeadline         DateTime?
+   595→  latePenalty          Float     @default(0)
+   596→  allowResubmission    Boolean   @default(true)
+   597→  createdBy            String?
+   598→  creator              User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+   599→  publishedAt          DateTime?
+   600→  closedAt             DateTime?
+   601→  originalDueDate      DateTime?
+   602→  deadlineChangedBy    String?
+   603→  deadlineChangedAt    DateTime?
+   604→  deadlineChangeReason String?
+   605→  createdAt            DateTime  @default(now())
+   606→  updatedAt            DateTime  @default(now()) @updatedAt
+   607→
+   608→  submissions HomeworkSubmission[]
+   609→  auditLogs   HomeworkAuditLog[]
+   610→  grievances  ParentGrievance[]
+   611→}
+   612→
+   613→model HomeworkSubmission {
+   614→  id                 String    @id @default(cuid())
+   615→  homeworkId         String
+   616→  homework           Homework  @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+   617→  studentId          String
+   618→  student            Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   619→  schoolId           String
+   620→  school             School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   621→  attemptNumber      Int       @default(1)
+   622→  status             String    @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, SUBMITTED, LATE, RETURNED, RESUBMISSION_REQUIRED, REVIEWED
+   623→  responseText       String?
+   624→  attachments        String? // JSON array
+   625→  submittedAt        DateTime?
+   626→  submittedLate      Boolean   @default(false)
+   627→  lateByMinutes      Int?
+   628→  marks              Float?
+   629→  grade              String?
+   630→  feedback           String?
+   631→  privateNote        String?
+   632→  reviewedBy         String?
+   633→  reviewedAt         DateTime?
+   634→  returnedAt         DateTime?
+   635→  resubmissionReason String?
+   636→  createdAt          DateTime  @default(now())
+   637→  updatedAt          DateTime  @default(now()) @updatedAt
+   638→
+   639→  @@unique([homeworkId, studentId, attemptNumber])
+   640→}
+   641→
+   642→model HomeworkAuditLog {
+   643→  id         String   @id @default(cuid())
+   644→  homeworkId String
+   645→  homework   Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+   646→  schoolId   String
+   647→  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   648→  userId     String?
+   649→  userName   String?
+   650→  action     String
+   651→  entity     String?
+   652→  entityId   String?
+   653→  oldValue   String?
+   654→  newValue   String?
+   655→  createdAt  DateTime @default(now())
+   656→}
+   657→
+   658→model Notification {
+   659→  id        String   @id @default(cuid())
+   660→  schoolId  String
+   661→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   662→  title     String
+   663→  message   String
+   664→  audience  String   @default("ALL")
+   665→  priority  String   @default("NORMAL")
+   666→  senderId  String?
+   667→  sender    User?    @relation(fields: [senderId], references: [id], onDelete: SetNull)
+   668→  createdAt DateTime @default(now())
+   669→
+   670→  reads NotificationRead[]
+   671→}
+   672→
+   673→// Per-user acknowledgement of school-wide announcements so read state
+   674→// survives reloads (messages already have their own `read` column).
+   675→model NotificationRead {
+   676→  id             String       @id @default(cuid())
+   677→  notificationId String
+   678→  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+   679→  userId         String
+   680→  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+   681→  readAt         DateTime     @default(now())
+   682→
+   683→  @@unique([notificationId, userId])
+   684→}
+   685→
+   686→model LibraryBook {
+   687→  id        String   @id @default(cuid())
+   688→  schoolId  String
+   689→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   690→  title     String
+   691→  author    String?
+   692→  category  String?
+   693→  publisher String?
+   694→  isbn      String?
+   695→  shelf     String?
+   696→  copies    Int      @default(1)
+   697→  available Int      @default(1)
+   698→  createdAt DateTime @default(now())
+   699→
+   700→  issues BookIssue[]
+   701→}
+   702→
+   703→model BookIssue {
+   704→  id         String      @id @default(cuid())
+   705→  bookId     String
+   706→  book       LibraryBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+   707→  studentId  String?
+   708→  student    Student?    @relation(fields: [studentId], references: [id])
+   709→  issuedDate DateTime    @default(now())
+   710→  dueDate    DateTime?
+   711→  returnDate DateTime?
+   712→  status     String      @default("ISSUED")
+   713→}
+   714→
+   715→model Driver {
+   716→  id        String   @id @default(cuid())
+   717→  schoolId  String
+   718→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   719→  userId    String?  @unique
+   720→  user      User?    @relation(fields: [userId], references: [id])
+   721→  licenseNo String?
+   722→  phone     String?
+   723→  createdAt DateTime @default(now())
+   724→
+   725→  vehicles Vehicle[]
+   726→}
+   727→
+   728→model Route {
+   729→  id        String   @id @default(cuid())
+   730→  schoolId  String
+   731→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   732→  name      String
+   733→  stops     String?
+   734→  fare      Float?
+   735→  startTime String?
+   736→  endTime   String?
+   737→  createdAt DateTime @default(now())
+   738→
+   739→  vehicles Vehicle[]
+   740→  students Student[]
+   741→}
+   742→
+   743→model Vehicle {
+   744→  id        String   @id @default(cuid())
+   745→  schoolId  String
+   746→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   747→  number    String
+   748→  type      String   @default("BUS")
+   749→  capacity  Int?
+   750→  driverId  String?
+   751→  driver    Driver?  @relation(fields: [driverId], references: [id])
+   752→  routeId   String?
+   753→  route     Route?   @relation(fields: [routeId], references: [id])
+   754→  createdAt DateTime @default(now())
+   755→}
+   756→
+   757→model ActivityLog {
+   758→  id        String   @id @default(cuid())
+   759→  schoolId  String?
+   760→  school    School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   761→  userId    String?
+   762→  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+   763→  action    String
+   764→  detail    String?
+   765→  createdAt DateTime @default(now())
+   766→}
+   767→
+   768→model Session {
+   769→  id        String   @id @default(cuid())
+   770→  userId    String
+   771→  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   772→  token     String   @unique
+   773→  expiresAt DateTime
+   774→  createdAt DateTime @default(now())
+   775→}
+   776→
+   777→model PlatformSetting {
+   778→  id             String   @id @default("global")
+   779→  showDemoSchool Boolean  @default(true)
+   780→  updatedAt      DateTime @updatedAt
+   781→}
+   782→
+   783→model Message {
+   784→  id          String   @id @default(cuid())
+   785→  schoolId    String
+   786→  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   787→  senderId    String?
+   788→  sender      User?    @relation("MessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+   789→  recipientId String?
+   790→  recipient   User?    @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
+   791→  subject     String
+   792→  body        String
+   793→  read        Boolean  @default(false)
+   794→  createdAt   DateTime @default(now())
+   795→}
+   796→
+   797→model SchoolEvent {
+   798→  id          String    @id @default(cuid())
+   799→  schoolId    String
+   800→  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   801→  title       String
+   802→  description String?
+   803→  type        String    @default("EVENT")
+   804→  startDate   DateTime
+   805→  endDate     DateTime?
+   806→  location    String?
+   807→  audience    String    @default("ALL")
+   808→  createdBy   String?
+   809→  creator     User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+   810→  createdAt   DateTime  @default(now())
+   811→}
+   812→
+   813→// ─── Examination Configuration (school-scoped, persisted) ─────────────
+   814→
+   815→model ExamTypeConfig {
+   816→  id        String   @id @default(cuid())
+   817→  schoolId  String
+   818→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   819→  name      String
+   820→  code      String?
+   821→  enabled   Boolean  @default(true)
+   822→  sortOrder Int      @default(0)
+   823→  createdAt DateTime @default(now())
+   824→  updatedAt DateTime @updatedAt
+   825→
+   826→  @@unique([schoolId, name])
+   827→}
+   828→
+   829→model GradeScale {
+   830→  id        String   @id @default(cuid())
+   831→  schoolId  String
+   832→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   833→  grade     String
+   834→  minPct    Float
+   835→  maxPct    Float    @default(100)
+   836→  color     String?
+   837→  sortOrder Int      @default(0)
+   838→  createdAt DateTime @default(now())
+   839→  updatedAt DateTime @updatedAt
+   840→
+   841→  @@unique([schoolId, grade])
+   842→}
+   843→
+   844→model ExamRule {
+   845→  id        String   @id @default(cuid())
+   846→  schoolId  String
+   847→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   848→  key       String
+   849→  value     String
+   850→  updatedAt DateTime @updatedAt
+   851→
+   852→  @@unique([schoolId, key])
+   853→}
+   854→
+   855→model AdmitCardConfig {
+   856→  id               String   @id @default(cuid())
+   857→  schoolId         String
+   858→  school           School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   859→  showPhoto        Boolean  @default(true)
+   860→  showRollNumber   Boolean  @default(true)
+   861→  showRoom         Boolean  @default(true)
+   862→  showSeatNumber   Boolean  @default(true)
+   863→  showTimetable    Boolean  @default(true)
+   864→  showInstructions Boolean  @default(true)
+   865→  showQrCode       Boolean  @default(false)
+   866→  updatedAt        DateTime @updatedAt
+   867→
+   868→  @@unique([schoolId])
+   869→}
+   870→
+   871→model ReportCardConfig {
+   872→  id                   String   @id @default(cuid())
+   873→  schoolId             String
+   874→  school               School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   875→  showAttendance       Boolean  @default(true)
+   876→  showRank             Boolean  @default(true)
+   877→  showPercentage       Boolean  @default(true)
+   878→  showGrade            Boolean  @default(true)
+   879→  showCoScholastic     Boolean  @default(false)
+   880→  showRemarks          Boolean  @default(true)
+   881→  showClassTeacherSign Boolean  @default(true)
+   882→  showPrincipalSign    Boolean  @default(true)
+   883→  updatedAt            DateTime @updatedAt
+   884→
+   885→  @@unique([schoolId])
+   886→}
+   887→
+   888→// ─── Homework Policy & Oversight (Principal) ──────────────────────────
+   889→
+   890→model HomeworkPolicy {
+   891→  id               String   @id @default(cuid())
+   892→  schoolId         String
+   893→  school           School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   894→  gradeLevel       String // "1", "2", ..., "9", "10", "11", "12", "all"
+   895→  maxMinutesPerDay Int      @default(30) // max daily homework minutes
+   896→  enabled          Boolean  @default(true)
+   897→  updatedAt        DateTime @updatedAt
+   898→
+   899→  @@unique([schoolId, gradeLevel])
+   900→}
+   901→
+   902→model NoHomeworkDate {
+   903→  id        String   @id @default(cuid())
+   904→  schoolId  String
+   905→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   906→  date      DateTime
+   907→  reason    String? // "Sports Day", "Festival", "Exam Week"
+   908→  createdAt DateTime @default(now())
+   909→
+   910→  @@unique([schoolId, date])
+   911→}
+   912→
+   913→model ParentGrievance {
+   914→  id          String    @id @default(cuid())
+   915→  schoolId    String
+   916→  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   917→  homeworkId  String?
+   918→  homework    Homework? @relation(fields: [homeworkId], references: [id], onDelete: SetNull)
+   919→  parentId    String?
+   920→  parentName  String?
+   921→  studentName String?
+   922→  subject     String
+   923→  description String
+   924→  category    String    @default("workload") // workload, ambiguous, missing_link, other
+   925→  status      String    @default("open") // open, acknowledged, resolved, dismissed
+   926→  response    String?
+   927→  resolvedBy  String?
+   928→  resolvedAt  DateTime?
+   929→  createdAt   DateTime  @default(now())
+   930→  updatedAt   DateTime  @updatedAt
+   931→}
+   932→
+   933→model HomeworkSurvey {
+   934→  id             String   @id @default(cuid())
+   935→  schoolId       String
+   936→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   937→  term           String // "term1", "term2", "annual"
+   938→  respondentType String   @default("parent") // parent, student
+   939→  manageable     Boolean  @default(true)
+   940→  stressful      Boolean  @default(false)
+   941→  rating         Int      @default(3) // 1-5
+   942→  feedback       String?
+   943→  createdAt      DateTime @default(now())
+   944→}
+   945→
+   946→// ─── Phase 9 — Enterprise Fee Architecture (DB-backed) ───────────────
+   947→//
+   948→// The fee-store has been in-memory + Zustand-persist (localStorage) since
+   949→// takeover. These new models make the fee system truly DB-backed and
+   950→// multi-tenant-safe, and let the webhook route auto-reconcile instead of
+   951→// just logging. All new models are ADDITIVE — the existing Fee + Payment
+   952→// models remain untouched so the legacy /api/fees route keeps working.
+   953→//
+   954→// Architectural mapping (store type → DB row):
+   955→//   - school-settings-store.fees.feeHeads[]  → MasterFeeHead
+   956→//   - fee-store.FEE_STRUCTURES[]             → FeeStructure (+ FeeHead rows)
+   957→//   - fee-store.FeeStructureVersion          → FeeStructureVersion
+   958→//   - fee-store.SEED_TRANSACTIONS[]          → FeeTransaction (immutable)
+   959→//   - fee-store.settlements[]                → Settlement
+   960→//   - fee-store.reconciliations[]            → Reconciliation
+   961→//   - fee-store.webhookEvents[]              → WebhookEvent
+   962→//
+   963→// Settlement status lifecycle:
+   964→//   pending → settled → reconciled
+   965→//                     ↘ exception → (manual review) → reconciled
+   966→//   failure → reversed
+   967→
+   968→/// School-wide master fee-head catalogue — single source of truth for
+   969→/// head names, default frequencies, default amounts, categories.
+   970→/// Picked from when building per-class fee structures.
+   971→model MasterFeeHead {
+   972→  id          String   @id @default(cuid())
+   973→  schoolId    String
+   974→  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   975→  name        String
+   976→  category    String   @default("Other") // Tuition, Admission, Annual, Transport, Lab, Library, Exam, Activity, Board, Other
+   977→  frequency   String   @default("Monthly") // Annual, Half-Yearly, Quarterly, Monthly, Per Term, One-Time
+   978→  amount      Float    @default(0)
+   979→  mandatory   Boolean  @default(true)
+   980→  active      Boolean  @default(true)
+   981→  description String?
+   982→  sortOrder   Int      @default(0)
+   983→  createdAt   DateTime @default(now())
+   984→  updatedAt   DateTime @updatedAt
+   985→
+   986→  /// Per-structure line items bound to this catalogue entry (read model).
+   987→  structures FeeHead[]
+   988→
+   989→  @@unique([schoolId, name])
+   990→}
+   991→
+   992→/// Per-class fee structure — one per (schoolId, classId). The effective
+   993→/// structure for a class is the one with status='current'. Drafts and
+   994→/// scheduled future structures live alongside as status='draft' or
+   995→/// 'scheduled'. Archived structures keep status='archived'.
+   996→model FeeStructure {
+   997→  id             String    @id @default(cuid())
+   998→  schoolId       String
+   999→  school         School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1000→  classId        String
+  1001→  className      String
+  1002→  classLevel     String    @default("Primary") // Pre-Primary, Primary, Middle, Secondary, Senior Secondary
+  1003→  status         String    @default("draft") // draft, current, scheduled, archived
+  1004→  version        Int       @default(1)
+  1005→  effectiveFrom  DateTime?
+  1006→  effectiveTo    DateTime?
+  1007→  publishedAt    DateTime?
+  1008→  archivedAt     DateTime?
+  1009→  archivedReason String?
+  1010→  createdAt      DateTime  @default(now())
+  1011→  updatedAt      DateTime  @updatedAt
+  1012→
+  1013→  heads        FeeHead[]
+  1014→  versions     FeeStructureVersion[]
+  1015→  transactions FeeTransaction[]
+  1016→
+  1017→  @@unique([schoolId, classId, status])
+  1018→  @@index([schoolId, status])
+  1019→}
+  1020→
+  1021→/// Per-structure line item — snapshot of a master catalogue entry at the
+  1022→/// time of structure creation. Editing the master catalogue doesn't
+  1023→/// retroactively change existing structures (versioning integrity).
+  1024→model FeeHead {
+  1025→  id          String         @id @default(cuid())
+  1026→  schoolId    String
+  1027→  school      School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1028→  structureId String
+  1029→  structure   FeeStructure   @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  1030→  /// Optional link back to the master catalogue entry. NULL means this
+  1031→  /// head was custom-typed by the principal and is uncatalogued.
+  1032→  catalogueId String?
+  1033→  catalogue   MasterFeeHead? @relation(fields: [catalogueId], references: [id], onDelete: SetNull)
+  1034→  name        String
+  1035→  category    String         @default("Other")
+  1036→  amount      Float          @default(0)
+  1037→  frequency   String         @default("Monthly")
+  1038→  mandatory   Boolean        @default(true)
+  1039→  active      Boolean        @default(true)
+  1040→  sortOrder   Int            @default(0)
+  1041→  createdAt   DateTime       @default(now())
+  1042→  updatedAt   DateTime       @updatedAt
+  1043→
+  1044→  @@index([schoolId, structureId])
+  1045→  @@index([schoolId, catalogueId])
+  1046→}
+  1047→
+  1048→/// Immutable snapshot of a fee structure at the moment it was published.
+  1049→/// Used for historical audit (a published structure can never be edited —
+  1050→/// only superseded by a new version that becomes 'current').
+  1051→model FeeStructureVersion {
+  1052→  id          String       @id @default(cuid())
+  1053→  schoolId    String
+  1054→  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1055→  structureId String
+  1056→  structure   FeeStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  1057→  version     Int
+  1058→  /// JSON snapshot of the entire FeeStructureConfig (heads + examFees +
+  1059→  /// meta) at publish time. Kept as a single JSON column so we don't
+  1060→  /// need a parallel FeeHeadVersion table.
+  1061→  snapshot    String
+  1062→  publishedAt DateTime     @default(now())
+  1063→  publishedBy String?
+  1064→  notes       String?
+  1065→
+  1066→  @@index([schoolId, structureId])
+  1067→}
+  1068→
+  1069→/// Immutable financial transaction — every payment event is recorded here
+  1070→/// for audit + reconciliation. Updates to Fee.paid remain on the legacy
+  1071→/// Fee model; this table is the source of truth for finance reports.
+  1072→model FeeTransaction {
+  1073→  id                   String           @id @default(cuid())
+  1074→  schoolId             String
+  1075→  school               School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1076→  studentId            String?
+  1077→  studentName          String?
+  1078→  className            String?
+  1079→  structureId          String?
+  1080→  structure            FeeStructure?    @relation(fields: [structureId], references: [id], onDelete: SetNull)
+  1081→  feeHeadName          String?
+  1082→  amount               Float
+  1083→  method               String           @default("CASH") // UPI, Card, Net Banking, Cash, Bank Transfer
+  1084→  status               String           @default("PENDING") // PENDING, SUCCESS, FAILED, REFUNDED, UNDER_VERIFICATION
+  1085→  /// Gateway order id (e.g. Razorpay order_id) — used by the webhook
+  1086→  /// to match the incoming payment.payment_id event back to this row.
+  1087→  gatewayOrderId       String?          @unique
+  1088→  gatewayPaymentId     String?
+  1089→  gatewaySignature     String?
+  1090→  gatewayName          String? // razorpay, cashfree, payu, manual
+  1091→  settlementId         String?
+  1092→  settlement           Settlement?      @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  1093→  reconciliationStatus String           @default("unreconciled") // unreconciled, reconciled, pending, exception
+  1094→  reconciliationNote   String?
+  1095→  reconciledAt         DateTime?
+  1096→  reconciledBy         String?
+  1097→  receiptNo            String?
+  1098→  note                 String?
+  1099→  createdAt            DateTime         @default(now())
+  1100→  updatedAt            DateTime         @updatedAt
+  1101→  reconciliations      Reconciliation[]
+  1102→
+  1103→  @@index([schoolId, status])
+  1104→  @@index([schoolId, reconciliationStatus])
+  1105→  @@index([schoolId, createdAt])
+  1106→}
+  1107→
+  1108→/// Gateway payout settlement — a batch of transactions the gateway
+  1109→/// paid out to the school's bank account on a given date.
+  1110→model Settlement {
+  1111→  id            String    @id @default(cuid())
+  1112→  schoolId      String
+  1113→  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1114→  payoutId      String?   @unique // gateway payout id (e.g. Razorpay settlement_id)
+  1115→  gatewayName   String? // razorpay, cashfree, payu, manual
+  1116→  periodStart   DateTime
+  1117→  periodEnd     DateTime
+  1118→  grossAmount   Float
+  1119→  fees          Float     @default(0)
+  1120→  netAmount     Float
+  1121→  status        String    @default("pending") // pending, settled, failed, reversed
+  1122→  bankReference String?
+  1123→  paidOutAt     DateTime?
+  1124→  createdAt     DateTime  @default(now())
+  1125→  updatedAt     DateTime  @updatedAt
+  1126→
+  1127→  transactions FeeTransaction[]
+  1128→
+  1129→  @@index([schoolId, status])
+  1130→  @@index([schoolId, periodStart])
+  1131→}
+  1132→
+  1133→/// Reconciliation audit row — matches a FeeTransaction against a
+  1134→/// Settlement (or against a manual bank statement entry). One row per
+  1135→/// match attempt (a transaction can be rematched after exceptions).
+  1136→model Reconciliation {
+  1137→  id            String         @id @default(cuid())
+  1138→  schoolId      String
+  1139→  school        School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1140→  transactionId String
+  1141→  transaction   FeeTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  1142→  settlementId  String?
+  1143→  status        String         @default("pending") // reconciled, unreconciled, pending, exception
+  1144→  matchedAt     DateTime       @default(now())
+  1145→  matchedBy     String?
+  1146→  note          String?
+  1147→
+  1148→  @@index([schoolId, transactionId])
+  1149→}
+  1150→
+  1151→/// Idempotent webhook event log — every incoming webhook is recorded
+  1152→/// here FIRST, then processed. The unique eventId means a duplicate
+  1153→/// webhook delivery is a no-op (idempotency).
+  1154→model WebhookEvent {
+  1155→  id                   String    @id @default(cuid())
+  1156→  schoolId             String?
+  1157→  school               School?   @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  1158→  eventId              String    @unique // gateway event_id — used for idempotency
+  1159→  eventType            String // payment.captured, payment.failed, settlement.processed
+  1160→  gatewayName          String    @default("razorpay")
+  1161→  signature            String?
+  1162→  rawPayload           String // full JSON body
+  1163→  status               String    @default("received") // received, processing, processed, error, duplicate
+  1164→  matchedTransactionId String?
+  1165→  error                String?
+  1166→  receivedAt           DateTime  @default(now())
+  1167→  processedAt          DateTime?
+  1168→
+  1169→  @@index([schoolId, status])
+  1170→  @@index([eventType])
+  1171→}
+  1172→
+  1173→/// RB-1 — Study Materials: the school's server-authorized repository of
+  1174→/// learning resources (worksheets, notes, syllabi, sample papers, revision
+  1175→/// packs). Metadata lives here; the bytes live under db/uploads/study-materials/
+  1176→/// and are ONLY ever served through the authorized download route (never
+  1177→/// statically). subjectId is a loose FK into Subject.id (string cuid).
+  1178→model StudyMaterial {
+  1179→  id           String    @id @default(cuid())
+  1180→  schoolId     String
+  1181→  title        String
+  1182→  description  String?
+  1183→  subjectId    String?
+  1184→  className    String?
+  1185→  category     String    @default("general") // general | worksheet | notes | syllabus | sample-paper | revision
+  1186→  fileName     String // generated safe name on disk (cuid + extension)
+  1187→  originalName String // user-facing name for Content-Disposition
+  1188→  mimeType     String
+  1189→  sizeBytes    Int
+  1190→  uploadedById String?
+  1191→  createdAt    DateTime  @default(now())
+  1192→  updatedAt    DateTime  @updatedAt
+  1193→
+  1194→  /// L2D — publication lifecycle (spec §33): draft | published | archived.
+  1195→  /// Students only ever see `published` + authorized rows.
+  1196→  status      String    @default("published")
+  1197→  /// Set when the row is (re-)published; null while a draft stays unseen.
+  1198→  publishedAt DateTime?
+  1199→
+  1200→  targets     StudyMaterialTarget[]
+  1201→  activities  LearningActivity[]
+  1202→  bookmarks   LearningBookmark[]
+  1203→
+  1204→  @@index([schoolId, category])
+  1205→  @@index([schoolId, createdAt])
+  1206→  @@index([schoolId, status])
+  1207→}
+  1208→
+  1209→// ─────────────────────────────────────────────────────────────────────
+  1210→// L2D — LEARNING EXPERIENCE 2.0 (spec: Learning is the student's academic
+  1211→// hub — Overview / Flashcards / Planner / Groups, real data only).
+  1212→// StudyMaterial above stays the SINGLE source of truth for learning
+  1213→// resources (spec §54/§56/§57 — no duplicate resource models); the models
+  1214→// below add per-student learning state on top of it.
+  1215→// ─────────────────────────────────────────────────────────────────────
+  1216→
+  1217→/// Specific-student targeting on top of StudyMaterial.className (null =
+  1218→/// whole school, a class label = that class). A row here grants exactly one
+  1219→/// student access to exactly one material (teacher/principal assigned).
+  1220→model StudyMaterialTarget {
+  1221→  id              String        @id @default(cuid())
+  1222→  studyMaterialId String
+  1223→  studyMaterial   StudyMaterial @relation(fields: [studyMaterialId], references: [id], onDelete: Cascade)
+  1224→  studentId       String
+  1225→  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  1226→  createdAt       DateTime      @default(now())
+  1227→
+  1228→  @@unique([studyMaterialId, studentId])
+  1229→  @@index([studentId])
+  1230→}
+  1231→
+  1232→/// Real "opened / completed" activity per student per material — powers
+  1233→/// Continue Learning, Recently Opened and honest completion counts.
+  1234→model LearningActivity {
+  1235→  id              String        @id @default(cuid())
+  1236→  schoolId        String
+  1237→  studentId       String
+  1238→  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  1239→  studyMaterialId String
+  1240→  studyMaterial   StudyMaterial @relation(fields: [studyMaterialId], references: [id], onDelete: Cascade)
+  1241→  openedAt        DateTime      @default(now())
+  1242→  lastOpenedAt    DateTime      @default(now())
+  1243→  completedAt     DateTime?
+  1244→
+  1245→  @@unique([studentId, studyMaterialId])
+  1246→  @@index([schoolId, studentId])
+  1247→  @@index([studentId, lastOpenedAt])
+  1248→}
+  1249→
+  1250→/// Bookmarked resources (spec §17 — persists across sessions, one row per
+  1251→/// student per material).
+  1252→model LearningBookmark {
+  1253→  id              String        @id @default(cuid())
+  1254→  schoolId        String
+  1255→  studentId       String
+  1256→  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  1257→  studyMaterialId String
+  1258→  studyMaterial   StudyMaterial @relation(fields: [studyMaterialId], references: [id], onDelete: Cascade)
+  1259→  createdAt        DateTime      @default(now())
+  1260→
+  1261→  @@unique([studentId, studyMaterialId])
+  1262→  @@index([schoolId, studentId])
+  1263→}
+  1264→
+  1265→/// Flashcard deck (school-scoped; optional subject identity).
+  1266→model FlashcardDeck {
+  1267→  id          String          @id @default(cuid())
+  1268→  schoolId    String
+  1269→  subjectId   String?
+  1270→  subject     Subject?        @relation(fields: [subjectId], references: [id])
+  1271→  name        String
+  1272→  description String?
+  1273→  createdAt   DateTime        @default(now())
+  1274→
+  1275→  cards        FlashcardCard[]
+  1276→  reviewStates FlashcardReviewState[]
+  1277→
+  1278→  @@index([schoolId])
+  1279→}
+  1280→
+  1281→/// One card in a deck; `position` gives a stable study order.
+  1282→model FlashcardCard {
+  1283→  id      String   @id @default(cuid())
+  1284→  deckId  String
+  1285→  deck    FlashcardDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  1286→  front   String
+  1287→  back    String
+  1288→  position Int     @default(0)
+  1289→
+  1290→  reviewStates FlashcardReviewState[]
+  1291→
+  1292→  @@index([deckId])
+  1293→}
+  1294→
+  1295→/// SM-2-lite spaced-repetition state per student per card — the server is
+  1296→/// the ONLY place ease/interval/dueAt are computed (spec §22: track real
+  1297→/// review state; never pretend).
+  1298→model FlashcardReviewState {
+  1299→  id             String        @id @default(cuid())
+  1300→  studentId      String
+  1301→  student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  1302→  cardId         String
+  1303→  card           FlashcardCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  1304→  deckId         String
+  1305→  deck           FlashcardDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  1306→  ease           Float         @default(2.5)
+  1307→  intervalDays   Int           @default(0)
+  1308→  dueAt          DateTime      @default(now())
+  1309→  reps           Int           @default(0)
+  1310→  lapses         Int           @default(0)
+  1311→  lastReviewedAt DateTime?
+  1312→
+  1313→  @@unique([studentId, cardId])
+  1314→  @@index([studentId, dueAt])
+  1315→  @@index([deckId, studentId])
+  1316→}
+  1317→
+  1318→/// Personal study planner task (spec §23/§24) — real CRUD, real due dates,
+  1319→/// real completion. Optional subject link is the "resource-linked" hook.
+  1320→model StudyTask {
+  1321→  id          String    @id @default(cuid())
+  1322→  schoolId    String
+  1323→  studentId   String
+  1324→  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  1325→  title       String
+  1326→  subjectId   String?
+  1327→  subject     Subject? @relation(fields: [subjectId], references: [id])
+  1328→  dueDate     DateTime?
+  1329→  completedAt DateTime?
+  1330→  createdAt   DateTime  @default(now())
+  1331→
+  1332→  @@index([schoolId, studentId])
+  1333→  @@index([studentId, dueDate])
+  1334→}
+  1335→
+  1336→/// Study group (school-scoped). Academic identity only — no social ranking,
+  1337→/// no helpfulness scores (spec §26).
+  1338→model StudyGroup {
+  1339→  id          String   @id @default(cuid())
+  1340→  schoolId    String
+  1341→  subjectId   String?
+  1342→  subject     Subject? @relation(fields: [subjectId], references: [id])
+  1343→  name        String
+  1344→  description String
+  1345→  createdAt   DateTime @default(now())
+  1346→
+  1347→  members   StudyGroupMember[]
+  1348→  questions StudyGroupQuestion[]
+  1349→
+  1350→  @@index([schoolId])
+  1351→}
+  1352→
+  1353→/// Membership row (one per student per group) — powers REAL member counts.
+  1354→model StudyGroupMember {
+  1355→  id        String     @id @default(cuid())
+  1356→  groupId   String
+  1357→  group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  1358→  studentId String
+  1359→  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  1360→  createdAt DateTime   @default(now())
+  1361→
+  1362→  @@unique([groupId, studentId])
+  1363→  @@index([studentId])
+  1364→}
+  1365→
+  1366→/// A student question inside a group. Lands PENDING and stays invisible to
+  1367→/// classmates until a teacher/principal publishes it (spec §29 moderation).
+  1368→model StudyGroupQuestion {
+  1369→  id        String     @id @default(cuid())
+  1370→  groupId   String
+  1371→  group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  1372→  schoolId  String
+  1373→  studentId String
+  1374→  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  1375→  question  String
+  1376→  status    String     @default("pending") // pending | published | hidden
+  1377→  createdAt DateTime   @default(now())
+  1378→
+  1379→  @@index([groupId, status])
+  1380→  @@index([schoolId])
+  1381→}
+  1382→

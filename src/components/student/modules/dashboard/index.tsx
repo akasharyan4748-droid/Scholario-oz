@@ -19,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { computeAccount, useFeeStore } from '@/lib/store/fee-store'
+import { useStudentNotifPrefsStore } from '@/lib/store/student-notif-prefs-store'
 import { DEMO_STUDENT_ID } from '../applications/student'
 import { apiFetch } from '../learning/api'
 import type { LearningOverview } from '../learning/types'
@@ -67,6 +68,14 @@ export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => 
     return () => { cancelled = true }
   }, [])
 
+  // SS-1 — study preferences (Settings → Study Preferences) gate the
+  // dashboard's learning reminders: flashcardReminders hides the
+  // Flashcards-due KPI + Up Next · REVIEW; plannerReminders hides
+  // Up Next · TASK. The prefs come from the same server-persisted store
+  // the Settings module writes (hydrated on panel mount).
+  const flashcardReminders = useStudentNotifPrefsStore((s) => s.learning.flashcardReminders)
+  const plannerReminders = useStudentNotifPrefsStore((s) => s.learning.plannerReminders)
+
   if (!student) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -86,12 +95,17 @@ export function StudentDashboard({ onNavigate }: { onNavigate: (key: string) => 
 
       <KpiGrid
         attendancePct={attendance.pct}
-        dueFlashcards={overview?.counts.dueFlashcards ?? null}
+        dueFlashcards={flashcardReminders ? (overview?.counts.dueFlashcards ?? null) : null}
         feePending={feePending}
       />
 
       {/* ── TODAY: what to focus on right now ─────────────────────────── */}
-      <SmartUpNext onNavigate={onNavigate} continueLearning={continueCard} />
+      <SmartUpNext
+        onNavigate={onNavigate}
+        continueLearning={continueCard}
+        showTaskReminder={plannerReminders}
+        showReviewReminder={flashcardReminders}
+      />
 
       <TodayClasses />
 

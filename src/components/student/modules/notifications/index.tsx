@@ -36,7 +36,7 @@ import {
   useStudentMessagingStore, countUnreadConversations, isConversationUnread,
   type StudentConversation,
 } from '@/lib/store/student-messaging-store'
-import { useStudentNotifPrefsStore } from '@/lib/store/student-notif-prefs-store'
+import { useStudentNotifPrefsStore, NOTIF_KIND_TO_PREF } from '@/lib/store/student-notif-prefs-store'
 import { useTimetableStore, getRecentChangesForClass, type PublishedVersion } from '@/lib/store/timetable-store'
 import { toast } from 'sonner'
 import { DEMO_STUDENT_ID } from '../applications/student'
@@ -173,7 +173,9 @@ export function buildStudentNotifications({ student, issues, conversations, seen
   return items.sort((a, b) => (b.at ? new Date(b.at).getTime() : 0) - (a.at ? new Date(a.at).getTime() : 0))
 }
 
-/** Nav-badge helper — unread derived notifications (not in readIds). */
+/** Nav-badge helper — unread derived notifications (not in readIds).
+ *  SS-1: disabled channels never count toward the badge (same filter the
+ *  feed applies — prefs are server-persisted, hydrated on panel mount). */
 export function useUnreadStudentNotificationCount(): number {
   const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
   const issues = useLibraryStore((s) => s.issues)
@@ -181,10 +183,13 @@ export function useUnreadStudentNotificationCount(): number {
   const seenAt = useStudentMessagingStore((s) => s.seenAt)
   const publications = useTimetableStore((s) => s.publications)
   const readIds = useStudentNotifPrefsStore((s) => s.readIds)
+  const prefs = useStudentNotifPrefsStore((s) => s.prefs)
   return useMemo(() => {
     const items = buildStudentNotifications({ student, issues, conversations, seenAt, publications })
-    return items.filter((i) => !readIds.includes(i.id)).length
-  }, [student, issues, conversations, seenAt, publications, readIds])
+    return items.filter(
+      (i) => !readIds.includes(i.id) && (prefs[NOTIF_KIND_TO_PREF[i.kind]] ?? true),
+    ).length
+  }, [student, issues, conversations, seenAt, publications, readIds, prefs])
 }
 
 // ─── Presentation meta ───────────────────────────────────────────────
@@ -207,12 +212,17 @@ export function StudentNotificationsModule({ onNavigate }: { onNavigate?: (key: 
   const conversations = useStudentMessagingStore((s) => s.conversations)
   const seenAt = useStudentMessagingStore((s) => s.seenAt)
   const readIds = useStudentNotifPrefsStore((s) => s.readIds)
+  const prefs = useStudentNotifPrefsStore((s) => s.prefs)
   const markRead = useStudentNotifPrefsStore((s) => s.markRead)
   const markAllRead = useStudentNotifPrefsStore((s) => s.markAllRead)
 
+  // SS-1 — channel preferences filter the feed (server-persisted prefs;
+  // messages/announcements are ALSO enforced server-side in the bell feed).
   const items = useMemo(
-    () => buildStudentNotifications({ student, issues, conversations, seenAt, publications }),
-    [student, issues, conversations, seenAt, publications],
+    () =>
+      buildStudentNotifications({ student, issues, conversations, seenAt, publications })
+        .filter((i) => prefs[NOTIF_KIND_TO_PREF[i.kind]] ?? true),
+    [student, issues, conversations, seenAt, publications, prefs],
   )
   const unreadItems = items.filter((i) => !readIds.includes(i.id))
 

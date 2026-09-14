@@ -551,3 +551,37 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   filter: invert(0.9);
 }
 
+
+/* ============================================================
+   SS-1 — Accessibility preferences (Settings → Accessibility)
+   ------------------------------------------------------------
+   1. OS-level reduced-motion is ALWAYS honored (media query).
+   2. The in-app "Reduce motion" toggle writes the same guarantees
+      via html[data-reduce-motion] (lets students opt in even when
+      the OS setting is off, and vice-versa).
+   3. "Larger text" scales the root rem by ~6% — the whole layout
+      scales proportionally, so nothing reflows or overflows.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html[data-reduce-motion='true'] *,
+html[data-reduce-motion='true'] *::before,
+html[data-reduce-motion='true'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+html[data-text-size='large'] {
+  font-size: 17px;
+}

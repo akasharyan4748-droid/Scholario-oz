@@ -20,7 +20,12 @@ export async function POST(req: NextRequest) {
     if (user.status !== 'ACTIVE') throw new Error('Account is not active')
     if (!user.passwordHash || !verifyPassword(password, user.passwordHash)) throw new Error('Invalid email or password')
 
-    const token = await createSession(user.id)
+    // SS-1 — capture the sign-in device context for Settings → Devices.
+    const forwarded = req.headers.get('x-forwarded-for')
+    const token = await createSession(user.id, {
+      userAgent: req.headers.get('user-agent'),
+      ipAddress: forwarded?.split(',')[0]?.trim() || null,
+    })
     await setSessionCookie(token)
 
     return {
@@ -29,6 +34,7 @@ export async function POST(req: NextRequest) {
       name: user.name ?? '',
       role: user.role,
       schoolId: user.schoolId,
+      avatarUrl: user.avatarUrl,
       school: user.school
         ? {
             id: user.school.id,

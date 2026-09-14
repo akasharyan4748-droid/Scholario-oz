@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { getCurrentUser, verifyPassword, hashPassword } from '@/lib/auth'
+import { getCurrentUser, getCurrentSession, verifyPassword, hashPassword } from '@/lib/auth'
 import { api } from '@/lib/api'
 
 export const runtime = 'nodejs'
@@ -12,6 +12,10 @@ export const runtime = 'nodejs'
  * verifies the current password against the DB user's passwordHash with the
  * SAME scrypt hash/verify helpers prisma/seed.ts uses to write password
  * hashes, validates the new password, and updates the record.
+ *
+ * SS-1 hardening: a successful change also revokes every OTHER session for
+ * the account (standard practice — other signed-in devices must re-enter
+ * the new password) and writes an ActivityLog audit row.
  */
 export async function POST(req: NextRequest) {
   return api(async () => {
@@ -44,6 +48,21 @@ export async function POST(req: NextRequest) {
       data: { passwordHash: hashPassword(newPassword) },
     })
 
-    return { ok: true }
+    // Revoke every OTHER session (keep this one signed in).
+    const current = await getCurrentSession()
+    const revoked = await db.session.deleteMany({
+      where: { userId: user.id, ...(current ? { token: { not: current.token } } : {}) },
+    })
+
+    await db.activityLog.create({
+      data: {
+        schoolId: user.schoolId ?? null,
+        userId: user.id,
+        action: 'password_changed',
+        detail: `Password updated from ${revoked.count + 1} active session(s); ${revoked.count} other session(s) signed out.`,
+      },
+    }).catch(() => {})
+
+    return { ok: true, otherSessionsSignedOut: revoked.count }
   })
 }

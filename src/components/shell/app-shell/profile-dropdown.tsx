@@ -6,6 +6,8 @@ import { LogOut, Settings, User, Sparkles, ChevronDown, Building2, ShieldCheck }
 // school they are browsing; super admins return to the control plane.
 import { useActiveTenant, switchTenant } from '@/lib/tenant/store'
 import { TENANTS } from '@/lib/tenant/schools'
+// SS-1 — server identity: renders the user's real profile photo when set.
+import { useCurrentUser } from '@/lib/store/current-user-store'
 
 interface ProfileUser {
   name?: string
@@ -36,6 +38,7 @@ export function ProfileDropdownTrigger({
   onToggle: () => void
 }) {
   void open
+  const serverAvatar = useCurrentUser((s) => s.me?.avatarUrl)
   return (
     <button
       onClick={onToggle}
@@ -46,8 +49,12 @@ export function ProfileDropdownTrigger({
         <p className="text-xs font-semibold text-foreground leading-none group-hover:text-primary transition-colors">{user?.name || 'Dr. Ramesh Varma'}</p>
         <p className="text-[10px] text-muted-foreground mt-1">{user?.email || 'principal@scholario.edu'}</p>
       </div>
-      <div className="w-8 h-8 rounded-full bg-muted text-foreground font-bold border border-border flex items-center justify-center text-xs shrink-0 group-hover:border-primary transition-colors">
-        {(user?.name || 'Dr. Ramesh Varma').split(' ').map((n) => n[0]).join('').slice(0, 2)}
+      <div className="w-8 h-8 rounded-full bg-muted text-foreground font-bold border border-border flex items-center justify-center text-xs shrink-0 overflow-hidden group-hover:border-primary transition-colors">
+        {serverAvatar ? (
+          <img src={serverAvatar} alt={user?.name || 'Profile photo'} className="h-full w-full object-cover" />
+        ) : (
+          (user?.name || 'Dr. Ramesh Varma').split(' ').map((n) => n[0]).join('').slice(0, 2)
+        )}
       </div>
       <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
     </button>

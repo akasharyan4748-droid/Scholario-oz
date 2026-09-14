@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '@/lib/store/auth-store'
 import { useTheme } from '@/lib/store/theme-store'
 import { useFocusStore } from '@/lib/store/focus-store'
+import { signOut } from '@/lib/signout'
 import type { NavGroup } from '@/components/shell/app-shell'
 import {
   searchEntities,
@@ -57,7 +58,7 @@ export function useCommandPalette({
   const [recentList, setRecentList] = useState<SearchResultItem[]>([])
   // DB-backed results from /api/search. null = not fetched/failed → mock fallback
   const [remoteResults, setRemoteResults] = useState<SearchResultItem[] | null>(null)
-  const { switchTo, logout } = useAuth()
+  const { switchTo } = useAuth()
   const { toggle: toggleTheme } = useTheme()
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -153,6 +154,33 @@ export function useCommandPalette({
       })
     }
 
+    if (role === 'student') {
+      // SS-1 — settings deep-links (role-aware: students never see
+      // administrative settings). Each navigates straight to the section.
+      const SETTINGS_ACTIONS: { id: string; section: string; title: string; subtitle: string; hint: string }[] = [
+        { id: 'act-set-notifications', section: 'notifications', title: 'Notification preferences', subtitle: 'Choose what you get notified about', hint: 'notifications alerts announcements messages reminders channels bell' },
+        { id: 'act-set-appearance', section: 'appearance', title: 'Appearance & theme', subtitle: 'Light, dark or system + accent colour', hint: 'theme dark light system appearance accent colour' },
+        { id: 'act-set-security', section: 'security', title: 'Login & security', subtitle: 'Password and sign-in', hint: 'password change login security email sign in' },
+        { id: 'act-set-devices', section: 'devices', title: 'Devices & sessions', subtitle: 'Where your account is signed in', hint: 'devices sessions browsers sign out other' },
+        { id: 'act-set-privacy', section: 'privacy', title: 'Privacy', subtitle: 'Who can see what', hint: 'privacy visibility classmates school managed' },
+        { id: 'act-set-support', section: 'support', title: 'Help & support', subtitle: 'Contact your school office', hint: 'help support contact school office report problem' },
+      ]
+      for (const a of SETTINGS_ACTIONS) {
+        if (a.hint.includes(q) || 'settings preferences'.includes(q)) {
+          actions.push({
+            id: a.id,
+            title: a.title,
+            subtitle: a.subtitle,
+            category: 'Settings & System',
+            type: 'setting',
+            moduleKey: `settings-${a.section}`,
+            iconName: 'Settings',
+            badge: 'Settings',
+          })
+        }
+      }
+    }
+
     if (role === 'principal' && 'switch login role teacher student demo'.includes(q)) {
       actions.push({
         id: 'act-switch-teacher',
@@ -202,7 +230,7 @@ export function useCommandPalette({
     } else if (item.id === 'act-switch-student') {
       switchTo('student')
     } else if (item.id === 'act-logout') {
-      logout()
+      void signOut()
     } else {
       saveRecentSearch(item)
       // DB-backed entity results carry a deep-link focus request so the

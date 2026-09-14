@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { withUser } from '@/lib/api'
+import { getUserPreferences } from '@/lib/user-preferences'
 
 export const runtime = 'nodejs'
 
@@ -68,23 +69,39 @@ export async function GET() {
 
     const schoolId = user.schoolId
 
+    // SS-1 — server-enforced notification preferences for students. The
+    // bell feed is the MESSAGE/ANNOUNCEMENT surface, so those two channels
+    // are honored HERE (the rest of the channels gate the student Notices
+    // module client-side against the same server-persisted prefs).
+    let prefMessages = true
+    let prefAnnouncements = true
+    if (user.role === 'STUDENT') {
+      const prefs = await getUserPreferences(user.id).catch(() => null)
+      prefMessages = prefs?.notifications.messages ?? true
+      prefAnnouncements = prefs?.notifications.announcements ?? true
+    }
+
     // Unread messages addressed to this user
-    const unreadMessages = await db.message.findMany({
-      where: { schoolId, recipientId: user.id, read: false },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      include: { sender: { select: { name: true, role: true } } },
-    })
+    const unreadMessages = prefMessages
+      ? await db.message.findMany({
+          where: { schoolId, recipientId: user.id, read: false },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: { sender: { select: { name: true, role: true } } },
+        })
+      : []
 
     // Recent school announcements (last 8 visible to this role) with read marks.
     // Audience filtering happens app-side because audience tags are free-form
     // (fetch a wider window, filter, then trim so the list stays full).
-    const announcementRows = await db.notification.findMany({
-      where: { schoolId },
-      orderBy: { createdAt: 'desc' },
-      take: 24,
-      include: { reads: { where: { userId: user.id }, select: { id: true } } },
-    })
+    const announcementRows = prefAnnouncements
+      ? await db.notification.findMany({
+          where: { schoolId },
+          orderBy: { createdAt: 'desc' },
+          take: 24,
+          include: { reads: { where: { userId: user.id }, select: { id: true } } },
+        })
+      : []
     const announcements: typeof announcementRows = []
     const seenBroadcasts = new Set<string>() // title+message of class-fanned announcements
     for (const row of announcementRows) {

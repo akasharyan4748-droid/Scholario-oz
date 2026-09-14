@@ -24,7 +24,10 @@
 
 import { forwardRef } from 'react'
 import { cn } from '@/lib/utils'
-import { AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+// SS-1 fix: the photo branch needs the Radix Avatar ROOT context — the
+// previous import pulled only Image/Fallback, which crash outside a root.
+// (The src path was never exercised before profile photos existed.)
+import { Avatar as UIAvatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 
 export interface AvatarProps {
   /** Full name — used to generate initials and deterministic color */
@@ -84,22 +87,30 @@ export const Avatar = forwardRef<HTMLDivElement, AvatarProps>(
     const g = gradient ?? AVATAR_GRADIENTS[hashString(name) % AVATAR_GRADIENTS.length]
     const shapeClass = shape === 'circle' ? 'rounded-full' : 'rounded-lg'
 
-    // If a photo URL is provided, use shadcn Avatar (handles image + fallback)
+    // If a photo URL is provided, use the Radix Avatar root (context for
+    // Image/Fallback) skinned with our gradient + sizing; falls back to
+    // initials automatically if the image fails to load.
     if (src) {
       return (
         <div
           ref={ref}
           className={cn(
-            'relative flex shrink-0 items-center justify-center overflow-hidden bg-gradient-to-br font-semibold text-white shadow-sm',
+            'relative shrink-0',
             shapeClass,
-            g,
             AVATAR_SIZES[size],
             ring && 'ring-2 ring-background',
             className,
           )}
         >
-          <AvatarImage src={src} alt={name} className="h-full w-full object-cover" />
-          <AvatarFallback className="bg-transparent text-white font-semibold">{text}</AvatarFallback>
+          <UIAvatar
+            className={cn(
+              'h-full w-full overflow-hidden bg-gradient-to-br font-semibold text-white shadow-sm',
+              g,
+            )}
+          >
+            <AvatarImage src={src} alt={name} className="h-full w-full object-cover" />
+            <AvatarFallback className="bg-transparent text-white font-semibold">{text}</AvatarFallback>
+          </UIAvatar>
         </div>
       )
     }

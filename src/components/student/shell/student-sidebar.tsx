@@ -24,6 +24,7 @@ import { ChevronLeft, ChevronRight, X, Search } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useStudentsStore } from '@/lib/store/students-store'
+import { useCurrentUser } from '@/lib/store/current-user-store'
 import { APP_VERSION } from '@/lib/app-version'
 import { DEMO_STUDENT_ID } from '../modules/applications/student'
 import type { NavGroup } from '@/components/shell/app-shell/types'
@@ -55,9 +56,11 @@ export function StudentSidebar({
 
   // Personal workspace identity — the canonical enrollment record (name,
   // class, section). Falls back to a quiet state if the roster is still
-  // hydrating.
+  // hydrating. SS-1: shows the student's real profile photo (server
+  // identity) when one is set, initials otherwise.
   const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
   const initials = student?.avatar ?? '·'
+  const avatarUrl = useCurrentUser((s) => s.me?.avatarUrl)
   const identityTitle = student ? `${student.name} · ${student.className}-${student.section}` : 'My Profile'
 
   return (
@@ -131,11 +134,15 @@ export function StudentSidebar({
           <span className="relative shrink-0">
             <span
               className={cn(
-                'flex items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 font-display font-bold text-white',
+                'flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 font-display font-bold text-white',
                 collapsed ? 'h-9 w-9 text-xs' : 'h-10 w-10 text-sm'
               )}
             >
-              {initials}
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={student?.name ?? 'My profile photo'} className="h-full w-full object-cover" />
+              ) : (
+                initials
+              )}
             </span>
             <span
               className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background bg-emerald-500"

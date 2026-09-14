@@ -6,8 +6,10 @@ import { io } from 'socket.io-client'
 import { toast } from 'sonner'
 import { Bell, Menu, Plus, Globe, Radio, Megaphone, Mail } from 'lucide-react'
 import { useAuth } from '@/lib/store/auth-store'
+import { useCurrentUser } from '@/lib/store/current-user-store'
 import { useLiveAlerts } from '@/lib/store/live-alerts-store'
 import { useLiveFeedStore } from '@/lib/store/live-feed-store'
+import { signOut } from '@/lib/signout'
 import { school } from '@/lib/mock/school'
 // SaaS-STAGE-2A — the shell footer reflects the ACTIVE TENANT's school
 // identity (falls back to the demo school profile for platform surfaces).
@@ -71,8 +73,14 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
   const [notifSource, setNotifSource] = useState<'live' | 'demo'>('demo')
   // Real-time event stream status (socket.io mini-service :3003 via gateway)
   const [streamLive, setStreamLive] = useState(false)
-  const { user, logout, switchTo } = useAuth()
+  const { user, switchTo } = useAuth()
   void roleLabel
+  // SS-1 — server identity (avatar / session context) for the shell + all
+  // account surfaces. One fetch per mount; settings refreshes it after
+  // avatar/password changes.
+  const meRefresh = useCurrentUser((s) => s.refresh)
+  const me = useCurrentUser((s) => s.me)
+  useEffect(() => { void meRefresh() }, [meRefresh])
 
   // Wire notification bell to the real DB-backed feed (unread messages + announcements).
   // Polls every 60s; falls back to demo mock data when the live feed is empty/unavailable.
@@ -107,41 +115,35 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
   }, [])
 
   // ─── Real-time event stream (socket.io mini-service :3003 via gateway) ───
-  // Resolves the viewer's school scope + DB user id from /api/auth/me first
-  // (the client session profile doesn't carry them), then subscribes. Super
-  // admins (schoolId = null) receive the platform-wide stream; school-scoped
-  // roles only see events for their own school. Direct messages are only
-  // surfaced to their addressee (recipientId filter).
+  // Resolves the viewer's school scope + DB user id from the server session
+  // (SS-1: the current-user store — shared with Settings/avatar surfaces),
+  // then subscribes. Super admins (schoolId = null) receive the platform-
+  // wide stream; school-scoped roles only see events for their own school.
+  // Direct messages are only surfaced to their addressee (recipientId filter).
   const streamScopeRef = useRef<string | null | undefined>(undefined) // undefined = resolving
   const streamUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!user) return
+    // Wait for the server identity BEFORE connecting: the school scope
+    // filter depends on it (connecting early would briefly accept events
+    // from every school). me === null while resolving → no socket yet.
+    if (!user || !me) return
     let cancelled = false
     let socket: ReturnType<typeof io> | null = null
 
-    fetch('/api/auth/me', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        const me = j && typeof j === 'object' && 'data' in j ? (j as { data?: { user?: { schoolId?: string | null; id?: string | null } } }).data?.user : null
-        if (me?.id) streamUserIdRef.current = me.id
-        return me?.schoolId ?? null
-      })
-      .catch(() => null)
-      .then((schoolId) => {
-        if (cancelled) return
-        streamScopeRef.current = schoolId
-        socket = io('/?XTransformPort=3003', {
-          transports: ['websocket', 'polling'],
-          reconnection: true,
-          reconnectionAttempts: 8,
-          reconnectionDelay: 1500,
-          timeout: 10000,
-        })
-        socket.on('connect', () => { setStreamLive(true); useLiveFeedStore.getState().setConnected(true) })
-        socket.on('disconnect', () => { setStreamLive(false); useLiveFeedStore.getState().setConnected(false) })
-        socket.on('connect_error', () => { setStreamLive(false); useLiveFeedStore.getState().setConnected(false) })
-        socket.on('school-event', (evt: StreamEvent) => {
+    streamUserIdRef.current = me.id
+    streamScopeRef.current = me.schoolId ?? null
+    socket = io('/?XTransformPort=3003', {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 8,
+      reconnectionDelay: 1500,
+      timeout: 10000,
+    })
+    socket.on('connect', () => { setStreamLive(true); useLiveFeedStore.getState().setConnected(true) })
+    socket.on('disconnect', () => { setStreamLive(false); useLiveFeedStore.getState().setConnected(false) })
+    socket.on('connect_error', () => { setStreamLive(false); useLiveFeedStore.getState().setConnected(false) })
+    socket.on('school-event', (evt: StreamEvent) => {
           // Scope filter — super admins see the whole platform
           const scope = streamScopeRef.current
           if (scope && evt.schoolId && evt.schoolId !== scope) return
@@ -212,14 +214,15 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
             { duration: 5000 }
           )
         })
-      })
 
     return () => {
       cancelled = true
       socket?.close()
       socket = null
     }
-  }, [user?.id])
+    // me identity fields (not the object) — avoids reconnect churn when the
+    // store refreshes for avatar/session updates.
+  }, [user?.id, me?.id, me?.schoolId])
 
   const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups])
   const activeItem = flatItems.find((i) => i.key === activeKey)
@@ -441,7 +444,7 @@ export function AppShell({ groups, activeKey, onNavigate, role, roleLabel, child
                 onSwitchToStudent={() => { switchTo('student'); setProfileOpen(false) }}
                 // SaaS-STAGE-2A — super admins jump straight back to the control plane.
                 onOpenPlatform={role === 'superadmin' ? () => onNavigate('overview') : undefined}
-                onLogout={() => { setProfileOpen(false); logout() }}
+                onLogout={() => { setProfileOpen(false); void signOut() }}
               />
             </div>
           </div>

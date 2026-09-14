@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   LayoutDashboard, User, CalendarDays, CalendarCheck, Award,
   IndianRupee, Megaphone, Bus, GraduationCap,
@@ -29,6 +29,7 @@ import { useStudentMessagingStore, countUnreadConversations } from '@/lib/store/
 import { POSITION_DEFS, filterActivePositions } from '@/lib/student-positions'
 import { useAcademicSession } from '@/lib/academic-session'
 import { useTransportAssignment } from '@/lib/store/transport-store'
+import { hydrateNotifPrefsFromServer } from '@/lib/store/student-notif-prefs-store'
 
 /**
  * STUDENT WORKSPACE NAVIGATION (Learning Experience 2.0 IA — spec §3).
@@ -111,6 +112,10 @@ const navGroups: NavGroup[] = [
  * notification feed, the topbar bell, quick actions) still reference the
  * OLD module keys. One central map keeps every one of them working with
  * the consolidated navigation, and remembers which tab to open.
+ *
+ * SS-1 — settings deep-links: the command palette navigates to
+ * settings-<section> pseudo-keys which land here (same mechanism the
+ * Learning tabs use).
  */
 const LEGACY_MODULE: Record<string, string> = {
   resources: 'learning',
@@ -122,6 +127,17 @@ const LEGACY_MODULE: Record<string, string> = {
   notifications: 'notices',
   announcements: 'notices',
   calendar: 'notices',
+  'settings-profile': 'settings',
+  'settings-security': 'settings',
+  'settings-devices': 'settings',
+  'settings-notifications': 'settings',
+  'settings-appearance': 'settings',
+  'settings-accessibility': 'settings',
+  'settings-learning': 'settings',
+  'settings-privacy': 'settings',
+  'settings-safety': 'settings',
+  'settings-support': 'settings',
+  'settings-about': 'settings',
 }
 
 /** Deep-link sub-tabs (e.g. dashboard "flashcards" → Learning · Flashcards). */
@@ -135,6 +151,17 @@ const LEGACY_TAB: Record<string, string> = {
   planner: 'planner',
   peer: 'groups',
   notifications: 'notifications',
+  'settings-profile': 'profile',
+  'settings-security': 'security',
+  'settings-devices': 'devices',
+  'settings-notifications': 'notifications',
+  'settings-appearance': 'appearance',
+  'settings-accessibility': 'accessibility',
+  'settings-learning': 'learning',
+  'settings-privacy': 'privacy',
+  'settings-safety': 'safety',
+  'settings-support': 'support',
+  'settings-about': 'about',
 }
 
 /** Live badge overrides — derived unread counts (never hardcoded). */
@@ -153,6 +180,12 @@ export function StudentPanel() {
   // Canonical demo student — one roster backs every role (see students-store v2).
   const studentId = 'STU-58'
   const studentName = 'Aarav Sharma'
+
+  // SS-1 — one server fetch on mount hydrates the student's persisted
+  // preferences (notification channels + learning reminders) into the
+  // client cache; every consumer (Notices feed, bell badge, dashboard
+  // gates, Settings) reads the same store afterwards.
+  useEffect(() => { void hydrateNotifPrefsFromServer() }, [])
 
   // Live nav badges — ALL derived from real stores/data, zero constants.
   const unreadNotifs = useUnreadStudentNotificationCount()
@@ -256,6 +289,8 @@ export function StudentPanel() {
         <NoticesModule initialTab={pendingTab ?? undefined} onTabChange={setPendingTab} onNavigate={navigate} />
       ) : active === 'my-class' ? (
         <MyClassModule />
+      ) : active === 'settings' ? (
+        <StudentSettingsModule initialSection={pendingTab ?? undefined} />
       ) : (
         renderStaticModule(active)
       )}
@@ -269,7 +304,6 @@ const staticModules: Record<string, React.ReactNode> = {
   attendance: <AttendanceModule />,
   results: <ResultsModule />,
   messages: <StudentMessagesModule />,
-  settings: <StudentSettingsModule />,
   fees: <FeesModule />,
   'my-certificates': <MyCertificatesModule />,
   applications: <StudentApplicationsModule />,

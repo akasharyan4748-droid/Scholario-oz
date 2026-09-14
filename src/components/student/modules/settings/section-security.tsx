@@ -1,0 +1,160 @@
+'use client'
+
+/**
+ * SS-1 — Settings → Login & Security.
+ *
+ * Real data only: login identity from the server session, the current
+ * session's start/expiry, and the account's last sign-in (User.lastLoginAt
+ * — updated by every login). Change-password revokes other sessions
+ * server-side (the API reports how many). No invented security metadata.
+ */
+import { useState } from 'react'
+import { LockKeyhole, LogOut, KeyRound } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
+import { useCurrentUser } from '@/lib/store/current-user-store'
+import { signOut } from '@/lib/signout'
+import { formatDate } from '@/lib/format'
+import { SectionCard, InfoRow } from './primitives'
+
+export function SecuritySection() {
+  const me = useCurrentUser((s) => s.me)
+  const session = useCurrentUser((s) => s.session)
+  const lastLoginAt = useCurrentUser((s) => s.lastLoginAt)
+
+  return (
+    <SectionCard icon={LockKeyhole} title="Login & Security" caption="Your sign-in identity and password">
+      <div className="divide-y divide-border/60">
+        <InfoRow label="Sign-in email" value={me?.email ?? '—'} />
+        <InfoRow label="Account type" value="Student" />
+        <InfoRow
+          label="This session started"
+          value={session ? formatDate(session.createdAt) : '—'}
+        />
+        <InfoRow
+          label="Last sign-in"
+          value={lastLoginAt ? formatDate(lastLoginAt) : 'This session'}
+        />
+      </div>
+
+      <div className="mt-5 pt-5 border-t border-border/70">
+        <ChangePasswordForm />
+      </div>
+
+      <div className="mt-5 pt-5 border-t border-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold">Sign out of this device</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Ends this session on this browser.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
+          onClick={() => { void signOut() }}
+        >
+          <LogOut className="h-4 w-4" /> Sign out
+        </Button>
+      </div>
+    </SectionCard>
+  )
+}
+
+function ChangePasswordForm() {
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    setError(null)
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setError('Fill in all three password fields.')
+      return
+    }
+    if (newPassword.length < 6) {
+      setError('New password must be at least 6 characters.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('New passwords do not match.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const r = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+      })
+      const j = await r.json().catch(() => null)
+      if (r.ok && j?.ok) {
+        const others = j?.data?.otherSessionsSignedOut ?? 0
+        toast.success('Password updated', {
+          description:
+            others > 0
+              ? `${others} other signed-in device${others > 1 ? 's were' : ' was'} signed out.`
+              : 'Use your new password next time you sign in.',
+        })
+        setCurrentPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+      } else {
+        setError(j?.error || 'Could not change password — please try again.')
+      }
+    } catch {
+      setError('Network error — please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <KeyRound className="h-3.5 w-3.5 text-primary" aria-hidden />
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Change password
+        </h4>
+      </div>
+      <div className="space-y-3 max-w-md">
+        <PasswordField id="pw-current" label="Current password" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" />
+        <PasswordField id="pw-new" label="New password" value={newPassword} onChange={setNewPassword} autoComplete="new-password" />
+        <PasswordField id="pw-confirm" label="Confirm new password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" />
+        {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
+        <div className="flex items-center gap-2 pt-1">
+          <Button size="sm" onClick={submit} disabled={submitting}>
+            {submitting ? 'Updating…' : 'Change password'}
+          </Button>
+          <span className="text-[11px] text-muted-foreground">Minimum 6 characters</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PasswordField({
+  id, label, value, onChange, autoComplete,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (v: string) => void
+  autoComplete: string
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">{label}</label>
+      <input
+        id={id}
+        type="password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring/40"
+      />
+    </div>
+  )
+}

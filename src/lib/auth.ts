@@ -27,11 +27,22 @@ export function generateToken(): string {
 export const SESSION_COOKIE = 'erp_session'
 export const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
 
-export async function createSession(userId: string): Promise<string> {
+export async function createSession(
+  userId: string,
+  meta?: { userAgent?: string | null; ipAddress?: string | null },
+): Promise<string> {
   const token = generateToken()
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
   await db.session.create({
-    data: { userId, token, expiresAt },
+    data: {
+      userId,
+      token,
+      expiresAt,
+      // SS-1 — device context for Settings → Devices (nullable: older
+      // sessions honestly render as "unknown device").
+      userAgent: meta?.userAgent?.slice(0, 400) ?? null,
+      ipAddress: meta?.ipAddress?.slice(0, 60) ?? null,
+    },
   })
   await db.user.update({
     where: { id: userId },
@@ -62,6 +73,60 @@ export async function clearSessionCookie() {
 export async function getSessionToken(): Promise<string | undefined> {
   const store = await cookies()
   return store.get(SESSION_COOKIE)?.value
+}
+
+/** SS-1 — the caller's Session row (token never leaves the server; the
+ *  id/createdAt/expiresAt/device metadata shape what Settings renders). */
+export async function getCurrentSession() {
+  const token = await getSessionToken()
+  if (!token) return null
+  const session = await db.session.findUnique({ where: { token } })
+  if (!session) return null
+  if (session.expiresAt < new Date()) {
+    await db.session.delete({ where: { id: session.id } }).catch(() => {})
+    return null
+  }
+  return session
+}
+
+/** SS-1 — light UA parser for the Devices list. Best-effort labels; never
+ *  a fingerprint. Unknown UAs render as "Unknown device" downstream. */
+export function parseUserAgent(ua: string | null | undefined): {
+  browser: string
+  os: string
+  device: 'Desktop' | 'Mobile' | 'Tablet' | 'Unknown'
+} {
+  if (!ua) return { browser: 'Unknown browser', os: 'Unknown OS', device: 'Unknown' }
+  const s = ua.toLowerCase()
+
+  const device: 'Desktop' | 'Mobile' | 'Tablet' | 'Unknown' = /ipad|tablet|playbook|silk/.test(s)
+    ? 'Tablet'
+    : /mobi|iphone|android.*mobile|windows phone/.test(s)
+      ? 'Mobile'
+      : /android/.test(s)
+        ? 'Tablet'
+        : /windows|macintosh|mac os|cros|linux/.test(s)
+          ? 'Desktop'
+          : 'Unknown'
+
+  const browser =
+    /edg\//.test(s) ? 'Edge'
+    : /opr\//.test(s) ? 'Opera'
+    : /chrome|crios/.test(s) && !/edg\//.test(s) ? 'Chrome'
+    : /firefox|fxios/.test(s) ? 'Firefox'
+    : /safari/.test(s) && !/chrome/.test(s) ? 'Safari'
+    : 'Unknown browser'
+
+  const os =
+    /windows/.test(s) ? 'Windows'
+    : /iphone|ipad|ipod|ios/.test(s) ? 'iOS'
+    : /mac os|macintosh/.test(s) ? 'macOS'
+    : /android/.test(s) ? 'Android'
+    : /cros/.test(s) ? 'ChromeOS'
+    : /linux/.test(s) ? 'Linux'
+    : 'Unknown OS'
+
+  return { browser, os, device }
 }
 
 export type AuthUser = {

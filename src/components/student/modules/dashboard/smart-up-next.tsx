@@ -37,9 +37,17 @@ interface SmartTask {
 interface SmartUpNextProps {
   onNavigate: (key: string) => void
   continueLearning: LearningMaterialCard | null
+  /** SS-1 — Settings → Study Preferences gates (default true). */
+  showTaskReminder?: boolean
+  showReviewReminder?: boolean
 }
 
-export function SmartUpNext({ onNavigate, continueLearning }: SmartUpNextProps) {
+export function SmartUpNext({
+  onNavigate,
+  continueLearning,
+  showTaskReminder = true,
+  showReviewReminder = true,
+}: SmartUpNextProps) {
   // Real planner tasks — the nearest incomplete one is the queue's anchor.
   const [nearestTask, setNearestTask] = useState<StudyTaskItem | null>(null)
   const [dueCount, setDueCount] = useState<number | null>(null)
@@ -80,7 +88,7 @@ export function SmartUpNext({ onNavigate, continueLearning }: SmartUpNextProps) 
       navKey: 'learning',
     })
   }
-  if (nearestTask) {
+  if (nearestTask && showTaskReminder) {
     tasks.push({
       priority: 'TASK',
       priorityColor: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
@@ -95,7 +103,7 @@ export function SmartUpNext({ onNavigate, continueLearning }: SmartUpNextProps) 
       navKey: 'planner',
     })
   }
-  if (dueCount !== null && dueCount > 0) {
+  if (showReviewReminder && dueCount !== null && dueCount > 0) {
     tasks.push({
       priority: 'REVIEW',
       priorityColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
