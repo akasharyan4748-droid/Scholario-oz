@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { AppShell } from '@/components/shell/app-shell'
 import { useTeachersStore, getTeacherActivePermissions } from '@/lib/store/teachers-store'
+import { useTeacherHubStore } from '@/lib/store/teacher-hub-store'
 import {
   buildTeacherNavGroups,
   getPendingAssignments,
@@ -22,6 +23,9 @@ import { useTeacherHandlers } from './teacher-panel/use-teacher-handlers'
 
 export function TeacherPanel() {
   const { teachers, positionsList, confirmPayrollRevision } = useTeachersStore()
+  // Live server-derived Teacher Hub counts (published by the Parent Connect
+  // module after each load) — drives the sidebar badge. One store, one truth.
+  const hubUnread = useTeacherHubStore((s) => s.parentUnread)
 
   // Default to Rohan Mehta (EMP-014) for Teacher View preview or active teacher
   const currentTeacher = teachers.find((t) => t.id === 'T-014') || teachers[0]
@@ -33,7 +37,7 @@ export function TeacherPanel() {
   // Check pending position assignments for approval workflow
   const pendingAssignments = getPendingAssignments(currentTeacher, isRelieved)
 
-  const navGroups = buildTeacherNavGroups({ isRelieved, activePermissions })
+  const navGroups = buildTeacherNavGroups({ isRelieved, activePermissions, hubUnread })
 
   const {
     dialogs,

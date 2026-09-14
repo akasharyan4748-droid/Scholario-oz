@@ -12,6 +12,7 @@
 
 import { useAuth } from '@/lib/store/auth-store'
 import { useCurrentUser } from '@/lib/store/current-user-store'
+import { useTeacherHubStore } from '@/lib/store/teacher-hub-store'
 
 export async function signOut(): Promise<void> {
   // Best-effort server revocation — never blocks the client reset.
@@ -22,4 +23,7 @@ export async function signOut(): Promise<void> {
   }
   useCurrentUser.getState().clear()
   useAuth.getState().logout()
+  // Teacher Hub live counts belong to the signed-in teacher — never let a
+  // previous session's badge leak into the next user's sidebar.
+  useTeacherHubStore.getState().clear()
 }

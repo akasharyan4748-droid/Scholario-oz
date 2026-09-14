@@ -1,97 +1,281 @@
 'use client'
 
-import { useState } from 'react'
-import { AnimatePresence } from 'framer-motion'
+/**
+ * Student Mentoring module (TH-FE-3) — the module composition root.
+ *
+ * Server-backed workspace over /api/teacher/mentoring*: quiet context
+ * toolbar → 4 summary cards → pill tabs (Mentees / Sessions / Goals /
+ * Follow-ups) → tab bodies, plus the four dialogs (add mentee, log session,
+ * new goal, mentee detail sheet). The top application bar already names the
+ * module — this page never repeats it.
+ */
+
+import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { AlarmClock, CalendarCheck, HeartHandshake, Plus, UserPlus, Users } from 'lucide-react'
+import { PageTransition } from '@/components/shared/ui'
+import { ModuleToolbar } from '@/components/teacher/teacher-panel/module-toolbar'
 import {
-  Heart, Users, Calendar, Plus, TrendingUp, Sparkles, MessageSquare,
-} from 'lucide-react'
-import { ModuleToolbar } from '../../teacher-panel/module-toolbar'
-import { KpiCard } from '@/components/shared/kpi-card'
-import { ChartCard, AreaTrend, Donut } from '@/components/shared/charts'
-import { mentorGroups, mentees, sessionLogs, mentoringStats, type Mentee } from '@/lib/mock/mentoring'
+  HubModuleSkeleton,
+  HubSectionError,
+  HubStatCards,
+  type HubStat,
+} from '@/components/teacher/modules/shared/hub-stat-cards'
+import { useFocusStore } from '@/lib/store/focus-store'
 import { cn } from '@/lib/utils'
-import { type Tab } from './data'
+import { GHOST_ACTION, PRIMARY_ACTION } from './shared'
+import { useMentoring } from './hooks'
 import { MenteesTab } from './mentees-tab'
-import { GroupsTab } from './groups-tab'
 import { SessionsTab } from './sessions-tab'
+import { GoalsTab } from './goals-tab'
+import { FollowUpsTab } from './follow-ups-tab'
 import { MenteeDetailDialog } from './mentee-detail-dialog'
 import { LogSessionDialog } from './log-session-dialog'
+import { GoalDialog } from './goal-dialog'
+import { AddMenteeDialog } from './add-mentee-dialog'
 
-// Teacher Student Mentoring module entry point.
-//
-// `teacher-panel/module-router.tsx` imports the named `MentoringModule`:
-//   import { MentoringModule } from '../modules/mentoring'
-//
-// This index owns the page-level state (active tab, selected mentee, log
-// session dialog open state) and composes: KPI cards, charts, the three tab
-// views (MenteesTab, GroupsTab, SessionsTab), and two modals (MenteeDetail
-// Dialog + LogSessionDialog).
-export function MentoringModule() {
-  const [tab, setTab] = useState<Tab>('mentees')
-  const [selectedMentee, setSelectedMentee] = useState<Mentee | null>(null)
-  const [showLogSession, setShowLogSession] = useState(false)
+type TabKey = 'mentees' | 'sessions' | 'goals' | 'follow-ups'
+
+export function MentoringModule({ onNavigate }: { onNavigate?: (key: string) => void }) {
+  const {
+    data,
+    loading,
+    error,
+    reload,
+    addMentee,
+    updateMentee,
+    logSession,
+    addGoal,
+    updateGoalStatus,
+    updateFollowUp,
+  } = useMentoring()
+
+  const [tab, setTab] = useState<TabKey>('mentees')
+  const [addOpen, setAddOpen] = useState(false)
+  const [logState, setLogState] = useState<{ open: boolean; studentId?: string }>({ open: false })
+  const [goalState, setGoalState] = useState<{ open: boolean; studentId?: string }>({
+    open: false,
+  })
+  const [detailStudentId, setDetailStudentId] = useState<string | null>(null)
+
+  // Focus deep-link (command palette): a mentoring mentee focus with id
+  // "mnt-<studentId>" opens that student's mentee sheet, then clears.
+  const focusHandled = useRef(false)
+  useEffect(() => {
+    if (focusHandled.current || !data) return
+    const focus = useFocusStore.getState().focus
+    if (!focus || focus.moduleKey !== 'mentoring' || focus.type !== 'mentee') return
+    if (typeof focus.id === 'string' && focus.id.startsWith('mnt-')) {
+      const studentId = focus.id.slice('mnt-'.length)
+      const known =
+        data.assignments.some((a) => a.student.id === studentId) ||
+        data.students.some((s) => s.id === studentId)
+      if (known) setDetailStudentId(studentId)
+      focusHandled.current = true
+      useFocusStore.getState().clearFocus()
+    }
+  }, [data])
+
+  const tabs: { key: TabKey; label: string; count: number }[] = data
+    ? [
+        { key: 'mentees', label: 'Mentees', count: data.assignments.length },
+        { key: 'sessions', label: 'Sessions', count: data.sessions.length },
+        { key: 'goals', label: 'Goals', count: data.goals.length },
+        { key: 'follow-ups', label: 'Follow-ups', count: data.followUps.length },
+      ]
+    : []
+
+  const stats: HubStat[] = data
+    ? [
+        {
+          key: 'active-mentees',
+          label: 'Active Mentees',
+          value: data.stats.activeMentees,
+          context: data.teacher.classLabel,
+          icon: Users,
+          tone: 'emerald',
+        },
+        {
+          key: 'sessions-month',
+          label: 'Sessions This Month',
+          value: data.stats.sessionsThisMonth,
+          context: `${data.stats.totalSessions} all-time`,
+          icon: CalendarCheck,
+          tone: 'sky',
+        },
+        {
+          key: 'follow-ups',
+          label: 'Follow-ups Due',
+          value: data.stats.followUpsOpen,
+          context: `${data.stats.followUpsDue} overdue`,
+          icon: AlarmClock,
+          tone: 'amber',
+        },
+        {
+          key: 'needing-support',
+          label: 'Needing Support',
+          value: data.stats.needingSupport,
+          context: 'watch & support statuses',
+          icon: HeartHandshake,
+          tone: 'rose',
+        },
+      ]
+    : []
 
   return (
-    <div className="space-y-5">
-      <ModuleToolbar
-        action={
-          <button
-            onClick={() => setShowLogSession(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+    <PageTransition className="space-y-4">
+      {!data ? (
+        loading ? (
+          <HubModuleSkeleton />
+        ) : (
+          <HubSectionError
+            message={error ?? 'Mentoring workspace could not load.'}
+            onRetry={reload}
+          />
+        )
+      ) : (
+        <>
+          {/* quiet context toolbar — the top bar already names the module */}
+          <ModuleToolbar
+            context={`${data.teacher.name} · Mentor · ${data.stats.activeMentees} mentees · ${data.stats.sessionsThisMonth} sessions this month`}
+            action={
+              <>
+                <button type="button" onClick={() => setAddOpen(true)} className={GHOST_ACTION}>
+                  <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                  Add Mentee
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLogState({ open: true })}
+                  className={PRIMARY_ACTION}
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  Log Session
+                </button>
+              </>
+            }
+          />
+
+          {/* summary cards */}
+          <HubStatCards stats={stats} />
+
+          {/* pill tab strip (scrolls horizontally on small screens) */}
+          <div
+            className="flex gap-1.5 overflow-x-auto pb-0.5"
+            role="tablist"
+            aria-label="Mentoring views"
           >
-            <Plus className="h-3.5 w-3.5" /> Log Session
-          </button>
-        }
-      />
+            {tabs.map((t) => {
+              const active = tab === t.key
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(t.key)}
+                  className={cn(
+                    'flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-colors',
+                    active
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  {t.label}
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums',
+                      active
+                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                        : 'bg-background/80 text-muted-foreground',
+                    )}
+                  >
+                    {t.count}
+                  </span>
+                  {t.key === 'follow-ups' && data.stats.followUpsDue > 0 && (
+                    <span
+                      className="h-1.5 w-1.5 rounded-full bg-rose-500"
+                      role="presentation"
+                      aria-label={`${data.stats.followUpsDue} overdue follow-ups`}
+                    />
+                  )}
+                </button>
+              )
+            })}
+          </div>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard label="Active Mentees" value={mentoringStats.totalMentees} icon={<Users className="h-5 w-5" />} accent="amber" trendLabel="Class 2-A" delay={0} />
-        <KpiCard label="Sessions This Month" value={mentoringStats.sessionsThisMonth} icon={<Calendar className="h-5 w-5" />} accent="emerald" trend={9} trendLabel="vs last month" delay={0.05} />
-        <KpiCard label="Avg Progress" value={mentoringStats.avgProgress} suffix="%" icon={<TrendingUp className="h-5 w-5" />} accent="violet" trend={6} trendLabel="mentee growth" delay={0.1} />
-        <KpiCard label="Needs Support" value={mentoringStats.needsSupportCount} icon={<Heart className="h-5 w-5" />} accent="rose" trendLabel="priority attention" delay={0.15} />
-      </div>
+          {/* tab bodies */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.18 }}
+            >
+              {tab === 'mentees' && (
+                <MenteesTab
+                  assignments={data.assignments}
+                  onSelect={setDetailStudentId}
+                  onAddMentee={() => setAddOpen(true)}
+                />
+              )}
+              {tab === 'sessions' && <SessionsTab sessions={data.sessions} />}
+              {tab === 'goals' && (
+                <GoalsTab
+                  goals={data.goals}
+                  onNewGoal={() => setGoalState({ open: true })}
+                  onUpdateStatus={updateGoalStatus}
+                />
+              )}
+              {tab === 'follow-ups' && (
+                <FollowUpsTab
+                  followUps={data.followUps}
+                  updateFollowUp={updateFollowUp}
+                  onOpenStudent={setDetailStudentId}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </>
+      )}
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        <ChartCard title="Sessions Trend" subtitle="Monthly mentoring sessions" className="lg:col-span-2">
-          <AreaTrend data={mentoringStats.monthlySessions} xKey="month" yKey="count" color="oklch(0.65 0.16 75)" height={240} gradientId="mentorGrad" />
-        </ChartCard>
-        <ChartCard title="Mentee Wellbeing" subtitle="Current status distribution">
-          <Donut data={mentoringStats.progressDistribution} centerValue={`${mentoringStats.totalMentees}`} centerLabel="mentees" height={240} />
-        </ChartCard>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2">
-        {[
-          { id: 'mentees' as Tab, label: 'My Mentees', icon: <Users className="h-3.5 w-3.5" />, count: mentees.length },
-          { id: 'groups' as Tab, label: 'Mentor Groups', icon: <Sparkles className="h-3.5 w-3.5" />, count: mentorGroups.length },
-          { id: 'sessions' as Tab, label: 'Session Logs', icon: <MessageSquare className="h-3.5 w-3.5" />, count: sessionLogs.length },
-        ].map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all',
-              tab === t.id ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'glass text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.icon}
-            {t.label}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold', tab === t.id ? 'bg-primary-foreground/20' : 'bg-muted')}>{t.count}</span>
-          </button>
-        ))}
-      </div>
-
-      <AnimatePresence mode="wait">
-        {tab === 'mentees' && <MenteesTab onSelect={setSelectedMentee} />}
-        {tab === 'groups' && <GroupsTab />}
-        {tab === 'sessions' && <SessionsTab />}
-      </AnimatePresence>
-
-      <MenteeDetailDialog mentee={selectedMentee} onClose={() => setSelectedMentee(null)} />
-      <LogSessionDialog open={showLogSession} onClose={() => setShowLogSession(false)} />
-    </div>
+      {/* dialogs (need the aggregate payload) */}
+      {data && (
+        <>
+          <AddMenteeDialog
+            open={addOpen}
+            onOpenChange={setAddOpen}
+            students={data.students}
+            assignments={data.assignments}
+            onAddMentee={addMentee}
+          />
+          <LogSessionDialog
+            open={logState.open}
+            onOpenChange={(o) => setLogState((s) => ({ ...s, open: o }))}
+            students={data.students}
+            defaultStudentId={logState.studentId}
+            onLogSession={logSession}
+          />
+          <GoalDialog
+            open={goalState.open}
+            onOpenChange={(o) => setGoalState((s) => ({ ...s, open: o }))}
+            students={data.students}
+            defaultStudentId={goalState.studentId}
+            onAddGoal={addGoal}
+          />
+          <MenteeDetailDialog
+            studentId={detailStudentId}
+            payload={data}
+            onClose={() => setDetailStudentId(null)}
+            onLogSession={(studentId) => setLogState({ open: true, studentId })}
+            onAddGoal={(studentId) => setGoalState({ open: true, studentId })}
+            onNavigate={onNavigate}
+            updateMentee={updateMentee}
+            updateGoalStatus={updateGoalStatus}
+          />
+        </>
+      )}
+    </PageTransition>
   )
 }

@@ -10,9 +10,11 @@ import type { TeacherRecord, PositionAssignment } from '@/lib/store/teachers-sto
 export interface NavRegistryArgs {
   isRelieved: boolean
   activePermissions: string[]
+  /** live server-derived unread parent messages — drives the Parent Connect badge */
+  hubUnread?: number
 }
 
-export function buildTeacherNavGroups({ isRelieved, activePermissions }: NavRegistryArgs): NavGroup[] {
+export function buildTeacherNavGroups({ isRelieved, activePermissions, hubUnread = 0 }: NavRegistryArgs): NavGroup[] {
   if (isRelieved) {
     return [
       {
@@ -65,7 +67,7 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions }: NavRegi
       items: [
         { key: 'ptm', label: 'PTM Scheduler', icon: <CalendarClock className="h-4.5 w-4.5" />, badge: 13 },
         { key: 'behavior', label: 'Student Behavior', icon: <Shield className="h-4.5 w-4.5" /> },
-        { key: 'parent-connect', label: 'Parent Connect', icon: <MessageSquareHeart className="h-4.5 w-4.5" />, badge: 4 },
+        { key: 'parent-connect', label: 'Parent Connect', icon: <MessageSquareHeart className="h-4.5 w-4.5" />, badge: hubUnread > 0 ? hubUnread : undefined },
         { key: 'mentoring', label: 'Student Mentoring', icon: <Heart className="h-4.5 w-4.5" /> },
       ],
     })

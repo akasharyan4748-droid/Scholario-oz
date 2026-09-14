@@ -72,6 +72,15 @@ model School {
   settlements          Settlement[]
   reconciliations      Reconciliation[]
   webhookEvents        WebhookEvent[]
+  parentConversations  ParentConversation[]
+  parentMessages       ParentMessage[]
+  behaviorRecords      BehaviorRecord[]
+  behaviorCategories   BehaviorCategory[]
+  mentoringAssignments MentoringAssignment[]
+  mentoringSessions    MentoringSession[]
+  mentoringGoals       MentoringGoal[]
+  teacherFollowUps     TeacherFollowUp[]
+  messageTemplates     MessageTemplate[]
 }
 
 model User {
@@ -103,6 +112,16 @@ model User {
   createdHomeworks   Homework[]
   notificationReads  NotificationRead[]
   preferences        UserPreference?
+
+  // Teacher Hub (Parent Connect / Behavior / Mentoring) — v2.14
+  teacherConversations     ParentConversation[] @relation("ParentConversationTeacher")
+  guardianConversations    ParentConversation[] @relation("ParentConversationParent")
+  sentParentMessages       ParentMessage[]      @relation("ParentMessageSender")
+  recordedBehavior         BehaviorRecord[]     @relation("BehaviorRecordRecorder")
+  mentoringAssignments     MentoringAssignment[] @relation("MentoringAssignmentTeacher")
+  mentoringSessions        MentoringSession[]    @relation("MentoringSessionTeacher")
+  mentoringGoals           MentoringGoal[]       @relation("MentoringGoalTeacher")
+  ownedTeacherFollowUps    TeacherFollowUp[]     @relation("TeacherFollowUpTeacher")
 }
 
 model Teacher {
@@ -158,6 +177,14 @@ model Student {
   studyGroupQuestions StudyGroupQuestion[]
   flashcardReviews    FlashcardReviewState[]
   materialTargets     StudyMaterialTarget[]
+
+  // Teacher Hub (Parent Connect / Behavior / Mentoring) — v2.14
+  parentConversations  ParentConversation[]
+  behaviorRecords      BehaviorRecord[]
+  mentoringAssignments MentoringAssignment[]
+  mentoringSessions    MentoringSession[]
+  mentoringGoals       MentoringGoal[]
+  teacherFollowUps     TeacherFollowUp[]
 }
 
 model Class {
@@ -1404,4 +1431,247 @@ model StudyGroupQuestion {
 
   @@index([groupId, status])
   @@index([schoolId])
+}
+
+// =====================================================================
+// TEACHER HUB — Parent Connect / Student Behavior / Student Mentoring
+// (v2.14). All rows are tenant-owned (schoolId) and every query path
+// resolves the authenticated teacher server-side (src/lib/teacher-hub.ts).
+// SQLite: no enums/Json — status/category values are documented strings.
+// =====================================================================
+
+/// One teacher ↔ one guardian ↔ one student school-communication thread.
+/// Deliberately separate from the flat `Message` model (inbox mail) — this
+/// carries conversational state: category, pinning, follow-up linkage and
+/// per-message read receipts.
+model ParentConversation {
+  id            String    @id @default(cuid())
+  schoolId      String
+  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  /// User.id of the teacher participant
+  teacherId     String
+  teacher       User      @relation("ParentConversationTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  /// User.id of the guardian participant (User.role = PARENT)
+  parentId      String
+  parent        User      @relation("ParentConversationParent", fields: [parentId], references: [id], onDelete: Cascade)
+  /// Student this conversation is about (shared identity with Behavior/Mentoring)
+  studentId     String
+  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// general | academic | attendance | behavior | wellbeing | urgent
+  category      String    @default("general")
+  pinned        Boolean   @default(false)
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  messages  ParentMessage[]
+  followUps TeacherFollowUp[]
+
+  @@unique([teacherId, studentId, parentId], name: "parent_conversation_participants")
+  @@index([schoolId, teacherId, lastMessageAt])
+  @@index([parentId])
+}
+
+/// A message inside a parent conversation. `readAt` is set when the
+/// RECIPIENT reads it (null = unread by recipient).
+model ParentMessage {
+  id             String             @id @default(cuid())
+  schoolId       String
+  school         School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   ParentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// User.id of the sender (teacher or parent)
+  senderId       String
+  sender         User               @relation("ParentMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime           @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([schoolId, senderId])
+}
+
+/// A significant observation about a student — positive recognition,
+/// neutral observation or a concern. Sensitive: `privateNote` is
+/// teacher/staff-only and is never exposed to parents or students.
+model BehaviorRecord {
+  id               String    @id @default(cuid())
+  schoolId         String
+  school           School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId        String
+  student          Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// User.id of the recording teacher
+  recordedById     String
+  recordedBy       User      @relation("BehaviorRecordRecorder", fields: [recordedById], references: [id], onDelete: Cascade)
+  date             DateTime
+  /// key from BehaviorCategory (school-configurable)
+  category         String
+  /// positive | observation | concern
+  type             String    @default("observation")
+  description      String
+  actionTaken      String?
+  followUpRequired Boolean   @default(false)
+  followUpDate     DateTime?
+  /// Teacher/staff-only — excluded from any parent/student surface
+  privateNote      String?
+  /// open | monitoring | resolved
+  status           String    @default("open")
+  parentNotified   Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  followUps TeacherFollowUp[]
+
+  @@index([schoolId, studentId, date])
+  @@index([schoolId, recordedById, date])
+}
+
+/// School-configurable behavior taxonomy (seeded with defaults; a school
+/// can add/rename/deactivate categories without code changes).
+model BehaviorCategory {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  key       String
+  label     String
+  /// any | positive | concern — the record form uses this to suggest types
+  kind      String   @default("any")
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, key])
+}
+
+/// A mentor ↔ mentee relationship. One row per teacher-student pair;
+/// `active = false` archives the relationship (history preserved).
+model MentoringAssignment {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  /// User.id of the mentor
+  teacherId   String
+  teacher     User      @relation("MentoringAssignmentTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// on-track | watch | needs-support | critical
+  status      String    @default("on-track")
+  /// academic | attendance | social | wellbeing | career | general
+  supportType String    @default("general")
+  notes       String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sessions MentoringSession[]
+  goals    MentoringGoal[]
+
+  @@unique([teacherId, studentId])
+  @@index([schoolId, teacherId, active])
+}
+
+/// A logged mentoring session (discussion, action items, follow-up date).
+model MentoringSession {
+  id              String              @id @default(cuid())
+  schoolId        String
+  school          School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  assignmentId    String
+  assignment      MentoringAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// User.id of the mentor (denormalised from assignment for direct scoping)
+  teacherId       String
+  teacher         User                @relation("MentoringSessionTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  date            DateTime
+  /// academic | wellbeing | attendance | career | personal-development | general
+  type            String              @default("general")
+  discussion      String
+  /// JSON string array of action items
+  actionItems     String?
+  durationMinutes Int?
+  followUpDate    DateTime?
+  createdAt       DateTime            @default(now())
+
+  followUps TeacherFollowUp[]
+
+  @@index([schoolId, teacherId, date])
+  @@index([assignmentId, date])
+}
+
+/// A student goal created by a mentor, with review date and lifecycle status.
+model MentoringGoal {
+  id           String              @id @default(cuid())
+  schoolId     String
+  school       School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  assignmentId String
+  assignment   MentoringAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// User.id of the mentor
+  teacherId    String
+  teacher      User                @relation("MentoringGoalTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  title        String
+  target       String?
+  reviewDate   DateTime?
+  /// not-started | in-progress | on-track | achieved | paused
+  status       String              @default("in-progress")
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([schoolId, teacherId, status])
+  @@index([assignmentId])
+}
+
+/// Unified teacher follow-up queue across the three Teacher Hub modules.
+/// `kind` routes it to the owning module; the optional refs keep the
+/// link to the originating conversation/record/session.
+model TeacherFollowUp {
+  id             String              @id @default(cuid())
+  schoolId       String
+  school         School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  /// User.id of the owning teacher
+  teacherId      String
+  teacher        User                @relation("TeacherFollowUpTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  /// parent-connect | behavior | mentoring
+  kind           String
+  studentId      String?
+  student        Student?            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   ParentConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  recordId       String?
+  record         BehaviorRecord?     @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  sessionId      String?
+  session        MentoringSession?   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  reason         String
+  note           String?
+  dueDate        DateTime
+  /// low | normal | high
+  priority       String              @default("normal")
+  /// open | done | cancelled
+  status         String              @default("open")
+  completedAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([schoolId, teacherId, status, dueDate])
+  @@index([kind, status])
+}
+
+/// School-approved message templates (quick replies in Parent Connect —
+/// configurable data, not hardcoded strings).
+model MessageTemplate {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  /// parent-connect | …future kinds
+  kind      String   @default("parent-connect")
+  label     String
+  body      String
+  /// general | academic | attendance | behavior | wellbeing
+  category  String   @default("general")
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, kind, isActive])
 }

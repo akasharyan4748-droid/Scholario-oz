@@ -41,9 +41,9 @@ export function ModuleRouter({ active, onNavigate }: ModuleRouterProps) {
       {active === 'resources' && <TeacherResourceLibraryModule />}
       {active === 'app-reviews' && <ApplicationReviewsModule />}
       {active === 'ptm' && <PTMSchedulerModule />}
-      {active === 'behavior' && <StudentBehaviorModule />}
-      {active === 'parent-connect' && <ParentConnectModule />}
-      {active === 'mentoring' && <MentoringModule />}
+      {active === 'behavior' && <StudentBehaviorModule onNavigate={onNavigate} />}
+      {active === 'parent-connect' && <ParentConnectModule onNavigate={onNavigate} />}
+      {active === 'mentoring' && <MentoringModule onNavigate={onNavigate} />}
       {active === 'analytics' && <TeacherAnalyticsModule />}
       {active === 'communication' && <CommunicationModule />}
       {active === 'reviews' && <PerformanceReviewsModule />}

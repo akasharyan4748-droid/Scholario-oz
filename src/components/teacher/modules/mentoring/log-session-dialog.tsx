@@ -1,77 +1,249 @@
 'use client'
 
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, Lightbulb } from 'lucide-react'
-import { mentees } from '@/lib/mock/mentoring'
-import { toast } from 'sonner'
+/**
+ * Log Session dialog (TH-FE-3) — logs a real mentoring session via
+ * POST /api/teacher/mentoring/sessions. The server auto-creates the mentee
+ * assignment when the student is not yet assigned, and auto-creates a
+ * follow-up when a follow-up date is set — the dialog just gathers input.
+ */
 
-// Log Session modal. Renders nothing when `open` is false. The dialog owns
-// its own AnimatePresence so the parent just renders `<LogSessionDialog
-// open={...} onClose={...} />` once.
-export function LogSessionDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import type { SessionItem, StudentRef } from '@/lib/teacher-hub-types'
+import { PRIMARY_ACTION, SESSION_TYPE_OPTIONS, todayInputDate } from './shared'
+import type { LogSessionInput } from './hooks'
+
+interface LogSessionDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /** students the teacher may log sessions for (server-scoped) */
+  students: StudentRef[]
+  /** prefills the student when opened from a mentee */
+  defaultStudentId?: string
+  onLogSession: (input: LogSessionInput) => Promise<SessionItem>
+}
+
+const DEFAULT_TYPE = 'general'
+
+export function LogSessionDialog({
+  open,
+  onOpenChange,
+  students,
+  defaultStudentId,
+  onLogSession,
+}: LogSessionDialogProps) {
+  const [studentId, setStudentId] = useState('')
+  const [date, setDate] = useState(todayInputDate())
+  const [type, setType] = useState<string>(DEFAULT_TYPE)
+  const [discussion, setDiscussion] = useState('')
+  const [actionItems, setActionItems] = useState('')
+  const [duration, setDuration] = useState('')
+  const [followUpDate, setFollowUpDate] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  // Fresh defaults each time the dialog opens (prefill honours the mentee).
+  useEffect(() => {
+    if (!open) return
+    setStudentId(defaultStudentId ?? '')
+    setDate(todayInputDate())
+    setType(DEFAULT_TYPE)
+    setDiscussion('')
+    setActionItems('')
+    setDuration('')
+    setFollowUpDate('')
+    setSaving(false)
+  }, [open, defaultStudentId])
+
+  const handleSubmit = async () => {
+    if (!studentId) {
+      toast.error('Select a student first')
+      return
+    }
+    if (!discussion.trim()) {
+      toast.error('Add a note of what was discussed')
+      return
+    }
+    const items = actionItems
+      .split('\n')
+      .map((i) => i.trim())
+      .filter(Boolean)
+    const minutes = Math.round(Number(duration))
+    setSaving(true)
+    try {
+      await onLogSession({
+        studentId,
+        date: date || undefined,
+        type: type as LogSessionInput['type'],
+        discussion: discussion.trim(),
+        actionItems: items.length ? items : undefined,
+        durationMinutes:
+          duration !== '' && Number.isFinite(minutes) && minutes > 0 ? minutes : undefined,
+        followUpDate: followUpDate || undefined,
+      })
+      toast.success('Session logged')
+      onOpenChange(false)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not log the session')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-          onClick={onClose}
-        >
-          <div className="absolute inset-0 bg-background/60 backdrop-blur-md" />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 16 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 16 }}
-            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-[calc(100vw-1.5rem)] sm:max-w-lg rounded-2xl border border-border glass-strong shadow-premium-lg overflow-hidden"
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[calc(100vw-1.5rem)] sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-sm font-semibold">Log Mentoring Session</DialogTitle>
+          <DialogDescription className="text-xs">
+            A first session for a new student adds them to your mentees automatically.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Student</Label>
+            <Select value={studentId} onValueChange={setStudentId}>
+              <SelectTrigger className="w-full text-xs">
+                <SelectValue placeholder="Select student" />
+              </SelectTrigger>
+              <SelectContent>
+                {students.map((s) => (
+                  <SelectItem key={s.id} value={s.id} className="text-xs">
+                    {s.name} · {s.classLabel}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {students.length === 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                No students are in your mentoring scope yet.
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="ms-date">Date</Label>
+              <Input
+                id="ms-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Session type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="w-full text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SESSION_TYPE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value} className="text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ms-discussion">
+              Discussion <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="ms-discussion"
+              value={discussion}
+              onChange={(e) => setDiscussion(e.target.value)}
+              placeholder="What was discussed and observed…"
+              className="min-h-24 text-xs"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ms-actions">Action items</Label>
+            <Textarea
+              id="ms-actions"
+              value={actionItems}
+              onChange={(e) => setActionItems(e.target.value)}
+              placeholder="One per line, e.g. Share practice set by Friday"
+              className="min-h-16 text-xs"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Optional — one action item per line.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="ms-duration">Duration (min)</Label>
+              <Input
+                id="ms-duration"
+                type="number"
+                min={5}
+                max={240}
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="20"
+                className="text-xs"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ms-followup">Follow-up date</Label>
+              <Input
+                id="ms-followup"
+                type="date"
+                value={followUpDate}
+                onChange={(e) => setFollowUpDate(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+            className="rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/50"
           >
-            <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-5 text-white">
-              <button onClick={onClose} className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 hover:bg-white/25 transition-colors"><X className="h-4 w-4" /></button>
-              <h2 className="font-display text-lg font-bold">Log Mentoring Session</h2>
-              <p className="text-amber-50/90 text-xs mt-0.5">Record a 1-on-1 mentoring session</p>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1.5">Mentee</p>
-                <select className="w-full rounded-xl border border-border bg-card/60 px-3 py-2 text-sm outline-none focus:border-primary/50">
-                  {mentees.map((m) => <option key={m.id}>{m.name} — Roll #{m.rollNo}</option>)}
-                </select>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1.5">Topic</p>
-                <input placeholder="e.g. Academic progress & confidence building" className="w-full rounded-xl border border-border bg-card/60 px-3 py-2 text-sm outline-none focus:border-primary/50" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1.5">Duration</p>
-                  <select className="w-full rounded-xl border border-border bg-card/60 px-3 py-2 text-sm outline-none focus:border-primary/50">
-                    <option>15 min</option><option>20 min</option><option>25 min</option><option>30 min</option>
-                  </select>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1.5">Rating</p>
-                  <select className="w-full rounded-xl border border-border bg-card/60 px-3 py-2 text-sm outline-none focus:border-primary/50">
-                    <option>5 — Excellent</option><option>4 — Good</option><option>3 — Average</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1.5">Session Summary</p>
-                <textarea placeholder="What was discussed? Key observations..." rows={3} className="w-full rounded-xl border border-border bg-card/60 px-3 py-2 text-sm outline-none focus:border-primary/50 resize-none" />
-              </div>
-              <button
-                onClick={() => { toast.success('Session logged', { description: 'Mentoring session recorded' }); onClose() }}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 py-2.5 text-sm font-semibold text-white shadow-md"
-              >
-                <Lightbulb className="h-4 w-4" /> Save Session Log
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className={`${PRIMARY_ACTION} disabled:opacity-60`}
+          >
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : null}
+            Log Session
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

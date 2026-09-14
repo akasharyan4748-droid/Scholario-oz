@@ -2,7 +2,6 @@
 
 import { students } from '@/lib/mock/students'
 import { teachers } from '@/lib/mock/teachers'
-import { parentConversations } from '@/lib/mock/parent-connect'
 import type { SearchResultItem } from './types'
 
 type Role = 'principal' | 'teacher' | 'student' | 'superadmin' | 'parent'
@@ -65,22 +64,41 @@ export function searchPeople(q: string, role: Role): SearchResultItem[] {
     })
   }
 
-  // 4. PARENTS & GUARDIANS SEARCH
-  parentConversations.forEach((pc) => {
-    const title = pc.parentName
-    const subtitle = `${pc.relationship} of ${pc.studentName} (Roll #${pc.rollNo}) · ${pc.phone}`
-    if (matches(title) || matches(subtitle) || matches(pc.phone) || matches(pc.studentName)) {
+  // 4. PARENTS & GUARDIANS SEARCH — derived from the student roster
+  // (guardian + ward). The DB-backed /api/search guardians block is
+  // authoritative and supersedes these instant local rows when it responds;
+  // these keep the palette instant while typing.
+  const allowedParentWards =
+    role === 'teacher'
+      ? students.filter((s) => s.className === 'Class 2' || s.className === 'Class 2-A')
+      : role === 'student'
+        ? [] // students never enumerate other families
+        : students
+  const seenGuardians = new Set<string>()
+  allowedParentWards.forEach((s) => {
+    const guardianName = s.fatherName
+    if (!guardianName || seenGuardians.has(guardianName)) return
+    seenGuardians.add(guardianName)
+    const title = guardianName
+    const subtitle = `Guardian of ${s.name} · ${s.className}-${s.section} · Roll ${s.rollNo}`
+    const kw = `${guardianName} ${s.motherName ?? ''} ${s.guardianPhone ?? ''} parent guardian`
+    if (
+      matches(title, kw) ||
+      matches(subtitle) ||
+      matches(s.guardianPhone ?? '') ||
+      matches(s.name)
+    ) {
       results.push({
-        id: `prt-${pc.id}`,
-        title: pc.parentName,
-        subtitle: `${pc.relationship} of ${pc.studentName} · Phone: ${pc.phone}`,
+        id: `prt-stu-${s.id}`,
+        title,
+        subtitle: `Guardian of ${s.name} · Roll ${s.rollNo}${s.guardianPhone ? ` · ${s.guardianPhone}` : ''}`,
         category: 'Parents & Guardians',
         type: 'parent',
-        moduleKey: 'messaging',
+        moduleKey: role === 'teacher' ? 'parent-connect' : 'messaging',
         iconName: 'MessageSquare',
-        badge: pc.relationship,
+        badge: 'Guardian',
         badgeVariant: 'info',
-        keywords: `${pc.parentName} parent guardian ${pc.studentName} ${pc.phone}`,
+        keywords: `${guardianName} parent guardian ${s.name} ${s.className}-${s.section}`,
       })
     }
   })

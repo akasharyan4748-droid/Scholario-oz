@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { withUser } from '@/lib/api'
 import { requireStudent, authorizedMaterials } from '@/lib/learning'
+import { requireTeacher, visibleBehaviorWhere, classLabelOf } from '@/lib/teacher-hub'
 import type { SearchResultItem } from '@/lib/search-service/types'
 
 export const runtime = 'nodejs'
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
       },
     })
     students.forEach((s) => {
-      const cls = s.class ? `${s.class.name}${s.class.section ? `-${s.class.section}` : ''}` : 'Unassigned'
+      const cls = classLabelOf(s.class) || 'Unassigned'
       results.push({
         id: `stu-${s.id}`,
         title: s.user?.name ?? 'Unnamed student',
@@ -239,7 +240,8 @@ export async function GET(req: NextRequest) {
 
     // 6. PARENTS & GUARDIANS — from Student.guardian* fields (replaces mock
     // parentConversations). Staff-only: students/parents must not enumerate
-    // other families' contact details.
+    // other families' contact details. Teachers deep-link into Parent
+    // Connect; other staff land in messaging.
     if (user.role !== 'STUDENT' && user.role !== 'PARENT') {
       const guardians = await db.student.findMany({
         where: {
@@ -247,6 +249,7 @@ export async function GET(req: NextRequest) {
           OR: [
             { guardianName: { contains: q } },
             { guardianPhone: { contains: q } },
+            { user: { name: { contains: q } } },
           ],
         },
         take,
@@ -258,14 +261,14 @@ export async function GET(req: NextRequest) {
       guardians.forEach((s) => {
         if (!s.guardianName) return
         const ward = s.user?.name ?? 'student'
-        const cls = s.class ? `${s.class.name}${s.class.section ? `-${s.class.section}` : ''}` : null
+        const cls = classLabelOf(s.class) || null
         results.push({
           id: `grd-${s.id}`,
           title: s.guardianName,
           subtitle: `Guardian of ${ward}${cls ? ` · ${cls}` : ''}${s.guardianPhone ? ` · ${s.guardianPhone}` : ''}`,
           category: 'Parents & Guardians',
           type: 'parent',
-          moduleKey: 'messaging',
+          moduleKey: user.role === 'TEACHER' ? 'parent-connect' : 'messaging',
           iconName: 'Users',
           badge: 'Guardian',
           badgeVariant: 'info',
@@ -344,6 +347,178 @@ export async function GET(req: NextRequest) {
           keywords: `${g.name} study group collaborate ${g.subject?.name ?? ''}`,
         })
       })
+    }
+
+    // 8. TEACHER HUB (teacher role only) — the teacher's OWN conversations,
+    //    visible behavior records, active mentees and open follow-ups.
+    //    Strictly scope-respecting (requireTeacher); behavior snippets NEVER
+    //    include descriptions or private notes — identity + category only.
+    if (user.role === 'TEACHER') {
+      try {
+        const ctx = await requireTeacher(user)
+        const [conversations, behaviorRecords, mentees, followUps, categoryRows] =
+          await Promise.all([
+            db.parentConversation.findMany({
+              where: {
+                schoolId,
+                teacherId: user.id,
+                OR: [
+                  { parent: { name: { contains: q } } },
+                  { student: { user: { name: { contains: q } } } },
+                  { messages: { some: { body: { contains: q } } } },
+                ],
+              },
+              take: 4,
+              orderBy: { lastMessageAt: 'desc' },
+              include: {
+                parent: { select: { name: true } },
+                student: {
+                  select: {
+                    rollNo: true,
+                    class: { select: { name: true, section: true } },
+                    user: { select: { name: true } },
+                  },
+                },
+              },
+            }),
+            db.behaviorRecord.findMany({
+              where: {
+                ...visibleBehaviorWhere(ctx),
+                OR: [
+                  { student: { user: { name: { contains: q } } } },
+                  { category: { contains: q } },
+                  { type: { contains: q } },
+                ],
+              },
+              take: 4,
+              orderBy: { date: 'desc' },
+              include: {
+                student: {
+                  select: {
+                    rollNo: true,
+                    class: { select: { name: true, section: true } },
+                    user: { select: { name: true } },
+                  },
+                },
+              },
+            }),
+            db.mentoringAssignment.findMany({
+              where: {
+                schoolId,
+                teacherId: user.id,
+                active: true,
+                student: { user: { name: { contains: q } } },
+              },
+              take: 4,
+              orderBy: { createdAt: 'asc' },
+              include: {
+                student: {
+                  select: {
+                    rollNo: true,
+                    class: { select: { name: true, section: true } },
+                    user: { select: { name: true } },
+                  },
+                },
+              },
+            }),
+            db.teacherFollowUp.findMany({
+              where: {
+                schoolId,
+                teacherId: user.id,
+                status: 'open',
+                OR: [{ reason: { contains: q } }, { student: { user: { name: { contains: q } } } }],
+              },
+              take: 4,
+              orderBy: { dueDate: 'asc' },
+              include: {
+                student: {
+                  select: {
+                    rollNo: true,
+                    class: { select: { name: true, section: true } },
+                    user: { select: { name: true } },
+                  },
+                },
+              },
+            }),
+            db.behaviorCategory.findMany({ where: { schoolId }, select: { key: true, label: true } }),
+          ])
+
+        const categoryLabel = new Map(categoryRows.map((c) => [c.key, c.label]))
+        const labelOf = (s: { class: { name: string; section: string | null } | null }) => classLabelOf(s.class)
+
+        conversations.forEach((c) => {
+          results.push({
+            id: `pcv-${c.id}`,
+            title: c.parent.name ?? 'Guardian',
+            subtitle: `Parent of ${c.student.user?.name ?? 'student'} · ${labelOf(c.student)}`,
+            category: 'Parents & Guardians',
+            type: 'parent',
+            moduleKey: 'parent-connect',
+            iconName: 'MessageSquare',
+            badge: 'Conversation',
+            badgeVariant: 'info',
+            keywords: `conversation parent message thread ${c.student.user?.name ?? ''}`,
+            timestamp: c.lastMessageAt ? c.lastMessageAt.getTime() : undefined,
+          })
+        })
+
+        behaviorRecords.forEach((r) => {
+          const typeLabel =
+            r.type === 'positive' ? 'Positive' : r.type === 'concern' ? 'Concern' : 'Observation'
+          results.push({
+            id: `beh-${r.id}`,
+            title: r.student.user?.name ?? 'Student',
+            // Identity + category + date ONLY — never the description or notes.
+            subtitle: `${categoryLabel.get(r.category) ?? r.category} · ${typeLabel} · ${new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`,
+            category: 'Students',
+            type: 'behavior',
+            moduleKey: 'behavior',
+            iconName: 'Shield',
+            badge: typeLabel,
+            badgeVariant:
+              r.type === 'positive' ? 'success' : r.type === 'concern' ? 'destructive' : 'warning',
+            keywords: `behavior observation conduct ${r.category} ${r.type}`,
+            timestamp: r.date.getTime(),
+          })
+        })
+
+        mentees.forEach((m) => {
+          results.push({
+            id: `mnt-${m.studentId}`,
+            title: m.student.user?.name ?? 'Student',
+            subtitle: `Mentee · ${labelOf(m.student)}`,
+            category: 'Students',
+            type: 'mentee',
+            moduleKey: 'mentoring',
+            iconName: 'Heart',
+            badge: 'Mentee',
+            badgeVariant:
+              m.status === 'needs-support' || m.status === 'critical' ? 'warning' : 'success',
+            keywords: `mentee mentoring mentor support ${m.supportType}`,
+          })
+        })
+
+        const endOfToday = new Date()
+        endOfToday.setHours(23, 59, 59, 999)
+        followUps.forEach((f) => {
+          results.push({
+            id: `fup-${f.id}`,
+            title: f.reason,
+            subtitle: `${f.student?.user?.name ?? 'Student'} · due ${new Date(f.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`,
+            category: 'Students',
+            type: 'followup',
+            moduleKey: f.kind === 'parent-connect' ? 'parent-connect' : f.kind,
+            iconName: 'AlarmClock',
+            badge: f.dueDate <= endOfToday ? 'Overdue' : 'Follow-up',
+            badgeVariant: f.dueDate <= endOfToday ? 'destructive' : 'warning',
+            keywords: `follow-up due task ${f.kind} ${f.priority}`,
+            timestamp: f.dueDate.getTime(),
+          })
+        })
+      } catch {
+        // No teacher profile row (or scope resolution failed) — skip the
+        // Teacher Hub blocks entirely; the rest of search stays usable.
+      }
     }
 
     return { results }

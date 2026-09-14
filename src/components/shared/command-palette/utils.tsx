@@ -2,7 +2,7 @@
 
 import {
   Search, User, Users, GraduationCap, School, BookOpen, MessageSquare, FileText,
-  Megaphone, BookMarked, IndianRupee, Sparkles, Settings, LogOut,
+  Megaphone, BookMarked, IndianRupee, Sparkles, Settings, LogOut, Shield, Heart, AlarmClock,
 } from 'lucide-react'
 
 export function renderItemIcon(iconName: string) {
@@ -33,6 +33,12 @@ export function renderItemIcon(iconName: string) {
       return <Settings className="h-4 w-4" />
     case 'LogOut':
       return <LogOut className="h-4 w-4" />
+    case 'Shield':
+      return <Shield className="h-4 w-4" />
+    case 'Heart':
+      return <Heart className="h-4 w-4" />
+    case 'AlarmClock':
+      return <AlarmClock className="h-4 w-4" />
     default:
       return <Search className="h-4 w-4" />
   }
