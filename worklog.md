@@ -1262,3 +1262,19 @@ Stage Summary:
 - API contract: /api/student/learning/overview (aggregate + ?subjectId drill), /search?q= (cross-entity permission-aware), /activity {studyMaterialId, action opened|completed}, /bookmark {studyMaterialId} toggle; /api/student/flashcards (+/[deckId]?due=1, /review {cardId, grade} SM-2-lite server-side); /api/student/study-tasks CRUD; /api/student/study-groups (+/[id], /questions POST → PENDING); /api/study-materials POST extended (TEACHER+PRINCIPAL, status, studentIds targeting; DELETE ownership-aware); /api/search role-aware with student Learning section.
 - Deferred (honest): teacher/principal UI for publishing materials (APIs live + curl-verified — same as RB-1's deferral, now including teacher role); group moderation UI for staff (questions can be flipped in DB; no staff surface yet); palette content-search deep-linking into the material detail dialog (moduleKey lands on Learning overview).
 - Version: APP_VERSION 2.10.0.
+
+---
+Task ID: GIT-PUSH-3
+Agent: main (Z.ai Code)
+Task: Commit and push the Learning Experience 2.0 ship (v2.10.0) to GitHub main + development.
+
+Work Log:
+- Committed aee1353 "feat: Learning Experience 2.0 — Learning becomes the academic hub (v2.10.0)" (on top of a platform auto-commit fca5a8a over 6cb935d).
+- PUSHED (fast-forward, no force needed): main:main → 6cb935d…aee1353; main:development → 6cb935d…aee1353.
+- VERIFIED via ls-remote: refs/heads/main = aee1353, refs/heads/development = aee1353, refs/heads/stable = 6f6383c (sibling archive, untouched).
+- PAT used inline only (never written to any file or remote config).
+
+Stage Summary:
+- GitHub Scholario-oz now mirrors v2.10.0 on BOTH main and development. Off-platform backup current.
+- Remind user to rotate the PAT (it was shared in chat).
+- Version: APP_VERSION 2.10.0.
