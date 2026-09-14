@@ -11,7 +11,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
-    "db:seed-study-materials": "bun prisma/seed-study-materials.ts"
+    "db:seed-study-materials": "bun prisma/seed-study-materials.ts",
+    "db:seed-learning": "bun prisma/seed-learning.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

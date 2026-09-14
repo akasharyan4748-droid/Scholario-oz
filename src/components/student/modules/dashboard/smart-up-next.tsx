@@ -1,15 +1,26 @@
 'use client'
 
+/**
+ * SmartUpNext — the student's REAL work queue (spec §13: no fabricated
+ * urgency/progress/AI claims). Sources are all server-backed since L2D:
+ *   · CONTINUE — the last opened, unfinished learning material
+ *   · TASK     — the nearest incomplete study-planner task (due date)
+ *   · REVIEW   — the flashcards that are actually due (server count)
+ * Sections without real data disappear. The old mock-driven homework /
+ * assignment entries are gone with Classwork (spec §1).
+ */
+
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  ClipboardList, BookOpen, Sparkles, ArrowUpRight, Zap,
+  BookOpen, ListTodo, Sparkles, ArrowUpRight, Zap,
 } from 'lucide-react'
 import { GlassCard } from '@/components/shared/ui'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { assignments, homeworks } from '@/lib/mock/academics'
-import { flashcardStats } from '@/lib/mock/flashcards'
 import { formatDate } from '@/lib/format'
+import { apiFetch } from '../learning/api'
+import type { LearningMaterialCard, StudyTaskItem } from '../learning/types'
 
 interface SmartTask {
   priority: string
@@ -23,66 +34,83 @@ interface SmartTask {
   navKey: string
 }
 
-/** Derived from the student's REAL work queue (SR-UI §25 — no fabricated
- *  urgency/progress/AI claims): the nearest pending assignment, the
- *  nearest active homework, and the flashcards that are actually due. */
-function buildSmartTasks(): SmartTask[] {
-  const nextAssignment = [...assignments]
-    .filter((a) => a.status === 'Pending')
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
-  const nextHomework = [...homeworks]
-    .filter((h) => h.status === 'Active')
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
-  const masteryPct = Math.round(
-    (flashcardStats.masteredCards / flashcardStats.totalCards) * 100,
-  )
-  const tasks: SmartTask[] = []
-  if (nextAssignment) {
-    tasks.push({
-      priority: 'ASSIGNMENT',
-      priorityColor: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-      icon: <ClipboardList className="h-4 w-4" />,
-      iconBg: 'from-rose-500 to-pink-600',
-      title: nextAssignment.title,
-      desc: `Due ${formatDate(nextAssignment.dueDate)} · ${nextAssignment.marks} marks · ${nextAssignment.subject}`,
-      action: 'Open Assignment',
-      actionColor: 'text-rose-600 hover:bg-rose-500/10',
-      navKey: 'assignments',
-    })
-  }
-  if (nextHomework) {
-    tasks.push({
-      priority: 'HOMEWORK',
-      priorityColor: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-      icon: <BookOpen className="h-4 w-4" />,
-      iconBg: 'from-amber-500 to-orange-600',
-      title: nextHomework.title,
-      desc: `Due ${formatDate(nextHomework.dueDate)} · by ${nextHomework.assignedBy}`,
-      action: 'Open Homework',
-      actionColor: 'text-amber-600 hover:bg-amber-500/10',
-      navKey: 'homework',
-    })
-  }
-  tasks.push({
-    priority: 'REVIEW',
-    priorityColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-    icon: <Sparkles className="h-4 w-4" />,
-    iconBg: 'from-emerald-500 to-teal-600',
-    title: `Flashcards — ${flashcardStats.dueToday} cards due`,
-    desc: `Across your decks · ${masteryPct}% mastered so far`,
-    action: 'Review',
-    actionColor: 'text-emerald-600 hover:bg-emerald-500/10',
-    navKey: 'flashcards',
-  })
-  return tasks
-}
-
 interface SmartUpNextProps {
   onNavigate: (key: string) => void
+  continueLearning: LearningMaterialCard | null
 }
 
-export function SmartUpNext({ onNavigate }: SmartUpNextProps) {
-  const smartTasks = buildSmartTasks()
+export function SmartUpNext({ onNavigate, continueLearning }: SmartUpNextProps) {
+  // Real planner tasks — the nearest incomplete one is the queue's anchor.
+  const [nearestTask, setNearestTask] = useState<StudyTaskItem | null>(null)
+  const [dueCount, setDueCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch<{ tasks: StudyTaskItem[] }>('/api/student/study-tasks')
+      .then((d) => {
+        if (cancelled) return
+        const incomplete = d.tasks
+          .filter((t) => !t.completedAt)
+          .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'))
+        setNearestTask(incomplete[0] ?? null)
+      })
+      .catch(() => { /* the queue simply shows its other real items */ })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch<{ dueTotal: number }>('/api/student/flashcards')
+      .then((d) => { if (!cancelled) setDueCount(d.dueTotal) })
+      .catch(() => { if (!cancelled) setDueCount(null) })
+    return () => { cancelled = true }
+  }, [])
+
+  const tasks: SmartTask[] = []
+  if (continueLearning) {
+    tasks.push({
+      priority: 'CONTINUE',
+      priorityColor: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+      icon: <BookOpen className="h-4 w-4" />,
+      iconBg: 'from-violet-500 to-purple-600',
+      title: continueLearning.title,
+      desc: `${continueLearning.subjectName ?? 'Learning'} · pick up where you left off`,
+      action: 'Continue',
+      actionColor: 'text-violet-600 hover:bg-violet-500/10',
+      navKey: 'learning',
+    })
+  }
+  if (nearestTask) {
+    tasks.push({
+      priority: 'TASK',
+      priorityColor: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+      icon: <ListTodo className="h-4 w-4" />,
+      iconBg: 'from-amber-500 to-orange-600',
+      title: nearestTask.title,
+      desc: nearestTask.dueDate
+        ? `Due ${formatDate(nearestTask.dueDate)}${nearestTask.subjectName ? ` · ${nearestTask.subjectName}` : ''}`
+        : nearestTask.subjectName ?? 'From your study planner',
+      action: 'Open Planner',
+      actionColor: 'text-amber-600 hover:bg-amber-500/10',
+      navKey: 'planner',
+    })
+  }
+  if (dueCount !== null && dueCount > 0) {
+    tasks.push({
+      priority: 'REVIEW',
+      priorityColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+      icon: <Sparkles className="h-4 w-4" />,
+      iconBg: 'from-emerald-500 to-teal-600',
+      title: `Flashcards — ${dueCount} card${dueCount === 1 ? '' : 's'} due`,
+      desc: 'Across your decks · spaced repetition',
+      action: 'Review',
+      actionColor: 'text-emerald-600 hover:bg-emerald-500/10',
+      navKey: 'flashcards',
+    })
+  }
+
+  if (tasks.length === 0) return null
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -103,20 +131,25 @@ export function SmartUpNext({ onNavigate }: SmartUpNextProps) {
             </motion.div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-display text-base sm:text-lg font-bold tracking-tight">Smart Up Next</h3>
+                <h3 className="font-display text-base sm:text-lg font-bold tracking-tight">Up Next</h3>
                 <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
                   Your Queue
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Ranked by your actual deadlines — here&apos;s what to focus on right now.
+                From your deadlines and study activity.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="relative mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-          {smartTasks.map((item, i) => (
+        <div
+          className={cn(
+            'relative mt-4 grid grid-cols-1 gap-3',
+            tasks.length >= 3 ? 'md:grid-cols-3' : tasks.length === 2 ? 'md:grid-cols-2' : '',
+          )}
+        >
+          {tasks.map((item, i) => (
             <motion.div
               key={item.title}
               initial={{ opacity: 0, y: 12 }}
@@ -134,8 +167,8 @@ export function SmartUpNext({ onNavigate }: SmartUpNextProps) {
                   {item.icon}
                 </div>
               </div>
-              <p className="font-semibold text-sm leading-snug">{item.title}</p>
-              <p className="text-xs text-muted-foreground mt-1">{item.desc}</p>
+              <p className="font-semibold text-sm leading-snug line-clamp-2">{item.title}</p>
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.desc}</p>
               <span className={cn('mt-2.5 inline-flex items-center gap-1 text-xs font-semibold transition-colors', item.actionColor)}>
                 {item.action}
                 <ArrowUpRight className="h-3 w-3" />

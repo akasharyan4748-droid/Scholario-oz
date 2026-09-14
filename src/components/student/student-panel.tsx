@@ -2,22 +2,19 @@
 
 import { useMemo, useState } from 'react'
 import {
-  LayoutDashboard, User, CalendarDays, CalendarCheck, BookOpen, Award,
+  LayoutDashboard, User, CalendarDays, CalendarCheck, Award,
   IndianRupee, Megaphone, Bus, GraduationCap,
   ClipboardList, ShieldCheck, Crown, MessageCircle, Settings, ScrollText,
-  FolderOpen,
 } from 'lucide-react'
 import { AppShell, type NavGroup } from '@/components/shell/app-shell'
 import { StudentDashboard } from './modules/dashboard'
 import { ProfileModule } from './modules/profile'
 import { AttendanceModule } from './modules/attendance'
-import { ClassworkModule } from './modules/classwork'
 import { LearningModule } from './modules/learning'
 import { NoticesModule } from './modules/notices'
 import { ResultsModule } from './modules/results'
 import { FeesModule } from './modules/fees'
 import { StudentApplicationsModule } from './modules/applications'
-import { StudyMaterialsModule } from './modules/study-materials'
 import { MyCertificatesModule } from './modules/my-certificates'
 import { TimetableModule } from './modules/timetable'
 import { BusTrackingModule } from './modules/bus-tracking'
@@ -32,18 +29,23 @@ import { useStudentMessagingStore, countUnreadConversations } from '@/lib/store/
 import { POSITION_DEFS, filterActivePositions } from '@/lib/student-positions'
 import { useAcademicSession } from '@/lib/academic-session'
 import { useTransportAssignment } from '@/lib/store/transport-store'
-import { homeworks, assignments } from '@/lib/mock/academics'
 
 /**
- * STUDENT WORKSPACE NAVIGATION (final Student-experience IA).
+ * STUDENT WORKSPACE NAVIGATION (Learning Experience 2.0 IA — spec §3).
  *
  * Structure mirrors how a student thinks about their school life:
  *   HOME → who am I, what's happening today
- *   SCHOOL → the official record: timetable, attendance, classwork, results
- *   LEARNING → learning hub + the school's study-material repository
+ *   SCHOOL → the official record: timetable, attendance, results
+ *   LEARNING → THE academic hub (resources, flashcards, planner, groups)
  *   COMMUNITY → people & announcements: messages, notices
  *   RECORDS → the paperwork: fees, certificates, transport, applications
  *   ACCOUNT → settings
+ *
+ * Removed from the STUDENT workspace (per spec §1-§2/§55/§77 — clean
+ * removal, no dead routes): Classwork (Homework/Assignments — the teacher
+ * workspace keeps its own classwork experience and the backend stays) and
+ * the separate Study Materials destination (the repository now surfaces
+ * inside Learning). Also long-gone: My Progress, My Wellbeing, My Library.
  *
  * Every module is real (no placeholder/dead entries). Two entries are
  * permission-derived, never hardcoded:
@@ -54,7 +56,6 @@ import { homeworks, assignments } from '@/lib/mock/academics'
  *     (useTransportAssignment: roster opt-in or an assigned route).
  *
  * BADGES — real derived counts only, never decorative numbers:
- *   · Classwork — active homework + pending assignments (canonical data)
  *   · Messages  — unread conversations (messaging store)
  *   · Notices   — unread notifications (notification store)
  * No other module has a real "unread/pending count" concept → no badge.
@@ -72,7 +73,6 @@ const navGroups: NavGroup[] = [
     items: [
       { key: 'timetable', label: 'Timetable', icon: <CalendarDays className="h-4.5 w-4.5" /> },
       { key: 'attendance', label: 'Attendance', icon: <CalendarCheck className="h-4.5 w-4.5" /> },
-      { key: 'classwork', label: 'Classwork', icon: <BookOpen className="h-4.5 w-4.5" /> },
       { key: 'results', label: 'Results', icon: <Award className="h-4.5 w-4.5" /> },
     ],
   },
@@ -80,7 +80,6 @@ const navGroups: NavGroup[] = [
     label: 'Learning',
     items: [
       { key: 'learning', label: 'Learning', icon: <GraduationCap className="h-4.5 w-4.5" /> },
-      { key: 'study-materials', label: 'Study Materials', icon: <FolderOpen className="h-4.5 w-4.5" /> },
     ],
   },
   {
@@ -114,13 +113,12 @@ const navGroups: NavGroup[] = [
  * the consolidated navigation, and remembers which tab to open.
  */
 const LEGACY_MODULE: Record<string, string> = {
-  homework: 'classwork',
-  assignments: 'classwork',
   resources: 'learning',
   flashcards: 'learning',
   planner: 'learning',
   peer: 'learning',
-  materials: 'study-materials',
+  materials: 'learning',
+  'study-materials': 'learning',
   notifications: 'notices',
   announcements: 'notices',
   calendar: 'notices',
@@ -128,28 +126,22 @@ const LEGACY_MODULE: Record<string, string> = {
 
 /** Deep-link sub-tabs (e.g. dashboard "flashcards" → Learning · Flashcards). */
 const LEGACY_TAB: Record<string, string> = {
-  homework: 'homework',
-  assignments: 'assignments',
   flashcards: 'flashcards',
   announcements: 'announcements',
   calendar: 'calendar',
-  resources: 'resources',
+  resources: 'overview',
+  materials: 'overview',
+  'study-materials': 'overview',
   planner: 'planner',
-  peer: 'peer',
+  peer: 'groups',
   notifications: 'notifications',
 }
 
-/** Live badge overrides — derived unread/pending counts (never hardcoded). */
-function withLiveBadges(
-  items: NavGroup['items'],
-  unreadNotifs: number,
-  unreadMsgs: number,
-  classworkPending: number,
-) {
+/** Live badge overrides — derived unread counts (never hardcoded). */
+function withLiveBadges(items: NavGroup['items'], unreadNotifs: number, unreadMsgs: number) {
   return items.map((item) => {
     if (item.key === 'notices') return { ...item, badge: unreadNotifs > 0 ? unreadNotifs : undefined }
     if (item.key === 'messages') return { ...item, badge: unreadMsgs > 0 ? unreadMsgs : undefined }
-    if (item.key === 'classwork') return { ...item, badge: classworkPending > 0 ? classworkPending : undefined }
     return item
   })
 }
@@ -165,14 +157,6 @@ export function StudentPanel() {
   // Live nav badges — ALL derived from real stores/data, zero constants.
   const unreadNotifs = useUnreadStudentNotificationCount()
   const unreadMsgs = useStudentMessagingStore((s) => countUnreadConversations(s.conversations, s.seenAt))
-  // Classwork = active homework + pending assignments from the canonical
-  // academics dataset (the same source the Classwork module reads).
-  const classworkPending = useMemo(
-    () =>
-      homeworks.filter((h) => h.status === 'Active').length +
-      assignments.filter((a) => a.status === 'Pending').length,
-    [],
-  )
 
   // Class Captain / Monitor: the nav entry appears ONLY while the student
   // holds an ACTIVE position in the LIVE academic session — resolved
@@ -214,7 +198,7 @@ export function StudentPanel() {
     // it earns prominence while active and vanishes the moment it ends.
     {
       ...navGroups[0],
-      items: withLiveBadges(navGroups[0].items, unreadNotifs, unreadMsgs, classworkPending),
+      items: withLiveBadges(navGroups[0].items, unreadNotifs, unreadMsgs),
     },
     ...myClassGroup,
     ...navGroups.slice(1).map((g) => ({
@@ -224,7 +208,6 @@ export function StudentPanel() {
         g.items.filter((item) => item.key !== 'bus' || hasTransport),
         unreadNotifs,
         unreadMsgs,
-        classworkPending,
       ),
     })),
   ]
@@ -267,8 +250,6 @@ export function StudentPanel() {
         <StudentDashboard onNavigate={navigate} />
       ) : active === 'profile' ? (
         <ProfileModule onNavigate={navigate} />
-      ) : active === 'classwork' ? (
-        <ClassworkModule initialTab={pendingTab ?? undefined} onTabChange={setPendingTab} />
       ) : active === 'learning' ? (
         <LearningModule initialTab={pendingTab ?? undefined} onTabChange={setPendingTab} />
       ) : active === 'notices' ? (
@@ -290,7 +271,6 @@ const staticModules: Record<string, React.ReactNode> = {
   messages: <StudentMessagesModule />,
   settings: <StudentSettingsModule />,
   fees: <FeesModule />,
-  'study-materials': <StudyMaterialsModule />,
   'my-certificates': <MyCertificatesModule />,
   applications: <StudentApplicationsModule />,
   bus: <BusTrackingModule />,

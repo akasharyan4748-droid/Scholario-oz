@@ -4,8 +4,6 @@
  * StudentNotificationsModule — a data-driven notification feed DERIVED
  * from real sources (no fabricated random items):
  *
- *   Homework due     → mock academics `homeworks` (Active)
- *   Assignments      → mock academics `assignments` (Pending)
  *   Exams            → mock academics `exams` (Scheduled)
  *   Fee reminder     → students-store STU-58 (feeStatus ≠ Paid)
  *   Library overdue  → library-store issues (borrower STU-58, Overdue)
@@ -22,7 +20,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Bell, BookOpen, ClipboardList, Award, IndianRupee, Library, MessageCircle,
+  Bell, Award, IndianRupee, Library, MessageCircle,
   Megaphone, CheckCheck, ChevronRight, Inbox, CalendarDays,
 } from 'lucide-react'
 import { GlassCard, SectionHeading, StatusBadge } from '@/components/shared/ui'
@@ -30,7 +28,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime, formatDate, formatINR } from '@/lib/format'
-import { homeworks, assignments, exams } from '@/lib/mock/academics'
+import { exams } from '@/lib/mock/academics'
 import { announcements } from '@/lib/mock/operations'
 import { useStudentsStore, type StudentRecord } from '@/lib/store/students-store'
 import { useLibraryStore, type IssueRecord } from '@/lib/store/library-store'
@@ -46,11 +44,11 @@ import { DEMO_STUDENT_ID } from '../applications/student'
 // ─── Types ───────────────────────────────────────────────────────────
 
 export type StudentNotificationTarget =
-  | 'homework' | 'assignments' | 'results' | 'fees'
+  | 'results' | 'fees'
   | 'messages' | 'announcements' | 'timetable'
 
 export type StudentNotificationKind =
-  | 'homework' | 'assignment' | 'exam' | 'fee' | 'library' | 'message' | 'announcement' | 'timetable'
+  | 'exam' | 'fee' | 'library' | 'message' | 'announcement' | 'timetable'
 
 export interface StudentNotificationItem {
   id: string
@@ -100,30 +98,6 @@ export function buildStudentNotifications({ student, issues, conversations, seen
         target: 'timetable',
       })
     }
-  }
-
-  // Homework due — Active homework
-  for (const h of homeworks.filter((x) => x.status === 'Active')) {
-    items.push({
-      id: `hw-${h.id}`,
-      kind: 'homework',
-      title: `Homework due — ${h.subject}`,
-      description: `${h.title} · due ${formatDate(h.dueDate)} · by ${h.assignedBy}`,
-      at: h.assignedOn,
-      target: 'homework',
-    })
-  }
-
-  // Assignments — Pending
-  for (const a of assignments.filter((x) => x.status === 'Pending')) {
-    items.push({
-      id: `asg-${a.id}`,
-      kind: 'assignment',
-      title: `Assignment due — ${a.subject}`,
-      description: `${a.title} · due ${formatDate(a.dueDate)} · ${a.marks} marks`,
-      at: a.dueDate,
-      target: 'assignments',
-    })
   }
 
   // Exams — Scheduled announcements
@@ -216,8 +190,6 @@ export function useUnreadStudentNotificationCount(): number {
 // ─── Presentation meta ───────────────────────────────────────────────
 
 const KIND_META: Record<StudentNotificationKind, { icon: typeof Bell; gradient: string; label: string }> = {
-  homework: { icon: BookOpen, gradient: 'from-emerald-500 to-teal-600', label: 'Homework' },
-  assignment: { icon: ClipboardList, gradient: 'from-violet-500 to-purple-600', label: 'Assignment' },
   exam: { icon: Award, gradient: 'from-amber-500 to-orange-600', label: 'Exam' },
   fee: { icon: IndianRupee, gradient: 'from-rose-500 to-pink-600', label: 'Fees' },
   library: { icon: Library, gradient: 'from-teal-600 to-emerald-700', label: 'Library' },
@@ -258,7 +230,7 @@ export function StudentNotificationsModule({ onNavigate }: { onNavigate?: (key: 
     <div className="space-y-6">
       <SectionHeading
         title="Notifications"
-        subtitle="Everything that needs your attention — homework, fees, library & school news"
+        subtitle="Everything that needs your attention — exams, fees, library & school news"
         icon={<Bell className="h-5 w-5" />}
         action={
           <div className="flex items-center gap-2">
@@ -282,7 +254,7 @@ export function StudentNotificationsModule({ onNavigate }: { onNavigate?: (key: 
               </Badge>
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Derived live from homework, assignments, exams, fees, library, messages, timetable & announcements
+              Derived live from exams, fees, library, messages, timetable & announcements
             </p>
           </div>
         </div>

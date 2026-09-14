@@ -1,25 +1,33 @@
 'use client'
 
+/**
+ * KpiGrid — REAL metrics only (spec §13/§14): attendance (canonical
+ * records), latest exam score (canonical results store), flashcards due
+ * (server aggregate) and fees pending (the same fee engine as the Fees
+ * module). The former mock-driven "Pending Homework" KPI is gone with
+ * Classwork (spec §1) — a dashboard must never manufacture numbers.
+ */
+
 import {
-  CalendarCheck, BookOpen, Award, IndianRupee,
+  CalendarCheck, Layers, Award, IndianRupee,
 } from 'lucide-react'
 import { KpiCard } from '@/components/shared/kpi-card'
 import { formatINR } from '@/lib/format'
-import { homeworks } from '@/lib/mock/academics'
 import { useMyResults } from '@/lib/store/student-results-store'
 import { useAttendanceSnapshot } from './data'
 
 interface KpiGridProps {
   attendancePct: number
-  pendingHomeworkCount: number
+  /** Real due count from the server (null = still loading → hidden). */
+  dueFlashcards: number | null
   feePending: number
 }
 
-export function KpiGrid({ attendancePct, pendingHomeworkCount, feePending }: KpiGridProps) {
+export function KpiGrid({ attendancePct, dueFlashcards, feePending }: KpiGridProps) {
   // STU-ATT — sparkline + week delta derive from the canonical records.
   const attendance = useAttendanceSnapshot()
   // STU-RES — latest published result from the canonical results store
-  // (the SAME source the Results module reads — one result source, §34).
+  // (the SAME source the Results module reads — one result source).
   const results = useMyResults()
   const latest = results.latest
   const prevPct = results.trend.length >= 2 ? results.trend[results.trend.length - 2].pct : null
@@ -49,14 +57,16 @@ export function KpiGrid({ attendancePct, pendingHomeworkCount, feePending }: Kpi
         accent="emerald"
         delay={0.05}
       />
-      <KpiCard
-        label="Pending Homework"
-        value={pendingHomeworkCount}
-        icon={<BookOpen className="h-5 w-5" />}
-        trendLabel={`of ${homeworks.length} assigned`}
-        accent="amber"
-        delay={0.1}
-      />
+      {dueFlashcards !== null && (
+        <KpiCard
+          label="Flashcards Due"
+          value={dueFlashcards}
+          icon={<Layers className="h-5 w-5" />}
+          trendLabel={dueFlashcards > 0 ? 'Ready for review' : 'All caught up'}
+          accent={dueFlashcards > 0 ? 'violet' : 'emerald'}
+          delay={0.1}
+        />
+      )}
       <KpiCard
         label="Fees Pending"
         value={feePending}

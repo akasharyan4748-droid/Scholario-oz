@@ -12,12 +12,16 @@ export const runtime = 'nodejs'
 
 /// DELETE /api/study-materials/[id]
 ///
-/// PRINCIPAL-only removal: deletes the row AND the stored file (a missing
-/// file on disk does not block the row deletion — the metadata must never
-/// outlive its delete intent). Strictly school-scoped (RLS on schoolId).
+/// Ownership-aware removal (L2D §30/§34): PRINCIPAL deletes any material
+/// in their school; TEACHER deletes only materials THEY uploaded
+/// (uploadedById === user.id). Deletes the row AND the stored file (a
+/// missing file on disk does not block the row deletion — the metadata
+/// must never outlive its delete intent). Strictly school-scoped (RLS on
+/// schoolId).
 ///
 /// Returns the deleted row's metadata: { ok: true, data: StudyMaterialMeta }.
-/// 404 when the row does not exist for this school.
+/// 404 when the row does not exist for this school; FORBIDDEN when a
+/// teacher tries to remove someone else's upload.
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -30,6 +34,10 @@ export async function DELETE(
       const material = await db.studyMaterial.findUnique({ where: { id } })
       if (!material) throw new Error('NOT_FOUND')
       if (material.schoolId !== schoolId) throw new Error('NOT_FOUND')
+      // Teachers may remove ONLY their own uploads (principals: any).
+      if (user.role === 'TEACHER' && material.uploadedById !== user.id) {
+        throw new Error('FORBIDDEN')
+      }
 
       let subjectName: string | null = null
       if (material.subjectId) {
@@ -50,6 +58,6 @@ export async function DELETE(
 
       return toStudyMaterialMeta(material, subjectName)
     },
-    { roles: ['PRINCIPAL'] }
+    { roles: ['TEACHER', 'PRINCIPAL'] }
   )
 }

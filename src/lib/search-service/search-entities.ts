@@ -25,7 +25,7 @@ export function searchEntities(
   const results: SearchResultItem[] = [
     ...searchPeople(q, role),
     ...searchAcademic(q),
-    ...searchContent(q),
+    ...searchContent(q, role),
     ...searchFees(q),
     ...searchFeatures(q, groups),
   ]

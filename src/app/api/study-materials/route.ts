@@ -6,18 +6,27 @@ import {
   STUDY_MATERIAL_UPLOAD_DIR,
   STUDY_MATERIAL_MAX_BYTES,
   STUDY_MATERIAL_CATEGORIES,
+  STUDY_MATERIAL_STATUSES,
   STUDY_MATERIAL_MIME_TO_EXT,
   generateStudyMaterialFileName,
   toStudyMaterialMeta,
 } from '@/lib/study-materials'
+import { requireStudent, authorizedMaterials, type StudentContext } from '@/lib/learning'
+import type { StudyMaterial } from '@prisma/client'
 
 export const runtime = 'nodejs'
 
 /// GET /api/study-materials
 ///
 /// The school's study-material repository INDEX (metadata only — the
-/// stored fileName never leaves the server). Roles: STUDENT / TEACHER /
-/// PRINCIPAL; strictly school-scoped (RLS on schoolId).
+/// stored fileName never leaves the server). Strictly school-scoped.
+///
+///   STUDENT    → only PUBLISHED + authorized rows (whole-school, the
+///                student's class label, or explicitly targeted at the
+///                student — L2D spec §31/§33/§58)
+///   TEACHER /
+///   PRINCIPAL  → every status (draft | published | archived) for their
+///                school, so they can manage the lifecycle end-to-end
 ///
 /// Optional query filters (composable):
 ///   ?category=worksheet|notes|syllabus|sample-paper|revision|general
@@ -25,8 +34,7 @@ export const runtime = 'nodejs'
 ///   ?q=<text>                   — case-insensitive contains on
 ///                                 title OR description
 ///
-/// Returns newest first:
-///   { ok: true, data: StudyMaterialMeta[] }
+/// Returns newest first: { ok: true, data: StudyMaterialMeta[] }
 export async function GET(req: NextRequest) {
   return withUser(
     async (user) => {
@@ -37,14 +45,25 @@ export async function GET(req: NextRequest) {
       const subjectId = sp.get('subjectId')?.trim() || undefined
       const q = sp.get('q')?.trim().toLowerCase() || undefined
 
-      const rows = await db.studyMaterial.findMany({
-        where: {
-          schoolId,
-          ...(category ? { category } : {}),
-          ...(subjectId ? { subjectId } : {}),
-        },
-        orderBy: { createdAt: 'desc' },
-      })
+      let rows: StudyMaterial[]
+      let ctx: StudentContext | null = null
+
+      if (user.role === 'STUDENT') {
+        // Permission-aware index — the predicate is recomputed server-side
+        // from the session (student identity + class label + targeting).
+        ctx = await requireStudent(user)
+        rows = await authorizedMaterials(ctx, { subjectId })
+        if (category) rows = rows.filter((m) => m.category === category)
+      } else {
+        rows = await db.studyMaterial.findMany({
+          where: {
+            schoolId,
+            ...(category ? { category } : {}),
+            ...(subjectId ? { subjectId } : {}),
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      }
 
       // Resolve subject display names server-side (one query, id → name).
       const subjectIds = [...new Set(rows.map((m) => m.subjectId).filter((v): v is string => !!v))]
@@ -65,26 +84,32 @@ export async function GET(req: NextRequest) {
 
       return filtered.map((m) => toStudyMaterialMeta(m, m.subjectId ? nameById.get(m.subjectId) ?? null : null))
     },
-    { roles: ['STUDENT', 'TEACHER', 'PRINCIPAL'] }
+    { roles: ['STUDENT', 'TEACHER', 'PRINCIPAL'] },
   )
 }
 
 /// POST /api/study-materials
 ///
-/// PRINCIPAL-only upload into the school's repository. multipart/form-data:
+/// TEACHER + PRINCIPAL upload into the school's repository (L2D spec §30:
+/// teacher-created content flows into Learning once published). The
+/// schoolId ALWAYS comes from the session. multipart/form-data:
 ///   title        (required, non-empty)
 ///   description  (optional)
 ///   subjectId    (optional — must resolve to a Subject of THIS school)
-///   className    (optional, e.g. "2-A")
+///   className    (optional class label, e.g. "Grade 9 - A"; empty/null =
+///                 whole school)
 ///   category     (optional; one of general|worksheet|notes|syllabus|
 ///                 sample-paper|revision — default "general")
+///   status       (optional; draft|published|archived — default "published")
+///   studentIds   (optional, repeatable — specific-student targeting; every
+///                 id must be a Student of THIS school)
 ///   file         (required — max 20 MB; PDF, png/jpg/webp, plain text,
 ///                 doc/docx, ppt/pptx, xls/xlsx)
 ///
 /// The file is stored under db/uploads/study-materials with a generated
 /// safe fileName (server id + canonical extension — the user's filename
-/// never touches the filesystem), the row is created, and the metadata is
-/// returned: { ok: true, data: StudyMaterialMeta }.
+/// never touches the filesystem), the row + targeting rows are created,
+/// and the metadata is returned: { ok: true, data: StudyMaterialMeta }.
 export async function POST(req: NextRequest) {
   return withUser(
     async (user) => {
@@ -117,6 +142,26 @@ export async function POST(req: NextRequest) {
       const categoryRaw = String(form.get('category') ?? 'general').trim() || 'general'
       if (!(STUDY_MATERIAL_CATEGORIES as readonly string[]).includes(categoryRaw)) {
         throw new Error('Invalid category')
+      }
+
+      const statusRaw = String(form.get('status') ?? 'published').trim() || 'published'
+      if (!(STUDY_MATERIAL_STATUSES as readonly string[]).includes(statusRaw)) {
+        throw new Error('Invalid status')
+      }
+      const publishedAt = statusRaw === 'published' ? new Date() : null
+
+      // Specific-student targeting (L2D spec §31): every id must be a
+      // Student of THIS school — anything else rejects the whole upload.
+      const studentIds = [...new Set(
+        form.getAll('studentIds').map((v) => String(v).trim()).filter(Boolean),
+      )]
+      if (studentIds.length > 0) {
+        const valid = await db.student.count({
+          where: { schoolId, id: { in: studentIds } },
+        })
+        if (valid !== studentIds.length) {
+          throw new Error('studentIds contains a student outside this school')
+        }
       }
 
       const file = form.get('file')
@@ -155,11 +200,18 @@ export async function POST(req: NextRequest) {
           mimeType,
           sizeBytes: bytes.byteLength,
           uploadedById: user.id,
+          status: statusRaw,
+          publishedAt,
         },
       })
+      if (studentIds.length > 0) {
+        await db.studyMaterialTarget.createMany({
+          data: studentIds.map((studentId) => ({ studyMaterialId: row.id, studentId })),
+        })
+      }
 
       return toStudyMaterialMeta(row, subjectName)
     },
-    { roles: ['PRINCIPAL'] }
+    { roles: ['TEACHER', 'PRINCIPAL'] },
   )
 }

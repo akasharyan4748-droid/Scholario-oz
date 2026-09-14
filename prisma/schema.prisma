@@ -146,6 +146,16 @@ model Student {
   seatAssignments     ExamSeatAssignment[]
   resultOutcomes      ExamResultOutcome[]
   homeworkSubmissions HomeworkSubmission[]
+
+  // L2D — Learning Experience 2.0 (student-scoped, always school-scoped too
+  // via the parent rows: material/deck/group carry schoolId).
+  learningActivities  LearningActivity[]
+  learningBookmarks   LearningBookmark[]
+  studyTasks          StudyTask[]
+  studyGroupMembers   StudyGroupMember[]
+  studyGroupQuestions StudyGroupQuestion[]
+  flashcardReviews    FlashcardReviewState[]
+  materialTargets     StudyMaterialTarget[]
 }
 
 model Class {
@@ -202,6 +212,11 @@ model Subject {
   homeworks        Homework[]
   examAttendances  ExamAttendance[]
   classAssignments ClassSubjectAssignment[]
+
+  // L2D — Learning Experience 2.0 subject-linked entities.
+  flashcardDecks   FlashcardDeck[]
+  studyTasks       StudyTask[]
+  studyGroups      StudyGroup[]
 
   // Spec §12/§32: stable canonical identity per school — one subject per code.
   // Prevents future duplicate subject creation at the database level.
@@ -1176,6 +1191,191 @@ model StudyMaterial {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  /// L2D — publication lifecycle (spec §33): draft | published | archived.
+  /// Students only ever see `published` + authorized rows.
+  status      String    @default("published")
+  /// Set when the row is (re-)published; null while a draft stays unseen.
+  publishedAt DateTime?
+
+  targets     StudyMaterialTarget[]
+  activities  LearningActivity[]
+  bookmarks   LearningBookmark[]
+
   @@index([schoolId, category])
   @@index([schoolId, createdAt])
+  @@index([schoolId, status])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// L2D — LEARNING EXPERIENCE 2.0 (spec: Learning is the student's academic
+// hub — Overview / Flashcards / Planner / Groups, real data only).
+// StudyMaterial above stays the SINGLE source of truth for learning
+// resources (spec §54/§56/§57 — no duplicate resource models); the models
+// below add per-student learning state on top of it.
+// ─────────────────────────────────────────────────────────────────────
+
+/// Specific-student targeting on top of StudyMaterial.className (null =
+/// whole school, a class label = that class). A row here grants exactly one
+/// student access to exactly one material (teacher/principal assigned).
+model StudyMaterialTarget {
+  id              String        @id @default(cuid())
+  studyMaterialId String
+  studyMaterial   StudyMaterial @relation(fields: [studyMaterialId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+
+  @@unique([studyMaterialId, studentId])
+  @@index([studentId])
+}
+
+/// Real "opened / completed" activity per student per material — powers
+/// Continue Learning, Recently Opened and honest completion counts.
+model LearningActivity {
+  id              String        @id @default(cuid())
+  schoolId        String
+  studentId       String
+  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studyMaterialId String
+  studyMaterial   StudyMaterial @relation(fields: [studyMaterialId], references: [id], onDelete: Cascade)
+  openedAt        DateTime      @default(now())
+  lastOpenedAt    DateTime      @default(now())
+  completedAt     DateTime?
+
+  @@unique([studentId, studyMaterialId])
+  @@index([schoolId, studentId])
+  @@index([studentId, lastOpenedAt])
+}
+
+/// Bookmarked resources (spec §17 — persists across sessions, one row per
+/// student per material).
+model LearningBookmark {
+  id              String        @id @default(cuid())
+  schoolId        String
+  studentId       String
+  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studyMaterialId String
+  studyMaterial   StudyMaterial @relation(fields: [studyMaterialId], references: [id], onDelete: Cascade)
+  createdAt        DateTime      @default(now())
+
+  @@unique([studentId, studyMaterialId])
+  @@index([schoolId, studentId])
+}
+
+/// Flashcard deck (school-scoped; optional subject identity).
+model FlashcardDeck {
+  id          String          @id @default(cuid())
+  schoolId    String
+  subjectId   String?
+  subject     Subject?        @relation(fields: [subjectId], references: [id])
+  name        String
+  description String?
+  createdAt   DateTime        @default(now())
+
+  cards        FlashcardCard[]
+  reviewStates FlashcardReviewState[]
+
+  @@index([schoolId])
+}
+
+/// One card in a deck; `position` gives a stable study order.
+model FlashcardCard {
+  id      String   @id @default(cuid())
+  deckId  String
+  deck    FlashcardDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  front   String
+  back    String
+  position Int     @default(0)
+
+  reviewStates FlashcardReviewState[]
+
+  @@index([deckId])
+}
+
+/// SM-2-lite spaced-repetition state per student per card — the server is
+/// the ONLY place ease/interval/dueAt are computed (spec §22: track real
+/// review state; never pretend).
+model FlashcardReviewState {
+  id             String        @id @default(cuid())
+  studentId      String
+  student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  cardId         String
+  card           FlashcardCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  deckId         String
+  deck           FlashcardDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  ease           Float         @default(2.5)
+  intervalDays   Int           @default(0)
+  dueAt          DateTime      @default(now())
+  reps           Int           @default(0)
+  lapses         Int           @default(0)
+  lastReviewedAt DateTime?
+
+  @@unique([studentId, cardId])
+  @@index([studentId, dueAt])
+  @@index([deckId, studentId])
+}
+
+/// Personal study planner task (spec §23/§24) — real CRUD, real due dates,
+/// real completion. Optional subject link is the "resource-linked" hook.
+model StudyTask {
+  id          String    @id @default(cuid())
+  schoolId    String
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  title       String
+  subjectId   String?
+  subject     Subject? @relation(fields: [subjectId], references: [id])
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([schoolId, studentId])
+  @@index([studentId, dueDate])
+}
+
+/// Study group (school-scoped). Academic identity only — no social ranking,
+/// no helpfulness scores (spec §26).
+model StudyGroup {
+  id          String   @id @default(cuid())
+  schoolId    String
+  subjectId   String?
+  subject     Subject? @relation(fields: [subjectId], references: [id])
+  name        String
+  description String
+  createdAt   DateTime @default(now())
+
+  members   StudyGroupMember[]
+  questions StudyGroupQuestion[]
+
+  @@index([schoolId])
+}
+
+/// Membership row (one per student per group) — powers REAL member counts.
+model StudyGroupMember {
+  id        String     @id @default(cuid())
+  groupId   String
+  group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([groupId, studentId])
+  @@index([studentId])
+}
+
+/// A student question inside a group. Lands PENDING and stays invisible to
+/// classmates until a teacher/principal publishes it (spec §29 moderation).
+model StudyGroupQuestion {
+  id        String     @id @default(cuid())
+  groupId   String
+  group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  schoolId  String
+  studentId String
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  question  String
+  status    String     @default("pending") // pending | published | hidden
+  createdAt DateTime   @default(now())
+
+  @@index([groupId, status])
+  @@index([schoolId])
 }

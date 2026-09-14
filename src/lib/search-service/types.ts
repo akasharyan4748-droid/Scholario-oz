@@ -17,7 +17,8 @@ export interface SearchResultItem {
     | 'Fees & Finance'
     | 'Features & Pages'
     | 'Settings & System'
-  type: 'student' | 'teacher' | 'class' | 'parent' | 'exam' | 'notice' | 'book' | 'fee' | 'feature' | 'setting' | 'subject'
+    | 'Learning'
+  type: 'student' | 'teacher' | 'class' | 'parent' | 'exam' | 'notice' | 'book' | 'fee' | 'feature' | 'setting' | 'subject' | 'material' | 'deck' | 'group'
   moduleKey: string
   iconName: string
   badge?: string

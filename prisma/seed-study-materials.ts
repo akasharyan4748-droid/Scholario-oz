@@ -1,14 +1,17 @@
 // ============================================================
 // seed-study-materials — RB-1 demo seed for the Study Materials
-// repository (Demo School of Scholario).
+// repository (Demo School of Scholario). L2D-1 update: rows now carry
+// the publication lifecycle (status=published + publishedAt) and target
+// the REAL class label of the demo student (resolved at runtime from the
+// DB — never a hardcoded class string, so targeting can never drift from
+// the authorization predicate).
 //
 // Creates 10 REALISTIC materials (worksheets, notes, syllabus, sample
-// papers, revision packs) for the demo school — mostly Class 2-A (the
-// demo student's class) plus a couple of whole-school items — and writes
-// REAL, tiny, valid files into db/uploads/study-materials (hand-built
-// minimal PDFs with correct xref tables + plain-text sheets; total well
-// under 200 KB). Idempotent: rows + files for the demo school are
-// replaced on every run.
+// papers, revision packs) for the demo school — mostly the demo student's
+// class plus a couple of whole-school items — and writes REAL, tiny, valid
+// files into db/uploads/study-materials (hand-built minimal PDFs with
+// correct xref tables + plain-text sheets; total well under 200 KB).
+// Idempotent: rows + files for the demo school are replaced on every run.
 //
 // Run: bun run db:seed-study-materials   (or: bun prisma/seed-study-materials.ts)
 // ============================================================
@@ -69,13 +72,12 @@ interface SeedMaterial {
   body: string[]
   createdAt: string // ISO — staggered so "newest first" is meaningful
 }
-
 const SEED: SeedMaterial[] = [
   {
     title: 'Maths Worksheet 7 — Addition & Subtraction to 100',
     description: 'Twenty word problems revising two-digit carrying and borrowing. Bring the finished sheet to Friday\u2019s Maths period.',
     subject: 'Mathematics',
-    className: '2-A',
+    className: 'MY-CLASS',
     category: 'worksheet',
     kind: 'pdf',
     body: [
@@ -95,7 +97,7 @@ const SEED: SeedMaterial[] = [
     title: 'English Grammar Notes — Nouns & Verbs',
     description: 'Class notes from the English grammar unit: what nouns and verbs are, spotting them in sentences, and ten practice sentences.',
     subject: 'English',
-    className: '2-A',
+    className: 'MY-CLASS',
     category: 'notes',
     kind: 'pdf',
     body: [
@@ -112,10 +114,10 @@ const SEED: SeedMaterial[] = [
     createdAt: '2026-09-08T11:00:00.000Z',
   },
   {
-    title: 'Class 2 Syllabus Overview — AY 2026-27',
-    description: 'Term-wise syllabus outline for every subject of Class 2 (April 2026 - March 2027), including assessment weeks and holidays.',
+    title: 'Class Syllabus Overview — AY 2026-27',
+    description: 'Term-wise syllabus outline for every subject (April 2026 - March 2027), including assessment weeks and holidays.',
     subject: null,
-    className: '2-A',
+    className: 'MY-CLASS',
     category: 'syllabus',
     kind: 'pdf',
     body: [
@@ -135,7 +137,7 @@ const SEED: SeedMaterial[] = [
     title: 'English Sample Paper — Term 2 Examination',
     description: 'Full-length sample paper matching the Term 2 exam pattern: comprehension passage, grammar fill-ups, spelling dictation and guided writing.',
     subject: 'English',
-    className: '2-A',
+    className: 'MY-CLASS',
     category: 'sample-paper',
     kind: 'pdf',
     body: [
@@ -154,7 +156,7 @@ const SEED: SeedMaterial[] = [
     title: 'Maths Revision Sheet — Shapes & Patterns',
     description: 'One-page revision of 2-D shapes, edges & corners, and growing number patterns before the Term 2 unit test.',
     subject: 'Mathematics',
-    className: '2-A',
+    className: 'MY-CLASS',
     category: 'revision',
     kind: 'pdf',
     body: [
@@ -172,7 +174,7 @@ const SEED: SeedMaterial[] = [
     title: 'Mental Sums Practice — Daily Five Minutes',
     description: 'A plain-text drill sheet of thirty mental sums (doubles, number bonds to 20, skip counting). Aim for five minutes a day.',
     subject: 'Mathematics',
-    className: '2-A',
+    className: 'MY-CLASS',
     category: 'worksheet',
     kind: 'txt',
     body: [
@@ -192,7 +194,7 @@ const SEED: SeedMaterial[] = [
     title: 'Handwriting Practice — Capital Letters',
     description: 'Trace-and-copy practice lines for capital A to Z in four-line format. One page per week is enough.',
     subject: null,
-    className: '2-A',
+    className: 'MY-CLASS',
     category: 'worksheet',
     kind: 'txt',
     body: [
@@ -251,7 +253,7 @@ const SEED: SeedMaterial[] = [
     title: 'Science Revision — Living & Non-Living Things',
     description: 'Revision card for the EVS/Science unit: what makes something living, and sorting exercises with pictures from the class board.',
     subject: null,
-    className: '2-A',
+    className: 'MY-CLASS',
     category: 'revision',
     kind: 'pdf',
     body: [
@@ -288,6 +290,17 @@ async function main() {
     where: { schoolId: school.id, role: 'PRINCIPAL' },
     select: { id: true },
   })
+
+  // L2D-1 — resolve the DEMO STUDENT's real class label (the student the
+  // demo login chip authenticates). Class targeting must match the exact
+  // label the authorization predicate compares against (Class.name).
+  const demoStudentUser = await db.user.findUnique({
+    where: { email: 'student1@demoschool.edu' },
+    include: { student: { include: { class: { select: { name: true } } } } },
+  })
+  const demoClassLabel = demoStudentUser?.student?.class?.name ?? null
+  const targetClass = (raw: string | null): string | null =>
+    raw === 'MY-CLASS' ? demoClassLabel : raw
 
   // Idempotency — drop this school's existing rows AND their bytes.
   const existing = await db.studyMaterial.findMany({ where: { schoolId: school.id } })
@@ -330,13 +343,15 @@ async function main() {
           item.subject === 'Mathematics' ? mathsId
           : item.subject === 'English' ? englishId
           : null,
-        className: item.className,
+        className: targetClass(item.className),
         category: item.category,
         fileName,
         originalName,
         mimeType,
         sizeBytes: bytes.byteLength,
         uploadedById: principal?.id ?? null,
+        status: 'published',
+        publishedAt: new Date(item.createdAt),
         createdAt: new Date(item.createdAt),
       },
     })
@@ -345,6 +360,8 @@ async function main() {
   const count = await db.studyMaterial.count({ where: { schoolId: school.id } })
   console.log(`✅ Seeded ${count} study materials for ${school.name} (id ${school.id}).`)
   console.log(`   Files written to db/uploads/study-materials — total ${(totalBytes / 1024).toFixed(1)} KB.`)
+  if (demoClassLabel) console.log(`   Class-targeted materials aim at the demo student's class: "${demoClassLabel}".`)
+  else console.log('   ⚠️ Demo student not found / has no class — class targeting is NULL (whole school).')
 }
 
 main()

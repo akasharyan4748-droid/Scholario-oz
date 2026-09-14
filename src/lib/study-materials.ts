@@ -31,6 +31,10 @@ export const STUDY_MATERIAL_CATEGORIES = [
 ] as const
 export type StudyMaterialCategory = (typeof STUDY_MATERIAL_CATEGORIES)[number]
 
+/** Publication lifecycle (L2D spec §33) — students see `published` only. */
+export const STUDY_MATERIAL_STATUSES = ['draft', 'published', 'archived'] as const
+export type StudyMaterialStatus = (typeof STUDY_MATERIAL_STATUSES)[number]
+
 /** Upload ceiling — 20 MB (bytes). */
 export const STUDY_MATERIAL_MAX_BYTES = 20 * 1024 * 1024
 
@@ -67,6 +71,8 @@ export type StudyMaterialMeta = {
   subjectName: string | null
   className: string | null
   category: string
+  status: string
+  publishedAt: Date | null
   originalName: string
   sizeBytes: number
   mimeType: string
@@ -86,6 +92,8 @@ export function toStudyMaterialMeta(
     subjectName,
     className: m.className,
     category: m.category,
+    status: m.status,
+    publishedAt: m.publishedAt,
     originalName: m.originalName,
     sizeBytes: m.sizeBytes,
     mimeType: m.mimeType,
