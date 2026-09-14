@@ -1199,3 +1199,22 @@ Stage Summary:
 - API contract (all { ok, data } / { ok:false, error }; erp_session cookie): GET /api/study-materials?category=&subjectId=&q= → metadata array (id,title,description,subjectId,subjectName,className,category,originalName,sizeBytes,mimeType,createdAt) newest-first, fileName server-private; GET /api/study-materials/[id]/download → authorized stream (Content-Type, Content-Disposition attachment originalName, Content-Length, no-store, nosniff; 401/404 otherwise); POST /api/study-materials (multipart title/description?/subjectId?/className?/category/file) PRINCIPAL-only with 20MB + MIME allowlist + safe generated fileName; DELETE /api/study-materials/[id] PRINCIPAL-only (row + file).
 - Deferred (honesty): Principal upload UI this round (APIs live + curl-verified); teacher/principal surfaces for study materials beyond the role-gated read API.
 - Version: APP_VERSION 2.9.1.
+
+---
+Task ID: GIT-PUSH-2
+Agent: main (Z.ai Code)
+Task: Push the verified v2.9.1 restoration state to GitHub main and development branches using the user's fresh PAT.
+
+Work Log:
+- Forensics: local repo on branch main @ 6cb935d ("rebuild lost v2.9.0 deltas as v2.9.1"), working tree clean, APP_VERSION 2.9.1, dev :3000 healthy (/api/app-version → {"version":"2.9.1"}, / → 200). git remote origin was still wiped from the platform rollback — no named remote re-created (PAT used inline only, NEVER stored in any file).
+- Remote inspection (git ls-remote + fetch): remote development & stable had moved to 6f6383c ("feat: My Progress v2 — Student Growth OS rebuild", APP_VERSION 2.7.0, still contains modules/progress.tsx + my-library.tsx + wellbeing.tsx, ZERO study-materials, ZERO filterActivePositions) — i.e. the lost sibling sandbox DID successfully push an INTERMEDIATE 2.7.0-era state before it died; the final 2.9.0 removal work never made it. Remote main was a43925e (tour-consent-2 old-generation archive).
+- Safety archives created BEFORE any force-push (local branches): archive/remote-main-pre-2.9.1 (= a43925e) and archive/sibling-v2.7.0 (= 6f6383c). Nothing is lost; the sibling era also remains on remote branch stable.
+- PUSHED (force, user-instructed): main:main → a43925e…6cb935d (forced update); main:development → 6f6383c…6cb935d (forced update).
+- VERIFIED via ls-remote: refs/heads/main = 6cb935d, refs/heads/development = 6cb935d, refs/heads/stable = 6f6383c (untouched archive).
+- The two histories had diverged at 2127d7f (SWR-1 rebuild line vs sibling release line), hence force was required; both prior remote tips are preserved (remote stable + local archive branches).
+
+Stage Summary:
+- GitHub Scholario-oz now holds the verified v2.9.1 (My Progress + My Library + My Wellbeing removed end-to-end, Study Materials server-authorized repository, session-scoped filterActivePositions, assignment-conditional Transport) on BOTH main and development — the off-platform backup the incident post-mortem demanded.
+- Sibling 2.7.0-era work preserved at remote stable + local archive/sibling-v2.7.0; old-generation tour-consent archive preserved at local archive/remote-main-pre-2.9.1.
+- PAT handling: token used inline in push/fetch/ls-remote commands only; no remote config written; token not written to any file. Remind user this PAT was shared in chat — rotate it again if this conversation log is ever exposed.
+- Version: APP_VERSION 2.9.1. Next ship after any further work: bump + push again (same one-shot URL pattern).
