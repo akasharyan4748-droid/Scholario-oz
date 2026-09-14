@@ -4,6 +4,7 @@ import { MotionConfig } from "framer-motion";
 import "./globals.css";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/shared/theme-provider";
+import { VersionGuard } from "@/components/shared/version-guard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,6 +47,9 @@ export default function RootLayout({
               respects the OS "prefers-reduced-motion" setting. */}
           <MotionConfig reducedMotion="user">
             {children}
+            {/* VersionGuard: self-heals any tab running a stale bundle
+                (polls /api/app-version and hard-reloads on mismatch). */}
+            <VersionGuard />
             <SonnerToaster position="bottom-right" closeButton />
           </MotionConfig>
         </ThemeProvider>
