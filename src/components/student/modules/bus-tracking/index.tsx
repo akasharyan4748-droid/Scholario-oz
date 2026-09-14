@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bus } from 'lucide-react'
-import { GlassCard, SectionHeading } from '@/components/shared/ui'
+import { GlassCard } from '@/components/shared/ui'
 import { myBusRoute, myBusStops } from '@/lib/mock/bus-tracking'
 import { KpiRow } from './kpi-row'
 import { LiveMap } from './live-map'
@@ -37,11 +36,11 @@ export function BusTrackingModule() {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="My School Bus"
-        subtitle="Live tracking for Route 4 · Sohna Road & Sector 49"
-        icon={<Bus className="h-5 w-5" />}
-      />
+      {/* LR-1 — compact context line, no giant module title (Transport
+          stays otherwise untouched: it is a strong module by design). */}
+      <p className="truncate text-xs text-muted-foreground">
+        Live tracking · Route 4 · Sohna Road & Sector 49
+      </p>
 
       <KpiRow eta={eta} speed={speed} stopsToGo={stopsToGo} currentStopIdx={currentStopIdx} />
 

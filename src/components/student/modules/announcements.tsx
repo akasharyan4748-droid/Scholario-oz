@@ -1,188 +1,286 @@
 'use client'
 
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+/**
+ * LR-1 — AnnouncementsModule (Notices · Announcements tab).
+ *
+ * REBUILT off static mock data onto the REAL school announcements feed
+ * (GET /api/student/notices — Notification rows published by the school,
+ * audience-scoped, per-user read state). Per the Scholario no-duplicate-
+ * module-title rule there is NO big "Announcements" heading — the Notices
+ * tab bar above already says where you are; this tab opens straight into
+ * a scannable premium feed:
+ *
+ *   [All] [Unread] [Important]                    5 notices
+ *   ─────────────────────────────────────────────────────
+ *   ● Robotics Workshop Registration — open   [Important]
+ *     Class 9 · Dr. Ananya Iyer · 2 Sep
+ *     The school has published "Robotics Workshop…
+ *
+ * Every row: unread dot, title, audience chip (category), publisher,
+ * date, priority, expandable details. Opening a row marks it read
+ * (server-persisted NotificationRead — survives reloads).
+ */
+
+import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 import {
-  Megaphone, Pin, Filter, Calendar, User, Sparkles, AlertCircle,
-  PartyPopper, BookOpen, GraduationCap, ChevronRight,
+  AlertTriangle, ChevronDown, RotateCcw, Megaphone, CheckCheck,
 } from 'lucide-react'
-import { GlassCard, SectionHeading, StatusBadge, GradientAvatar } from '@/components/shared/ui'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { announcements, noticeBoard } from '@/lib/mock/operations'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import { useServerNotices, type ServerNotice } from '@/lib/store/server-notices-store'
 import { formatDate } from '@/lib/format'
 
-const categoryConfig: Record<string, { bg: string; text: string; gradient: string; icon: React.ReactNode; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'primary' }> = {
-  Event: { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', gradient: 'from-emerald-400 to-teal-500', icon: <PartyPopper className="h-4 w-4" />, variant: 'success' },
-  Academic: { bg: 'bg-violet-500/10', text: 'text-violet-600 dark:text-violet-400', gradient: 'from-violet-400 to-purple-500', icon: <BookOpen className="h-4 w-4" />, variant: 'primary' },
-  Holiday: { bg: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', gradient: 'from-amber-400 to-orange-500', icon: <Sparkles className="h-4 w-4" />, variant: 'warning' },
-  Urgent: { bg: 'bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400', gradient: 'from-rose-400 to-pink-500', icon: <AlertCircle className="h-4 w-4" />, variant: 'danger' },
-  General: { bg: 'bg-cyan-500/10', text: 'text-cyan-600 dark:text-cyan-400', gradient: 'from-cyan-400 to-sky-500', icon: <Megaphone className="h-4 w-4" />, variant: 'info' },
+// ─── Filters ─────────────────────────────────────────────────────────
+
+type FilterKey = 'all' | 'unread' | 'important'
+
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'unread', label: 'Unread' },
+  { key: 'important', label: 'Important' },
+]
+
+function isImportant(n: ServerNotice): boolean {
+  return n.priority === 'HIGH' || n.priority === 'URGENT'
 }
 
+// ─── Module ──────────────────────────────────────────────────────────
+
 export function AnnouncementsModule() {
-  const [filter, setFilter] = useState('all')
+  const notices = useServerNotices((s) => s.notices)
+  const loading = useServerNotices((s) => s.loading)
+  const error = useServerNotices((s) => s.error)
+  const refresh = useServerNotices((s) => s.refresh)
 
-  const filtered = filter === 'all'
-    ? announcements
-    : announcements.filter((a) => a.category.toLowerCase() === filter)
+  const [filter, setFilter] = useState<FilterKey>('all')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="Announcements"
-        subtitle="Stay updated with the latest from school"
-        icon={<Megaphone className="h-5 w-5" />}
-        action={
-          <div className="flex items-center gap-2">
-            <StatusBadge status={`${announcements.length} notices`} variant="primary" dot />
-          </div>
-        }
-      />
+  // Freshness on mount (the panel hydrate already warmed the cache).
+  useEffect(() => {
+    if (useServerNotices.getState().notices === null || useServerNotices.getState().error) {
+      void refresh()
+    }
+  }, [refresh])
 
-      {/* Notice board (pinned) */}
-      <GlassCard className="p-3 sm:p-4 lg:p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="font-semibold text-sm flex items-center gap-2">
-              <Pin className="h-4 w-4 text-rose-500" /> Pinned Notice Board
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Important dates & upcoming activities</p>
-          </div>
-          <StatusBadge status="Live" variant="success" dot />
+  const unreadCount = useMemo(() => (notices ?? []).filter((n) => !n.read).length, [notices])
+
+  const filtered = useMemo(() => {
+    if (!notices) return []
+    switch (filter) {
+      case 'unread': return notices.filter((n) => !n.read)
+      case 'important': return notices.filter(isImportant)
+      default: return notices
+    }
+  }, [notices, filter])
+
+  // ── States: error → skeleton → empty → feed ───────────────────────
+  if (error && !notices) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card py-16 text-center">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
+          <AlertTriangle className="h-5 w-5" aria-hidden />
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {noticeBoard.map((n, i) => (
-            <motion.div
-              key={n.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.06 }}
-              whileHover={{ y: -3 }}
-              className="group relative overflow-hidden rounded-2xl border border-border bg-card/40 p-4 hover:shadow-premium transition-all"
-            >
-              <div className={`absolute -top-8 -right-8 h-20 w-20 rounded-full opacity-20 blur-2xl`} style={{ background: n.color }} />
-              <div className="relative">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-2 w-2 rounded-full" style={{ background: n.color }} />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{n.tag}</span>
-                </div>
-                <p className="font-semibold text-sm leading-tight">{n.title}</p>
-                <div className="flex items-center gap-1 mt-2 text-[11px] text-muted-foreground">
-                  <Calendar className="h-3 w-3" />
-                  {formatDate(n.date)}
-                </div>
+        <div>
+          <p className="text-sm font-medium text-foreground">Something went wrong</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            We couldn&apos;t load your announcements right now.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => void refresh()} className="gap-1.5">
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Try again
+        </Button>
+      </div>
+    )
+  }
+
+  if (!notices) {
+    // Skeleton matches the final feed layout (toolbar + rows).
+    return (
+      <div className="space-y-4" aria-busy="true" aria-label="Loading announcements">
+        <div className="flex items-center gap-2">
+          {FILTERS.map((f) => <Skeleton key={f.key} className="h-7 w-16 rounded-full" />)}
+          <Skeleton className="ml-auto h-4 w-20" />
+        </div>
+        <div className="divide-y divide-border/60 rounded-xl border border-border bg-card">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-start gap-3 px-4 py-3.5">
+              <Skeleton className="mt-1.5 h-2 w-2 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-1/2" />
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
-      </GlassCard>
+      </div>
+    )
+  }
 
-      {/* Filter tabs + announcements list */}
-      <Tabs defaultValue="all" value={filter} onValueChange={setFilter}>
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <h3 className="font-display text-lg font-bold">All Announcements</h3>
-          </div>
-        </div>
-        <TabsList className="bg-card/60 backdrop-blur w-full justify-start overflow-x-auto no-scrollbar h-auto flex-wrap">
-          <TabsTrigger value="all">All ({announcements.length})</TabsTrigger>
-          <TabsTrigger value="event">Events ({announcements.filter((a) => a.category === 'Event').length})</TabsTrigger>
-          <TabsTrigger value="academic">Academic ({announcements.filter((a) => a.category === 'Academic').length})</TabsTrigger>
-          <TabsTrigger value="holiday">Holidays ({announcements.filter((a) => a.category === 'Holiday').length})</TabsTrigger>
-          <TabsTrigger value="general">General ({announcements.filter((a) => a.category === 'General').length})</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={filter} className="mt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <AnimatePresence mode="popLayout">
-              {filtered.map((a, i) => {
-                const c = categoryConfig[a.category] ?? categoryConfig.General
-                return (
-                  <motion.div
-                    key={a.id}
-                    layout
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ delay: i * 0.06 }}
-                  >
-                    <GlassCard className="p-3 sm:p-4 lg:p-5 h-full" hover>
-                      <div className="flex items-start gap-3 mb-3">
-                        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${c.gradient} text-white shadow-md`}>
-                          {c.icon}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="font-semibold text-sm leading-tight">{a.title}</p>
-                            <StatusBadge status={a.category} variant={c.variant} />
-                          </div>
-                          <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted-foreground flex-wrap">
-                            <span className="flex items-center gap-0.5"><Calendar className="h-3 w-3" /> {formatDate(a.date)}</span>
-                            <span className="text-border">·</span>
-                            <span className="flex items-center gap-0.5"><User className="h-3 w-3" /> {a.postedBy}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{a.content}</p>
-                      <div className="mt-4 flex items-center justify-between pt-3 border-t border-border">
-                        <div className="flex items-center gap-2">
-                          <GradientAvatar name={a.postedBy} size="sm" />
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-medium truncate">{a.postedBy}</p>
-                            <p className="text-[10px] text-muted-foreground">School Administration</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                            For: {a.audience}
-                          </span>
-                        </div>
-                      </div>
-                    </GlassCard>
-                  </motion.div>
-                )
-              })}
-            </AnimatePresence>
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {/* Quick categories */}
-      <GlassCard className="p-3 sm:p-4 lg:p-5">
-        <h3 className="font-semibold text-sm mb-4 flex items-center gap-2">
-          <GraduationCap className="h-4 w-4 text-primary" /> Browse by Category
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {Object.entries(categoryConfig).map(([cat, c], i) => {
-            const count = announcements.filter((a) => a.category === cat).length
+  return (
+    <div className="space-y-4">
+      {/* ── Compact toolbar — filters + honest count (no module title) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/30 p-0.5"
+          role="group"
+          aria-label="Announcement filters"
+        >
+          {FILTERS.map((f) => {
+            const count =
+              f.key === 'unread' ? unreadCount
+              : f.key === 'important' ? notices.filter(isImportant).length
+              : notices.length
             return (
-              <motion.button
-                key={cat}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: i * 0.05 }}
-                whileHover={{ y: -2 }}
-                onClick={() => setFilter(cat.toLowerCase())}
-                className={`group rounded-2xl border p-4 text-left transition-all ${
-                  filter === cat.toLowerCase()
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border bg-card/40 hover:shadow-premium'
-                }`}
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                aria-pressed={filter === f.key}
+                className={cn(
+                  'rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+                  filter === f.key
+                    ? 'bg-background shadow-2xs text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
               >
-                <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${c.gradient} text-white shadow-md mb-2`}>
-                  {c.icon}
-                </div>
-                <p className="font-semibold text-sm">{cat}</p>
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-[11px] text-muted-foreground">{count} notices</p>
-                  <ChevronRight className="h-3 w-3 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-                </div>
-              </motion.button>
+                {f.label}
+                <span className={cn(
+                  'ml-1.5 text-[10px] tabular-nums',
+                  filter === f.key ? 'text-muted-foreground' : 'text-muted-foreground/60',
+                )}>
+                  {count}
+                </span>
+              </button>
             )
           })}
         </div>
-      </GlassCard>
+        {unreadCount > 0 && (
+          <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
+            {unreadCount} unread
+          </span>
+        )}
+      </div>
+
+      {/* ── The feed ─────────────────────────────────────────────────── */}
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-border bg-card/50 px-4 py-12 text-center">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/60 text-muted-foreground">
+            <Megaphone className="h-5 w-5" aria-hidden />
+          </span>
+          <p className="text-sm font-medium text-foreground">
+            {filter === 'unread' ? 'You&apos;re all caught up' : 'No announcements yet'}
+          </p>
+          <p className="max-w-xs text-xs text-muted-foreground">
+            {filter === 'unread'
+              ? 'Every announcement has been read.'
+              : filter === 'important'
+                ? 'Nothing marked important right now.'
+                : 'Your school&apos;s announcements will appear here.'}
+          </p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border bg-card shadow-2xs">
+          {filtered.map((n, i) => (
+            <NoticeRow
+              key={n.id}
+              notice={n}
+              index={i}
+              expanded={expandedId === n.id}
+              onToggle={() => {
+                const next = expandedId === n.id ? null : n.id
+                setExpandedId(next)
+                // Opening a row acknowledges it (server-persisted).
+                if (next && !n.read) void useServerNotices.getState().markRead(n.id)
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
+  )
+}
+
+// ─── One feed row ────────────────────────────────────────────────────
+
+function NoticeRow({
+  notice, index, expanded, onToggle,
+}: {
+  notice: ServerNotice
+  index: number
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const important = isImportant(notice)
+  return (
+    <motion.button
+      type="button"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, delay: Math.min(index * 0.04, 0.2) }}
+      onClick={onToggle}
+      aria-expanded={expanded}
+      className={cn(
+        'flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors',
+        !notice.read ? 'bg-primary/[0.025]' : 'bg-transparent',
+        'hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40',
+      )}
+    >
+      {/* Unread indicator — a quiet dot, only when unread */}
+      <span className="mt-[7px] flex h-2 w-2 shrink-0 items-center justify-center" aria-hidden>
+        {!notice.read && <span className="h-2 w-2 rounded-full bg-primary" />}
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className={cn(
+            'truncate text-sm',
+            notice.read ? 'font-medium text-foreground/90' : 'font-semibold text-foreground',
+          )}>
+            {notice.title}
+          </span>
+          {important && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="h-3 w-3" aria-hidden /> Important
+            </span>
+          )}
+        </span>
+
+        {/* Preview (clamped) or full details when expanded */}
+        <span className={cn(
+          'mt-0.5 block text-xs leading-relaxed text-muted-foreground',
+          expanded ? '' : 'line-clamp-1',
+        )}>
+          {notice.message}
+        </span>
+
+        {/* Meta: category · publisher · date */}
+        <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground/80">
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
+            {notice.audience}
+          </span>
+          <span className="truncate">{notice.sender}</span>
+          <span aria-hidden>·</span>
+          <span className="tabular-nums">{formatDate(notice.createdAt)}</span>
+          {notice.read && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/60">
+                <CheckCheck className="h-3 w-3" aria-hidden /> Read
+              </span>
+            </>
+          )}
+        </span>
+      </span>
+
+      <ChevronDown
+        className={cn(
+          'mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200',
+          expanded && 'rotate-180',
+        )}
+        aria-hidden
+      />
+    </motion.button>
   )
 }

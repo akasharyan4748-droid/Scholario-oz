@@ -9,13 +9,18 @@
  * class record — never a school-wide directory). Sending appends a
  * persisted student message; the app NEVER fabricates teacher replies.
  * Unread is derived (last message from teacher + not seen since).
+ *
+ * LR-1 no-duplicate-title rule: NO giant "Messages" heading — the
+ * sidebar + top bar already say where you are. One compact toolbar
+ * (quiet context line + New message) sits directly above the mail-style
+ * two-pane surface, and the content owns the rest of the space.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  ArrowLeft, MessageCircle, Plus, Search, Send, X, Inbox, Clock,
+  ArrowLeft, MessageCircle, Plus, Search, Send, X, Inbox,
 } from 'lucide-react'
-import { GlassCard, SectionHeading, GradientAvatar } from '@/components/shared/ui'
+import { GlassCard, GradientAvatar } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -110,24 +115,25 @@ export function StudentMessagesModule() {
   }, [openId, markConversationSeen, active?.messages.length])
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="Messages"
-        subtitle={student ? `${student.className}-${student.section} · Class teacher & subject teachers` : 'Direct messages with your teachers'}
-        icon={<MessageCircle className="h-5 w-5" />}
-        action={
-          <div className="flex items-center gap-2">
-            {unread > 0 && (
-              <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10 text-[10px]">
-                {unread} unread
-              </Badge>
-            )}
-            <Button size="sm" onClick={() => setComposing(true)}>
-              <Plus className="h-4 w-4" /> New message
-            </Button>
-          </div>
-        }
-      />
+    <div className="space-y-3">
+      {/* ── Compact toolbar — context + actions, no module title (LR-1) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="truncate text-xs text-muted-foreground">
+          {student
+            ? `${student.className}-${student.section} · class teacher & subject teachers`
+            : 'Direct messages with your teachers'}
+        </p>
+        <div className="flex items-center gap-2">
+          {unread > 0 && (
+            <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10 text-[10px]">
+              {unread} unread
+            </Badge>
+          )}
+          <Button size="sm" className="h-8" onClick={() => setComposing(true)}>
+            <Plus className="h-4 w-4" /> New message
+          </Button>
+        </div>
+      </div>
 
       <GlassCard className="p-0 overflow-hidden flex h-[70vh] lg:h-[calc(100vh-13rem)] min-h-[28rem]">
         {/* ── Conversation list (master) ── */}
@@ -162,6 +168,7 @@ export function StudentMessagesModule() {
               filtered.map((c, i) => {
                 const isUnread = isConversationUnread(c, seenAt)
                 const last = c.messages[c.messages.length - 1]
+                const selected = openId === c.id
                 return (
                   <motion.button
                     key={c.id}
@@ -169,25 +176,36 @@ export function StudentMessagesModule() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: Math.min(i * 0.04, 0.2) }}
                     onClick={() => setOpenId(c.id)}
+                    aria-current={selected ? 'true' : undefined}
                     className={cn(
-                      'w-full flex items-start gap-3 px-3 py-3 text-left border-b border-border/40 transition-colors',
-                      openId === c.id ? 'bg-primary/5' : 'hover:bg-muted/40',
+                      'relative w-full flex items-start gap-3 px-3.5 py-3 text-left border-b border-border/40 transition-colors',
+                      selected ? 'bg-primary/[0.06]' : 'hover:bg-muted/40',
                     )}
                   >
+                    {/* Selection rail — a hairline accent on the open thread */}
+                    {selected && (
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-[3px] rounded-r-full bg-primary" aria-hidden />
+                    )}
                     <GradientAvatar name={c.teacherName} size="sm" className="mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-xs font-semibold truncate flex-1">{c.teacherName}</p>
+                        <p className={cn(
+                          'text-[13px] truncate flex-1',
+                          isUnread ? 'font-semibold' : 'font-medium text-foreground/85',
+                        )}>{c.teacherName}</p>
                         {isUnread && (
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-label="Unread" />
+                          <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />
                         )}
                       </div>
                       <p className="text-[11px] text-muted-foreground truncate mt-0.5">{c.subject}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <p className="text-[10px] text-muted-foreground/70 truncate flex-1">
+                        <p className={cn(
+                          'text-[10px] truncate flex-1',
+                          isUnread ? 'text-muted-foreground' : 'text-muted-foreground/70',
+                        )}>
                           {last ? `${last.from === 'teacher' ? '' : 'You: '}${last.body}` : '—'}
                         </p>
-                        <span className="text-[10px] text-muted-foreground/60 shrink-0">
+                        <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">
                           {formatRelativeTime(c.lastOn)}
                         </span>
                       </div>
@@ -209,12 +227,15 @@ export function StudentMessagesModule() {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
               <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground">
-                <Inbox className="h-6 w-6" />
+                <Inbox className="h-6 w-6" aria-hidden />
               </div>
               <p className="text-sm font-medium">Select a conversation</p>
               <p className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed">
                 Pick a thread from the list, or start a new message to your class teacher.
               </p>
+              <Button variant="outline" size="sm" className="mt-4 h-8 gap-1.5 lg:hidden" onClick={() => setComposing(true)}>
+                <Plus className="h-3.5 w-3.5" aria-hidden /> New message
+              </Button>
             </div>
           )}
         </div>
@@ -475,11 +496,11 @@ function NewMessageDialog({
 
 function EmptyMini({ text }: { text: string }) {
   return (
-    <div className="py-10 text-center px-6">
-      <div className="mx-auto mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-muted/60 text-muted-foreground">
-        <Clock className="h-4 w-4" />
+    <div className="py-12 text-center px-6">
+      <div className="mx-auto mb-2.5 flex h-10 w-10 items-center justify-center rounded-xl bg-muted/60 text-muted-foreground">
+        <MessageCircle className="h-4.5 w-4.5" aria-hidden />
       </div>
-      <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">{text}</p>
+      <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto leading-relaxed">{text}</p>
     </div>
   )
 }

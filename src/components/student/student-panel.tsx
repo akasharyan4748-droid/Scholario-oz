@@ -30,6 +30,7 @@ import { POSITION_DEFS, filterActivePositions } from '@/lib/student-positions'
 import { useAcademicSession } from '@/lib/academic-session'
 import { useTransportAssignment } from '@/lib/store/transport-store'
 import { hydrateNotifPrefsFromServer } from '@/lib/store/student-notif-prefs-store'
+import { useServerNotices } from '@/lib/store/server-notices-store'
 
 /**
  * STUDENT WORKSPACE NAVIGATION (Learning Experience 2.0 IA — spec §3).
@@ -185,7 +186,13 @@ export function StudentPanel() {
   // preferences (notification channels + learning reminders) into the
   // client cache; every consumer (Notices feed, bell badge, dashboard
   // gates, Settings) reads the same store afterwards.
-  useEffect(() => { void hydrateNotifPrefsFromServer() }, [])
+  // LR-1 — the same mount hydrates the REAL school announcements
+  // (/api/student/notices) so the Notices module shows published rows,
+  // never static demo content.
+  useEffect(() => {
+    void hydrateNotifPrefsFromServer()
+    void useServerNotices.getState().refresh()
+  }, [])
 
   // Live nav badges — ALL derived from real stores/data, zero constants.
   const unreadNotifs = useUnreadStudentNotificationCount()

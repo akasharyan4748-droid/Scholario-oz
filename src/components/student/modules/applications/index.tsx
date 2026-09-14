@@ -22,7 +22,6 @@ import {
   Eye, FileText, Paperclip, ClipboardList, Undo2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { SectionHeading } from '@/components/shared/ui'
 import { CATEGORY_ICON as SHARED_CATEGORY_ICON } from '@/components/shared/application-category'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -124,12 +123,12 @@ export function StudentApplicationsModule() {
   }
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="Applications & Forms"
-        subtitle="School applications, registrations and consent forms open to you — apply online, pay online or at school, and keep the printed record."
-        icon={<ClipboardList className="h-5 w-5" />}
-      />
+    <div className="space-y-5">
+      {/* LR-1 — compact context line, no giant module title. The section
+          labels below ("Open for you", …) carry the real structure. */}
+      <p className="text-xs text-muted-foreground">
+        School applications, registrations & consent forms open to you — apply online, pay online or at school.
+      </p>
 
       {!canonical || !identity ? (
         <div className="rounded-xl border border-border bg-card px-4 py-10 text-center">

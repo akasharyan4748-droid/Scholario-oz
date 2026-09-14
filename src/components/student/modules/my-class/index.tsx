@@ -15,7 +15,7 @@ import {
   Crown, Megaphone, AlertTriangle, CalendarClock, ListTodo, Pin, X, Send,
   CheckCircle2, Clock, ShieldCheck, Inbox,
 } from 'lucide-react'
-import { GlassCard, SectionHeading, GradientAvatar, StatusBadge } from '@/components/shared/ui'
+import { GlassCard, GradientAvatar, StatusBadge } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -110,12 +110,12 @@ export function MyClassModule() {
   const positionTitles = positions.map((p) => POSITION_DEFS[p.key]?.title ?? p.key).join(' · ')
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="My Class"
-        subtitle={`${student.className}-${student.section} · Class responsibility`}
-        icon={<Crown className="h-5 w-5" />}
-      />
+    <div className="space-y-5">
+      {/* LR-1 — compact context line, no giant module title. The position
+          hero below carries the real identity of this surface. */}
+      <p className="truncate text-xs text-muted-foreground">
+        {student.className}-{student.section} · Class responsibility
+      </p>
 
       {/* Position hero */}
       <GlassCard className="p-4 sm:p-5 overflow-hidden relative">

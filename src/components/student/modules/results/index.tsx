@@ -36,7 +36,6 @@ import {
   type SubjectMark,
 } from '@/lib/store/student-results-store'
 import { useAcademicSession } from '@/lib/academic-session'
-import { StudentPageHeader } from '../../shell/page-header'
 import { AssessmentSelector } from './assessment-selector'
 import { Hero } from './hero'
 import { SubjectPerformance } from './subject-performance'
@@ -46,6 +45,27 @@ import { Remark } from './remark'
 import { History } from './history'
 import { ClassStandings } from './class-standings'
 import { ReportCard } from './report-card'
+
+/* ── Scope chips — the page's ONE context line (LR-1: no big title) ── */
+
+function ScopeChips({ sessionLabel, classLabel }: { sessionLabel: string; classLabel: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2" aria-label="Result scope">
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.07] px-2.5 py-1 text-[11px] font-medium text-primary"
+        title="Active academic session"
+      >
+        <CalendarRange className="h-3 w-3 shrink-0" aria-hidden /> {sessionLabel}
+      </span>
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-muted/40 px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+        title="Your class and section"
+      >
+        <Users className="h-3 w-3 shrink-0" aria-hidden /> {classLabel}
+      </span>
+    </div>
+  )
+}
 
 /* ── Insight derivations — selected assessment, its own previous ──── */
 
@@ -144,14 +164,7 @@ export function ResultsModule() {
     return (
       <PageTransition>
         <div className="space-y-6 sm:space-y-7">
-          <StudentPageHeader
-            title="My Results"
-            subtitle="Your academic performance"
-            chips={[
-              { label: session.label, icon: CalendarRange, tone: 'primary' },
-              { label: `${ctx.className}-${ctx.section}`, icon: Users },
-            ]}
-          />
+          <ScopeChips sessionLabel={session.label} classLabel={`${ctx.className}-${ctx.section}`} />
           <GlassCard hover={false} className="on-card px-6 py-16 text-center">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <Award className="h-6 w-6" aria-hidden />
@@ -171,15 +184,10 @@ export function ResultsModule() {
   return (
     <PageTransition>
       <div className="space-y-6 sm:space-y-7">
-        {/* Scope, once — contextual chips, never repeated below (§5/§32) */}
-        <StudentPageHeader
-          title="My Results"
-          subtitle="Your academic performance"
-          chips={[
-            { label: session.label, icon: CalendarRange, tone: 'primary', title: 'Active academic session' },
-            { label: `${ctx.className}-${ctx.section}`, icon: Users, title: 'Your class and section' },
-          ]}
-        />
+        {/* LR-1 — no module title: the sidebar + top bar already say
+            "Results". The session + class chips below are the page's one
+            scope line (§5/§32); nothing repeats them. */}
+        <ScopeChips sessionLabel={session.label} classLabel={`${ctx.className}-${ctx.section}`} />
 
         {/* The one prominent control — which result am I reading? */}
         <AssessmentSelector

@@ -11,7 +11,7 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Award, Eye, Download, FileText, X } from 'lucide-react'
-import { GlassCard, SectionHeading, StatusBadge } from '@/components/shared/ui'
+import { GlassCard, StatusBadge } from '@/components/shared/ui'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -92,19 +92,16 @@ export function MyCertificatesModule() {
   }
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="My Certificates"
-        subtitle="Bonafide, character and other official certificates issued to you"
-        icon={<Award className="h-5 w-5" />}
-        action={
-          <StatusBadge
-            status={mine.length > 0 ? `${mine.length} certificate${mine.length > 1 ? 's' : ''}` : 'None yet'}
-            variant="primary"
-            dot
-          />
-        }
-      />
+    <div className="space-y-4">
+      {/* LR-1 — compact context line, no giant module title */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="truncate text-xs text-muted-foreground">
+          Bonafide, character & official certificates issued to you
+        </p>
+        <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
+          {mine.length > 0 ? `${mine.length} certificate${mine.length > 1 ? 's' : ''}` : 'None yet'}
+        </span>
+      </div>
 
       <GlassCard className="p-3 sm:p-4 lg:p-5">
         {mine.length === 0 ? (

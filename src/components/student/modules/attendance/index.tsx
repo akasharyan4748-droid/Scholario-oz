@@ -19,13 +19,14 @@
  *   → holidays, weekends and unrecorded days never reduce attendance,
  *     and "No Record" never silently becomes Absent.
  *
- * Reading rhythm (§35): context once → hero summary → calendar +
- * records → trend. The page header establishes scope through one quiet
- * window chip — class/section/session never repeat below (§5/§32).
+ * Reading rhythm (§35): hero summary → calendar + records → trend.
+ * LR-1 — no module title: the sidebar + top bar already say
+ * "Attendance"; the Snapshot's "Overall · <window>" line is the page's
+ * one scope line, so class/section/session never repeat below (§5/§32).
  */
 
 import { useMemo, useState } from 'react'
-import { CalendarOff, CalendarRange } from 'lucide-react'
+import { CalendarOff } from 'lucide-react'
 import { GlassCard, PageTransition } from '@/components/shared/ui'
 import {
   useStudentAttendanceStore,
@@ -36,7 +37,6 @@ import {
 } from '@/lib/store/student-attendance-store'
 import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
 import { useStudentsStore } from '@/lib/store/students-store'
-import { StudentPageHeader } from '../../shell/page-header'
 import { Snapshot, type TodayStatus } from './snapshot'
 import { CalendarView } from './calendar-view'
 import { MonthRecords } from './month-records'
@@ -121,7 +121,6 @@ export function AttendanceModule() {
     return (
       <PageTransition>
         <div className="space-y-6 sm:space-y-7">
-          <StudentPageHeader title="My Attendance" subtitle="Your attendance overview" />
           <GlassCard hover={false} className="on-card px-6 py-16 text-center">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <CalendarOff className="h-6 w-6" aria-hidden />
@@ -140,12 +139,9 @@ export function AttendanceModule() {
   return (
     <PageTransition>
       <div className="space-y-6 sm:space-y-7">
-        {/* Scope, once — the record window as a quiet chip (§32) */}
-        <StudentPageHeader
-          title="My Attendance"
-          subtitle="Your attendance overview"
-          chips={[{ label: windowLabel, icon: CalendarRange, tone: 'primary', title: 'Your recorded attendance window' }]}
-        />
+        {/* LR-1 — no module title: the sidebar + top bar already say
+            "Attendance"; the Snapshot below carries the record window
+            ("Overall · <window>") as the page's one scope line. */}
 
         {/* 1 — "How am I doing?" (§20) */}
         <Snapshot stats={stats} windowLabel={windowLabel} thresholds={thresholds} today={todayStatus} />
