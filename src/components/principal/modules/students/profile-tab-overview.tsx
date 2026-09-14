@@ -4,19 +4,22 @@ import { useMemo } from 'react'
 import { Award, Calendar, Cake, Crown, Droplet, FileText, IdCard, User } from 'lucide-react'
 import { formatINR, formatDate } from '@/lib/format'
 import { useStudentsStore, type StudentRecord } from '@/lib/store/students-store'
-import { POSITION_DEFS } from '@/lib/student-positions'
+import { POSITION_DEFS, filterActivePositions } from '@/lib/student-positions'
+import { useAcademicSession } from '@/lib/academic-session'
 import { Section, InfoRow } from './shared'
 
 type Props = { student: StudentRecord }
 
 export function OverviewTab({ student }: Props) {
-  // Active class responsibilities (Class Captain / Monitor …) — derived from
-  // the persisted assignment, never hardcoded (spec §24). Raw array +
-  // useMemo (zustand v5 selector stability).
+  // Active class responsibilities (Class Captain / Monitor …) in the LIVE
+  // academic session — derived through the canonical session-scoped resolver,
+  // never hardcoded (spec §24, RB-1). Raw array + useMemo (zustand v5
+  // selector stability).
   const allPositions = useStudentsStore((s) => s.studentPositions)
+  const sessionId = useAcademicSession().id
   const activePositions = useMemo(
-    () => allPositions.filter((p) => p.active && p.studentId === student.id),
-    [allPositions, student.id],
+    () => filterActivePositions(allPositions, student.id, sessionId),
+    [allPositions, student.id, sessionId],
   )
   return (
     <div className="space-y-4">

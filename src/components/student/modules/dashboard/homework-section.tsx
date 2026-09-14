@@ -19,10 +19,11 @@ interface HomeworkSectionProps {
 
 export function HomeworkSection({ pendingHomework, dueAssignments, libraryId }: HomeworkSectionProps) {
   // STU-F — the library card reads the ONE library store (the same source
-  // My Library and Notifications use), filtered to the demo student's live
+  // the Notifications feed uses), filtered to the demo student's live
   // overdue issue. The old source (mock/operations + a stale admissionNo)
   // silently rendered nothing; the toast-only "Return Book" stub was removed
-  // — returns happen at the counter (My Library is the read-only view).
+  // — returns happen at the counter (the card is the read-only summary; the
+  // dedicated student Library module was retired in the 2.9 workspace cut).
   // SR-UI §25 — the summary stats derive from the SAME store (raw array +
   // useMemo — zustand v5 selectors must return stable refs). No fake
   // "books read / reading streak" numbers.
@@ -112,7 +113,7 @@ export function HomeworkSection({ pendingHomework, dueAssignments, libraryId }: 
       <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-1">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-sm flex items-center gap-2">
-            <BookMarked className="h-4 w-4 text-cyan-500" /> My Library
+            <BookMarked className="h-4 w-4 text-cyan-500" /> Library
           </h3>
           <span className="text-[10px] font-mono text-muted-foreground">{libraryId}</span>
         </div>

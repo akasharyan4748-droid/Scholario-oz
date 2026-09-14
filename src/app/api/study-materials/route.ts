@@ -1,0 +1,165 @@
+import { NextRequest } from 'next/server'
+import { mkdir, writeFile } from 'fs/promises'
+import { db } from '@/lib/db'
+import { withUser, schoolScoped } from '@/lib/api'
+import {
+  STUDY_MATERIAL_UPLOAD_DIR,
+  STUDY_MATERIAL_MAX_BYTES,
+  STUDY_MATERIAL_CATEGORIES,
+  STUDY_MATERIAL_MIME_TO_EXT,
+  generateStudyMaterialFileName,
+  toStudyMaterialMeta,
+} from '@/lib/study-materials'
+
+export const runtime = 'nodejs'
+
+/// GET /api/study-materials
+///
+/// The school's study-material repository INDEX (metadata only — the
+/// stored fileName never leaves the server). Roles: STUDENT / TEACHER /
+/// PRINCIPAL; strictly school-scoped (RLS on schoolId).
+///
+/// Optional query filters (composable):
+///   ?category=worksheet|notes|syllabus|sample-paper|revision|general
+///   ?subjectId=<Subject.id>     — exact match
+///   ?q=<text>                   — case-insensitive contains on
+///                                 title OR description
+///
+/// Returns newest first:
+///   { ok: true, data: StudyMaterialMeta[] }
+export async function GET(req: NextRequest) {
+  return withUser(
+    async (user) => {
+      const schoolId = schoolScoped(user)
+
+      const sp = req.nextUrl.searchParams
+      const category = sp.get('category')?.trim() || undefined
+      const subjectId = sp.get('subjectId')?.trim() || undefined
+      const q = sp.get('q')?.trim().toLowerCase() || undefined
+
+      const rows = await db.studyMaterial.findMany({
+        where: {
+          schoolId,
+          ...(category ? { category } : {}),
+          ...(subjectId ? { subjectId } : {}),
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      // Resolve subject display names server-side (one query, id → name).
+      const subjectIds = [...new Set(rows.map((m) => m.subjectId).filter((v): v is string => !!v))]
+      const subjects = subjectIds.length
+        ? await db.subject.findMany({ where: { schoolId, id: { in: subjectIds } }, select: { id: true, name: true } })
+        : []
+      const nameById = new Map(subjects.map((s) => [s.id, s.name]))
+
+      // Text search — applied in JS so behaviour is identical on SQLite
+      // (no case-insensitive `contains` mode there). Order is preserved.
+      const filtered = q
+        ? rows.filter(
+            (m) =>
+              m.title.toLowerCase().includes(q) ||
+              (m.description ?? '').toLowerCase().includes(q),
+          )
+        : rows
+
+      return filtered.map((m) => toStudyMaterialMeta(m, m.subjectId ? nameById.get(m.subjectId) ?? null : null))
+    },
+    { roles: ['STUDENT', 'TEACHER', 'PRINCIPAL'] }
+  )
+}
+
+/// POST /api/study-materials
+///
+/// PRINCIPAL-only upload into the school's repository. multipart/form-data:
+///   title        (required, non-empty)
+///   description  (optional)
+///   subjectId    (optional — must resolve to a Subject of THIS school)
+///   className    (optional, e.g. "2-A")
+///   category     (optional; one of general|worksheet|notes|syllabus|
+///                 sample-paper|revision — default "general")
+///   file         (required — max 20 MB; PDF, png/jpg/webp, plain text,
+///                 doc/docx, ppt/pptx, xls/xlsx)
+///
+/// The file is stored under db/uploads/study-materials with a generated
+/// safe fileName (server id + canonical extension — the user's filename
+/// never touches the filesystem), the row is created, and the metadata is
+/// returned: { ok: true, data: StudyMaterialMeta }.
+export async function POST(req: NextRequest) {
+  return withUser(
+    async (user) => {
+      const schoolId = schoolScoped(user)
+
+      const form = await req.formData().catch(() => null)
+      if (!form) throw new Error('Expected multipart/form-data')
+
+      const title = String(form.get('title') ?? '').trim()
+      if (!title) throw new Error('A title is required')
+
+      const descriptionRaw = String(form.get('description') ?? '').trim()
+      const description = descriptionRaw ? descriptionRaw : null
+
+      const subjectIdRaw = String(form.get('subjectId') ?? '').trim()
+      const subjectId = subjectIdRaw ? subjectIdRaw : null
+      let subjectName: string | null = null
+      if (subjectId) {
+        const subject = await db.subject.findFirst({
+          where: { id: subjectId, schoolId },
+          select: { id: true, name: true },
+        })
+        if (!subject) throw new Error('Subject not found for this school')
+        subjectName = subject.name
+      }
+
+      const classNameRaw = String(form.get('className') ?? '').trim()
+      const className = classNameRaw ? classNameRaw : null
+
+      const categoryRaw = String(form.get('category') ?? 'general').trim() || 'general'
+      if (!(STUDY_MATERIAL_CATEGORIES as readonly string[]).includes(categoryRaw)) {
+        throw new Error('Invalid category')
+      }
+
+      const file = form.get('file')
+      if (!(file instanceof File)) throw new Error('A file is required')
+      if (file.size === 0) throw new Error('The uploaded file is empty')
+      if (file.size > STUDY_MATERIAL_MAX_BYTES) {
+        throw new Error('File exceeds the 20 MB limit')
+      }
+      const mimeType = file.type || 'application/octet-stream'
+      if (!STUDY_MATERIAL_MIME_TO_EXT[mimeType]) {
+        throw new Error('This file type is not allowed')
+      }
+
+      // Generate the SAFE server-side name BEFORE touching the disk —
+      // extension derives from the validated MIME map, never from the
+      // user-supplied filename.
+      const fileName = generateStudyMaterialFileName(mimeType)
+      const bytes = Buffer.from(await file.arrayBuffer())
+
+      await mkdir(STUDY_MATERIAL_UPLOAD_DIR, { recursive: true })
+      await writeFile(
+        `${STUDY_MATERIAL_UPLOAD_DIR}/${fileName}`,
+        bytes,
+      )
+
+      const row = await db.studyMaterial.create({
+        data: {
+          schoolId,
+          title,
+          description,
+          subjectId,
+          className,
+          category: categoryRaw,
+          fileName,
+          originalName: file.name || fileName,
+          mimeType,
+          sizeBytes: bytes.byteLength,
+          uploadedById: user.id,
+        },
+      })
+
+      return toStudyMaterialMeta(row, subjectName)
+    },
+    { roles: ['PRINCIPAL'] }
+  )
+}

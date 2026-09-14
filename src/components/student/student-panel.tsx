@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react'
 import {
   LayoutDashboard, User, CalendarDays, CalendarCheck, BookOpen, Award,
-  IndianRupee, Megaphone, Trophy, Library, Bus, GraduationCap,
+  IndianRupee, Megaphone, Bus, GraduationCap,
   ClipboardList, ShieldCheck, Crown, MessageCircle, Settings, ScrollText,
+  FolderOpen,
 } from 'lucide-react'
 import { AppShell, type NavGroup } from '@/components/shell/app-shell'
 import { StudentDashboard } from './modules/dashboard'
@@ -13,11 +14,10 @@ import { AttendanceModule } from './modules/attendance'
 import { ClassworkModule } from './modules/classwork'
 import { LearningModule } from './modules/learning'
 import { NoticesModule } from './modules/notices'
-import { ProgressModule } from './modules/progress'
 import { ResultsModule } from './modules/results'
 import { FeesModule } from './modules/fees'
 import { StudentApplicationsModule } from './modules/applications'
-import { MyLibraryModule } from './modules/my-library'
+import { StudyMaterialsModule } from './modules/study-materials'
 import { MyCertificatesModule } from './modules/my-certificates'
 import { TimetableModule } from './modules/timetable'
 import { BusTrackingModule } from './modules/bus-tracking'
@@ -29,7 +29,9 @@ import { StudentSubscriptionActivation } from './StudentSubscriptionActivation'
 import { getStudentSubscription } from '@/lib/platform-subscription'
 import { useStudentsStore } from '@/lib/store/students-store'
 import { useStudentMessagingStore, countUnreadConversations } from '@/lib/store/student-messaging-store'
-import { POSITION_DEFS } from '@/lib/student-positions'
+import { POSITION_DEFS, filterActivePositions } from '@/lib/student-positions'
+import { useAcademicSession } from '@/lib/academic-session'
+import { useTransportAssignment } from '@/lib/store/transport-store'
 import { homeworks, assignments } from '@/lib/mock/academics'
 
 /**
@@ -38,15 +40,18 @@ import { homeworks, assignments } from '@/lib/mock/academics'
  * Structure mirrors how a student thinks about their school life:
  *   HOME → who am I, what's happening today
  *   SCHOOL → the official record: timetable, attendance, classwork, results
- *   LEARNING → my growth: learning hub, progress
+ *   LEARNING → learning hub + the school's study-material repository
  *   COMMUNITY → people & announcements: messages, notices
- *   RECORDS → the paperwork: fees, library, certificates, transport,
- *             applications
+ *   RECORDS → the paperwork: fees, certificates, transport, applications
  *   ACCOUNT → settings
  *
- * Every module is real (no placeholder/dead entries). The Class
- * Leadership group appears ONLY while the student holds an ACTIVE
- * position (permission-derived, never hardcoded).
+ * Every module is real (no placeholder/dead entries). Two entries are
+ * permission-derived, never hardcoded:
+ *   · Class Leadership (My Class group) — ONLY while the student holds
+ *     an ACTIVE position in the live academic session (resolved through
+ *     filterActivePositions — the single activity resolver).
+ *   · Transport — ONLY for students with a transport assignment
+ *     (useTransportAssignment: roster opt-in or an assigned route).
  *
  * BADGES — real derived counts only, never decorative numbers:
  *   · Classwork — active homework + pending assignments (canonical data)
@@ -75,7 +80,7 @@ const navGroups: NavGroup[] = [
     label: 'Learning',
     items: [
       { key: 'learning', label: 'Learning', icon: <GraduationCap className="h-4.5 w-4.5" /> },
-      { key: 'progress', label: 'My Progress', icon: <Trophy className="h-4.5 w-4.5" /> },
+      { key: 'study-materials', label: 'Study Materials', icon: <FolderOpen className="h-4.5 w-4.5" /> },
     ],
   },
   {
@@ -89,7 +94,6 @@ const navGroups: NavGroup[] = [
     label: 'Records',
     items: [
       { key: 'fees', label: 'Fees', icon: <IndianRupee className="h-4.5 w-4.5" /> },
-      { key: 'my-library', label: 'Library', icon: <Library className="h-4.5 w-4.5" /> },
       { key: 'my-certificates', label: 'Certificates', icon: <ScrollText className="h-4.5 w-4.5" /> },
       { key: 'bus', label: 'Transport', icon: <Bus className="h-4.5 w-4.5" /> },
       { key: 'applications', label: 'Applications', icon: <ClipboardList className="h-4.5 w-4.5" /> },
@@ -116,9 +120,7 @@ const LEGACY_MODULE: Record<string, string> = {
   flashcards: 'learning',
   planner: 'learning',
   peer: 'learning',
-  achievements: 'progress',
-  portfolio: 'progress',
-  career: 'progress',
+  materials: 'study-materials',
   notifications: 'notices',
   announcements: 'notices',
   calendar: 'notices',
@@ -134,9 +136,6 @@ const LEGACY_TAB: Record<string, string> = {
   resources: 'resources',
   planner: 'planner',
   peer: 'peer',
-  achievements: 'achievements',
-  portfolio: 'portfolio',
-  career: 'career',
   notifications: 'notifications',
 }
 
@@ -176,14 +175,17 @@ export function StudentPanel() {
   )
 
   // Class Captain / Monitor: the nav entry appears ONLY while the student
-  // holds an ACTIVE position — derived from the persisted assignment,
-  // never hardcoded. Ending the assignment removes it instantly.
+  // holds an ACTIVE position in the LIVE academic session — resolved
+  // through filterActivePositions (the canonical session-scoped activity
+  // resolver), never hardcoded. Ending the assignment (or moving to a new
+  // session) removes it instantly.
   // (Raw array + useMemo — zustand v5 selectors must return stable refs.)
   const student = useStudentsStore((s) => s.students.find((x) => x.id === studentId))
   const allPositions = useStudentsStore((s) => s.studentPositions)
+  const sessionId = useAcademicSession().id
   const activePositions = useMemo(
-    () => allPositions.filter((p) => p.active && p.studentId === studentId),
-    [allPositions, studentId],
+    () => filterActivePositions(allPositions, studentId, sessionId),
+    [allPositions, studentId, sessionId],
   )
   const myClassGroup: NavGroup[] =
     activePositions.length > 0
@@ -200,6 +202,13 @@ export function StudentPanel() {
           },
         ]
       : []
+
+  // RB-1 — Transport is an opt-in service: students without a transport
+  // assignment (no roster opt-in, no assigned route) never see the
+  // Transport entry — not in the sidebar and not in ⌘K search (the palette
+  // is nav-derived). The demo student HAS transport, so the demo shows it.
+  const hasTransport = useTransportAssignment(studentId)
+
   const groups: NavGroup[] = [
     // Home first, then the (conditional) Class Leadership responsibility —
     // it earns prominence while active and vanishes the moment it ends.
@@ -210,7 +219,13 @@ export function StudentPanel() {
     ...myClassGroup,
     ...navGroups.slice(1).map((g) => ({
       ...g,
-      items: withLiveBadges(g.items, unreadNotifs, unreadMsgs, classworkPending),
+      items: withLiveBadges(
+        // 'bus' is assignment-conditional (see useTransportAssignment above).
+        g.items.filter((item) => item.key !== 'bus' || hasTransport),
+        unreadNotifs,
+        unreadMsgs,
+        classworkPending,
+      ),
     })),
   ]
 
@@ -258,8 +273,6 @@ export function StudentPanel() {
         <LearningModule initialTab={pendingTab ?? undefined} onTabChange={setPendingTab} />
       ) : active === 'notices' ? (
         <NoticesModule initialTab={pendingTab ?? undefined} onTabChange={setPendingTab} onNavigate={navigate} />
-      ) : active === 'progress' ? (
-        <ProgressModule initialTab={pendingTab ?? undefined} onTabChange={setPendingTab} />
       ) : active === 'my-class' ? (
         <MyClassModule />
       ) : (
@@ -277,7 +290,7 @@ const staticModules: Record<string, React.ReactNode> = {
   messages: <StudentMessagesModule />,
   settings: <StudentSettingsModule />,
   fees: <FeesModule />,
-  'my-library': <MyLibraryModule />,
+  'study-materials': <StudyMaterialsModule />,
   'my-certificates': <MyCertificatesModule />,
   applications: <StudentApplicationsModule />,
   bus: <BusTrackingModule />,

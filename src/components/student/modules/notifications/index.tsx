@@ -47,7 +47,7 @@ import { DEMO_STUDENT_ID } from '../applications/student'
 
 export type StudentNotificationTarget =
   | 'homework' | 'assignments' | 'results' | 'fees'
-  | 'my-library' | 'messages' | 'announcements' | 'timetable'
+  | 'messages' | 'announcements' | 'timetable'
 
 export type StudentNotificationKind =
   | 'homework' | 'assignment' | 'exam' | 'fee' | 'library' | 'message' | 'announcement' | 'timetable'
@@ -151,7 +151,9 @@ export function buildStudentNotifications({ student, issues, conversations, seen
     })
   }
 
-  // Library — the student's own overdue issues (with fine)
+  // Library — the student's own overdue issues (with fine). Informational
+  // only (no target): the dedicated student Library module was retired in
+  // the 2.9 workspace cut — returns/fines settle at the counter.
   if (student) {
     for (const i of issues.filter((x) => x.borrowerId === student.id && x.status === 'Overdue')) {
       items.push({
@@ -160,7 +162,6 @@ export function buildStudentNotifications({ student, issues, conversations, seen
         title: `Library book overdue — ${i.bookTitle}`,
         description: `Was due ${formatDate(i.dueDate)} · fine ${formatINR(i.fine)}`,
         at: i.dueDate,
-        target: 'my-library',
       })
     }
   }

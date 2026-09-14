@@ -20,7 +20,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useStudentsStore, type StudentPosition, type StudentRecord } from '@/lib/store/students-store'
-import { POSITION_DEFS, hasCapability, allCapabilities, type StudentCapability } from '@/lib/student-positions'
+import { POSITION_DEFS, hasCapability, allCapabilities, filterActivePositions, type StudentCapability } from '@/lib/student-positions'
+import { useAcademicSession } from '@/lib/academic-session'
 import { useClassResponsibilityStore, type ClassUpdateCategory, type IssueCategory, type IssuePriority, type ResponsibilityTask } from '@/lib/store/class-responsibility-store'
 import { teachers } from '@/lib/mock/teachers'
 import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
@@ -63,10 +64,13 @@ function allowedTeachers(classId: string, section: string): { id: string; name: 
 export function MyClassModule() {
   const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
   // Raw array + useMemo — zustand v5 selectors must return stable refs.
+  // RB-1 — activity resolves ONLY through the canonical session-scoped
+  // resolver; a position from an earlier session is history, not authority.
   const allPositions = useStudentsStore((s) => s.studentPositions)
+  const sessionId = useAcademicSession().id
   const positions = useMemo(
-    () => allPositions.filter((p) => p.active && p.studentId === DEMO_STUDENT_ID),
-    [allPositions],
+    () => filterActivePositions(allPositions, DEMO_STUDENT_ID, sessionId),
+    [allPositions, sessionId],
   )
 
   const updates = useClassResponsibilityStore((s2) => s2.classUpdates)

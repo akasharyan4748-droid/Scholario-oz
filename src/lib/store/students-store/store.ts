@@ -3,7 +3,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { StudentPosition, StudentPositionKey, StudentsState, StudentStatus } from './types'
-import { POSITION_DEFS } from '@/lib/student-positions'
+import { POSITION_DEFS, filterActivePositions } from '@/lib/student-positions'
+import { ACTIVE_SESSION_ID, getActiveAcademicSessionId } from '@/lib/academic-session'
 import { HOUSE_DEFS, SEED_SUBJECTS } from './constants'
 import { SS, SC } from './seed-data'
 import { SUBJECTS_BY_LEVEL } from './constants'
@@ -38,16 +39,20 @@ export const useStudentsStore = create<StudentsState>()(
   houses: HOUSE_DEFS,
   promotions: [],
   transfers: [],
-  // Class Captain / Monitor positions — seeded with ONE example in another
-  // class so the principal Leadership tab shows an occupied state out of the
-  // box; the demo student starts WITHOUT a position (assign via Leadership
-  // tab to see the student-side capabilities appear, then end it to watch
-  // them disappear — spec §38 E2E).
+  // Class Captain / Monitor positions (RB-1: SESSION-SCOPED — every record
+  // carries the academic session it was awarded in). Seeded with:
+  //   · POS-SEED-1 — a Class 9-A monitor so the principal Leadership tab
+  //     shows an occupied state out of the box;
+  //   · POS-SEED-2 — the DEMO student (STU-58, Class 2-A) as Class Captain
+  //     of the LIVE session so the student-side Class Leadership workspace
+  //     is demonstrable immediately (awarding/ending via the Leadership tab
+  //     persists over this seed, per spec §38 E2E).
   studentPositions: [
     {
       id: 'POS-SEED-1',
       studentId: 'STU-27',
       studentName: 'Diya Verma',
+      sessionId: ACTIVE_SESSION_ID,
       classId: 'C10',
       className: 'Class 9',
       section: 'A',
@@ -57,6 +62,21 @@ export const useStudentsStore = create<StudentsState>()(
       assignedOn: '2026-08-15T09:00:00.000Z',
       active: true,
       notes: 'Appointed at the Investiture Ceremony.',
+    },
+    {
+      id: 'POS-SEED-2',
+      studentId: 'STU-58',
+      studentName: 'Aarav Sharma',
+      sessionId: ACTIVE_SESSION_ID,
+      classId: 'C05',
+      className: 'Class 2',
+      section: 'A',
+      key: 'class-captain',
+      assignedById: 'PRINCIPAL',
+      assignedByName: 'Dr. Ananya Iyer',
+      assignedOn: '2026-08-15T09:00:00.000Z',
+      active: true,
+      notes: 'Appointed at the Investiture Ceremony — AY 2026–2027.',
     },
   ],
   // Canonical subject registry (Spec §28). Cloned from SEED_SUBJECTS so
@@ -122,16 +142,24 @@ export const useStudentsStore = create<StudentsState>()(
     const student = st.students.find((s) => s.id === input.studentId)
     if (!student) return { ok: false as const, error: 'Student not found.' }
     if (student.status !== 'Active') return { ok: false as const, error: 'Only active students can hold a class responsibility.' }
-    // One active holder per (class · section · position) — replacing an
-    // existing holder ends their position first (history preserved).
+    // One active holder per (class · section · position · SESSION). Activity
+    // resolves ONLY through the canonical resolver — never `p.active`
+    // directly (RB-1 constitution). Replacing an existing holder ends their
+    // position first (history preserved).
+    const sessionId = getActiveAcademicSessionId()
     const displaced = st.studentPositions.filter(
-      (p) => p.active && p.classId === student.classId && p.section === student.section && p.key === input.key,
+      (p) =>
+        p.classId === student.classId &&
+        p.section === student.section &&
+        p.key === input.key &&
+        filterActivePositions(st.studentPositions, p.studentId, sessionId).some((ap) => ap.id === p.id),
     )
     const now = new Date().toISOString()
     const record: import('./types').StudentPosition = {
       id: `POS-${Date.now().toString(36)}`,
       studentId: student.id,
       studentName: student.name,
+      sessionId,
       classId: student.classId,
       className: student.className,
       section: student.section,
@@ -504,8 +532,40 @@ export const useStudentsStore = create<StudentsState>()(
       storage: createTenantScopedStorage('scholario-students-v1'),
       // v2 — roster extended with the 16 Class 2-A students (STU-43..58):
       // one canonical store now backs principal + teacher + student roles.
-      // Version bump discards stale persisted state so the new roster seeds.
-      version: 2,
+      // v3 (RB-1) — StudentPosition became SESSION-SCOPED: every persisted
+      // position gains the live session id ('2026-2027' convention), and the
+      // demo student's Class Captain assignment is restored for the current
+      // session when an older persisted state predates it. The migration
+      // runs ONCE per browser; afterwards awarding/ending positions persists
+      // normally (spec §38 E2E stays intact).
+      version: 3,
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Partial<StudentsState>
+        if (version < 3) {
+          const positions = (state.studentPositions ?? []).map((p) =>
+            p.sessionId ? p : { ...p, sessionId: ACTIVE_SESSION_ID },
+          )
+          if (!positions.some((p) => p.studentId === 'STU-58' && p.sessionId === ACTIVE_SESSION_ID)) {
+            positions.push({
+              id: 'POS-SEED-2',
+              studentId: 'STU-58',
+              studentName: 'Aarav Sharma',
+              sessionId: ACTIVE_SESSION_ID,
+              classId: 'C05',
+              className: 'Class 2',
+              section: 'A',
+              key: 'class-captain',
+              assignedById: 'PRINCIPAL',
+              assignedByName: 'Dr. Ananya Iyer',
+              assignedOn: '2026-08-15T09:00:00.000Z',
+              active: true,
+              notes: 'Appointed at the Investiture Ceremony — AY 2026–2027.',
+            })
+          }
+          state.studentPositions = positions
+        }
+        return state as StudentsState
+      },
       partialize: (s) => ({
         students: s.students,
         classes: s.classes,

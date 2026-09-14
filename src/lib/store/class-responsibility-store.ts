@@ -16,7 +16,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createTenantScopedStorage } from '@/lib/tenant/tenant-storage'
 import { useStudentsStore, type StudentPosition } from '@/lib/store/students-store'
-import { hasCapability, POSITION_DEFS, type StudentCapability } from '@/lib/student-positions'
+import { hasCapability, POSITION_DEFS, filterActivePositions, type StudentCapability } from '@/lib/student-positions'
+import { getActiveAcademicSessionId } from '@/lib/academic-session'
 
 // ─── Entities ────────────────────────────────────────────────────────
 
@@ -142,9 +143,13 @@ function authorize(
   capability: StudentCapability,
   target?: { classId: string; section: string },
 ): { ok: true; positions: StudentPosition[] } | { ok: false; error: string } {
-  const positions = useStudentsStore
-    .getState()
-    .studentPositions.filter((p) => p.active && p.studentId === actorStudentId)
+  // RB-1 — activity resolves ONLY through the canonical session-scoped
+  // resolver (filterActivePositions); `p.active` is never read directly.
+  const positions = filterActivePositions(
+    useStudentsStore.getState().studentPositions,
+    actorStudentId,
+    getActiveAcademicSessionId(),
+  )
   if (positions.length === 0) {
     return { ok: false, error: 'You do not hold an active class responsibility.' }
   }
@@ -296,9 +301,13 @@ export const useClassResponsibilityStore = create<ClassResponsibilityState>()(
       addResponsibilityTask: ({ studentId, studentName, classId, section, title, detail, assignedByName, dueOn }) => {
         const student = useStudentsStore.getState().students.find((s) => s.id === studentId)
         if (!student) return { ok: false, error: 'Student not found.' }
-        const holdsPosition = useStudentsStore
-          .getState()
-          .studentPositions.some((p) => p.active && p.studentId === studentId)
+        // RB-1 — canonical session-scoped activity resolver.
+        const holdsPosition =
+          filterActivePositions(
+            useStudentsStore.getState().studentPositions,
+            studentId,
+            getActiveAcademicSessionId(),
+          ).length > 0
         if (!holdsPosition) {
           return { ok: false, error: 'This student does not hold an active class responsibility.' }
         }

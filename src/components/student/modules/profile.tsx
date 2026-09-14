@@ -25,7 +25,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   User, Phone, Mail, Calendar, Droplet, Crown, GraduationCap,
-  Activity, TrendingUp, IndianRupee, IdCard, Award, Library, Bus,
+  Activity, TrendingUp, IndianRupee, IdCard, Award, Bus,
   ChevronRight, ClipboardList, ShieldCheck,
 } from 'lucide-react'
 import { GlassCard, StatusBadge, GradientAvatar } from '@/components/shared/ui'
@@ -35,13 +35,12 @@ import { useStudentsStore } from '@/lib/store/students-store'
 import type { StudentRecord } from '@/lib/store/students-store'
 import { useStudentAttendanceStore, computeStats, studentRecords } from '@/lib/store/student-attendance-store'
 import { useFeeStore } from '@/lib/store/fee-store'
-import { useLibraryStore } from '@/lib/store/library-store'
 import { useCertificatesStore } from '@/lib/store/certificates-store'
-import { POSITION_DEFS } from '@/lib/student-positions'
+import { POSITION_DEFS, filterActivePositions } from '@/lib/student-positions'
+import { useAcademicSession, ACTIVE_SESSION_ID, formatSessionLabel } from '@/lib/academic-session'
 import { useMyResults, fmtPct } from '@/lib/store/student-results-store'
 import { DEMO_STUDENT_ID } from './applications/student'
-import { formatDate, formatINR } from '@/lib/format'
-import { ACTIVE_SESSION_ID, formatSessionLabel } from '@/lib/academic-session'
+import { formatDate } from '@/lib/format'
 import { StudentIdCardDialog } from '@/components/student/shell/student-id-card'
 
 const TABS = [
@@ -84,23 +83,21 @@ export function ProfileModule({ onNavigate }: { onNavigate?: (key: string) => vo
     [allAttendance],
   )
 
-  // Library + certificates — the same stores My Library / My Certificates
-  // read (raw array + useMemo — zustand v5 selectors must return stable refs).
-  const allIssues = useLibraryStore((s) => s.issues)
-  const myIssues = useMemo(
-    () => allIssues.filter((i) => i.borrowerId === DEMO_STUDENT_ID),
-    [allIssues],
-  )
+  // Certificates — the same store My Certificates reads (raw array +
+  // useMemo — zustand v5 selectors must return stable refs).
   const allDocs = useCertificatesStore((s) => s.documents)
   const myDocs = useMemo(
     () => allDocs.filter((d) => d.studentId === DEMO_STUDENT_ID || d.admissionNo === 'DSO2024058'),
     [allDocs],
   )
 
-  // Positions held by THIS student — only ACTIVE ones surface.
+  // Positions held by THIS student — only ACTIVE ones in the live session
+  // surface (RB-1 canonical resolver; raw array + useMemo keeps zustand v5
+  // selectors on stable refs).
+  const sessionId = useAcademicSession().id
   const positions = useMemo(
-    () => allPositions.filter((p) => p.active && p.studentId === DEMO_STUDENT_ID),
-    [allPositions],
+    () => filterActivePositions(allPositions, DEMO_STUDENT_ID, sessionId),
+    [allPositions, sessionId],
   )
 
   if (!student) {
@@ -114,10 +111,6 @@ export function ProfileModule({ onNavigate }: { onNavigate?: (key: string) => vo
   const s = student
   const feePending = Math.max(0, s.feeTotal - feePaid)
   const feeStatus = feePending === 0 ? 'Paid' : feePaid > 0 ? 'Partial' : 'Pending'
-  const openIssues = myIssues.filter((i) => i.status === 'Issued' || i.status === 'Overdue')
-  const overdueFine = myIssues
-    .filter((i) => i.status === 'Overdue')
-    .reduce((sum, i) => sum + (i.fine ?? 0), 0)
 
   return (
     <div className="space-y-5 sm:space-y-6 max-w-4xl">
@@ -271,8 +264,6 @@ export function ProfileModule({ onNavigate }: { onNavigate?: (key: string) => vo
           <RecordsTab
             student={s}
             certCount={myDocs.length}
-            openIssues={openIssues.length}
-            overdueFine={overdueFine}
             onNavigate={onNavigate}
           />
         )}
@@ -407,11 +398,9 @@ function ParentsTab({ student: s }: { student: StudentRecord }) {
 }
 
 /** ── Records: only rows whose data actually exists; each deep-links ──── */
-function RecordsTab({ student: s, certCount, openIssues, overdueFine, onNavigate }: {
+function RecordsTab({ student: s, certCount, onNavigate }: {
   student: StudentRecord
   certCount: number
-  openIssues: number
-  overdueFine: number
   onNavigate?: (key: string) => void
 }) {
   const rows: {
@@ -444,17 +433,6 @@ function RecordsTab({ student: s, certCount, openIssues, overdueFine, onNavigate
       iconClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
       title: 'Certificates',
       value: `${certCount} issued`,
-    })
-  }
-
-  // Library — only with real activity
-  if (openIssues > 0) {
-    rows.push({
-      key: 'my-library',
-      icon: <Library className="h-4 w-4" />,
-      iconClass: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
-      title: 'Library',
-      value: `${openIssues} book${openIssues === 1 ? '' : 's'} issued${overdueFine > 0 ? ` · ${formatINR(overdueFine)} fine` : ''}`,
     })
   }
 

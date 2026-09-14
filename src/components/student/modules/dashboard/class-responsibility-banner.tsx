@@ -10,16 +10,20 @@ import { motion } from 'framer-motion'
 import { Crown, Megaphone, ListTodo, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useStudentsStore } from '@/lib/store/students-store'
-import { POSITION_DEFS, hasCapability } from '@/lib/student-positions'
+import { POSITION_DEFS, hasCapability, filterActivePositions } from '@/lib/student-positions'
+import { useAcademicSession } from '@/lib/academic-session'
 import { formatDate } from '@/lib/format'
 import { DEMO_STUDENT_ID } from '../applications/student'
 
 export function ClassResponsibilityBanner({ onNavigate }: { onNavigate: (key: string) => void }) {
   const student = useStudentsStore((s) => s.students.find((x) => x.id === DEMO_STUDENT_ID))
+  // RB-1 — canonical session-scoped activity resolver (raw array + useMemo
+  // keeps the zustand v5 selector on a stable ref).
   const allPositions = useStudentsStore((s) => s.studentPositions)
+  const sessionId = useAcademicSession().id
   const positions = useMemo(
-    () => allPositions.filter((p) => p.active && p.studentId === DEMO_STUDENT_ID),
-    [allPositions],
+    () => filterActivePositions(allPositions, DEMO_STUDENT_ID, sessionId),
+    [allPositions, sessionId],
   )
 
   if (!student || positions.length === 0) return null

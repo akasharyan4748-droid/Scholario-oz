@@ -1154,3 +1154,28 @@ model WebhookEvent {
   @@index([schoolId, status])
   @@index([eventType])
 }
+
+/// RB-1 — Study Materials: the school's server-authorized repository of
+/// learning resources (worksheets, notes, syllabi, sample papers, revision
+/// packs). Metadata lives here; the bytes live under db/uploads/study-materials/
+/// and are ONLY ever served through the authorized download route (never
+/// statically). subjectId is a loose FK into Subject.id (string cuid).
+model StudyMaterial {
+  id           String    @id @default(cuid())
+  schoolId     String
+  title        String
+  description  String?
+  subjectId    String?
+  className    String?
+  category     String    @default("general") // general | worksheet | notes | syllabus | sample-paper | revision
+  fileName     String // generated safe name on disk (cuid + extension)
+  originalName String // user-facing name for Content-Disposition
+  mimeType     String
+  sizeBytes    Int
+  uploadedById String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([schoolId, category])
+  @@index([schoolId, createdAt])
+}

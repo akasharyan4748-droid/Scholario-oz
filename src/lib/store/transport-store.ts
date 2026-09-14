@@ -318,3 +318,27 @@ export function useTransportData() {
     }
   }, [vehicles, routes, drivers, assignments, maintenance])
 }
+
+/**
+ * RB-1 — single-student transport-assignment resolver.
+ *
+ * A student "has transport" when EITHER the canonical roster marks the
+ * opt-in (`StudentRecord.transport` — the same flag the seeded assignments
+ * and the ₹500/month Transport fee head are gated on) OR an explicit
+ * Assigned row exists in this store (the principal/office can assign from
+ * the Transport module). This is the gate the student-side Transport nav
+ * item derives from: students without an assignment never see Transport
+ * anywhere in their workspace (sidebar or ⌘K search).
+ */
+export function useTransportAssignment(studentId: string): boolean {
+  const optedIn = useStudentsStore(
+    (s) => s.students.find((x) => x.id === studentId)?.transport ?? false,
+  )
+  const assignments = useTransportStore((s) => s.assignments)
+  return useMemo(
+    () =>
+      optedIn ||
+      assignments.some((a) => a.studentId === studentId && a.status === 'Assigned'),
+    [optedIn, assignments, studentId],
+  )
+}

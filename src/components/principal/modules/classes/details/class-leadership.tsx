@@ -28,7 +28,8 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { GradientAvatar } from '@/components/shared/ui'
 import { useStudentsStore, type ClassRecord, type StudentRecord, type StudentPosition } from '@/lib/store/students-store'
-import { POSITION_DEFS, POSITION_ORDER, type StudentPositionKey } from '@/lib/student-positions'
+import { POSITION_DEFS, POSITION_ORDER, filterActivePositions, type StudentPositionKey } from '@/lib/student-positions'
+import { useAcademicSession } from '@/lib/academic-session'
 import { useClassResponsibilityStore } from '@/lib/store/class-responsibility-store'
 import { useDismissOnEscape } from '@/hooks/use-dismiss-on-escape'
 import { formatDate, formatRelativeTime } from '@/lib/format'
@@ -45,12 +46,22 @@ export function ClassLeadership({ cls }: { cls: ClassRecord }) {
   const [assigning, setAssigning] = useState<{ section: string; key: StudentPositionKey } | null>(null)
   const [ending, setEnding] = useState<StudentPosition | null>(null)
   const [taskFor, setTaskFor] = useState<StudentPosition | null>(null)
+  // RB-1 — occupancy/activity resolves through the canonical session-scoped
+  // resolver: a position held in an EARLIER session is history, not
+  // authority, and does not block a new appointment.
+  const sessionId = useAcademicSession().id
 
   const sectionStudents = (section: string) =>
     students.filter((s) => s.classId === cls.id && s.section === section && s.status === 'Active')
 
   const activeFor = (section: string, key: StudentPositionKey) =>
-    positions.find((p) => p.active && p.classId === cls.id && p.section === section && p.key === key)
+    positions.find(
+      (p) =>
+        p.classId === cls.id &&
+        p.section === section &&
+        p.key === key &&
+        filterActivePositions(positions, p.studentId, sessionId).some((ap) => ap.id === p.id),
+    )
 
   const holder = (p?: StudentPosition) => (p ? students.find((s) => s.id === p.studentId) : undefined)
 

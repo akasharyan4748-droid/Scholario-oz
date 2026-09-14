@@ -9,6 +9,14 @@
 // actions (class-responsibility-store). The persisted assignment lives in
 // the students-store (`studentPositions`) — the UI NEVER hardcodes
 // `if student === 'Aarav'` style conditions.
+//
+// CONSTITUTION (RB-1): a position is SESSION-SCOPED — it belongs to the
+// academic session it was awarded in (StudentPosition.sessionId, the
+// '2026-2027' hyphen id convention shared with the fee engine /
+// academic-session module). `filterActivePositions` below is the ONLY
+// activity resolver in the codebase: NEVER check `p.active` directly and
+// never hand-roll `active && studentId === …` filters. A position from a
+// previous session is history, not authority.
 // ============================================================
 
 import type { StudentPosition } from '@/lib/store/students-store/types'
@@ -106,6 +114,31 @@ export const POSITION_ORDER: StudentPositionKey[] = [
 /** All capabilities granted by a single ACTIVE position record. */
 export function capabilitiesOf(position: StudentPosition): StudentCapability[] {
   return POSITION_DEFS[position.key]?.capabilities ?? []
+}
+
+/**
+ * THE canonical activity resolver (RB-1 constitution).
+ *
+ * Resolves the positions a student currently holds in a given academic
+ * session: matching studentId AND sessionId AND still active. Every
+ * consumer — nav derivation, the Class Captain workspace, dashboard
+ * banner, profile chips, principal Leadership tab, and the store-side
+ * authorization checks — MUST go through this function. Never read
+ * `p.active` directly; a position from an earlier session is inactive by
+ * definition even when its historical flag is still true.
+ *
+ * Pass the active session id from `useAcademicSession().id` (UI) or
+ * `getActiveAcademicSessionId()` (stores) — both from
+ * `@/lib/academic-session` ('2026-2027' hyphen convention).
+ */
+export function filterActivePositions(
+  positions: StudentPosition[],
+  studentId: string,
+  sessionId: string,
+): StudentPosition[] {
+  return positions.filter(
+    (p) => p.active && p.studentId === studentId && p.sessionId === sessionId,
+  )
 }
 
 /** Does the holder of these ACTIVE positions have the capability? */

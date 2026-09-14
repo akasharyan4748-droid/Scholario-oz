@@ -39,6 +39,11 @@ export interface StudentPosition {
   studentId: string
   /** Holder display name at assignment time (snapshot for history rows). */
   studentName: string
+  /** Academic session this position belongs to ('2026-2027' hyphen id —
+   *  the shared convention from @/lib/academic-session / fee-store). A
+   *  position is only authoritative in ITS session: filterActivePositions
+   *  resolves activity per (studentId · sessionId). */
+  sessionId: string
   /** Class + section the position is scoped to (derived from the student). */
   classId: string
   className: string
