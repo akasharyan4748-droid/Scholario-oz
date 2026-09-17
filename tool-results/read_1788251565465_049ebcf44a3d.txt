@@ -1,0 +1,587 @@
+     1→'use client'
+     2→
+     3→/**
+     4→ * FeesSettingsSection — Fee Management module settings (FEE-SPECIFIC RULES
+     5→ * ONLY, Principal-first).
+     6→ *
+     7→ * The Principal reads this screen as "What can I control about fees?" —
+     8→ * short titles, live status, compact controls, minimal helper text. No
+     9→ * architecture descriptions, no routes, no implementation narration.
+    10→ *
+    11→ * What lives here is genuinely fee-specific POLICY:
+    12→ *
+    13→ *   1. Late Fee Rules        — per-month amount, grace period, max, scope
+    14→ *   2. Concession Rules      — sibling / staff ward / scholarship %
+    15→ *   3. One-Time Entry Fees   — compact applicability list + per-fee rule
+    16→ *                              builder (Everyone / Selected classes / Gender /
+    17→ *                              Classes + gender). Amounts stay canonical:
+    18→ *                              admission = the engine's own value; registration
+    19→ *                              = the published fee structures. The settings
+    20→ *                              card never creates a second amount source.
+    21→ *   4. Controlled-Edit Policy — the actual structure versioning behaviour
+    22→ *
+    23→ * Permission model (Super Admin → school capability → Principal):
+    24→ *   fee_entry_policy_manage grants the One-Time Entry Fee EDIT controls.
+    25→ *   Without it the Principal sees the live policy read-only — no editable
+    26→ *   controls, no misleading "request" actions. The store action enforces
+    27→ *   the same capability (defence in depth), matching every other fee
+    28→ *   capability.
+    29→ *
+    30→ * Card anatomy mirrors Salary Settings via the shared SettingsCard
+    31→ * primitive (modules/shared/settings-card.tsx): one flat card per group,
+    32→ * clean rows, no box-inside-box nesting.
+    33→ */
+    34→
+    35→import { useMemo, useState } from 'react'
+    36→import {
+    37→  AlertTriangle, Gift, Check, Archive, Lock, UserPlus, ShieldCheck, Eye, Pencil,
+    38→} from 'lucide-react'
+    39→import { Button } from '@/components/ui/button'
+    40→import { Input } from '@/components/ui/input'
+    41→import { Label } from '@/components/ui/label'
+    42→import { Switch } from '@/components/ui/switch'
+    43→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+    44→import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+    45→import { useFeeStore } from '@/lib/store/fee-store'
+    46→import type { EntryFeeAudience, EntryFeeRule } from '@/lib/store/fee-store'
+    47→import { entryFeeApplies } from '@/lib/store/fee-store-data'
+    48→import { useStudentsStore } from '@/lib/store/students-store'
+    49→import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
+    50→import { formatINR } from '@/lib/format'
+    51→import { cn } from '@/lib/utils'
+    52→import { useEffectiveFeeCapabilities } from '@/lib/tenant/store'
+    53→import { SettingsCard } from '../shared/settings-card'
+    54→import { toast } from 'sonner'
+    55→
+    56→// RuleChip — tiny mono value chip summarising the live rule values.
+    57→function RuleChip({ children }: { children: React.ReactNode }) {
+    58→  return (
+    59→    <span className="inline-flex items-center rounded-md border border-border/50 bg-muted/60 px-2 py-0.5 text-[10px] font-medium tabular-nums whitespace-nowrap">
+    60→      {children}
+    61→    </span>
+    62→  )
+    63→}
+    64→
+    65→/** Non-interactive "view only" pill — makes a platform-restricted setting
+    66→ *  visible as such without implying any editable or requestable action. */
+    67→function ViewOnlyChip({ label = 'View only' }: { label?: string }) {
+    68→  return (
+    69→    <span
+    70→      className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground ring-1 ring-border"
+    71→      title="Managed under a platform permission you have not been granted"
+    72→    >
+    73→      <Eye className="h-2.5 w-2.5" aria-hidden /> {label}
+    74→    </span>
+    75→  )
+    76→}
+    77→
+    78→export function FeesSettingsSection() {
+    79→  return (
+    80→    // No page heading / banner — the "Settings" tab establishes context and
+    81→    // content starts immediately (Salary Settings benchmark).
+    82→    <div className="space-y-4">
+    83→      <LateFeeSettings />
+    84→      <ConcessionSettings />
+    85→      <EntryFeePolicyCard />
+    86→      <PoliciesSettings />
+    87→    </div>
+    88→  )
+    89→}
+    90→
+    91→// ─── Late Fee Rules ────────────────────────────────────────────────
+    92→// Principal reading: ₹50/month · max ₹500 · 7-day grace · mandatory heads
+    93→// only · applied automatically. The engine consumes the exact same rule.
+    94→
+    95→function LateFeeSettings() {
+    96→  const rule = useFeeStore((s) => s.lateFeeRule)
+    97→  const updateLateFeeRule = useFeeStore((s) => s.updateLateFeeRule)
+    98→  const [local, setLocal] = useState(rule)
+    99→  const dirty = JSON.stringify(local) !== JSON.stringify(rule)
+   100→
+   101→  return (
+   102→    <SettingsCard
+   103→      label="Late Fee Rules"
+   104→      icon={<AlertTriangle />}
+   105→      summary={local.enabled ? 'on' : 'off'}
+   106→      action={
+   107→        dirty ? (
+   108→          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { updateLateFeeRule(local); toast.success('Late fee rules updated') }}>
+   109→            <Check className="h-3 w-3" /> Save
+   110→          </Button>
+   111→        ) : undefined
+   112→      }
+   113→    >
+   114→      <div className="space-y-3">
+   115→        {/* Live rule summary — current values at a glance (updates as fields change) */}
+   116→        <div className="flex items-center flex-wrap gap-1.5">
+   117→          <RuleChip>{formatINR(local.amountPerMonth, true)} / month</RuleChip>
+   118→          <RuleChip>max {formatINR(local.maxLateFee, true)}</RuleChip>
+   119→          <RuleChip>grace {local.gracePeriodDays}d</RuleChip>
+   120→          <RuleChip>{local.appliesTo === 'mandatory_only' ? 'mandatory heads' : 'all heads'}</RuleChip>
+   121→          <RuleChip>{local.enabled ? 'applied automatically' : 'manual — engine off'}</RuleChip>
+   122→        </div>
+   123→        {/* Rule inputs — 2-col grid of labeled fields */}
+   124→        <div className="grid grid-cols-2 gap-3">
+   125→          <div>
+   126→            <Label className="text-[11px]">Amount per Month (₹)</Label>
+   127→            <Input type="number" value={local.amountPerMonth} onChange={(e) => setLocal({ ...local, amountPerMonth: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
+   128→          </div>
+   129→          <div>
+   130→            <Label className="text-[11px]">Grace Period (days)</Label>
+   131→            <Input type="number" value={local.gracePeriodDays} onChange={(e) => setLocal({ ...local, gracePeriodDays: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
+   132→          </div>
+   133→          <div>
+   134→            <Label className="text-[11px]">Max Late Fee (₹)</Label>
+   135→            <Input type="number" value={local.maxLateFee} onChange={(e) => setLocal({ ...local, maxLateFee: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
+   136→          </div>
+   137→          <div>
+   138→            <Label className="text-[11px]">Applies To</Label>
+   139→            <select value={local.appliesTo} onChange={(e) => setLocal({ ...local, appliesTo: e.target.value as 'mandatory_only' | 'all' })} className="w-full h-8 text-xs rounded-md border border-border bg-background px-2 mt-1">
+   140→              <option value="mandatory_only">Mandatory Heads Only</option>
+   141→              <option value="all">All Heads</option>
+   142→            </select>
+   143→          </div>
+   144→        </div>
+   145→        {/* Master switch — clean row, no nested bordered box */}
+   146→        <div className="flex items-center justify-between gap-3">
+   147→          <p className="text-xs font-medium">Automatically apply to overdue accounts</p>
+   148→          <Switch checked={local.enabled} onCheckedChange={(c) => setLocal({ ...local, enabled: c })} aria-label="Enable late fee" />
+   149→        </div>
+   150→        {/* One short engine-behaviour line — the chips above carry the values. */}
+   151→        <p className="text-[10px] text-muted-foreground border-t border-border/60 pt-2.5">
+   152→          Each instalment unpaid past the {local.gracePeriodDays}-day grace accrues{' '}
+   153→          <span className="font-semibold tabular-nums text-foreground">{formatINR(local.amountPerMonth, true)}</span>/month, capped{' '}
+   154→          <span className="font-semibold tabular-nums text-foreground">{formatINR(local.maxLateFee, true)}</span>.
+   155→          {local.appliesTo === 'mandatory_only' ? ' Optional and additional charges are never late-fee\u2019d.' : ' Applies to all heads.'}
+   156→        </p>
+   157→      </div>
+   158→    </SettingsCard>
+   159→  )
+   160→}
+   161→
+   162→// ─── Concession Rules ──────────────────────────────────────────────
+   163→
+   164→function ConcessionSettings() {
+   165→  const rule = useFeeStore((s) => s.concessionRule)
+   166→  const updateConcessionRule = useFeeStore((s) => s.updateConcessionRule)
+   167→  const [local, setLocal] = useState(rule)
+   168→  const dirty = JSON.stringify(local) !== JSON.stringify(rule)
+   169→
+   170→  return (
+   171→    <SettingsCard
+   172→      label="Concession Rules"
+   173→      icon={<Gift />}
+   174→      summary={local.enabled ? 'on' : 'off'}
+   175→      action={
+   176→        dirty ? (
+   177→          <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { updateConcessionRule(local); toast.success('Concession rules updated') }}>
+   178→            <Check className="h-3 w-3" /> Save
+   179→          </Button>
+   180→        ) : undefined
+   181→      }
+   182→    >
+   183→      <div className="space-y-3">
+   184→        {/* Live rule summary — discounts at a glance (updates as fields change) */}
+   185→        <div className="flex items-center flex-wrap gap-1.5">
+   186→          <RuleChip>sibling {local.siblingDiscountPct}%</RuleChip>
+   187→          <RuleChip>staff ward {local.staffWardDiscountPct}%</RuleChip>
+   188→          <RuleChip>scholarship {local.scholarshipDiscountPct}%</RuleChip>
+   189→          {local.requiresApproval && <RuleChip><span className="text-amber-600 font-semibold">principal approval</span></RuleChip>}
+   190→        </div>
+   191→        {/* Rule inputs — discount %s */}
+   192→        <div className="grid sm:grid-cols-3 gap-3">
+   193→          <div>
+   194→            <Label className="text-[11px]">Sibling Discount (%)</Label>
+   195→            <Input type="number" value={local.siblingDiscountPct} onChange={(e) => setLocal({ ...local, siblingDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
+   196→          </div>
+   197→          <div>
+   198→            <Label className="text-[11px]">Staff Ward (%)</Label>
+   199→            <Input type="number" value={local.staffWardDiscountPct} onChange={(e) => setLocal({ ...local, staffWardDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
+   200→          </div>
+   201→          <div>
+   202→            <Label className="text-[11px]">Scholarship (%)</Label>
+   203→            <Input type="number" value={local.scholarshipDiscountPct} onChange={(e) => setLocal({ ...local, scholarshipDiscountPct: Number(e.target.value) })} className="h-8 text-xs tabular-nums mt-1" />
+   204→          </div>
+   205→        </div>
+   206→        {/* Toggles — clean rows, no nested bordered container */}
+   207→        <div className="space-y-2 border-t border-border/60 pt-2.5">
+   208→          <div className="flex items-center justify-between gap-3">
+   209→            <p className="text-xs font-medium">Require Principal approval</p>
+   210→            <Switch checked={local.requiresApproval} onCheckedChange={(c) => setLocal({ ...local, requiresApproval: c })} aria-label="Require principal approval" />
+   211→          </div>
+   212→          <div className="flex items-center justify-between gap-3">
+   213→            <p className="text-xs font-medium">Enable concessions on student accounts</p>
+   214→            <Switch checked={local.enabled} onCheckedChange={(c) => setLocal({ ...local, enabled: c })} aria-label="Enable concessions" />
+   215→          </div>
+   216→        </div>
+   217→      </div>
+   218→    </SettingsCard>
+   219→  )
+   220→}
+   221→
+   222→// ─── One-Time Entry Fees — compact applicability list + rule builder ──
+   223→//
+   224→// WHAT the fee is (catalogue head + canonical amount) is separate from
+   225→// WHO it applies to (the applicability rule edited here). Each fee row
+   226→// shows the rule in one human line; the pencil opens a small dialog with
+   227→// the four-option rule builder and a live preview.
+   228→//
+   229→// Amounts are never edited here: Admission Fee shows the engine's own
+   230→// value; Registration Fee is derived from the published fee structures.
+   231→// One-time stays one-time — the billing engine expands these heads
+   232→// exactly once, and this card never touches frequency semantics.
+   233→
+   234→/** Compact display name for a canonical class ("Class 11 PCM" only when
+   235→ *  the selection covers SOME of that grade's streams). */
+   236→function classChipLabel(id: string): string {
+   237→  const c = ACADEMIC_CLASSES.find((x) => x.id === id)
+   238→  if (!c) return id
+   239→  return c.stream ? `${c.name} ${c.stream}` : c.name
+   240→}
+   241→
+   242→/** Human one-line summary of an applicability rule:
+   243→ *  "All students" · "Boys" · "Class 9 & Class 11" · "Boys · Class 6 & Class 8". */
+   244→function describeAudience(a: EntryFeeAudience): string {
+   245→  if (a.scope === 'all') return 'All students'
+   246→  const classIds = a.classIds ?? []
+   247→  const list = summarizeClassIds(classIds)
+   248→  if (a.scope === 'gender') return a.gender === 'girls' ? 'Girls' : 'Boys'
+   249→  if (a.scope === 'classes') return list || 'No classes selected'
+   250→  return `${a.gender === 'girls' ? 'Girls' : 'Boys'} · ${list || 'No classes selected'}`
+   251→}
+   252→
+   253→/** Join selected canonical classes into a short human list, collapsing a
+   254→ *  grade to its plain name when every stream of that grade is selected. */
+   255→function summarizeClassIds(ids: string[]): string {
+   256→  if (ids.length === 0) return ''
+   257→  const picked = new Set(ids)
+   258→  const byName = new Map<string, { total: number; picked: number; first: string; stream: string | undefined }>()
+   259→  for (const c of ACADEMIC_CLASSES) {
+   260→    const e = byName.get(c.name) ?? { total: 0, picked: 0, first: c.id, stream: c.stream }
+   261→    e.total += 1
+   262→    if (picked.has(c.id)) e.picked += 1
+   263→    byName.set(c.name, e)
+   264→  }
+   265→  const tokens: string[] = []
+   266→  const seen = new Set<string>()
+   267→  for (const c of ACADEMIC_CLASSES) {
+   268→    if (!picked.has(c.id) || seen.has(c.name)) continue
+   269→    seen.add(c.name)
+   270→    const e = byName.get(c.name)!
+   271→    tokens.push(e.picked === e.total ? c.name : `${c.name} ${c.stream ?? ''}`.trim())
+   272→  }
+   273→  if (tokens.length === 0) return ''
+   274→  if (tokens.length === 1) return tokens[0]
+   275→  return `${tokens.slice(0, -1).join(', ')} & ${tokens[tokens.length - 1]}`
+   276→}
+   277→
+   278→// ─── One-Time Entry Fees card ──────────────────────────────────────
+   279→
+   280→function EntryFeePolicyCard() {
+   281→  const policy = useFeeStore((s) => s.entryFeePolicy)
+   282→  const updateEntryFeePolicy = useFeeStore((s) => s.updateEntryFeePolicy)
+   283→  const feeStructures = useFeeStore((s) => s.feeStructures)
+   284→  const perms = useEffectiveFeeCapabilities()
+   285→  const canManage = perms.fee_entry_policy_manage
+   286→  const [editingRule, setEditingRule] = useState<string | null>(null)
+   287→
+   288→  // Registration Fee amount is DERIVED from the live published fee
+   289→  // structures (canonical source) — draft copies are excluded because a
+   290→  // draft charges nobody.
+   291→  const registration = useMemo(() => {
+   292→    const entries = feeStructures
+   293→      .filter((st) => !/draft/i.test(st.className))
+   294→      .flatMap((st) => st.components
+   295→        .filter((c) => c.active && (c.catalogueId === 'fh-2' || c.name === 'Registration Fee'))
+   296→        .map((c) => ({ amount: c.amount })))
+   297→    const amounts = Array.from(new Set(entries.map((e) => e.amount)))
+   298→    return {
+   299→      found: entries.length > 0,
+   300→      label: amounts.length === 1 ? formatINR(amounts[0]) : 'per structure',
+   301→    }
+   302→  }, [feeStructures])
+   303→
+   304→  const ruleLabel = (r: EntryFeeRule) => (r.id === 'admission' ? 'Admission Fee' : r.id === 'registration' ? 'Registration Fee' : r.id)
+   305→  const ruleAmount = (r: EntryFeeRule) =>
+   306→    r.id === 'admission'
+   307→      ? `${formatINR(policy.admissionAmount)} · one-time`
+   308→      : `${registration.found ? registration.label : '—'} · one-time`
+   309→
+   310→  const saveRule = (ruleId: string, applies: EntryFeeAudience) => {
+   311→    updateEntryFeePolicy({
+   312→      rules: policy.rules.map((r) => (r.id === ruleId ? { ...r, applies } : r)),
+   313→    })
+   314→    toast.success('Applicability updated', {
+   315→      description: `${ruleLabel(policy.rules.find((r) => r.id === ruleId)!)}, now: ${describeAudience(applies)}`,
+   316→    })
+   317→  }
+   318→
+   319→  const editing = editingRule ? policy.rules.find((r) => r.id === editingRule) ?? null : null
+   320→
+   321→  return (
+   322→    <SettingsCard
+   323→      label="One-Time Entry Fees"
+   324→      icon={<UserPlus />}
+   325→      summary={policy.enabled ? 'enabled' : 'off'}
+   326→      action={
+   327→        canManage ? (
+   328→          <span className="text-[10px] text-muted-foreground">Tap a fee to edit who pays it</span>
+   329→        ) : (
+   330→          <ViewOnlyChip label="View only" />
+   331→        )
+   332→      }
+   333→    >
+   334→      <div className="space-y-3">
+   335→        {/* Status · who manages — one compact line */}
+   336→        <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-[11px]">
+   337→          <span className="text-muted-foreground">Status
+   338→            <span className={cn('ml-1.5 font-semibold', policy.enabled ? 'text-emerald-600' : 'text-muted-foreground')}>
+   339→              {policy.enabled ? 'Enabled' : 'Disabled'}
+   340→            </span>
+   341→          </span>
+   342→          <span className="text-muted-foreground">Who can manage
+   343→            <span className="ml-1.5 font-semibold text-foreground">{canManage ? 'Principal' : 'Platform (Super Admin)'}</span>
+   344→          </span>
+   345→        </div>
+   346→
+   347→        {/* Fee rows — name + amount, then the rule in one human line */}
+   348→        <div className="divide-y divide-border/40 border-t border-b border-border/40">
+   349→          {policy.rules.map((r) => (
+   350→            <div key={r.id} className="py-2.5">
+   351→              <div className="flex items-center justify-between gap-2">
+   352→                <p className="text-xs font-medium shrink-0">{ruleLabel(r)}</p>
+   353→                <div className="flex items-center gap-1.5 shrink-0">
+   354→                  <p className="text-[11px] text-muted-foreground tabular-nums">{ruleAmount(r)}</p>
+   355→                  {canManage && (
+   356→                    <Button
+   357→                      size="sm" variant="ghost"
+   358→                      className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+   359→                      onClick={() => setEditingRule(r.id)}
+   360→                      aria-label={`Edit who pays ${ruleLabel(r)}`}
+   361→                    >
+   362→                      <Pencil className="h-3 w-3" />
+   363→                    </Button>
+   364→                  )}
+   365→                </div>
+   366→              </div>
+   367→              <p className="text-[11px] text-muted-foreground mt-0.5">
+   368→                Applies to: <span className={cn('font-medium', canManage ? 'text-foreground' : 'text-foreground/80')}>{describeAudience(r.applies)}</span>
+   369→              </p>
+   370→            </div>
+   371→          ))}
+   372→        </div>
+   373→
+   374→        {/* One honest line — the one-time guarantee (engine rule, unchanged). */}
+   375→        <p className="text-[10px] text-muted-foreground">
+   376→          Charged once, at admission — never with recurring dues.
+   377→          {!canManage && ' Changes are managed by the platform (Super Admin).'}
+   378→        </p>
+   379→      </div>
+   380→
+   381→      {/* Rule builder — small dialog per fee */}
+   382→      {editing && canManage && (
+   383→        <RuleBuilderDialog
+   384→          rule={editing}
+   385→          label={ruleLabel(editing)}
+   386→          onClose={() => setEditingRule(null)}
+   387→          onSave={(applies) => { saveRule(editing.id, applies); setEditingRule(null) }}
+   388→        />
+   389→      )}
+   390→    </SettingsCard>
+   391→  )
+   392→}
+   393→
+   394→// ─── Rule builder dialog — "APPLIES TO" with four simple options ───
+   395→
+   396→const SCOPE_OPTIONS: { value: EntryFeeAudience['scope']; label: string; hint: string }[] = [
+   397→  { value: 'all', label: 'Everyone', hint: 'Every student' },
+   398→  { value: 'classes', label: 'Selected classes', hint: 'Only the classes you pick' },
+   399→  { value: 'gender', label: 'Gender', hint: 'Boys only or girls only' },
+   400→  { value: 'classes_gender', label: 'Classes + gender', hint: 'One gender within selected classes' },
+   401→]
+   402→
+   403→function RuleBuilderDialog({ rule, label, onClose, onSave }: {
+   404→  rule: EntryFeeRule
+   405→  label: string
+   406→  onClose: () => void
+   407→  onSave: (applies: EntryFeeAudience) => void
+   408→}) {
+   409→  const students = useStudentsStore((s) => s.students)
+   410→  const [scope, setScope] = useState<EntryFeeAudience['scope']>(rule.applies.scope)
+   411→  const [gender, setGender] = useState<'boys' | 'girls'>(rule.applies.gender ?? 'boys')
+   412→  const [classIds, setClassIds] = useState<string[]>(rule.applies.classIds ?? [])
+   413→
+   414→  const draft: EntryFeeAudience = useMemo(() => ({
+   415→    scope,
+   416→    ...(scope === 'gender' || scope === 'classes_gender' ? { gender } : {}),
+   417→    ...(scope === 'classes' || scope === 'classes_gender' ? { classIds } : {}),
+   418→  }), [scope, gender, classIds])
+   419→
+   420→  const affected = useMemo(
+   421→    () => students.filter((s) => s.status === 'Active' && entryFeeApplies(draft, s)).length,
+   422→    [students, draft],
+   423→  )
+   424→
+   425→  const needsClasses = scope === 'classes' || scope === 'classes_gender'
+   426→  const needsGender = scope === 'gender' || scope === 'classes_gender'
+   427→
+   428→  const toggleClass = (id: string) =>
+   429→    setClassIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+   430→
+   431→  const save = () => {
+   432→    if (needsClasses && classIds.length === 0) {
+   433→      toast.error('Select at least one class')
+   434→      return
+   435→    }
+   436→    onSave(draft)
+   437→  }
+   438→
+   439→  return (
+   440→    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
+   441→      <DialogContent className="sm:max-w-md">
+   442→        <DialogHeader>
+   443→          <DialogTitle className="text-sm font-semibold">{label} — who pays it?</DialogTitle>
+   444→          <DialogDescription className="text-[11px]">
+   445→            Applies to future admissions only. Recorded payments never change.
+   446→          </DialogDescription>
+   447→        </DialogHeader>
+   448→
+   449→        <div className="space-y-3.5">
+   450→          {/* APPLIES TO — four options */}
+   451→          <RadioGroup value={scope} onValueChange={(v) => setScope(v as EntryFeeAudience['scope'])} className="gap-1.5">
+   452→            {SCOPE_OPTIONS.map((opt) => (
+   453→              <label
+   454→                key={opt.value}
+   455→                className={cn(
+   456→                  'flex items-center gap-2.5 rounded-lg border px-3 py-2 cursor-pointer transition-colors',
+   457→                  scope === opt.value ? 'border-primary/50 bg-primary/5' : 'border-border/60 hover:bg-muted/40',
+   458→                )}
+   459→              >
+   460→                <RadioGroupItem value={opt.value} className="h-3.5 w-3.5" />
+   461→                <span className="min-w-0">
+   462→                  <span className="block text-xs font-medium leading-tight">{opt.label}</span>
+   463→                  <span className="block text-[10px] text-muted-foreground leading-tight mt-0.5">{opt.hint}</span>
+   464→                </span>
+   465→              </label>
+   466→            ))}
+   467→          </RadioGroup>
+   468→
+   469→          {/* Gender — when the scope needs it */}
+   470→          {needsGender && (
+   471→            <div>
+   472→              <p className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground mb-1.5">Gender</p>
+   473→              <div className="flex gap-1.5">
+   474→                {(['boys', 'girls'] as const).map((g) => (
+   475→                  <button
+   476→                    key={g}
+   477→                    type="button"
+   478→                    onClick={() => setGender(g)}
+   479→                    className={cn(
+   480→                      'h-7 px-3 rounded-md text-xs font-medium border transition-colors capitalize',
+   481→                      gender === g ? 'border-primary/50 bg-primary/5 text-foreground' : 'border-border/60 text-muted-foreground hover:bg-muted/40',
+   482→                    )}
+   483→                    aria-pressed={gender === g}
+   484→                  >
+   485→                    {g}
+   486→                  </button>
+   487→                ))}
+   488→              </div>
+   489→            </div>
+   490→          )}
+   491→
+   492→          {/* Classes — chip grid, when the scope needs it */}
+   493→          {needsClasses && (
+   494→            <div>
+   495→              <div className="flex items-center justify-between mb-1.5">
+   496→                <p className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground">Classes</p>
+   497→                <button
+   498→                  type="button"
+   499→                  className="text-[10px] font-medium text-muted-foreground hover:text-foreground"
+   500→                  onClick={() => setClassIds(classIds.length === ACADEMIC_CLASSES.length ? [] : ACADEMIC_CLASSES.map((c) => c.id))}
+   501→                >
+   502→                  {classIds.length === ACADEMIC_CLASSES.length ? 'Clear all' : 'Select all'}
+   503→                </button>
+   504→              </div>
+   505→              <div className="flex flex-wrap gap-1.5">
+   506→                {ACADEMIC_CLASSES.map((c) => {
+   507→                  const on = classIds.includes(c.id)
+   508→                  return (
+   509→                    <button
+   510→                      key={c.id}
+   511→                      type="button"
+   512→                      onClick={() => toggleClass(c.id)}
+   513→                      aria-pressed={on}
+   514→                      className={cn(
+   515→                        'h-7 px-2.5 rounded-md text-[11px] font-medium border transition-colors',
+   516→                        on ? 'border-primary/50 bg-primary/10 text-foreground' : 'border-border/60 text-muted-foreground hover:bg-muted/40',
+   517→                      )}
+   518→                    >
+   519→                      {classChipLabel(c.id)}
+   520→                    </button>
+   521→                  )
+   522→                })}
+   523→              </div>
+   524→            </div>
+   525→          )}
+   526→
+   527→          {/* Live preview — the rule in one line + how many students it reaches */}
+   528→          <div className="rounded-lg bg-muted/50 border border-border/50 px-3 py-2">
+   529→            <p className="text-[11px] leading-snug">
+   530→              <span className="text-muted-foreground">Applies to</span>{' '}
+   531→              <span className="font-semibold">{describeAudience(draft)}</span>
+   532→            </p>
+   533→            <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+   534→              {affected} student{affected === 1 ? '' : 's'} currently match
+   535→            </p>
+   536→          </div>
+   537→        </div>
+   538→
+   539→        <DialogFooter className="gap-1.5">
+   540→          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={onClose}>Cancel</Button>
+   541→          <Button size="sm" className="h-8 text-xs gap-1" onClick={save}>
+   542→            <Check className="h-3 w-3" /> Save
+   543→          </Button>
+   544→        </DialogFooter>
+   545→      </DialogContent>
+   546→    </Dialog>
+   547→  )
+   548→}
+   549→
+   550→// ─── Controlled-Edit Policy — the ACTUAL version mechanics implemented
+   551→// across Fee Structures (publish → lock → window), as short rules.
+   552→
+   553→const POLICY_ROWS = [
+   554→  {
+   555→    icon: <Lock className="h-3.5 w-3.5 shrink-0 text-sky-600 mt-0.5" />,
+   556→    lead: 'Publish locks.',
+   557→    text: 'Published structures never change silently — edits open a new version.',
+   558→  },
+   559→  {
+   560→    icon: <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 mt-0.5" />,
+   561→    lead: '60% guardian approval.',
+   562→    text: 'Fee changes affecting families apply after 60% approve, or at the deadline.',
+   563→  },
+   564→  {
+   565→    icon: <Archive className="h-3.5 w-3.5 shrink-0 text-amber-600 mt-0.5" />,
+   566→    lead: 'Archive, never delete.',
+   567→    text: 'Payments and receipts are permanent records — archived, never removed.',
+   568→  },
+   569→]
+   570→
+   571→function PoliciesSettings() {
+   572→  return (
+   573→    <SettingsCard label="Controlled-Edit Policy" icon={<ShieldCheck />}>
+   574→      <div className="space-y-2.5">
+   575→        {POLICY_ROWS.map((row) => (
+   576→          <div key={row.lead} className="flex items-start gap-2.5">
+   577→            {row.icon}
+   578→            <p className="text-[11px] leading-relaxed text-muted-foreground">
+   579→              <span className="font-semibold text-foreground">{row.lead}</span> {row.text}
+   580→            </p>
+   581→          </div>
+   582→        ))}
+   583→      </div>
+   584→    </SettingsCard>
+   585→  )
+   586→}
+   587→

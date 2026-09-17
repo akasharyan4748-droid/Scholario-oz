@@ -1,0 +1,683 @@
+     1→'use client'
+     2→
+     3→/**
+     4→ * FeesTransactionsSection — serious financial transaction table.
+     5→ *
+     6→ * - KPI cards in the shared Overview SummaryCard language (SaaS-STAGE-1):
+     7→ *   Transactions · Total Collected · Avg. Transaction
+     8→ * - Filters: search, class, mode, status, fee head, type, SOURCE
+     9→ *   (Office / Teacher / Class Teacher / Student — operational source;
+    10→ *   gateway is a channel, never a source). Desktop = inline selects via
+    11→ *   the shared FilterToolbar; tablet/mobile = ONE compact Filters button
+    12→ *   opening the filter sheet (reusable pattern for the whole app).
+    13→ * - Row actions: View, Print, Download (with tooltips) — no redundant Reprint
+    14→ * - Row click: opens a slide-from-right Transaction Detail Drawer showing
+    15→ *   student info, fee info, payment info, gateway info (if available),
+    16→ *   offline info, balance before/after, receipt actions, and audit info.
+    17→ *
+    18→ * Phase 4 fixes (FEE-SETTINGS-TXN):
+    19→ *   - Summary metrics count ONLY successful transactions for amounts
+    20→ *     (Total Amount / Avg. Transaction). The Transactions count shows the
+    21→ *     success vs other split so the operator sees settled vs pending.
+    22→ *   - Export generates a real CSV from the filtered rows.
+    23→ *   - Detail drawer wired to real FeeTransaction fields (incl. gateway,
+    24→ *     settlement, reconciliation, refund fields).
+    25→ *
+    26→ * SaaS-STAGE-1 receipt consolidation: ONE canonical A5/A4 dual-copy
+    27→ * receipt engine (fee-receipt-a5.tsx) — the legacy thermal renderer and
+    28→ * the '80mm' paper option are retired.
+    29→ */
+    30→
+    31→import { useState, useMemo } from 'react'
+    32→import { motion, AnimatePresence } from 'framer-motion'
+    33→import {
+    34→  Download, Printer, Eye,
+    35→  Receipt as ReceiptIcon, User, Calendar,
+    36→  CreditCard, Landmark, ArrowRightLeft, ShieldCheck, AlertCircle,
+    37→  FileText, Banknote, Smartphone, Wallet,
+    38→  ArrowUpRight, ReceiptText, IndianRupee,
+    39→} from 'lucide-react'
+    40→import { Button } from '@/components/ui/button'
+    41→import {
+    42→  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+    43→} from '@/components/ui/sheet'
+    44→import {
+    45→  useFeeData, useFeeStore, txnCategory, collectorSourceLabel,
+    46→  type FeeTransaction, type PaymentMode, type PaymentStatus, type TransactionCategory,
+    47→} from '@/lib/store/fee-store'
+    48→import { useApplicationsStore } from '@/lib/store/applications-store'
+    49→import { formatINR, formatDate, formatRelativeTime } from '@/lib/format'
+    50→import { cn } from '@/lib/utils'
+    51→import { SummaryCard, SummaryCardGrid } from '../shared/summary-card'
+    52→import { FilterToolbar } from '../shared/filter-toolbar'
+    53→import { FeePanel, FeeEmptyState, ModeIcon, modeAccent, FeeStatusBadge, TxnDateTime, SourceChip, txnSourceKey } from './fees-shared'
+    54→import { FeeReceiptA5Preview, printReceiptA5, downloadReceiptA5 } from './fee-receipt-a5'
+    55→import { toast } from 'sonner'
+    56→
+    57→// ─── Financial type badge (Core Fee / Examination Fee / Additional) ────
+    58→
+    59→const TXN_TYPE_META: Record<TransactionCategory, { label: string; className: string }> = {
+    60→  CORE: { label: 'Core Fee', className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20' },
+    61→  EXAMINATION: { label: 'Exam Fee', className: 'bg-orange-500/10 text-orange-700 dark:text-orange-300 ring-1 ring-orange-500/20' },
+    62→  ADDITIONAL: { label: 'Additional', className: 'bg-violet-500/10 text-violet-700 dark:text-violet-300 ring-1 ring-violet-500/20' },
+    63→}
+    64→
+    65→// Category dot tones used where the Type column merges into the Fee Head
+    66→// cell (spec §7): Core = emerald, Examination = cyan, Additional = violet.
+    67→const TXN_TYPE_DOT: Record<TransactionCategory, { label: string; dot: string }> = {
+    68→  CORE: { label: 'Core Fee', dot: 'bg-emerald-500' },
+    69→  EXAMINATION: { label: 'Examination Fee', dot: 'bg-cyan-500' },
+    70→  ADDITIONAL: { label: 'Additional Charge', dot: 'bg-violet-500' },
+    71→}
+    72→
+    73→export function TransactionTypeBadge({ category, className }: { category: TransactionCategory; className?: string }) {
+    74→  const meta = TXN_TYPE_META[category] ?? TXN_TYPE_META.CORE
+    75→  return (
+    76→    <span className={cn('inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap', meta.className, className)}>
+    77→      {meta.label}
+    78→    </span>
+    79→  )
+    80→}
+    81→
+    82→export function txnCategoryLabel(category: TransactionCategory): string {
+    83→  return (TXN_TYPE_META[category] ?? TXN_TYPE_META.CORE).label
+    84→}
+    85→
+    86→interface Props {
+    87→  data: ReturnType<typeof useFeeData>
+    88→  onCollect?: () => void
+    89→}
+    90→
+    91→// Mobile-only source facet label mapping (kept beside the table).
+    92→const SOURCE_OPTIONS = [
+    93→  { value: 'all', label: 'All Sources' },
+    94→  { value: 'office', label: 'Office' },
+    95→  { value: 'teacher', label: 'Teacher' },
+    96→  { value: 'class_teacher', label: 'Class Teacher' },
+    97→  { value: 'self', label: 'Student self-service' },
+    98→]
+    99→
+   100→export function FeesTransactionsSection({ data }: Props) {
+   101→  const { transactions, accounts } = data
+   102→  const receiptSettings = useFeeStore((s) => s.receiptSettings)
+   103→  const applications = useApplicationsStore((s) => s.applications)
+   104→  // APPS-FIN-LINK-1 — application-bound payments resolve to their form title
+   105→  // so the ledger (and the detail drawer) show WHICH application a payment
+   106→  // belongs to. Rows whose application no longer resolves render unchanged.
+   107→  const appTitleById = useMemo(
+   108→    () => new Map(applications.map((a) => [a.id, a.title])) as Map<string, string>,
+   109→    [applications],
+   110→  )
+   111→
+   112→  const [search, setSearch] = useState('')
+   113→  const [modeFilter, setModeFilter] = useState<'all' | PaymentMode>('all')
+   114→  const [statusFilter, setStatusFilter] = useState<'all' | PaymentStatus>('all')
+   115→  const [classFilter, setClassFilter] = useState('all')
+   116→  const [feeHeadFilter, setFeeHeadFilter] = useState('all')
+   117→  // FINANCIAL TYPE filter — Core Fee / Examination Fee / Additional Charge.
+   118→  const [typeFilter, setTypeFilter] = useState<'all' | TransactionCategory>('all')
+   119→  // OPERATIONAL SOURCE filter (SaaS-STAGE-1) — Office / Teacher /
+   120→  // Class Teacher / Student self-service. Gateway is a channel, not a source.
+   121→  const [sourceFilter, setSourceFilter] = useState('all')
+   122→  const [viewReceipt, setViewReceipt] = useState<FeeTransaction | null>(null)
+   123→
+   124→  // Canonical A5/A4 receipt engine only (thermal consolidated away).
+   125→  const doPrint = (t: FeeTransaction) => {
+   126→    printReceiptA5(t, receiptSettings)
+   127→    useFeeStore.getState().markReceiptHandled(t.id, 'Principal')
+   128→    toast.success('Print dialog opened')
+   129→  }
+   130→  const doDownload = (t: FeeTransaction) => {
+   131→    downloadReceiptA5(t, receiptSettings)
+   132→    useFeeStore.getState().markReceiptHandled(t.id, 'Principal')
+   133→    toast.success('Receipt downloaded', { description: `${t.receiptNo}.html` })
+   134→  }
+   135→  const [detailTxn, setDetailTxn] = useState<FeeTransaction | null>(null)
+   136→
+   137→  const classes = useMemo(() => {
+   138→    const set = new Set(transactions.map((t) => t.className))
+   139→    return Array.from(set).sort()
+   140→  }, [transactions])
+   141→  const feeHeads = useMemo(() => {
+   142→    const set = new Set(transactions.map((t) => t.feeHead))
+   143→    return Array.from(set).sort()
+   144→  }, [transactions])
+   145→
+   146→  const filtered = useMemo(() => {
+   147→    return transactions.filter((t) => {
+   148→      const q = search.toLowerCase().trim()
+   149→      if (q && !t.studentName.toLowerCase().includes(q) && !t.receiptNo.toLowerCase().includes(q) && !t.id.toLowerCase().includes(q) && !t.admissionNo.toLowerCase().includes(q)) return false
+   150→      if (modeFilter !== 'all' && t.mode !== modeFilter) return false
+   151→      if (statusFilter !== 'all' && t.status !== statusFilter) return false
+   152→      if (classFilter !== 'all' && t.className !== classFilter) return false
+   153→      if (feeHeadFilter !== 'all' && t.feeHead !== feeHeadFilter) return false
+   154→      if (typeFilter !== 'all' && txnCategory(t) !== typeFilter) return false
+   155→      if (sourceFilter !== 'all' && txnSourceKey(t) !== sourceFilter) return false
+   156→      return true
+   157→    })
+   158→  }, [transactions, search, modeFilter, statusFilter, classFilter, feeHeadFilter, typeFilter, sourceFilter])
+   159→
+   160→  // ─── Summary metrics (FIX) ────────────────────────────────────────
+   161→  // Only count transactions with status === 'Success' for amount totals.
+   162→  // The Total count reflects ALL rows matching the current filters, and
+   163→  // the Success count shows how many of those have settled — so the
+   164→  // operator sees pending/failed volume separately.
+   165→  const successFiltered = useMemo(
+   166→    () => filtered.filter((t) => t.status === 'Success'),
+   167→    [filtered],
+   168→  )
+   169→  const totalAmount = successFiltered.reduce((s, t) => s + t.amount, 0)
+   170→  const successCount = successFiltered.length
+   171→  const totalCount = filtered.length
+   172→  const avgAmount = successCount > 0 ? Math.round(totalAmount / successCount) : 0
+   173→
+   174→  const activeFiltersCount = (modeFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (classFilter !== 'all' ? 1 : 0) + (feeHeadFilter !== 'all' ? 1 : 0) + (typeFilter !== 'all' ? 1 : 0) + (sourceFilter !== 'all' ? 1 : 0)
+   175→
+   176→  // Reset ghost in the toolbar — same fields the old collapsible panel's
+   177→  // "Clear Filters" button cleared (search text intentionally untouched).
+   178→  const handleResetFilters = () => {
+   179→    setModeFilter('all'); setStatusFilter('all'); setClassFilter('all'); setFeeHeadFilter('all'); setTypeFilter('all'); setSourceFilter('all')
+   180→  }
+   181→
+   182→  const handleExport = () => {
+   183→    if (filtered.length === 0) {
+   184→      toast.info('Nothing to export', { description: 'No transactions match the current filters.' })
+   185→      return
+   186→    }
+   187→    const headers = ['Receipt No', 'Transaction ID', 'Student', 'Admission No', 'Class', 'Fee Head', 'Type', 'Amount', 'Mode', 'Source', 'Status', 'Date', 'Collected By', 'Verified By', 'Reference No', 'Gateway', 'Gateway Payment ID', 'Settlement ID', 'UTR', 'Academic Year']
+   188→    const rows = filtered.map((t) => [
+   189→      t.receiptNo, t.id, t.studentName, t.admissionNo, t.className, t.feeHead,
+   190→      txnCategoryLabel(txnCategory(t)),
+   191→      String(t.amount), t.mode, collectorSourceLabel(t.collectorRole), t.status, t.date, t.collectedBy,
+   192→      t.verifiedBy ?? '', t.referenceNo ?? '',
+   193→      t.gateway ?? '', t.gatewayPaymentId ?? '', t.settlementId ?? '', t.utr ?? '', t.academicYear,
+   194→    ])
+   195→    const csv = [headers, ...rows]
+   196→      .map((r) => r.map((c) => {
+   197→        const s = String(c ?? '')
+   198→        // Quote + escape per RFC 4180
+   199→        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+   200→      }).join(','))
+   201→      .join('\n')
+   202→    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+   203→    const url = URL.createObjectURL(blob)
+   204→    const a = document.createElement('a')
+   205→    a.href = url
+   206→    a.download = `transactions-${new Date().toISOString().split('T')[0]}.csv`
+   207→    document.body.appendChild(a)
+   208→    a.click()
+   209→    document.body.removeChild(a)
+   210→    URL.revokeObjectURL(url)
+   211→    toast.success('Export downloaded', { description: `${filtered.length} transaction(s) exported to CSV.` })
+   212→  }
+   213→
+   214→  return (
+   215→    <div className="space-y-4">
+   216→      {/* KPI cards — the shared Overview SummaryCard language (SaaS-STAGE-1):
+   217→          amounts from Success only; the Transactions card carries the
+   218→          success vs other split as its sub line. */}
+   219→      <SummaryCardGrid columns={3}>
+   220→        <SummaryCard
+   221→          label="Transactions"
+   222→          value={totalCount}
+   223→          tone="slate"
+   224→          icon={<ReceiptText className="h-4 w-4" />}
+   225→          sub={`${successCount} successful · ${totalCount - successCount} other`}
+   226→        />
+   227→        <SummaryCard
+   228→          label="Total Collected"
+   229→          value={formatINR(totalAmount, true)}
+   230→          tone="emerald"
+   231→          icon={<IndianRupee className="h-4 w-4" />}
+   232→          sub="successful only · across filtered rows"
+   233→          delay={0.05}
+   234→        />
+   235→        <SummaryCard
+   236→          label="Avg. Transaction"
+   237→          value={formatINR(avgAmount, true)}
+   238→          tone="teal"
+   239→          icon={<ArrowUpRight className="h-4 w-4" />}
+   240→          sub="per successful payment"
+   241→          delay={0.1}
+   242→        />
+   243→      </SummaryCardGrid>
+   244→
+   245→      {/* Toolbar — shared responsive FilterToolbar (SaaS-STAGE-1):
+   246→          desktop = search + Class/Mode/Status/Fee Head/Type/Source inline;
+   247→          tablet/mobile = ONE compact Filters button → filter sheet. */}
+   248→      <FilterToolbar
+   249→        search={search}
+   250→        onSearchChange={setSearch}
+   251→        searchPlaceholder="Search student / receipt / transaction ID…"
+   252→        activeCount={activeFiltersCount}
+   253→        onReset={handleResetFilters}
+   254→        filters={[
+   255→          { id: 'class', label: 'Class', value: classFilter, onChange: setClassFilter, placeholder: 'All Classes', options: [{ value: 'all', label: 'All Classes' }, ...classes.map((c) => ({ value: c, label: c }))] },
+   256→          { id: 'mode', label: 'Mode', value: modeFilter, onChange: (v) => setModeFilter(v as 'all' | PaymentMode), placeholder: 'All Modes', options: [{ value: 'all', label: 'All Modes' }, { value: 'UPI', label: 'UPI' }, { value: 'Card', label: 'Card' }, { value: 'Net Banking', label: 'Net Banking' }, { value: 'Cash', label: 'Cash' }, { value: 'Cheque', label: 'Cheque' }, { value: 'Bank Transfer', label: 'Bank Transfer' }] },
+   257→          { id: 'status', label: 'Status', value: statusFilter, onChange: (v) => setStatusFilter(v as 'all' | PaymentStatus), placeholder: 'All Status', options: [{ value: 'all', label: 'All Status' }, { value: 'Success', label: 'Success' }, { value: 'Pending', label: 'Pending' }, { value: 'Under Verification', label: 'Under Verification' }, { value: 'Failed', label: 'Failed' }, { value: 'Refunded', label: 'Refunded' }] },
+   258→          { id: 'head', label: 'Fee Head', value: feeHeadFilter, onChange: setFeeHeadFilter, placeholder: 'All Heads', options: [{ value: 'all', label: 'All Heads' }, ...feeHeads.map((h) => ({ value: h, label: h }))] },
+   259→          { id: 'type', label: 'Type', value: typeFilter, onChange: (v) => setTypeFilter(v as 'all' | TransactionCategory), placeholder: 'All Types', options: [{ value: 'all', label: 'All Types' }, { value: 'CORE', label: 'Core Fee' }, { value: 'EXAMINATION', label: 'Examination Fee' }, { value: 'ADDITIONAL', label: 'Additional Charge' }] },
+   260→          { id: 'source', label: 'Source', value: sourceFilter, onChange: setSourceFilter, placeholder: 'All Sources', options: SOURCE_OPTIONS },
+   261→        ]}
+   262→        actions={
+   263→          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleExport}>
+   264→            <Download className="h-3.5 w-3.5" /> Export
+   265→          </Button>
+   266→        }
+   267→      />
+   268→
+   269→      {/* Transactions table — module ledger recipe: flush p-0 body inside the
+   270→          rounded-xl bordered panel; SOLID sticky header row (opaque bg so
+   271→          scrolled rows never bleed through — the old muted/40 translucent
+   272→          tint let the first row show through the header); py-2.5 text-xs
+   273→          cells; hover:bg-muted/30 rows */}
+   274→      <FeePanel bodyClassName="p-0">
+   275→        <div className="overflow-x-auto max-h-[36rem]">
+   276→          <table className="w-full text-xs border-separate border-spacing-0">
+   277→            <thead className="sticky top-0 z-10">
+   278→              <tr className="h-10 bg-muted shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+   279→                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Receipt</th>
+   280→                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Student</th>
+   281→                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden lg:table-cell">Class</th>
+   282→                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden md:table-cell">Fee Head</th>
+   283→                <th className="text-right px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Amount</th>
+   284→                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden sm:table-cell">Mode</th>
+   285→                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden xl:table-cell">Source</th>
+   286→                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Status</th>
+   287→                <th className="text-left px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted hidden lg:table-cell">Date</th>
+   288→                <th className="text-center px-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground whitespace-nowrap bg-muted">Actions</th>
+   289→              </tr>
+   290→            </thead>
+   291→            <tbody>
+   292→              {filtered.map((t) => {
+   293→                const dotMeta = TXN_TYPE_DOT[txnCategory(t)] ?? TXN_TYPE_DOT.CORE
+   294→                return (
+   295→                  <tr
+   296→                    key={t.id}
+   297→                    className="border-t border-border/30 hover:bg-muted/30 cursor-pointer transition-colors"
+   298→                    onClick={() => setDetailTxn(t)}
+   299→                  >
+   300→                    <td className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground whitespace-nowrap">{t.receiptNo}</td>
+   301→                    <td className="px-3 py-2.5 text-xs">
+   302→                      <p className="font-medium">{t.studentName}</p>
+   303→                      <p className="text-[10px] text-muted-foreground font-mono">{t.admissionNo}</p>
+   304→                    </td>
+   305→                    <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell">{t.className}</td>
+   306→                    {/* Fee Head + merged category chip (Type column removed): tiny
+   307→                        colored dot — Core emerald / Exam cyan / Additional violet */}
+   308→                    <td className="px-3 py-2.5 text-xs hidden md:table-cell max-w-[220px]">
+   309→                      <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full" title={`${dotMeta.label} · ${t.feeHead}`}>
+   310→                        <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', dotMeta.dot)} aria-hidden />
+   311→                        <span className="truncate text-muted-foreground">{t.feeHead}</span>
+   312→                      </span>
+   313→                      {t.applicationId && appTitleById.get(t.applicationId) && (
+   314→                        <span
+   315→                          className="block truncate text-[10px] text-muted-foreground/75 mt-px pl-3"
+   316→                          title={`Payment linked to application: ${appTitleById.get(t.applicationId)}`}
+   317→                        >
+   318→                          <span aria-hidden>↳ </span>{appTitleById.get(t.applicationId)}
+   319→                        </span>
+   320→                      )}
+   321→                    </td>
+   322→                    <td className="px-3 py-2.5 text-right tabular-nums font-medium whitespace-nowrap">{formatINR(t.amount)}</td>
+   323→                    <td className="px-3 py-2.5 text-center hidden sm:table-cell">
+   324→                      <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ring-1', modeAccent(t.mode))}>
+   325→                        <ModeIcon mode={t.mode} className="h-2.5 w-2.5" />
+   326→                        {t.mode}
+   327→                      </span>
+   328→                    </td>
+   329→                    {/* Operational source (SaaS-STAGE-1): Office / Teacher /
+   330→                        Class Teacher / Student — never the gateway channel. */}
+   331→                    <td className="px-3 py-2.5 text-center hidden xl:table-cell">
+   332→                      <SourceChip role={t.collectorRole} collectedBy={t.collectedBy} maxW="max-w-[120px]" />
+   333→                    </td>
+   334→                    <td className="px-3 py-2.5 text-center"><FeeStatusBadge status={t.status} /></td>
+   335→                    <td className="px-3 py-2.5 text-xs text-muted-foreground hidden lg:table-cell whitespace-nowrap"><TxnDateTime transaction={t} /></td>
+   336→                    <td className="px-3 py-2.5 text-center">
+   337→                      <div
+   338→                        className="inline-flex items-center gap-0.5"
+   339→                        onClick={(e) => e.stopPropagation()}
+   340→                      >
+   341→                        <button onClick={() => setDetailTxn(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-primary hover:bg-primary/10 transition-colors" title="View details" aria-label={`View details of ${t.receiptNo}`}>
+   342→                          <Eye className="h-3 w-3" />
+   343→                        </button>
+   344→                        <button onClick={() => doPrint(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Print receipt" aria-label={`Print receipt ${t.receiptNo}`}>
+   345→                          <Printer className="h-3 w-3" />
+   346→                        </button>
+   347→                        <button onClick={() => doDownload(t)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Download receipt" aria-label={`Download receipt ${t.receiptNo}`}>
+   348→                          <Download className="h-3 w-3" />
+   349→                        </button>
+   350→                      </div>
+   351→                    </td>
+   352→                  </tr>
+   353→                )
+   354→              })}
+   355→              {filtered.length === 0 && (
+   356→                <tr><td colSpan={10} className="py-12"><FeeEmptyState icon={<ReceiptIcon className="h-6 w-6" />} title="No transactions match your filters" description="Try adjusting the search or filter criteria." /></td></tr>
+   357→              )}
+   358→            </tbody>
+   359→          </table>
+   360→        </div>
+   361→      </FeePanel>
+   362→
+   363→      {/* Receipt preview modal */}
+   364→      <AnimatePresence>
+   365→        {viewReceipt && (
+   366→          <motion.div
+   367→            initial={{ opacity: 0 }}
+   368→            animate={{ opacity: 1 }}
+   369→            exit={{ opacity: 0 }}
+   370→            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+   371→            onClick={() => setViewReceipt(null)}
+   372→          >
+   373→            <motion.div
+   374→              initial={{ scale: 0.95, opacity: 0 }}
+   375→              animate={{ scale: 1, opacity: 1 }}
+   376→              exit={{ scale: 0.95, opacity: 0 }}
+   377→              className="bg-card border border-border rounded-xl p-4 max-h-[90vh] overflow-y-auto w-[min(56rem,calc(100vw-2rem))]"
+   378→              onClick={(e) => e.stopPropagation()}
+   379→            >
+   380→              {/* THE canonical A5/A4 dual-copy receipt (thermal consolidated away) */}
+   381→              <FeeReceiptA5Preview
+   382→                transaction={viewReceipt}
+   383→                settings={receiptSettings}
+   384→                onClose={() => setViewReceipt(null)}
+   385→                onPrint={() => doPrint(viewReceipt)}
+   386→                onDownload={() => doDownload(viewReceipt)}
+   387→              />
+   388→            </motion.div>
+   389→          </motion.div>
+   390→        )}
+   391→      </AnimatePresence>
+   392→
+   393→      {/* Transaction detail drawer (slide-from-right) */}
+   394→      <TransactionDetailDrawer
+   395→        txn={detailTxn}
+   396→        accounts={accounts}
+   397→        receiptSettings={receiptSettings}
+   398→        applicationTitle={detailTxn?.applicationId ? appTitleById.get(detailTxn.applicationId) : undefined}
+   399→        onClose={() => setDetailTxn(null)}
+   400→        onViewReceipt={(t) => setViewReceipt(t)}
+   401→        onPrint={doPrint}
+   402→        onDownload={doDownload}
+   403→      />
+   404→    </div>
+   405→  )
+   406→}
+   407→
+   408→// ─── Transaction Detail Drawer ──────────────────────────────────────
+   409→
+   410→interface DrawerProps {
+   411→  txn: FeeTransaction | null
+   412→  accounts: ReturnType<typeof useFeeData>['accounts']
+   413→  receiptSettings: ReturnType<typeof useFeeStore.getState>['receiptSettings']
+   414→  /** Resolved application title when this payment is bound to an
+   415→   *  Applications & Forms submission (undefined otherwise). */
+   416→  applicationTitle?: string
+   417→  onClose: () => void
+   418→  onViewReceipt: (t: FeeTransaction) => void
+   419→  onPrint: (t: FeeTransaction) => void
+   420→  onDownload: (t: FeeTransaction) => void
+   421→}
+   422→
+   423→function TransactionDetailDrawer({ txn, accounts, receiptSettings, applicationTitle, onClose, onViewReceipt, onPrint, onDownload }: DrawerProps) {
+   424→  if (!txn) return null
+   425→
+   426→  // Look up the student account + ledger to compute balance before/after.
+   427→  const account = accounts.find((a) => a.studentId === txn.studentId)
+   428→  let balanceBefore: number | null = null
+   429→  let balanceAfter: number | null = null
+   430→  if (account) {
+   431→    const idx = account.ledger.findIndex((e) => e.id === `LED-${txn.studentId}-${txn.id}`)
+   432→    if (idx >= 0) {
+   433→      balanceAfter = account.ledger[idx].balance
+   434→      balanceBefore = idx > 0 ? account.ledger[idx - 1].balance : 0
+   435→    }
+   436→  }
+   437→
+   438→  const isOnline = txn.paymentSource === 'online' || txn.paymentSource === 'gateway' || !!txn.gateway
+   439→  const hasGateway = !!txn.gateway || !!txn.gatewayPaymentId || !!txn.gatewayOrderId || !!txn.settlementId
+   440→  const isOffline = txn.paymentSource === 'offline' || ['Cash', 'Cheque', 'Bank Transfer'].includes(txn.mode)
+   441→  const isRefunded = txn.status === 'Refunded' || !!txn.refundedAmount
+   442→
+   443→  return (
+   444→    <Sheet open={!!txn} onOpenChange={(o) => { if (!o) onClose() }}>
+   445→      <SheetContent
+   446→        side="right"
+   447→        className="w-full sm:max-w-lg flex flex-col gap-0 p-0"
+   448→      >
+   449→        <SheetHeader className="px-4 pt-4 pb-2 border-b border-border">
+   450→          <SheetTitle className="flex items-center gap-2 text-sm">
+   451→            <ReceiptIcon className="h-4 w-4 text-emerald-600" />
+   452→            Transaction Detail
+   453→          </SheetTitle>
+   454→          <SheetDescription className="text-[11px]">
+   455→            {txn.receiptNo} · {txn.id}
+   456→          </SheetDescription>
+   457→        </SheetHeader>
+   458→
+   459→        {/* Scrollable body */}
+   460→        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+   461→          {/* Status banner */}
+   462→          <div className={cn(
+   463→            'rounded-lg border px-3 py-2 flex items-center justify-between',
+   464→            txn.status === 'Success' && 'bg-emerald-500/[0.04] border-emerald-500/20',
+   465→            txn.status === 'Pending' && 'bg-amber-500/[0.04] border-amber-500/20',
+   466→            txn.status === 'Under Verification' && 'bg-sky-500/[0.04] border-sky-500/20',
+   467→            txn.status === 'Failed' && 'bg-rose-500/[0.04] border-rose-500/20',
+   468→            txn.status === 'Refunded' && 'bg-violet-500/[0.04] border-violet-500/20',
+   469→          )}>
+   470→            <div>
+   471→              <p className="text-[10px] uppercase text-muted-foreground font-semibold tracking-wider">Status</p>
+   472→              <p className="text-base font-bold mt-0.5">{txn.status}</p>
+   473→            </div>
+   474→            <div className="text-right">
+   475→              <p className="text-[10px] uppercase text-muted-foreground font-semibold tracking-wider">Amount</p>
+   476→              <p className={cn('text-xl font-bold tabular-nums mt-0.5', txn.status === 'Success' ? 'text-emerald-600' : txn.status === 'Failed' ? 'text-rose-600' : '')}>
+   477→                {formatINR(txn.amount)}
+   478→              </p>
+   479→            </div>
+   480→          </div>
+   481→
+   482→          {/* Student info */}
+   483→          <DetailSection icon={<User className="h-3.5 w-3.5" />} title="Student Information">
+   484→            <DetailRow label="Student Name" value={txn.studentName} />
+   485→            <DetailRow label="Admission No" value={txn.admissionNo} mono />
+   486→            <DetailRow label="Class" value={txn.className} />
+   487→            {account && <DetailRow label="Roll No" value={account.rollNo || '—'} />}
+   488→            {account && <DetailRow label="Guardian" value={`${account.guardianName} · ${account.guardianPhone}`} />}
+   489→          </DetailSection>
+   490→
+   491→          {/* Fee info */}
+   492→          <DetailSection icon={<FileText className="h-3.5 w-3.5" />} title="Fee Information">
+   493→            <DetailRow
+   494→              label="Type"
+   495→              value={<TransactionTypeBadge category={txnCategory(txn)} />}
+   496→            />
+   497→            <DetailRow label="Fee Head / Charge" value={txn.feeHead} />
+   498→            {applicationTitle && <DetailRow label="Linked Application" value={applicationTitle} />}
+   499→            <DetailRow label="Purpose" value={txn.purpose} />
+   500→            <DetailRow label="Academic Year" value={txn.academicYear} />
+   501→            {account && (
+   502→              <>
+   503→                <DetailRow label="Net Payable" value={formatINR(account.netPayable)} />
+   504→                <DetailRow label="Outstanding" value={formatINR(account.outstanding)} />
+   505→              </>
+   506→            )}
+   507→          </DetailSection>
+   508→
+   509→          {/* Payment info */}
+   510→          <DetailSection icon={<CreditCard className="h-3.5 w-3.5" />} title="Payment Information">
+   511→            <DetailRow
+   512→              label="Mode"
+   513→              value={
+   514→                <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ring-1', modeAccent(txn.mode))}>
+   515→                  <ModeIcon mode={txn.mode} className="h-2.5 w-2.5" />
+   516→                  {txn.mode}
+   517→                </span>
+   518→              }
+   519→            />
+   520→            <DetailRow label="Status" value={<FeeStatusBadge status={txn.status} />} />
+   521→            <DetailRow label="Receipt No" value={txn.receiptNo} mono />
+   522→            <DetailRow label="Transaction ID" value={txn.id} mono />
+   523→            <DetailRow label="Date / Time" value={`${formatDate(txn.date)} ${txn.verifiedAt ? `· verified ${formatRelativeTime(txn.verifiedAt)}` : ''}`} />
+   524→            {txn.referenceNo && <DetailRow label="Reference No" value={txn.referenceNo} mono />}
+   525→            {txn.meta?.bankName && <DetailRow label="Bank" value={txn.meta.bankName} />}
+   526→            {txn.meta?.chequeNumber && <DetailRow label="Cheque No" value={`${txn.meta.chequeNumber}${txn.meta.chequeDate ? ` · ${formatDate(txn.meta.chequeDate)}` : ''}`} mono />}
+   527→            {txn.meta?.cardLast4 && <DetailRow label="Card Last 4" value={`**** ${txn.meta.cardLast4}`} mono />}
+   528→            {txn.meta?.upiId && <DetailRow label="UPI ID" value={txn.meta.upiId} mono />}
+   529→            {txn.meta?.neftUtr && <DetailRow label="NEFT UTR" value={txn.meta.neftUtr} mono />}
+   530→          </DetailSection>
+   531→
+   532→          {/* Gateway info (only if applicable) */}
+   533→          {hasGateway && (
+   534→            <DetailSection icon={<Landmark className="h-3.5 w-3.5" />} title="Gateway Information">
+   535→              {txn.gateway && <DetailRow label="Gateway" value={<span className="capitalize">{txn.gateway}</span>} />}
+   536→              {txn.gatewayPaymentId && <DetailRow label="Gateway Payment ID" value={txn.gatewayPaymentId} mono />}
+   537→              {txn.gatewayOrderId && <DetailRow label="Gateway Order ID" value={txn.gatewayOrderId} mono />}
+   538→              {txn.settlementId && <DetailRow label="Settlement ID" value={txn.settlementId} mono />}
+   539→              {txn.settlementStatus && (
+   540→                <DetailRow
+   541→                  label="Settlement Status"
+   542→                  value={
+   543→                    <span className={cn(
+   544→                      'inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold capitalize',
+   545→                      txn.settlementStatus === 'settled' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+   546→                      txn.settlementStatus === 'pending' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+   547→                      txn.settlementStatus === 'failed' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+   548→                      txn.settlementStatus === 'reversed' && 'bg-sky-500/10 text-sky-700 dark:text-sky-300',
+   549→                    )}>
+   550→                      {txn.settlementStatus}
+   551→                    </span>
+   552→                  }
+   553→                />
+   554→              )}
+   555→              {txn.utr && <DetailRow label="UTR" value={txn.utr} mono />}
+   556→              {txn.gatewayFee !== undefined && <DetailRow label="Gateway Fee" value={formatINR(txn.gatewayFee)} accent="rose" />}
+   557→              {txn.taxOnFee !== undefined && <DetailRow label="Tax on Fee" value={formatINR(txn.taxOnFee)} accent="rose" />}
+   558→              {txn.netAmount !== undefined && <DetailRow label="Net Amount" value={formatINR(txn.netAmount)} accent="emerald" />}
+   559→              {txn.reconciliationStatus && (
+   560→                <DetailRow
+   561→                  label="Reconciliation"
+   562→                  value={
+   563→                    <span className={cn(
+   564→                      'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold capitalize',
+   565→                      txn.reconciliationStatus === 'reconciled' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+   566→                      txn.reconciliationStatus === 'pending' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+   567→                      txn.reconciliationStatus === 'unreconciled' && 'bg-muted text-muted-foreground',
+   568→                      txn.reconciliationStatus === 'exception' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+   569→                    )}>
+   570→                      <ArrowRightLeft className="h-2.5 w-2.5" />
+   571→                      {txn.reconciliationStatus}
+   572→                    </span>
+   573→                  }
+   574→                />
+   575→              )}
+   576→            </DetailSection>
+   577→          )}
+   578→
+   579→          {/* Refund info (if applicable) */}
+   580→          {isRefunded && (
+   581→            <DetailSection icon={<AlertCircle className="h-3.5 w-3.5" />} title="Refund Information">
+   582→              {txn.refundedAmount !== undefined && <DetailRow label="Refunded Amount" value={formatINR(txn.refundedAmount)} accent="rose" />}
+   583→              {txn.refundReason && <DetailRow label="Reason" value={txn.refundReason} />}
+   584→            </DetailSection>
+   585→          )}
+   586→
+   587→          {/* Offline info (if applicable) */}
+   588→          {isOffline && (
+   589→            <DetailSection icon={<Banknote className="h-3.5 w-3.5" />} title="Offline Collection">
+   590→              <DetailRow label="Collected By" value={txn.collectedBy} />
+   591→              <DetailRow
+   592→                label="Verification"
+   593→                value={
+   594→                  txn.verifiedBy
+   595→                    ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"><ShieldCheck className="h-2.5 w-2.5" /> Verified by {txn.verifiedBy}</span>
+   596→                    : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300">Pending verification</span>
+   597→                }
+   598→              />
+   599→              {txn.verifiedAt && <DetailRow label="Verified At" value={`${formatDate(txn.verifiedAt)} · ${formatRelativeTime(txn.verifiedAt)}`} />}
+   600→            </DetailSection>
+   601→          )}
+   602→
+   603→          {/* Online collection info (if applicable) */}
+   604→          {isOnline && !hasGateway && (
+   605→            <DetailSection icon={<Smartphone className="h-3.5 w-3.5" />} title="Online Collection">
+   606→              <DetailRow label="Collected By" value={txn.collectedBy} />
+   607→              <DetailRow label="Source" value={<span className="capitalize">{txn.paymentSource ?? 'online'}</span>} />
+   608→            </DetailSection>
+   609→          )}
+   610→
+   611→          {/* Balance before / after (if computable from the student ledger) */}
+   612→          {balanceAfter !== null && (
+   613→            <DetailSection icon={<Wallet className="h-3.5 w-3.5" />} title="Account Balance Impact">
+   614→              <DetailRow label="Balance Before" value={balanceBefore !== null ? formatINR(Math.max(0, balanceBefore)) : '—'} />
+   615→              <DetailRow label="Payment Applied" value={`− ${formatINR(txn.amount)}`} accent="emerald" />
+   616→              <DetailRow label="Balance After" value={formatINR(Math.max(0, balanceAfter))} />
+   617→            </DetailSection>
+   618→          )}
+   619→
+   620→          {/* Audit info */}
+   621→          <DetailSection icon={<Calendar className="h-3.5 w-3.5" />} title="Audit Information">
+   622→            <DetailRow label="Recorded On" value={formatDate(txn.date)} />
+   623→            <DetailRow label="Collected By" value={txn.collectedBy} />
+   624→            {txn.verifiedBy && <DetailRow label="Verified By" value={txn.verifiedBy} />}
+   625→            {txn.verifiedAt && <DetailRow label="Verified At" value={`${formatDate(txn.verifiedAt)} · ${formatRelativeTime(txn.verifiedAt)}`} />}
+   626→            <DetailRow label="Academic Year" value={txn.academicYear} />
+   627→          </DetailSection>
+   628→        </div>
+   629→
+   630→        {/* Footer actions */}
+   631→        <div className="border-t border-border bg-card px-4 py-3 flex items-center gap-2 flex-wrap">
+   632→          <Button size="sm" className="gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => onViewReceipt(txn)}>
+   633→            <Eye className="h-3.5 w-3.5" /> View Receipt
+   634→          </Button>
+   635→          <Button size="sm" variant="outline" className="gap-1" onClick={() => onPrint(txn)}>
+   636→            <Printer className="h-3.5 w-3.5" /> Print
+   637→          </Button>
+   638→          <Button size="sm" variant="outline" className="gap-1" onClick={() => onDownload(txn)}>
+   639→            <Download className="h-3.5 w-3.5" /> Download
+   640→          </Button>
+   641→          </div>
+   642→      </SheetContent>
+   643→    </Sheet>
+   644→  )
+   645→}
+   646→
+   647→// ─── Drawer sub-components ───────────────────────────────────────────
+   648→
+   649→function DetailSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+   650→  return (
+   651→    <div>
+   652→      <div className="flex items-center gap-1.5 mb-1.5">
+   653→        <span className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground">{icon}</span>
+   654→        <p className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground">{title}</p>
+   655→      </div>
+   656→      <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 space-y-1">
+   657→        {children}
+   658→      </div>
+   659→    </div>
+   660→  )
+   661→}
+   662→
+   663→function DetailRow({
+   664→  label, value, mono, accent,
+   665→}: {
+   666→  label: string
+   667→  value: React.ReactNode
+   668→  mono?: boolean
+   669→  accent?: 'emerald' | 'rose' | 'amber'
+   670→}) {
+   671→  const accentClass = {
+   672→    emerald: 'text-emerald-600',
+   673→    rose: 'text-rose-600',
+   674→    amber: 'text-amber-600',
+   675→  }[accent ?? ''] ?? ''
+   676→  return (
+   677→    <div className="flex items-start justify-between gap-3 text-[11px]">
+   678→      <span className="text-muted-foreground shrink-0">{label}</span>
+   679→      <span className={cn('font-medium text-right min-w-0 break-words', mono && 'font-mono text-[10px]', accentClass)}>{value || '—'}</span>
+   680→    </div>
+   681→  )
+   682→}
+   683→

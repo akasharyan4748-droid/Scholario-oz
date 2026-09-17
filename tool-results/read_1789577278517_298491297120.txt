@@ -1,0 +1,833 @@
+     1→'use client'
+     2→
+     3→/**
+     4→ * Class Attendance — the CT baseline + ST prefill workflow (spec §11 of
+     5→ * the Teacher Workspace cleanup brief).
+     6→ *
+     7→ * WORKFLOW:
+     8→ *   Class Teacher marks attendance  →  the class's daily baseline
+     9→ *   ↓ (other teachers open their assigned class)
+    10→ *   students are ALREADY marked (prefilled from the baseline)
+    11→ *   ↓
+    12→ *   the subject teacher adjusts only exceptions and explicitly submits
+    13→ *   their OWN subject-session record (kept separate from the baseline).
+    14→ *
+    15→ * Data layer discipline mirrors use-lesson-planner: one aggregate fetch
+    16→ * (`cache: 'no-store', credentials: 'same-origin'`), a 401 that routes
+    17→ * through the shared signOut(), a single-flight submit lock, the POST
+    18→ * response REPLACES the view (no re-GET), and a friendly error
+    19→ * vocabulary for the server's error codes. Simply viewing prefilled
+    20→ * statuses never creates a submission — only the explicit Save does.
+    21→ */
+    22→
+    23→import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+    24→import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+    25→import {
+    26→  Check, CheckCircle2, Clock, Crown, Info, Plane, Save, Search, Sparkles, Users, X,
+    27→} from 'lucide-react'
+    28→import { GlassCard, GradientAvatar, PageTransition, StatusBadge } from '@/components/shared/ui'
+    29→import { ModuleToolbar } from '../teacher-panel/module-toolbar'
+    30→import {
+    31→  HubEmptyState,
+    32→  HubModuleSkeleton,
+    33→  HubSectionError,
+    34→} from './shared/hub-stat-cards'
+    35→import { Button } from '@/components/ui/button'
+    36→import { Input } from '@/components/ui/input'
+    37→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    38→import { toast } from 'sonner'
+    39→import { signOut } from '@/lib/signout'
+    40→import { cn } from '@/lib/utils'
+    41→import {
+    42→  ATTENDANCE_MARKS,
+    43→  type AttendanceMark,
+    44→  type AttendanceScopeDTO,
+    45→  type ClassAttendanceScopesPayload,
+    46→  type ClassAttendanceViewDTO,
+    47→} from '@/lib/class-attendance-types'
+    48→
+    49→// ─── request helper (house fetch discipline) ──────────────────────────
+    50→
+    51→// A dead server session cannot be retried — reset auth ONCE, land on login.
+    52→let sessionExpiredInFlight = false
+    53→
+    54→function handleExpiredSession(): void {
+    55→  if (sessionExpiredInFlight) return
+    56→  sessionExpiredInFlight = true
+    57→  void signOut().finally(() => {
+    58→    window.setTimeout(() => {
+    59→      sessionExpiredInFlight = false
+    60→    }, 2000)
+    61→  })
+    62→}
+    63→
+    64→async function caRequest<T>(url: string, init?: RequestInit): Promise<T> {
+    65→  const r = await fetch(url, {
+    66→    ...init,
+    67→    cache: 'no-store',
+    68→    credentials: 'same-origin',
+    69→    headers: init?.body
+    70→      ? { 'Content-Type': 'application/json', ...(init?.headers ?? {}) }
+    71→      : init?.headers,
+    72→  })
+    73→  if (r.status === 401) {
+    74→    handleExpiredSession()
+    75→    throw new Error('UNAUTHORIZED')
+    76→  }
+    77→  let json: unknown = null
+    78→  try {
+    79→    json = await r.json()
+    80→  } catch {
+    81→    /* non-JSON error body — fall through to the generic message */
+    82→  }
+    83→  const envelope = json as { ok?: unknown; error?: unknown; data?: T } | null
+    84→  if (!r.ok || !envelope || envelope.ok !== true) {
+    85→    const message =
+    86→      envelope && typeof envelope.error === 'string' && envelope.error
+    87→        ? envelope.error
+    88→        : `Request failed (${r.status})`
+    89→    throw new Error(message)
+    90→  }
+    91→  return envelope.data as T
+    92→}
+    93→
+    94→// Server error codes → human sentences (lesson-planner vocabulary style).
+    95→const CA_ERROR_MESSAGES: Record<string, string> = {
+    96→  UNAUTHORIZED: 'Your session has expired. Please sign in again.',
+    97→  FORBIDDEN: "This class isn't assigned to you.",
+    98→  NOT_FOUND: 'That class or subject could not be found.',
+    99→  CLASS_REQUIRED: 'Select a class first.',
+   100→  SUBJECT_REQUIRED: 'Select a subject you teach for this class.',
+   101→  INVALID_DATE: 'Please pick a valid date.',
+   102→  FUTURE_DATE: 'Attendance cannot be marked for a future date.',
+   103→  BAD_STATUS: 'That attendance status is not supported.',
+   104→  BAD_ENTRIES: 'The attendance entries were malformed — please retry.',
+   105→  ROSTER_MISMATCH: 'The class roster changed while you were marking — reloading the latest roster.',
+   106→}
+   107→
+   108→function friendlyError(e: unknown): string {
+   109→  const raw = e instanceof Error ? e.message : ''
+   110→  return CA_ERROR_MESSAGES[raw] ?? 'Attendance could not be loaded. Please try again.'
+   111→}
+   112→
+   113→// ─── presentation helpers ──────────────────────────────────────────────
+   114→
+   115→interface StatusConfig {
+   116→  label: string
+   117→  icon: React.ReactNode
+   118→  active: string
+   119→  inactive: string
+   120→}
+   121→
+   122→const STATUS_CONFIG: Record<AttendanceMark, StatusConfig> = {
+   123→  present: {
+   124→    label: 'Present',
+   125→    icon: <Check className="h-3.5 w-3.5" aria-hidden="true" />,
+   126→    active: 'bg-emerald-500 text-white border-emerald-500 shadow-sm shadow-emerald-500/30',
+   127→    inactive: 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 border-emerald-500/30',
+   128→  },
+   129→  absent: {
+   130→    label: 'Absent',
+   131→    icon: <X className="h-3.5 w-3.5" aria-hidden="true" />,
+   132→    active: 'bg-rose-500 text-white border-rose-500 shadow-sm shadow-rose-500/30',
+   133→    inactive: 'text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 border-rose-500/30',
+   134→  },
+   135→  late: {
+   136→    label: 'Late',
+   137→    icon: <Clock className="h-3.5 w-3.5" aria-hidden="true" />,
+   138→    active: 'bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/30',
+   139→    inactive: 'text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 border-amber-500/30',
+   140→  },
+   141→  leave: {
+   142→    label: 'Leave',
+   143→    icon: <Plane className="h-3.5 w-3.5" aria-hidden="true" />,
+   144→    active: 'bg-info text-white border-info shadow-sm',
+   145→    inactive: 'text-info hover:bg-info/10 border-info/30',
+   146→  },
+   147→}
+   148→
+   149→const ROW_TINT: Record<AttendanceMark, string> = {
+   150→  present: 'border-emerald-500/20 bg-emerald-500/5',
+   151→  absent: 'border-rose-500/20 bg-rose-500/5',
+   152→  late: 'border-amber-500/20 bg-amber-500/5',
+   153→  leave: 'border-info/20 bg-info/5',
+   154→}
+   155→
+   156→/** Thin-scrollbar utilities (the house recipe — no global CSS needed). */
+   157→const THIN_SCROLLBAR =
+   158→  '[scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/25 [&::-webkit-scrollbar-track]:bg-transparent'
+   159→
+   160→function fmtDay(day: string): string {
+   161→  return new Date(`${day}T00:00:00.000Z`).toLocaleDateString('en-IN', {
+   162→    weekday: 'long',
+   163→    day: 'numeric',
+   164→    month: 'long',
+   165→    year: 'numeric',
+   166→    timeZone: 'UTC',
+   167→  })
+   168→}
+   169→
+   170→function fmtTime(iso: string): string {
+   171→  return new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
+   172→}
+   173→
+   174→/** Draft rule (the key prefill semantic): own session → CT baseline → present. */
+   175→function persistedStatus(s: { sessionStatus: AttendanceMark | null; baselineStatus: AttendanceMark | null }): AttendanceMark {
+   176→  return s.sessionStatus ?? s.baselineStatus ?? 'present'
+   177→}
+   178→
+   179→function buildDraft(view: ClassAttendanceViewDTO): Record<string, AttendanceMark> {
+   180→  const draft: Record<string, AttendanceMark> = {}
+   181→  for (const s of view.roster) draft[s.studentId] = persistedStatus(s)
+   182→  return draft
+   183→}
+   184→
+   185→// ─── the data hook ────────────────────────────────────────────────────
+   186→
+   187→interface ClassAttendanceState {
+   188→  /** the teacher's allowed classes (always fresh from the last payload) */
+   189→  scopes: AttendanceScopeDTO[]
+   190→  /** true once the scopes request succeeded (empty list = no classes) */
+   191→  scopesLoaded: boolean
+   192→  /** set when the scopes request itself failed (nothing rendered yet) */
+   193→  scopesErrorMessage: string | null
+   194→  today: string
+   195→  scopeSel: { classId: string; subjectId: string | null }
+   196→  date: string
+   197→  view: ClassAttendanceViewDTO | null
+   198→  viewLoading: boolean
+   199→  viewError: string | null
+   200→  draft: Record<string, AttendanceMark>
+   201→  submitting: boolean
+   202→  selectClass: (classId: string) => void
+   203→  selectSubject: (subjectId: string) => void
+   204→  setDate: (day: string) => void
+   205→  setStatus: (studentId: string, status: AttendanceMark) => void
+   206→  markAllPresent: (studentIds: string[]) => void
+   207→  reloadView: () => void
+   208→  retryScopes: () => void
+   209→  submit: () => Promise<void>
+   210→}
+   211→
+   212→function useClassAttendance(): ClassAttendanceState {
+   213→  const [scopesPayload, setScopesPayload] = useState<ClassAttendanceScopesPayload | null>(null)
+   214→  const [scopesError, setScopesError] = useState<string | null>(null)
+   215→  const [scopeSel, setScopeSel] = useState<{ classId: string; subjectId: string | null }>({ classId: '', subjectId: null })
+   216→  const [date, setDate] = useState('')
+   217→  const [view, setView] = useState<ClassAttendanceViewDTO | null>(null)
+   218→  const [viewLoading, setViewLoading] = useState(false)
+   219→  const [viewError, setViewError] = useState<string | null>(null)
+   220→  const [draft, setDraft] = useState<Record<string, AttendanceMark>>({})
+   221→  const [submitting, setSubmitting] = useState(false)
+   222→  const [scopesTick, setScopesTick] = useState(0)
+   223→  const [viewTick, setViewTick] = useState(0)
+   224→
+   225→  const mounted = useRef(true)
+   226→  const submittingRef = useRef(false)
+   227→
+   228→  useEffect(() => {
+   229→    mounted.current = true
+   230→    return () => {
+   231→      mounted.current = false
+   232→    }
+   233→  }, [])
+   234→
+   235→  const applyView = useCallback((v: ClassAttendanceViewDTO) => {
+   236→    setView(v)
+   237→    setDraft(buildDraft(v))
+   238→  }, [])
+   239→
+   240→  // ① scopes — fetched once (and on retry); picks the default scope + date.
+   241→  useEffect(() => {
+   242→    let cancelled = false
+   243→    caRequest<ClassAttendanceScopesPayload>('/api/teacher/class-attendance')
+   244→      .then((d) => {
+   245→        if (cancelled || !mounted.current) return
+   246→        setScopesPayload(d)
+   247→        setScopesError(null)
+   248→        if (d.scopes.length) {
+   249→          setScopeSel((cur) =>
+   250→            cur.classId
+   251→              ? cur
+   252→              : { classId: d.scopes[0].classId, subjectId: d.scopes[0].subjects[0]?.subjectId ?? null },
+   253→          )
+   254→          setDate((cur) => cur || d.today)
+   255→        }
+   256→      })
+   257→      .catch((e: unknown) => {
+   258→        if (cancelled || !mounted.current) return
+   259→        setScopesError(e instanceof Error && e.message === 'UNAUTHORIZED' ? 'UNAUTHORIZED' : friendlyError(e))
+   260→      })
+   261→    return () => {
+   262→      cancelled = true
+   263→    }
+   264→  }, [scopesTick])
+   265→
+   266→  // ② the marking view — re-fetched on every scope / date change.
+   267→  useEffect(() => {
+   268→    if (!scopeSel.classId || !date) return
+   269→    let cancelled = false
+   270→    setViewLoading(true)
+   271→    setViewError(null)
+   272→    const params = new URLSearchParams({ classId: scopeSel.classId, date })
+   273→    if (scopeSel.subjectId) params.set('subjectId', scopeSel.subjectId)
+   274→    caRequest<ClassAttendanceViewDTO>(`/api/teacher/class-attendance?${params.toString()}`)
+   275→      .then((d) => {
+   276→        if (!cancelled && mounted.current) applyView(d)
+   277→      })
+   278→      .catch((e: unknown) => {
+   279→        if (!cancelled && mounted.current) setViewError(friendlyError(e))
+   280→      })
+   281→      .finally(() => {
+   282→        if (!cancelled && mounted.current) setViewLoading(false)
+   283→      })
+   284→    return () => {
+   285→      cancelled = true
+   286→    }
+   287→  }, [scopeSel, date, viewTick, applyView])
+   288→
+   289→  const selectClass = useCallback((classId: string) => {
+   290→    setScopeSel((cur) => {
+   291→      if (cur.classId === classId) return cur
+   292→      const scope = (view?.scopes ?? scopesPayload?.scopes ?? []).find((s) => s.classId === classId)
+   293→      return { classId, subjectId: scope?.subjects[0]?.subjectId ?? null }
+   294→    })
+   295→  }, [view, scopesPayload])
+   296→
+   297→  const selectSubject = useCallback((subjectId: string) => {
+   298→    setScopeSel((cur) => (cur.subjectId === subjectId ? cur : { ...cur, subjectId }))
+   299→  }, [])
+   300→
+   301→  const setStatus = useCallback((studentId: string, status: AttendanceMark) => {
+   302→    setDraft((prev) => (prev[studentId] === status ? prev : { ...prev, [studentId]: status }))
+   303→  }, [])
+   304→
+   305→  const markAllPresent = useCallback((studentIds: string[]) => {
+   306→    setDraft((prev) => {
+   307→      const next = { ...prev }
+   308→      let changed = 0
+   309→      for (const id of studentIds) {
+   310→        if (next[id] !== 'present') changed++
+   311→        next[id] = 'present'
+   312→      }
+   313→      return changed ? next : prev
+   314→    })
+   315→  }, [])
+   316→
+   317→  const reloadView = useCallback(() => setViewTick((t) => t + 1), [])
+   318→  const retryScopes = useCallback(() => setScopesTick((t) => t + 1), [])
+   319→
+   320→  // ③ the explicit submission — the ONLY write path. Single-flight; the
+   321→  //    POST response replaces the view (persistence without a re-GET).
+   322→  const submit = useCallback(async () => {
+   323→    if (!view || submittingRef.current || !view.roster.length) return
+   324→    submittingRef.current = true
+   325→    setSubmitting(true)
+   326→    const entries = view.roster.map((s) => ({
+   327→      studentId: s.studentId,
+   328→      status: draft[s.studentId] ?? 'present',
+   329→    }))
+   330→    try {
+   331→      const data = await caRequest<ClassAttendanceViewDTO>('/api/teacher/class-attendance', {
+   332→        method: 'POST',
+   333→        body: JSON.stringify({
+   334→          classId: view.classId,
+   335→          subjectId: view.subjectId,
+   336→          date: view.date,
+   337→          entries,
+   338→        }),
+   339→      })
+   340→      submittingRef.current = false
+   341→      if (mounted.current) applyView(data)
+   342→      const present = entries.filter((e) => e.status === 'present').length
+   343→      if (data.mode === 'CT_DAILY') {
+   344→        toast.success('Class baseline saved', {
+   345→          description: `${data.classLabel} · ${fmtDay(data.date)} · ${present} of ${entries.length} present`,
+   346→        })
+   347→      } else if (data.isClassTeacher) {
+   348→        toast.success(`${data.subjectName} attendance saved`, {
+   349→          description: `${present} of ${entries.length} present · the class baseline for ${data.classLabel} was updated too`,
+   350→        })
+   351→      } else {
+   352→        toast.success(`${data.subjectName} attendance saved`, {
+   353→          description: `${data.classLabel} · ${fmtDay(data.date)} · ${present} of ${entries.length} present`,
+   354→        })
+   355→      }
+   356→    } catch (e: unknown) {
+   357→      submittingRef.current = false
+   358→      const code = e instanceof Error ? e.message : ''
+   359→      toast.error(friendlyError(e))
+   360→      if (code === 'ROSTER_MISMATCH') reloadView()
+   361→    } finally {
+   362→      if (mounted.current) setSubmitting(false)
+   363→    }
+   364→  }, [view, draft, applyView, reloadView])
+   365→
+   366→  return {
+   367→    scopes: view?.scopes ?? scopesPayload?.scopes ?? [],
+   368→    scopesLoaded: scopesPayload != null,
+   369→    scopesErrorMessage: scopesError,
+   370→    today: view?.today ?? scopesPayload?.today ?? date,
+   371→    scopeSel,
+   372→    date,
+   373→    view,
+   374→    viewLoading,
+   375→    viewError,
+   376→    draft,
+   377→    submitting,
+   378→    selectClass,
+   379→    selectSubject,
+   380→    setDate,
+   381→    setStatus,
+   382→    markAllPresent,
+   383→    reloadView,
+   384→    retryScopes,
+   385→    submit,
+   386→  }
+   387→}
+   388→
+   389→// ─── the module ───────────────────────────────────────────────────────
+   390→
+   391→export function AttendanceModule() {
+   392→  const reduce = useReducedMotion()
+   393→  const [search, setSearch] = useState('')
+   394→  const ca = useClassAttendance()
+   395→  const { view, scopes, today, date, scopeSel, draft, submitting, viewLoading, viewError } = ca
+   396→
+   397→  // ── derived state (the whole UI reads from these) ──
+   398→  const roster = useMemo(() => view?.roster ?? [], [view])
+   399→  const currentScope = useMemo(
+   400→    () => scopes.find((s) => s.classId === scopeSel.classId) ?? null,
+   401→    [scopes, scopeSel.classId],
+   402→  )
+   403→  const mode = view?.mode ?? (scopeSel.subjectId ? 'SUBJECT' : 'CT_DAILY')
+   404→
+   405→  const counts = useMemo(() => {
+   406→    const c = { present: 0, absent: 0, late: 0, leave: 0 }
+   407→    for (const s of roster) c[draft[s.studentId] ?? 'present']++
+   408→    return c
+   409→  }, [roster, draft])
+   410→
+   411→  const total = roster.length
+   412→  const rate = total > 0 ? ((counts.present / total) * 100).toFixed(1) : '0.0'
+   413→
+   414→  const filtered = useMemo(() => {
+   415→    const q = search.trim().toLowerCase()
+   416→    if (!q) return roster
+   417→    return roster.filter(
+   418→      (s) => s.name.toLowerCase().includes(q) || (s.rollNo ?? '').toLowerCase().includes(q),
+   419→    )
+   420→  }, [roster, search])
+   421→
+   422→  // A change = any draft status differs from what is persisted for that
+   423→  // student (own session → CT baseline → the implicit 'present' default).
+   424→  const hasChanges = useMemo(
+   425→    () => roster.some((s) => (draft[s.studentId] ?? 'present') !== persistedStatus(s)),
+   426→    [roster, draft],
+   427→  )
+   428→  // "Persisted" only counts when EVERY roster student has a row — a day
+   429→  // that only partially has records is still unsubmitted (e.g. legacy
+   430→  // one-student baseline rows must not fake a Saved state).
+   431→  const fullyPersisted = Boolean(
+   432→    view && total > 0 && (mode === 'SUBJECT'
+   433→      ? view.meta.session.count >= total
+   434→      : view.meta.baseline.count >= total),
+   435→  )
+   436→  const clean = fullyPersisted && !hasChanges
+   437→
+   438→  const submittedNote =
+   439→    view && mode === 'SUBJECT' && view.meta.session.submitted && view.meta.session.submittedAt
+   440→      ? `Submitted ${fmtTime(view.meta.session.submittedAt)}`
+   441→      : view && mode === 'CT_DAILY' && view.meta.baseline.marked
+   442→        ? 'Baseline saved'
+   443→        : null
+   444→
+   445→  const saveLabel = submitting
+   446→    ? 'Saving…'
+   447→    : clean
+   448→      ? mode === 'SUBJECT' ? 'Submitted' : 'Saved'
+   449→      : fullyPersisted
+   450→        ? mode === 'SUBJECT' ? 'Update Submission' : 'Update Attendance'
+   451→        : 'Save Attendance'
+   452→  const saveDisabled = submitting || clean || !total
+   453→
+   454→  // Prefill semantics — calm, one line, never per-row shouting.
+   455→  const showPrefillNote =
+   456→    view != null && mode === 'SUBJECT' && !view.meta.session.submitted && view.meta.baseline.marked
+   457→  const showClassTeacherNote =
+   458→    view != null && (mode === 'CT_DAILY' || (mode === 'SUBJECT' && view.isClassTeacher && !view.meta.baseline.marked))
+   459→
+   460→  const handleBulkPresent = () => {
+   461→    const ids = filtered.map((s) => s.studentId)
+   462→    if (!ids.length) return
+   463→    ca.markAllPresent(ids)
+   464→    toast.success(`Marked ${ids.length} student${ids.length === 1 ? '' : 's'} present`, {
+   465→      description: 'Review and save the attendance.',
+   466→    })
+   467→  }
+   468→
+   469→  // ── early states ──
+   470→  if (!ca.scopesLoaded && ca.scopesErrorMessage != null) {
+   471→    return (
+   472→      <PageTransition className="space-y-5">
+   473→        <GlassCard className="p-4" hover={false}>
+   474→          <HubSectionError message={ca.scopesErrorMessage} onRetry={ca.retryScopes} />
+   475→        </GlassCard>
+   476→      </PageTransition>
+   477→    )
+   478→  }
+   479→
+   480→  if (!ca.scopesLoaded) {
+   481→    return (
+   482→      <PageTransition>
+   483→        <HubModuleSkeleton />
+   484→      </PageTransition>
+   485→    )
+   486→  }
+   487→
+   488→  if (!scopes.length) {
+   489→    return (
+   490→      <PageTransition className="space-y-5">
+   491→        <GlassCard hover={false} className="overflow-hidden">
+   492→          <HubEmptyState
+   493→            icon={Users}
+   494→            title="No classes assigned"
+   495→            hint="Attendance follows your class-subject assignments and class-teacher duties. Once the school office assigns you a class, its roster appears here automatically."
+   496→          />
+   497→        </GlassCard>
+   498→      </PageTransition>
+   499→    )
+   500→  }
+   501→
+   502→  return (
+   503→    <PageTransition className="space-y-5">
+   504→      <ModuleToolbar
+   505→        className="flex-col items-stretch sm:flex-row sm:items-center"
+   506→        context={`Mark daily attendance · ${fmtDay(date || today)}`}
+   507→        action={
+   508→          <div className="flex flex-wrap items-center gap-2">
+   509→            <Select value={scopeSel.classId} onValueChange={ca.selectClass}>
+   510→              <SelectTrigger className="h-9 w-[128px]" aria-label="Select class">
+   511→                <SelectValue placeholder="Class" />
+   512→              </SelectTrigger>
+   513→              <SelectContent>
+   514→                {scopes.map((s) => (
+   515→                  <SelectItem key={s.classId} value={s.classId}>
+   516→                    {s.classLabel}
+   517→                  </SelectItem>
+   518→                ))}
+   519→              </SelectContent>
+   520→            </Select>
+   521→
+   522→            {mode === 'SUBJECT' && currentScope ? (
+   523→              <Select value={scopeSel.subjectId ?? undefined} onValueChange={ca.selectSubject}>
+   524→                <SelectTrigger className="h-9 w-[136px]" aria-label="Select subject">
+   525→                  <SelectValue placeholder="Subject" />
+   526→                </SelectTrigger>
+   527→                <SelectContent>
+   528→                  {currentScope.subjects.map((sub) => (
+   529→                    <SelectItem key={sub.subjectId} value={sub.subjectId}>
+   530→                      {sub.subjectName}
+   531→                    </SelectItem>
+   532→                  ))}
+   533→                </SelectContent>
+   534→              </Select>
+   535→            ) : (
+   536→              <span className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-3 text-xs font-medium text-muted-foreground">
+   537→                <Crown className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" />
+   538→                Class Teacher · Daily Attendance
+   539→              </span>
+   540→            )}
+   541→
+   542→            <div className="relative flex items-center gap-2">
+   543→              <Input
+   544→                type="date"
+   545→                value={date}
+   546→                max={today}
+   547→                onChange={(e) => {
+   548→                  if (e.target.value) ca.setDate(e.target.value)
+   549→                }}
+   550→                className="h-9 w-[142px]"
+   551→                aria-label="Attendance date"
+   552→              />
+   553→              {date && today && date !== today && (
+   554→                <button
+   555→                  type="button"
+   556→                  onClick={() => ca.setDate(today)}
+   557→                  className="flex h-9 shrink-0 items-center rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/50"
+   558→                >
+   559→                  Today
+   560→                </button>
+   561→              )}
+   562→            </div>
+   563→
+   564→            {submittedNote && (
+   565→              <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+   566→                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+   567→                {submittedNote}
+   568→              </span>
+   569→            )}
+   570→
+   571→            <Button
+   572→              type="button"
+   573→              onClick={() => void ca.submit()}
+   574→              disabled={saveDisabled}
+   575→              className="h-9 min-w-[128px]"
+   576→            >
+   577→              <AnimatePresence mode="wait" initial={false}>
+   578→                {submitting ? (
+   579→                  <motion.span
+   580→                    key="saving"
+   581→                    initial={{ opacity: 0 }}
+   582→                    animate={{ opacity: 1 }}
+   583→                    exit={{ opacity: 0 }}
+   584→                    className="flex items-center gap-2"
+   585→                  >
+   586→                    <motion.span
+   587→                      animate={{ rotate: 360 }}
+   588→                      transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+   589→                      className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white"
+   590→                      aria-hidden="true"
+   591→                    />
+   592→                    Saving…
+   593→                  </motion.span>
+   594→                ) : clean ? (
+   595→                  <motion.span
+   596→                    key="saved"
+   597→                    initial={{ scale: 0.6, opacity: 0 }}
+   598→                    animate={{ scale: 1, opacity: 1 }}
+   599→                    className="flex items-center gap-2"
+   600→                  >
+   601→                    <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+   602→                    {mode === 'SUBJECT' ? 'Submitted' : 'Saved'}
+   603→                  </motion.span>
+   604→                ) : (
+   605→                  <motion.span
+   606→                    key="save"
+   607→                    initial={{ opacity: 0 }}
+   608→                    animate={{ opacity: 1 }}
+   609→                    exit={{ opacity: 0 }}
+   610→                    className="flex items-center gap-2"
+   611→                  >
+   612→                    <Save className="h-4 w-4" aria-hidden="true" />
+   613→                    {fullyPersisted ? (mode === 'SUBJECT' ? 'Update Submission' : 'Update Attendance') : 'Save Attendance'}
+   614→                  </motion.span>
+   615→                )}
+   616→              </AnimatePresence>
+   617→            </Button>
+   618→          </div>
+   619→        }
+   620→      />
+   621→
+   622→      {viewError && !view ? (
+   623→        <GlassCard className="p-4" hover={false}>
+   624→          <HubSectionError message={viewError} onRetry={ca.reloadView} />
+   625→        </GlassCard>
+   626→      ) : !view ? (
+   627→        <HubModuleSkeleton />
+   628→      ) : (
+   629→        <div
+   630→          aria-busy={viewLoading}
+   631→          className={cn('space-y-5 transition-opacity duration-200', viewLoading && 'pointer-events-none opacity-60')}
+   632→        >
+   633→          {/* Live summary cards */}
+   634→          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+   635→            {[
+   636→              { key: 'present', label: 'Present', value: counts.present, color: 'emerald', icon: <Check className="h-4 w-4" /> },
+   637→              { key: 'absent', label: 'Absent', value: counts.absent, color: 'rose', icon: <X className="h-4 w-4" /> },
+   638→              { key: 'late', label: 'Late', value: counts.late, color: 'amber', icon: <Clock className="h-4 w-4" /> },
+   639→              { key: 'leave', label: 'On Leave', value: counts.leave, color: 'info', icon: <Plane className="h-4 w-4" /> },
+   640→            ].map((c, i) => (
+   641→              <motion.div
+   642→                key={c.key}
+   643→                initial={reduce ? false : { opacity: 0, y: 12 }}
+   644→                animate={{ opacity: 1, y: 0 }}
+   645→                transition={{ delay: i * 0.05 }}
+   646→              >
+   647→                <GlassCard className="p-3 sm:p-4" hover={false}>
+   648→                  <div className="flex items-center justify-between mb-2">
+   649→                    <span className="text-xs text-muted-foreground font-medium">{c.label}</span>
+   650→                    <div
+   651→                      className={cn(
+   652→                        'flex h-7 w-7 items-center justify-center rounded-lg',
+   653→                        c.color === 'emerald' && 'bg-emerald-500/10 text-emerald-600',
+   654→                        c.color === 'rose' && 'bg-rose-500/10 text-rose-600',
+   655→                        c.color === 'amber' && 'bg-amber-500/10 text-amber-600',
+   656→                        c.color === 'info' && 'bg-info/10 text-info',
+   657→                      )}
+   658→                    >
+   659→                      {c.icon}
+   660→                    </div>
+   661→                  </div>
+   662→                  <p
+   663→                    className={cn(
+   664→                      'font-display text-2xl font-bold',
+   665→                      c.color === 'emerald' && 'text-emerald-600 dark:text-emerald-400',
+   666→                      c.color === 'rose' && 'text-rose-600 dark:text-rose-400',
+   667→                      c.color === 'amber' && 'text-amber-600 dark:text-amber-400',
+   668→                      c.color === 'info' && 'text-info',
+   669→                    )}
+   670→                  >
+   671→                    <motion.span
+   672→                      key={c.value}
+   673→                      initial={reduce ? false : { scale: 1.3 }}
+   674→                      animate={{ scale: 1 }}
+   675→                      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+   676→                      className="tabular-nums"
+   677→                    >
+   678→                      {c.value}
+   679→                    </motion.span>
+   680→                    <span className="text-base text-muted-foreground font-normal">/{total}</span>
+   681→                  </p>
+   682→                </GlassCard>
+   683→              </motion.div>
+   684→            ))}
+   685→          </div>
+   686→
+   687→          {/* Roster card */}
+   688→          <GlassCard className="p-3 sm:p-4 lg:p-5">
+   689→            {showPrefillNote && (
+   690→              <div className="mb-4 flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+   691→                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+   692→                <span>Prefilled from the Class Teacher&rsquo;s attendance — adjust exceptions and submit.</span>
+   693→              </div>
+   694→            )}
+   695→            {showClassTeacherNote && (
+   696→              <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+   697→                <Crown className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+   698→                <span>You are the Class Teacher — your submission becomes the class baseline for the day.</span>
+   699→              </div>
+   700→            )}
+   701→
+   702→            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+   703→              <div className="min-w-0">
+   704→                <h3 className="font-semibold text-sm truncate">
+   705→                  {view.classLabel}
+   706→                  {view.subjectName ? ` · ${view.subjectName}` : ' · Daily Attendance'} · Student Roster
+   707→                </h3>
+   708→                <p className="text-xs text-muted-foreground mt-0.5">
+   709→                  Tap a status for each student · Attendance rate: {rate}%
+   710→                </p>
+   711→              </div>
+   712→              <div className="flex w-full items-center gap-2 sm:w-auto">
+   713→                <div className="relative min-w-0 flex-1 sm:flex-none">
+   714→                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+   715→                  <Input
+   716→                    value={search}
+   717→                    onChange={(e) => setSearch(e.target.value)}
+   718→                    placeholder="Search student…"
+   719→                    aria-label="Search students"
+   720→                    className="pl-8 h-9 w-full sm:w-44"
+   721→                  />
+   722→                </div>
+   723→                <Button
+   724→                  type="button"
+   725→                  variant="outline"
+   726→                  size="sm"
+   727→                  onClick={handleBulkPresent}
+   728→                  disabled={!filtered.length}
+   729→                  className="h-9 shrink-0"
+   730→                >
+   731→                  <Sparkles className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" /> Mark all present
+   732→                </Button>
+   733→              </div>
+   734→            </div>
+   735→
+   736→            {total === 0 ? (
+   737→              <HubEmptyState
+   738→                icon={Users}
+   739→                title="No students in this class"
+   740→                hint="Once students are enrolled into the class, their roster appears here for marking."
+   741→                className="py-8"
+   742→              />
+   743→            ) : (
+   744→              <div className={cn('space-y-2 max-h-[640px] overflow-y-auto pr-1 -mr-1', THIN_SCROLLBAR)}>
+   745→                {filtered.map((s, i) => {
+   746→                  const current = draft[s.studentId] ?? 'present'
+   747→                  return (
+   748→                    <motion.div
+   749→                      key={s.studentId}
+   750→                      initial={reduce ? false : { opacity: 0, y: 8 }}
+   751→                      animate={{ opacity: 1, y: 0 }}
+   752→                      transition={{ delay: Math.min(i * 0.02, 0.25) }}
+   753→                      className={cn(
+   754→                        'flex items-center gap-2 sm:gap-3 rounded-xl border p-2.5 sm:p-3 transition-colors',
+   755→                        ROW_TINT[current],
+   756→                      )}
+   757→                    >
+   758→                      <div className="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
+   759→                        {s.rollNo ?? '—'}
+   760→                      </div>
+   761→                      <GradientAvatar name={s.name} size="sm" />
+   762→                      <div className="min-w-0 flex-1">
+   763→                        <p className="font-medium text-sm truncate">{s.name}</p>
+   764→                        <p className="text-[11px] text-muted-foreground truncate">
+   765→                          Roll #{s.rollNo ?? '—'} · {view.classLabel}
+   766→                        </p>
+   767→                      </div>
+   768→                      <div className="flex items-center gap-1 sm:gap-1.5">
+   769→                        {ATTENDANCE_MARKS.map((m) => {
+   770→                          const cfg = STATUS_CONFIG[m]
+   771→                          const isActive = current === m
+   772→                          return (
+   773→                            <motion.button
+   774→                              key={m}
+   775→                              type="button"
+   776→                              whileTap={reduce ? undefined : { scale: 0.92 }}
+   777→                              onClick={() => ca.setStatus(s.studentId, m)}
+   778→                              aria-pressed={isActive}
+   779→                              aria-label={`Mark ${s.name} as ${cfg.label}`}
+   780→                              title={cfg.label}
+   781→                              className={cn(
+   782→                                'flex items-center justify-center gap-1 rounded-lg border text-[11px] font-medium transition-all',
+   783→                                'h-11 w-11 sm:h-8 sm:w-auto sm:px-2.5',
+   784→                                isActive ? cfg.active : cn('bg-transparent', cfg.inactive),
+   785→                              )}
+   786→                            >
+   787→                              {cfg.icon}
+   788→                              <span className="hidden sm:inline">{cfg.label}</span>
+   789→                            </motion.button>
+   790→                          )
+   791→                        })}
+   792→                      </div>
+   793→                    </motion.div>
+   794→                  )
+   795→                })}
+   796→                {filtered.length === 0 && (
+   797→                  <div className="py-10 text-center">
+   798→                    <Users className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" aria-hidden="true" />
+   799→                    <p className="text-sm font-medium text-muted-foreground">No students match &ldquo;{search}&rdquo;</p>
+   800→                  </div>
+   801→                )}
+   802→              </div>
+   803→            )}
+   804→
+   805→            {/* Footer summary */}
+   806→            <div className="mt-4 pt-4 border-t border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+   807→              <div className="flex items-center gap-2 text-xs">
+   808→                <Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+   809→                <span className="text-muted-foreground">
+   810→                  Total: <span className="font-semibold text-foreground">{total} students</span>
+   811→                </span>
+   812→                <span className="text-muted-foreground">·</span>
+   813→                <StatusBadge
+   814→                  status={total > 0 && counts.present / total >= 0.85 ? 'Healthy' : total > 0 && counts.present / total >= 0.65 ? 'Average' : 'Low'}
+   815→                  variant={total > 0 && counts.present / total >= 0.85 ? 'success' : total > 0 && counts.present / total >= 0.65 ? 'warning' : 'danger'}
+   816→                  dot
+   817→                />
+   818→              </div>
+   819→              <p className="text-[11px] text-muted-foreground">
+   820→                {clean ? (
+   821→                  <span className="font-medium text-emerald-600 dark:text-emerald-400">All changes saved</span>
+   822→                ) : (
+   823→                  <span className="font-medium text-amber-600 dark:text-amber-400">Unsaved changes</span>
+   824→                )}
+   825→              </p>
+   826→            </div>
+   827→          </GlassCard>
+   828→        </div>
+   829→      )}
+   830→    </PageTransition>
+   831→  )
+   832→}
+   833→

@@ -1,0 +1,6 @@
+{
+  "name": "dev-server",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  }
+}

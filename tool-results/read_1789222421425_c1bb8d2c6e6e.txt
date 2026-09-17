@@ -1,0 +1,2002 @@
+     1→/**
+     2→ * Fee data store — canonical Principal Fee Management store.
+     3→ *
+     4→ * Connected to the same StudentRecord[] used by Students & Classes,
+     5→ * Admissions, Attendance, Examinations.
+     6→ *
+     7→ * Mutations:
+     8→ *   - recordPayment (with validation)
+     9→ *   - approveCashRequest / rejectCashRequest / requestClarification
+    10→ *   - addFeeHead / updateFeeHead / archiveFeeHead
+    11→ *   - addPaymentMode / updatePaymentMode / togglePaymentMode
+    12→ *   - updateLateFeeRule / updateConcessionRule
+    13→ *   - updateReceiptSettings
+    14→ *   - reprintReceipt (no second financial transaction)
+    15→ *
+    16→ * Audit log: every mutation creates an immutable audit record.
+    17→ */
+    18→
+    19→import { create } from 'zustand'
+    20→import { persist } from 'zustand/middleware'
+    21→// SaaS-STAGE-2A — tenant foundation. The fee store is TENANT-SCOPED
+    22→// (per-school persisted namespace + seed factory) and ENFORCES the
+    23→// platform-granted capabilities in the actions below — the UI gates are
+    24→// convenience, these guards are the law (client cannot bypass them).
+    25→import { migrateLegacyScopedStore, createTenantScopedStorage, TENANT_SCOPED_BASES } from '@/lib/tenant/tenant-storage'
+    26→import { DEFAULT_TENANT_ID } from '@/lib/tenant/schools'
+    27→import { getActiveTenantPermissionsSync, getActiveTenantConfigSync } from '@/lib/tenant/store'
+    28→import type { CapabilityKey } from '@/lib/tenant/types'
+    29→import { useStudentsStore } from '@/lib/store/students-store'
+    30→import type { StudentRecord } from '@/lib/store/students-store'
+    31→import { STALE_APPLICATION_PURGE } from './applications-purge'
+    32→import { useCommunicationStore } from '@/lib/store/communication-store'
+    33→// PHASE 6 — read-only access to the master fee-head catalogue from
+    34→// school-settings-store (used by bulkLinkHeadsByName to derive the
+    35→// category from the picked catalogue entry). No circular dep —
+    36→// school-settings-store doesn't import from fee-store.
+    37→import { useSchoolSettingsStore } from '@/lib/store/school-settings-store'
+    38→import { useMemo, useState, useEffect } from 'react'
+    39→import { formatINR } from '@/lib/format'
+    40→// PHASE 5 — class catalogue lookup. Static import (no circular dep:
+    41→// the classes catalogue has no imports from any store). Used by
+    42→// countStudentsForStructure's classId path + the Coverage Matrix UI.
+    43→import { ACADEMIC_CLASSES } from '@/lib/mock/academic/classes'
+    44→// V6 MODULARIZATION — seed + default data constants live in fee-store-data
+    45→// (pure data, types imported type-only from here so there is no runtime
+    46→// cycle). The previously-public symbols are re-exported below so every
+    47→// existing `from '@/lib/store/fee-store'` import keeps working unchanged.
+    48→import {
+    49→  FREQUENCY_MULTIPLIER,
+    50→  VALID_FREQUENCIES,
+    51→  computeHeadsTotal,
+    52→  computeExamFeeTotal,
+    53→  FEE_STRUCTURES,
+    54→  SEED_VERSIONS,
+    55→  DEFAULT_PAYMENT_MODES,
+    56→  DEFAULT_LATE_FEE_RULE,
+    57→  DEFAULT_CONCESSION_RULE,
+    58→  DEFAULT_RECEIPT_SETTINGS,
+    59→  SEED_GATEWAY_CONFIG,
+    60→  SEED_BANK_ACCOUNTS,
+    61→  SEED_UPI_QR_CONFIGS,
+    62→  SEED_SETTLEMENTS,
+    63→  SEED_RECONCILIATION_RECORDS,
+    64→  SEED_WEBHOOK_EVENTS,
+    65→  SEED_TRANSACTIONS,
+    66→  SEED_FEE_TRANSACTIONS,
+    67→  STU58_SEED_TXNS,
+    68→  SEED_CASH_REQUESTS,
+    69→  SEED_AUDIT,
+    70→  SEED_ADDITIONAL_CHARGES,
+    71→  SEED_CONCESSIONS,
+    72→  SEED_OPTIONAL_HEAD_OPTINS,
+    73→  isHeadApplicableToStudent,
+    74→  expandHeadChargeEntries,
+    75→  expandExamChargeEntries,
+    76→  billingPeriodsFor,
+    77→  DEFAULT_ENTRY_FEE_POLICY,
+    78→  CURRENT_ACADEMIC_YEAR,
+    79→} from './fee-store-data'
+    80→import type { EntryFeePolicy, ScheduledCharge } from './fee-store-data'
+    81→export {
+    82→  FREQUENCY_MULTIPLIER,
+    83→  VALID_FREQUENCIES,
+    84→  computeHeadsTotal,
+    85→  computeExamFeeTotal,
+    86→  FEE_STRUCTURES,
+    87→  DEFAULT_PAYMENT_MODES,
+    88→  DEFAULT_LATE_FEE_RULE,
+    89→  DEFAULT_CONCESSION_RULE,
+    90→  DEFAULT_RECEIPT_SETTINGS,
+    91→  SEED_FEE_TRANSACTIONS,
+    92→  CURRENT_ACADEMIC_YEAR,
+    93→  billingPeriodsFor,
+    94→  expandHeadChargeEntries,
+    95→  expandExamChargeEntries,
+    96→}
+    97→export type { EntryFeePolicy, EntryFeeAudience, EntryFeeRule } from './fee-store-data'
+    98→export { entryFeeApplies, admissionFeeFor } from './fee-store-data'
+    99→
+   100→// ─── Tenant capability enforcement (SaaS-STAGE-2A) ───────────────────
+   101→//
+   102→// Super Admin → school capability → Principal. The ACTIVE tenant's
+   103→// effective permissions are resolved at ACTION time (never captured), so
+   104→// a config change in the School Control Center applies to every panel
+   105→// after the tenant reload — and the store refuses to mutate when the
+   106→// capability is absent, even if a client calls the action directly.
+   107→
+   108→const CAPABILITY_DENIALS: Record<CapabilityKey, string> = {
+   109→  fee_structure_edit: 'Fee structure editing is disabled for your school by the platform configuration.',
+   110→  fee_structure_publish: 'Fee structure publishing is disabled for your school by the platform configuration.',
+   111→  fee_structure_archive: 'Fee structure archiving is disabled for your school by the platform configuration.',
+   112→  fee_structure_delete: 'Permanent delete is reserved for the Scholario platform. Schools archive structures; the platform purges after the retention window.',
+   113→  fee_catalogue_manage: 'Fee catalogue management is disabled for your school by the platform configuration.',
+   114→  fee_entry_policy_manage: 'One-time entry fee policy management is disabled for your school by the platform configuration.',
+   115→}
+   116→
+   117→/** Returns null when the ACTIVE tenant grants the capability, else the denial reason. */
+   118→function platformCapabilityDenial(cap: CapabilityKey): string | null {
+   119→  const perms = getActiveTenantPermissionsSync()
+   120→  return perms[cap] ? null : CAPABILITY_DENIALS[cap]
+   121→}
+   122→
+   123→// ─── Types ───────────────────────────────────────────────────────────
+   124→
+   125→export type PaymentMode = 'UPI' | 'Card' | 'Net Banking' | 'Cash' | 'Cheque' | 'Bank Transfer'
+   126→export type PaymentStatus = 'Success' | 'Pending' | 'Failed' | 'Under Verification' | 'Refunded'
+   127→export type FeePaymentStatus = 'Paid' | 'Partially Paid' | 'Due' | 'Overdue' | 'On Hold'
+   128→
+   129→/**
+   130→ * Operational payment SOURCE (SaaS-STAGE-1) — who/where the money was
+   131→ * collected through. Gateway is a payment CHANNEL (processing method),
+   132→ * never a source label: source chips always read Office / Teacher /
+   133→ * Class Teacher / Student self-service, regardless of whether the mode
+   134→ * was UPI, Card, or a gateway-confirmed online payment.
+   135→ */
+   136→export type CollectorRole = 'principal' | 'teacher' | 'class_teacher' | 'self'
+   137→
+   138→/** Source label used across ALL fee surfaces (one vocabulary). */
+   139→export function collectorSourceLabel(role: FeeTransaction['collectorRole']): string {
+   140→  if (role === 'teacher') return 'Teacher'
+   141→  if (role === 'class_teacher') return 'Class Teacher'
+   142→  if (role === 'self') return 'Student'
+   143→  return 'Office'
+   144→}
+   145→export type AuditAction =
+   146→  | 'payment.recorded'
+   147→  | 'cash.submitted'
+   148→  | 'cash.approved'
+   149→  | 'cash.rejected'
+   150→  | 'cash.clarification'
+   151→  | 'concession.granted'
+   152→  | 'concession.requested'
+   153→  | 'concession.rejected'
+   154→  | 'fee_applicability.changed'
+   155→  | 'settings.changed'
+   156→  | 'fee_structure.changed'
+   157→  | 'payment.reversed'
+   158→  | 'refund.approved'
+   159→  | 'receipt.generated'
+   160→  | 'receipt.reprinted'
+   161→  | 'fee_head.created'
+   162→  | 'fee_head.updated'
+   163→  | 'fee_head.archived'
+   164→  | 'payment_mode.updated'
+   165→  // ─── Additional Charges (Core vs Additional financial separation) ───
+   166→  | 'additional_charge.created'
+   167→  | 'additional_charge.cancelled'
+   168→  | 'additional_charge.closed'
+   169→  | 'additional_charge.payment'
+   170→  // ─── APPS-IA-1 — standalone-collection lifecycle ───
+   171→  | 'additional_charge.draft_created'
+   172→  | 'additional_charge.updated'
+   173→  | 'additional_charge.published'
+   174→  | 'additional_charge.archived'
+   175→  | 'additional_charge.deleted'
+   176→  // ─── Payment infrastructure audit actions (Phase 4) ───
+   177→  | 'gateway.connected'
+   178→  | 'gateway.disconnected'
+   179→  | 'bank_account.added'
+   180→  | 'bank_account.updated'
+   181→  | 'bank_account.deactivated'
+   182→  | 'upi_qr.added'
+   183→  | 'upi_qr.updated'
+   184→  | 'settlement.recorded'
+   185→  | 'reconciliation.matched'
+   186→
+   187→export type FeeHeadCategory =
+   188→  | 'Tuition' | 'Admission' | 'Annual' | 'Transport' | 'Lab' | 'Library'
+   189→  | 'Exam' | 'Activity' | 'Board' | 'Other'
+   190→
+   191→/**
+   192→ * FINANCIAL CATEGORY of a payment/transaction (Core vs Additional vs Exam).
+   193→ *
+   194→ *   CORE        — money against the standard annual fee structure
+   195→ *                 (recurring heads: Tuition, Transport, Library…).
+   196→ *   EXAMINATION — money against per-examination charges (the exam fee
+   197→ *                 schedule + board/exam heads).
+   198→ *   ADDITIONAL  — money against an event-based Additional Charge
+   199→ *                 (Educational Tour, Workshop, Competition…) — tracked
+   200→ *                 SEPARATELY from core fees so the two are never mixed.
+   201→ *
+   202→ * Optional on FeeTransaction for backward compatibility: legacy
+   203→ * transactions (recorded before this field existed) derive their category
+   204→ * via `txnCategory()` (feeHead containing "exam" → EXAMINATION, else CORE).
+   205→ */
+   206→export type TransactionCategory = 'CORE' | 'EXAMINATION' | 'ADDITIONAL'
+   207→
+   208→/** Resolve the financial category of any transaction (new or legacy). */
+   209→export function txnCategory(
+   210→  t: Pick<FeeTransaction, 'category' | 'additionalChargeId' | 'feeHead'>,
+   211→): TransactionCategory {
+   212→  if (t.additionalChargeId) return 'ADDITIONAL'
+   213→  if (t.category) return t.category
+   214→  if (/exam/i.test(t.feeHead ?? '')) return 'EXAMINATION'
+   215→  return 'CORE'
+   216→}
+   217→
+   218→/** Coarse category of an Additional Charge (drives icon/label in the UI).
+   219→ *  'Donation' covers standalone contribution drives (relief fund,
+   220→ *  development fund…) — FIN-COLLECTION redesign. */
+   221→export type AdditionalChargeCategory =
+   222→  | 'Tour' | 'Workshop' | 'Competition' | 'Camp' | 'Event' | 'Material' | 'Donation' | 'Other'
+   223→
+   224→/**
+   225→ * Collection lifecycle (FIN-COLLECTION → APPS-IA-1 generalization):
+   226→ *   Draft    — being composed; NOT an obligation yet (excluded from student
+   227→ *              accounts, the collect-payment wizard and student fees).
+   228→ *              Editable in full and DELETABLE (no money can exist).
+   229→ *   Active   — open for collection (linked applications publish → Active)
+   230→ *   Closed   — collection window finished; complete payment history
+   231→ *              preserved and surfaced through the Record File view. A
+   232→ *              closed charge stops being an obligation for students.
+   233→ *   Archived — historical read-only record; payment history stays
+   234→ *              accessible forever (accounting integrity).
+   235→ *   Cancelled — revoked before completion; already-collected payments
+   236→ *              stay on record (audit trail).
+   237→ */
+   238→export type AdditionalChargeStatus = 'Draft' | 'Active' | 'Closed' | 'Archived' | 'Cancelled'
+   239→
+   240→/**
+   241→ * ADDITIONAL CHARGE — an event-based / special financial obligation that
+   242→ * exists INDEPENDENTLY of the standard annual class Fee Structure.
+   243→ *
+   244→ * Example: "Educational Tour — Jaipur", Class 8, ₹2,500, due 15 Sep,
+   245→ * Optional. Creating it does NOT touch the Class 8 annual fee structure;
+   246→ * payments against it are recorded with category='ADDITIONAL' and never
+   247→ * reduce the student's CORE fee outstanding.
+   248→ *
+   249→ * A master-catalogue entry of kind ADDITIONAL is a reusable TEMPLATE —
+   250→ * this entity is the actual assignment/occurrence.
+   251→ */
+   252→export interface AdditionalCharge {
+   253→  id: string
+   254→  /** Display name, e.g. "Educational Tour — Jaipur". */
+   255→  name: string
+   256→  category: AdditionalChargeCategory
+   257→  /** Per-student amount (INR). */
+   258→  amount: number
+   259→  academicYear: string
+   260→  /** Canonical AcademicClassDef ids the charge applies to (e.g. ['C11']). */
+   261→  applicableClassIds: string[]
+   262→  /** Optional specific student ids — when set, ONLY these students owe the
+   263→   *  charge (overrides applicableClassIds for scoping). */
+   264→  studentIds?: string[]
+   265→  /** Payment due date (ISO yyyy-mm-dd). */
+   266→  dueDate: string
+   267→  /** Optional (student may opt out) vs Mandatory (expected of everyone). */
+   268→  mandatory: boolean
+   269→  /** Reason / description shown to parents + in the ledger. */
+   270→  description?: string
+   271→  /** Event / reference this charge belongs to ("Jaipur Educational Tour"). */
+   272→  reference?: string
+   273→  createdBy: string
+   274→  createdAt: string
+   275→  status: AdditionalChargeStatus
+   276→  /** Last edit timestamp (APPS-IA-1 lifecycle edits). */
+   277→  updatedAt?: string
+   278→  /** Principal's reason when cancelling (audit trail only). */
+   279→  cancelReason?: string
+   280→  // ─── FIN-COLLECTION redesign (all optional for backward compat) ───
+   281→  /** Donation-style drive where the payer may contribute a custom
+   282→   *  amount. `amount` becomes the SUGGESTED per-student figure and
+   283→   *  expected collection falls back to `targetAmount` (not
+   284→   *  students × amount). */
+   285→  allowCustomAmount?: boolean
+   286→  /** Optional overall collection target (₹) — shown instead of
+   287→   *  students × amount for custom-amount drives. */
+   288→  targetAmount?: number
+   289→  /** When the collection was closed (status Closed). */
+   290→  closedAt?: string
+   291→  /** Optional note recorded when closing the collection. */
+   292→  closeNote?: string
+   293→  // ─── APPS-IA-1 standalone-collection lifecycle (all optional) ───
+   294→  /** Optional collection open date (informational — shown in the UI). */
+   295→  startDate?: string
+   296→  /** Optional instructions shown to payers (payment channel guidance). */
+   297→  instructions?: string
+   298→  /** When a Draft collection was published (status Active). */
+   299→  publishedAt?: string
+   300→  /** When the collection was archived (status Archived). */
+   301→  archivedAt?: string
+   302→  /** Principal's reason when archiving. */
+   303→  archiveNote?: string
+   304→}
+   305→
+   306→export interface FeeHead {
+   307→  id: string
+   308→  name: string
+   309→  /** Per-period amount (e.g. ₹4,000 if Monthly). Multiplied by FREQUENCY_MULTIPLIER to get the academic-year total. */
+   310→  amount: number
+   311→  frequency: 'Annual' | 'Half-Yearly' | 'Quarterly' | 'Monthly' | 'Per Term' | 'One-Time'
+   312→  mandatory: boolean
+   313→  active: boolean
+   314→  /**
+   315→   * MASTER-CATALOGUE LINK (Phase 5 — additive, optional).
+   316→   *
+   317→   * When this head was picked from the school's master fee-head catalogue
+   318→   * (school-settings-store.fees.feeHeads), this is the catalogue id.
+   319→   * Lets the Master Catalogue UI report "X class structures use this head"
+   320→   * and lets the principal edit the catalogue entry's defaults and have
+   321→   * them propagate to new structures (existing structures keep their
+   322→   * snapshot — versioning integrity preserved).
+   323→   *
+   324→   * For backward compat, heads created before this field existed (or
+   325→   * custom heads typed by hand in the structure editor) have
+   326→   * `catalogueId === undefined`. The catalogue UI still lists them
+   327→   * under "Uncatalogued heads" so the principal can normalize them.
+   328→   */
+   329→  catalogueId?: string
+   330→  /**
+   331→   * CATEGORY (Phase 5 — additive, optional).
+   332→   *
+   333→   * Coarse classification matching the master catalogue's `type` field.
+   334→   * Used for grouping in the structure card + coverage matrix. Falls
+   335→   * back to the master catalogue entry's type when catalogueId is set
+   336→   * but category is undefined; defaults to 'Other' if neither is set.
+   337→   */
+   338→  category?: FeeHeadCategory
+   339→}
+   340→
+   341→/**
+   342→ * Examination fee entry — charged PER EXAMINATION INSTANCE (not recurring).
+   343→ *
+   344→ * Unlike the recurring fee heads above (which are charged per period), an
+   345→ * exam fee is levied every time the school conducts an examination of the
+   346→ * matching examType (Unit Test, Half-Yearly, Annual Examination, etc.).
+   347→ * The exam-creation flow in the Examination module reads this schedule to
+   348→ * auto-resolve the per-exam fee for newly created examinations.
+   349→ */
+   350→export interface ExamFeeEntry {
+   351→  id: string
+   352→  /** Canonical exam type — matches the `EXAM_TYPES` vocabulary in
+   353→   *  `src/lib/exams/types.ts` (e.g. 'Unit Test', 'Half-Yearly',
+   354→   *  'Annual Examination', 'Pre-Board', 'Practical'). */
+   355→  examType: string
+   356→  /** Per-examination amount (in INR). Charged once per conducted exam. */
+   357→  amount: number
+   358→  /** Planned number of examination instances for the academic year.
+   359→   *  e.g. Unit Test × 4, Half-Yearly × 1, Annual × 1.
+   360→   *  The estimated annual exam fee = amount × plannedInstances.
+   361→   *  Default 1 if not specified. */
+   362→  plannedInstances?: number
+   363→  mandatory: boolean
+   364→  active: boolean
+   365→}
+   366→
+   367→/** The examination fee schedule within a fee structure — kept separate from
+   368→ *  the recurring fee heads because exam fees are not charged per period. */
+   369→export type ExamFeeSchedule = ExamFeeEntry[]
+   370→
+   371→/**
+   372→ * Per-frequency multiplier — number of times the per-period amount is
+   373→ * charged in a single academic year. Used by `computeHeadsTotal` to
+   374→ * produce the ACADEMIC YEAR TOTAL (not just the per-period sum).
+   375→ *
+   376→ *   Monthly ₹4,000 → 4,000 × 12 = ₹48,000 annual total
+   377→ *   Per Term ₹1,000 → 1,000 × 3 = ₹3,000 annual total (3 terms / year)
+   378→ *   One-Time ₹5,000 → ₹5,000 (charged once across the student's tenure)
+   379→ */
+   380→
+   381→export interface FeeTransaction {
+   382→  id: string
+   383→  receiptNo: string
+   384→  studentId: string
+   385→  studentName: string
+   386→  admissionNo: string
+   387→  className: string
+   388→  classId: string
+   389→  amount: number
+   390→  mode: PaymentMode
+   391→  status: PaymentStatus
+   392→  date: string
+   393→  /** Full ISO wall-clock instant when this payment was RECORDED — powers
+   394→   *  the secondary "· 02:35 PM" timestamp in the Payments / Transactions
+   395→   *  tables (FINAL PAYMENTS UI POLISH §2). Optional for backward compat:
+   396→   *  legacy rows fall back to the TXN-<epochMs> id, then to date-only. */
+   397→  recordedAt?: string
+   398→  purpose: string
+   399→  feeHead: string
+   400→  collectedBy: string
+   401→  verifiedBy: string | null
+   402→  verifiedAt: string | null
+   403→  referenceNo: string | null
+   404→  academicYear: string
+   405→  /** FINANCIAL CATEGORY — what obligation this money was collected
+   406→   *  against (Core fee / Examination fee / Additional charge). Optional
+   407→   *  for backward compat; derive via txnCategory() when absent. */
+   408→  category?: TransactionCategory
+   409→  /** When this payment was collected against an Additional Charge, the
+   410→   *  AdditionalCharge.id. Lets the charge's collected progress + the
+   411→   *  student's additional outstanding recompute from transactions. */
+   412→  additionalChargeId?: string
+   413→  /** Optional metadata for cheques / cards / UPI references. */
+   414→  meta?: {
+   415→    bankName?: string
+   416→    chequeDate?: string
+   417→    chequeNumber?: string
+   418→    cardLast4?: string
+   419→    upiId?: string
+   420→    neftUtr?: string
+   421→  }
+   422→  // ─── Payment infrastructure fields (Phase 4 — all optional for backward compat) ───
+   423→  paymentSource?: 'online' | 'offline' | 'gateway' | 'manual'
+   424→  gateway?: GatewayProvider
+   425→  gatewayPaymentId?: string
+   426→  gatewayOrderId?: string
+   427→  settlementId?: string
+   428→  settlementStatus?: SettlementStatus
+   429→  utr?: string
+   430→  gatewayFee?: number
+   431→  taxOnFee?: number
+   432→  netAmount?: number
+   433→  reconciliationStatus?: ReconciliationStatus
+   434→  refundedAmount?: number
+   435→  refundReason?: string
+   436→  /** Principal's note when rejecting a direct cash verification. */
+   437→  verificationNote?: string
+   438→  /** When this payment belongs to an Applications & Forms submission, the
+   439→   *  application id — kept alongside additionalChargeId so the permanent
+   440→   *  record chain (application → charge → txn → receipt) stays explicit. */
+   441→  applicationId?: string
+   442→  /** WHO recorded this payment — drives the verification lifecycle
+   443→   *  (PAY-REWORK-1). 'principal' = school office / Principal (authorised
+   444→   *  finance role — payment is verified at record time). 'teacher' =
+   445→   *  teacher collection (ALWAYS requires Principal verification before it
+   446→   *  counts as officially paid). 'class_teacher' = Class Teacher
+   447→   *  collection (same verification rule as teacher — SaaS-STAGE-1 source
+   448→   *  vocabulary: Office / Teacher / Class Teacher). 'self' = student/
+   449→   *  guardian self-service submission (manual transfer reference —
+   450→   *  requires verification; a real gateway webhook would confirm these
+   451→   *  automatically in future). Absent on legacy seed rows — treat as
+   452→   *  'principal'. Gateway is a payment CHANNEL (gateway/gatewayPaymentId
+   453→   *  fields), never a collector role. */
+   454→  collectorRole?: CollectorRole
+   455→  /** Receipt lifecycle: when this payment's receipt was first printed or
+   456→   *  downloaded by an authorised user. A payment with a handled receipt is
+   457→   *  completed activity (settles into Transactions view); the payment
+   458→   *  record itself is NEVER deleted — only its UI classification changes. */
+   459→  receiptHandledAt?: string
+   460→}
+   461→
+   462→export interface StudentFeeAccount {
+   463→  studentId: string
+   464→  studentName: string
+   465→  admissionNo: string
+   466→  rollNo: string
+   467→  className: string
+   468→  section: string
+   469→  classId: string
+   470→  totalApplicable: number
+   471→  concession: number
+   472→  netPayable: number
+   473→  paid: number
+   474→  outstanding: number
+   475→  lateFee: number
+   476→  totalDue: number
+   477→  status: FeePaymentStatus
+   478→  lastPaymentDate: string | null
+   479→  daysOverdue: number
+   480→  transactions: FeeTransaction[]
+   481→  /**
+   482→   * Offline-history carry ("Previous Receipts") — the portion of the
+   483→   * register's collected-to-date (student.feePaid) that has NO digitised
+   484→   * transaction row. EXACTLY the same derivation the Fee Ledger renders
+   485→   * as its "Previous Receipts" line (computed once in computeAccount —
+   486→   * never re-derived in the UI), surfaced on the account so Payment
+   487→   * History and the Paid tile can never disagree: previousReceipts + the
+   488→   * countable transaction rows == `paid`. Null when there is no carry.
+   489→   */
+   490→  previousReceipts: { amount: number; date: string; description: string } | null
+   491→  guardianName: string
+   492→  guardianPhone: string
+   493→  /** Chronological ledger entries (charges + payments). */
+   494→  ledger: LedgerEntry[]
+   495→  // ─── CORE vs ADDITIONAL separation (all additive) ────────────────
+   496→  /** Core (recurring structure) expected amount, BEFORE concession. */
+   497→  coreExpected: number
+   498→  /** Examination (per-exam schedule) expected amount. */
+   499→  examExpected: number
+   500→  /** Per-student position on event-based Additional Charges — kept
+   501→   *  completely separate from the core numbers above so the two are
+   502→   *  never mixed into one unexplained figure. */
+   503→  additional: {
+   504→    /** Active charges applicable to this student. */
+   505→    charges: Array<{
+   506→      chargeId: string
+   507→      name: string
+   508→      category: AdditionalChargeCategory
+   509→      amount: number
+   510→      dueDate: string
+   511→      mandatory: boolean
+   512→      reference?: string
+   513→      paid: number
+   514→      outstanding: number
+   515→    }>
+   516→    /** Sum of active charge amounts. */
+   517→    total: number
+   518→    /** Successful + under-verification ADDITIONAL payments. */
+   519→    paid: number
+   520→    /** max(0, total − paid). */
+   521→    outstanding: number
+   522→  }
+   523→}
+   524→
+   525→export interface LedgerEntry {
+   526→  id: string
+   527→  date: string
+   528→  feeHead: string
+   529→  charge: number
+   530→  payment: number
+   531→  balance: number
+   532→  description: string
+   533→  receiptNo?: string
+   534→  /** What this line represents — drives the ledger's Type column
+   535→   *  (Core Fee / Exam Fee / Additional Fee / Payment / Concession /
+   536→   *  Late Fee). Optional for backward compat. */
+   537→  entryType?: 'core' | 'exam' | 'additional' | 'payment' | 'concession' | 'late-fee'
+   538→}
+   539→
+   540→export interface FeeStructureConfig {
+   541→  id: string
+   542→  category: string
+   543→  className: string
+   544→  classLevel: string
+   545→  /**
+   546→   * CLASS-WISE BINDING (Phase 5 — additive, optional).
+   547→   *
+   548→   * The canonical AcademicClassDef.id (from src/lib/mock/academic/classes.ts)
+   549→   * that this structure primarily applies to. When set, the matching logic
+   550→   * in `findStructureForStudent` and `countStudentsForStructure` prefers
+   551→   * classId over className (handles stream-class ambiguity — e.g. two
+   552→   * Class 11 streams share one fee structure).
+   553→   *
+   554→   * Optional for backward compat with pre-Phase-5 structures and custom
+   555→   * drafts whose className doesn't map to a real academic class. Those
+   556→   * fall back to the legacy className → classLevel matching path.
+   557→   */
+   558→  classId?: string
+   559→  /**
+   560→   * STREAM-CLASS APPLICABILITY (Phase 5 — additive, optional).
+   561→   *
+   562→   * The full list of AcademicClassDef.ids this structure applies to. When
+   563→   * set, a student whose classId is in this list matches this structure
+   564→   * even if their className differs from `className` (e.g. a "Class 11"
+   565→   * structure with classId='C14-PCM' and applicableClassIds=['C14-PCM',
+   566→   * 'C14-PCB'] matches BOTH Class 11 streams).
+   567→   *
+   568→   * When absent, the matcher uses only `classId` (if set) or falls back
+   569→   * to className/classLevel matching.
+   570→   */
+   571→  applicableClassIds?: string[]
+   572→  annual: number
+   573→  components: FeeHead[]
+   574→  effectiveFrom: string
+   575→  /** If superseded, points to the new version. */
+   576→  supersededBy?: string
+   577→  version: number
+   578→  /**
+   579→   * Examination fee schedule — per-examination charges (NOT recurring).
+   580→   * Optional for backward compatibility: existing structures without this
+   581→   * field simply have no per-exam fees configured.
+   582→   */
+   583→  examFeeSchedule?: ExamFeeSchedule
+   584→  /**
+   585→   * SESSION-SPECIFIC BINDING (STRUCT-SESSION — additive): the academic
+   586→   * session this structure belongs to (e.g. '2026-2027'). Class 10 ·
+   587→   * 2026-27 and Class 10 · 2027-28 are SEPARATE structures — a new
+   588→   * session never mutates the old one. Optional for backward compat:
+   589→   * persisted pre-session structures default to the current session.
+   590→   */
+   591→  academicYear?: string
+   592→  /** True when this structure was auto-created by the session class-sync
+   593→   *  and has not been configured yet (empty heads). */
+   594→  notConfigured?: boolean
+   595→}
+   596→
+   597→// ─── Versioned Fee Structure (Phase 3 — version-aware data model) ──
+   598→// Backward-compatible: FeeStructureConfig (above) remains the live pointer
+   599→// to the CURRENT version. The new types below add an immutable history.
+   600→
+   601→export type FeeStructureStatus = 'current' | 'scheduled' | 'archived' | 'draft'
+   602→
+   603→/** A versioned snapshot of a fee structure at a point in time. */
+   604→export interface FeeStructureVersion {
+   605→  id: string                    // unique version id (e.g. FSV-FS01-2)
+   606→  structureId: string           // parent structure id
+   607→  version: number               // 1, 2, 3...
+   608→  status: FeeStructureStatus
+   609→  heads: FeeHead[]              // snapshot of fee heads at this version
+   610→  totalAmount: number           // computed total of active heads
+   611→  effectiveFrom: string         // ISO date
+   612→  effectiveTo?: string          // ISO date (when superseded)
+   613→  createdBy: string             // user name
+   614→  createdAt: string             // ISO timestamp
+   615→  approvedBy?: string
+   616→  approvedAt?: string
+   617→  changeReason?: string
+   618→  supersedesId?: string         // previous version id
+   619→  notes?: string
+   620→  /**
+   621→   * SaaS-STAGE-2A — archive retention metadata. Stamped when the version
+   622→   * enters the archived state. Drives the centralized 30-day retention
+   623→   * display (lib/tenant/archive-retention.ts); the actual purge is a
+   624→   * FUTURE PLATFORM-SIDE JOB — never a client timer.
+   625→   */
+   626→  archivedAt?: string
+   627→  archivedBy?: string
+   628→  /**
+   629→   * Examination fee schedule snapshot at this version. Optional for
+   630→   * backward compatibility: pre-existing versions without this field
+   631→   * have no per-exam fees configured at that snapshot.
+   632→   */
+   633→  examFeeSchedule?: ExamFeeSchedule
+   634→}
+   635→
+   636→export type FeeChangeLogAction =
+   637→  | 'created' | 'edited' | 'published' | 'scheduled'
+   638→  | 'archived' | 'restored' | 'rolled_back' | 'deleted'
+   639→
+   640→/** Immutable audit log entry for every financial change. */
+   641→export interface FeeChangeLog {
+   642→  id: string
+   643→  structureId: string
+   644→  versionId: string
+   645→  action: FeeChangeLogAction
+   646→  changedBy: string
+   647→  changedAt: string
+   648→  changes: { headName: string; oldValue: number; newValue: number }[]
+   649→  reason?: string
+   650→  affectedStudents: number
+   651→}
+   652→
+   653→// ─── MID-SESSION STRUCTURE REVISION (STRUCT-REV) ───────────────────────
+   654→//
+   655→// A published CURRENT-SESSION structure is LOCKED (fee stability for a
+   656→// running session). Exceptional changes go through a controlled flow,
+   657→// deliberately simple — no voting system, no discussion, no committees:
+   658→//
+   659→//   Locked structure → Request Edit (temporary window, salary-pattern)
+   660→//     → make changes → Submit Revision (a PROPOSED new version — never
+   661→//     an overwrite) → affected students/guardians acknowledge
+   662→//     → ≥ 60% approval → Principal publishes the new version → notify.
+   663→//
+   664→// The currently published version keeps applying until the revision is
+   665→// published. Historical transactions are NEVER recalculated.
+   666→
+   667→export type StructureRevisionStatus =
+   668→  | 'Pending Approval' | 'Threshold Reached' | 'Published' | 'Cancelled'
+   669→
+   670→export interface StructureRevision {
+   671→  id: string
+   672→  structureId: string
+   673→  className: string
+   674→  classId?: string
+   675→  academicYear: string
+   676→  /** Version number of the currently published structure at proposal time. */
+   677→  fromVersion: number
+   678→  /** Version number the revision WILL become when published. */
+   679→  toVersion: number
+   680→  /** Snapshot of the currently published heads (for the approval card). */
+   681→  previousHeads: FeeHead[]
+   682→  /** The proposed head set. */
+   683→  proposedHeads: FeeHead[]
+   684→  previousTotal: number
+   685→  proposedTotal: number
+   686→  effectiveFrom: string
+   687→  reason?: string
+   688→  requestedBy: string
+   689→  requestedAt: string
+   690→  /** Canonical student ids affected (the structure's class roster). */
+   691→  affectedStudentIds: string[]
+   692→  /** studentId → 'Approved' | 'Declined' (acknowledgements received). */
+   693→  responses: Record<string, 'Approved' | 'Declined'>
+   694→  status: StructureRevisionStatus
+   695→  publishedAt?: string
+   696→  publishedVersionId?: string
+   697→  cancelledAt?: string
+   698→}
+   699→
+   700→/** Temporary editing window for ONE locked structure (salary-pattern). */
+   701→export interface StructureEditWindow {
+   702→  structureId: string | null
+   703→  openedAt: number | null
+   704→  expiresAt: number | null
+   705→}
+   706→
+   707→
+   708→export interface CashRequest {
+   709→  id: string
+   710→  studentId: string
+   711→  studentName: string
+   712→  admissionNo: string
+   713→  className: string
+   714→  amount: number
+   715→  feeHead: string
+   716→  collectedBy: string
+   717→  collectedAt: string
+   718→  submittedAt: string
+   719→  status: 'Pending Principal Acceptance' | 'Collected by Teacher' | 'Confirmed by Principal' | 'Rejected' | 'Clarification Requested'
+   720→  /** Notes from teacher during submission. */
+   721→  notes?: string
+   722→  /** Principal reason for reject/clarification. */
+   723→  reason?: string
+   724→  referenceNo?: string
+   725→  /** Student outstanding at time of submission (snapshot for context). */
+   726→  contextBalanceAtSubmission?: number
+   727→}
+   728→
+   729→export interface AuditRecord {
+   730→  id: string
+   731→  action: AuditAction
+   732→  actor: string
+   733→  timestamp: string
+   734→  /** Entity affected (transaction id, fee head id, student id, etc.). */
+   735→  entityId: string
+   736→  entityType: 'transaction' | 'cash_request' | 'fee_head' | 'fee_structure' | 'payment_mode' | 'concession' | 'receipt' | 'gateway' | 'bank_account' | 'upi_qr' | 'settlement' | 'reconciliation' | 'webhook' | 'additional_charge' | 'settings' | 'student'
+   737→  description: string
+   738→  before?: string
+   739→  after?: string
+   740→  /** Cannot be deleted or modified — append-only. */
+   741→  readonly _immutable?: true
+   742→}
+   743→
+   744→export interface PaymentModeConfig {
+   745→  id: PaymentMode
+   746→  label: string
+   747→  active: boolean
+   748→  requiresReference: boolean
+   749→  requiresBankName?: boolean
+   750→  requiresChequeDetails?: boolean
+   751→  defaultFeeHead?: string
+   752→}
+   753→
+   754→export interface LateFeeRule {
+   755→  enabled: boolean
+   756→  amountPerMonth: number
+   757→  gracePeriodDays: number
+   758→  maxLateFee: number
+   759→  appliesTo: 'all' | 'mandatory_only'
+   760→}
+   761→
+   762→export interface ConcessionRule {
+   763→  enabled: boolean
+   764→  siblingDiscountPct: number
+   765→  staffWardDiscountPct: number
+   766→  scholarshipDiscountPct: number
+   767→  requiresApproval: boolean
+   768→}
+   769→
+   770→export interface ReceiptSettings {
+   771→  prefix: string
+   772→  startNumber: number
+   773→  footerMessage: string
+   774→  showAuthorizedSignature: boolean
+   775→  /** Print format of THE ONE canonical receipt design (SaaS-STAGE-1):
+   776→   *  A5 landscape = one student per page (Student + School copy
+   777→   *  side-by-side with tear line — canonical). A4 portrait = TWO students
+   778→   *  per page (each occupies one A5-landscape area → 4 copies/sheet) —
+   779→   *  the same design, denser sheet. The legacy 80mm thermal renderer has
+   780→   *  been consolidated away; '80mm' may still arrive from old persisted
+   781→   *  state and is migrated to 'A5'. */
+   782→  paperSize: 'A5' | 'A4'
+   783→}
+   784→
+   785→// ─── STUDENT CONCESSION (auditable concession records) ───────────────
+   786→//
+   787→// A concession is a first-class financial record, not a bare scalar:
+   788→// type · percent-or-amount · applicable scope · student/account ·
+   789→// effective period · approval status · approvedBy · reason — and every
+   790→// transition (requested / approved / rejected) emits an immutable audit
+   791→// entry. Concessions reduce the APPLICABLE amount → net payable →
+   792→// outstanding; they NEVER rewrite historical payments.
+   793→export type ConcessionType = 'Sibling Discount' | 'Staff Ward' | 'Scholarship' | 'Other'
+   794→export type ConcessionStatus = 'Pending' | 'Approved' | 'Rejected'
+   795→
+   796→export interface StudentConcession {
+   797→  id: string
+   798→  studentId: string
+   799→  type: ConcessionType
+   800→  /** 'percent' = % of the applicable amount; 'amount' = flat ₹ per session. */
+   801→  basis: 'percent' | 'amount'
+   802→  /** Percent (0-100) when basis='percent'; rupees when basis='amount'. */
+   803→  value: number
+   804→  /** v1 scope: 'core_all' = the student's full applicable school fees
+   805→   *  (core + exam). Per-head scoping is deliberately NOT modelled yet —
+   806→   *  add an appliesToHeadIds only when a real workflow needs it. */
+   807→  appliesTo: 'core_all'
+   808→  effectiveFrom: string
+   809→  effectiveTo?: string
+   810→  status: ConcessionStatus
+   811→  reason: string
+   812→  requestedBy: string
+   813→  requestedAt: string
+   814→  approvedBy?: string
+   815→  approvedAt?: string
+   816→  /** Principal's reason when rejecting (audit trail). */
+   817→  rejectedReason?: string
+   818→}
+   819→
+   820→// ─── Payment Infrastructure Types (Phase 4) ──────────────────────────
+   821→//
+   822→// Backward-compatible additions: all new types are exported but the existing
+   823→// FeeState interface, mutations, and seed data are unchanged (except for
+   824→// the bug fixes noted inline). The new types model the payment gateway,
+   825→// bank account, UPI/QR, settlement, reconciliation, and webhook domains.
+   826→// Secret keys are NEVER stored in client-side state — they go to server env.
+   827→
+   828→export type GatewayProvider = 'razorpay' | 'cashfree' | 'payu' | 'none'
+   829→export type GatewayEnvironment = 'test' | 'live'
+   830→export type GatewayStatus = 'connected' | 'disconnected' | 'test_mode' | 'error'
+   831→
+   832→export interface GatewayConfig {
+   833→  id: string
+   834→  provider: GatewayProvider
+   835→  environment: GatewayEnvironment
+   836→  status: GatewayStatus
+   837→  /** Masked when displayed in the UI. */
+   838→  merchantId?: string
+   839→  /** Public key ID — safe to show. */
+   840→  apiKeyId?: string
+   841→  /** Stored server-side only; kept on the type for documentation but NOT persisted to client state. */
+   842→  webhookSecret?: string
+   843→  webhookUrl?: string
+   844→  webhookStatus: 'healthy' | 'not_configured' | 'error'
+   845→  lastWebhookAt?: string
+   846→  failedWebhookCount: number
+   847→  /** Linked BankAccount.id where settlements are credited. */
+   848→  settlementAccountId?: string
+   849→  connectedAt?: string
+   850→  connectedBy?: string
+   851→  /** All test-mode checks completed successfully. */
+   852→  testModePassed: boolean
+   853→}
+   854→
+   855→export type BankAccountType = 'savings' | 'current' | 'nre' | 'nro'
+   856→export type AccountStatus = 'active' | 'inactive'
+   857→
+   858→export interface BankAccount {
+   859→  id: string
+   860→  holderName: string
+   861→  bankName: string
+   862→  /** Full number stored; UI masks it (e.g. ****6789). */
+   863→  accountNumber: string
+   864→  ifsc: string
+   865→  branch: string
+   866→  accountType: BankAccountType
+   867→  status: AccountStatus
+   868→  isPrimary: boolean
+   869→  addedAt: string
+   870→  addedBy: string
+   871→  /** Parent-facing display instructions shown on the payment page. */
+   872→  parentDisplayInstructions?: string
+   873→}
+   874→
+   875→export type UpiQrType = 'static' | 'dynamic'
+   876→export type UpiQrStatus = 'active' | 'inactive'
+   877→
+   878→export interface UpiQrConfig {
+   879→  id: string
+   880→  name: string
+   881→  /** School's UPI VPA (e.g. school@hdfc). */
+   882→  upiId: string
+   883→  payeeName: string
+   884→  qrType: UpiQrType
+   885→  /** Gateway provider if this QR is gateway-managed (vs raw UPI). */
+   886→  provider?: string
+   887→  status: UpiQrStatus
+   888→  notes?: string
+   889→  addedAt: string
+   890→  addedBy: string
+   891→}
+   892→
+   893→export type SettlementStatus = 'pending' | 'settled' | 'failed' | 'reversed'
+   894→export type ReconciliationStatus = 'reconciled' | 'unreconciled' | 'pending' | 'exception'
+   895→
+   896→export interface Settlement {
+   897→  id: string
+   898→  gateway: GatewayProvider
+   899→  settlementDate: string
+   900→  grossAmount: number
+   901→  gatewayFee: number
+   902→  taxOnFee: number
+   903→  netAmount: number
+   904→  bankAccountId?: string
+   905→  utr?: string
+   906→  status: SettlementStatus
+   907→  /** FeeTransaction IDs included in this settlement payout. */
+   908→  transactionIds: string[]
+   909→  createdAt: string
+   910→  reconciledAt?: string
+   911→  reconciledBy?: string
+   912→}
+   913→
+   914→export interface ReconciliationRecord {
+   915→  id: string
+   916→  transactionId: string
+   917→  settlementId?: string
+   918→  gatewayPaymentId?: string
+   919→  gatewayOrderId?: string
+   920→  utr?: string
+   921→  reconciliationStatus: ReconciliationStatus
+   922→  reconciledBy?: string
+   923→  reconciledAt?: string
+   924→  notes?: string
+   925→}
+   926→
+   927→export interface WebhookEvent {
+   928→  id: string
+   929→  provider: GatewayProvider
+   930→  /** Provider's event ID — used as the idempotency key. */
+   931→  eventId: string
+   932→  /** payment.success, payment.failed, refund.created, settlement.created, etc. */
+   933→  eventType: string
+   934→  receivedAt: string
+   935→  processedAt?: string
+   936→  status: 'processed' | 'failed' | 'duplicate'
+   937→  /** Sanitized JSON string — no secrets. */
+   938→  payload?: string
+   939→  /** Linked FeeTransaction if a transaction was created/updated. */
+   940→  transactionId?: string
+   941→}
+   942→
+   943→// ─── Helper: derive a student's classLevel from their className ─────
+   944→// FEE-PER-CLASS: used by the fallback matching path in computeAccount
+   945→// + byCategory distribution + countStudentsForStructure when a student's
+   946→// className doesn't have an exact per-class FeeStructureConfig (e.g. a
+   947→// Class 4 student with no FS for "Class 4" falls back to "Primary" →
+   948→// the Class 2 structure).
+   949→export function studentClassLevel(className: string): string {
+   950→  return className.includes('11') || className.includes('12') ? 'Senior Secondary' :
+   951→    className.includes('9') || className.includes('10') ? 'Secondary' :
+   952→    className.match(/Class [6-8]/) ? 'Middle' :
+   953→    className.match(/Class [1-5]/) ? 'Primary' : 'Pre-Primary'
+   954→}
+   955→
+   956→// ─── STRUCT-REV helpers ────────────────────────────────────────────────
+   957→
+   958→/** Acknowledgement threshold for mid-session revisions (PART 12): 60%. */
+   959→export const STRUCTURE_APPROVAL_THRESHOLD = 0.6
+   960→
+   961→/**
+   962→ * Returns the reason a structure cannot be edited in place, or null when
+   963→ * editing is allowed. Rules (PART 7/8/9):
+   964→ *   • draft / not-configured structures → editable freely
+   965→ *   • historical (non-current) session → read-only, always
+   966→ *   • published CURRENT-session structure → locked unless a temporary
+   967→ *     editing window is open for it
+   968→ */
+   969→export function structureLockReason(
+   970→  state: Pick<FeeState, 'versions' | 'structureEditWindow'>,
+   971→  struct: Pick<FeeStructureConfig, 'id' | 'academicYear' | 'className'>,
+   972→): string | null {
+   973→  const isPublished = state.versions.some((v) => v.structureId === struct.id && v.status === 'current')
+   974→  if (!isPublished) return null // draft — editable
+   975→  const year = struct.academicYear ?? CURRENT_ACADEMIC_YEAR
+   976→  if (year !== CURRENT_ACADEMIC_YEAR) {
+   977→    return 'Historical session structures are read-only — the record stays historically intact.'
+   978→  }
+   979→  const w = state.structureEditWindow
+   980→  const live = w.structureId === struct.id && !!w.expiresAt && Date.now() < w.expiresAt
+   981→  if (live) return null
+   982→  return `"${struct.className}" is locked — it is active for students. Request a temporary edit window to make exceptional changes.`
+   983→}
+   984→
+   985→/** Is the temporary editing window live for the given structure? */
+   986→export function structureEditWindowLive(
+   987→  window: StructureEditWindow,
+   988→  structureId: string,
+   989→  now = Date.now(),
+   990→): { live: boolean; msLeft: number } {
+   991→  const live = window.structureId === structureId && !!window.expiresAt && now < window.expiresAt
+   992→  return { live, msLeft: live ? Math.max(0, (window.expiresAt ?? 0) - now) : 0 }
+   993→}
+   994→
+   995→// ─── Helper: find the FeeStructureConfig that applies to a student ──
+   996→// FEE-PER-CLASS (Phase 5): tries an EXACT classId match first (using the
+   997→// student's classId when available, derived from className via the
+   998→// ACADEMIC_CLASSES catalogue). Falls back to className exact match,
+   999→// then classLevel substring matching. This priority order ensures:
+  1000→//   1. A student in Class 9 (C12) finds FS04 (classId='C12') directly —
+  1001→//      no substring walk.
+  1002→//   2. A student in Class 11-PCB (C14-PCB) finds the future Class 11
+  1003→//      structure via applicableClassIds=['C14-PCM','C14-PCB'] — handles
+  1004→//      the stream-class ambiguity that className-only matching couldn't.
+  1005→//   3. A student whose className has no structure (e.g. "Class 4") falls
+  1006→//      back to the level (Primary → FS02).
+  1007→//
+  1008→// The signature accepts an optional classId (Phase 5 addition). Callers
+  1009→// that pass only className continue to work — backward compatible.
+  1010→export function findStructureForStudent(className: string, classId?: string): FeeStructureConfig | undefined {
+  1011→  // STRUCT-SESSION/REV — resolve against the LIVE store state (the pool the
+  1012→  // publish pipeline updates), falling back to the seed constant only when
+  1013→  // the store is not yet hydrated. Previously this read the static
+  1014→  // FEE_STRUCTURES seed directly, so a newly published version never
+  1015→  // reached student accounts (PART 21 violation).
+  1016→  let pool: FeeStructureConfig[] = FEE_STRUCTURES
+  1017→  try {
+  1018→    const live = useFeeStore.getState().feeStructures
+  1019→    if (Array.isArray(live) && live.length > 0) pool = live
+  1020→  } catch {
+  1021→    /* store not initialised yet — seed fallback is correct at init time */
+  1022→  }
+  1023→  // 1. classId exact match (preferred path — Phase 5)
+  1024→  if (classId) {
+  1025→    const byApplicable = pool.find((f) => f.applicableClassIds?.includes(classId))
+  1026→    if (byApplicable) return byApplicable
+  1027→    const byClassId = pool.find((f) => f.classId === classId)
+  1028→    if (byClassId) return byClassId
+  1029→  }
+  1030→  // 2. className exact match (legacy path — pre-Phase-5 primary lookup)
+  1031→  const byName = pool.find((f) => f.className === className)
+  1032→  if (byName) return byName
+  1033→  // 3. classLevel fallback (last resort — keeps backward compat with
+  1034→  //    pre-FEE-PER-CLASS seed which used range names like "Class 9–10")
+  1035→  return pool.find((f) => f.classLevel === studentClassLevel(className))
+  1036→}
+  1037→
+  1038→// ─── Helper: count affected students for a structure ───────────────
+  1039→// FEE-PER-CLASS (Phase 5): tries an EXACT classId/applicableClassIds
+  1040→// match first (so a Class 9 structure reports only Class 9 students,
+  1041→// and a Class 12 structure reports BOTH PCM and PCB stream students).
+  1042→// Falls back to className exact match, then classLevel substring
+  1043→// matching when no student has an exact className match (e.g. a custom
+  1044→// structure with className="Custom").
+  1045→//
+  1046→// Mirrors the matching logic in `findStructureForStudent` so the
+  1047→// changeLog's `affectedStudents` field reflects the same students
+  1048→// whose fee accounts would be re-derived when the structure changes.
+  1049→function countStudentsForStructure(struct: {
+  1050→  className: string
+  1051→  classLevel: string
+  1052→  classId?: string
+  1053→  applicableClassIds?: string[]
+  1054→}): number {
+  1055→  const students = useStudentsStore.getState().students.filter((s) => s.status === 'Active')
+  1056→  // 1. classId / applicableClassIds exact match (Phase 5 — preferred
+  1057→  //    path when the structure is bound to academic class ids).
+  1058→  if (struct.applicableClassIds && struct.applicableClassIds.length > 0) {
+  1059→    const matched = students.filter((s) => {
+  1060→      const sid = deriveStudentClassId(s.className)
+  1061→      return sid != null && struct.applicableClassIds!.includes(sid)
+  1062→    })
+  1063→    if (matched.length > 0) return matched.length
+  1064→  }
+  1065→  if (struct.classId) {
+  1066→    const matched = students.filter((s) => deriveStudentClassId(s.className) === struct.classId)
+  1067→    if (matched.length > 0) return matched.length
+  1068→  }
+  1069→  // 2. className exact match (legacy path)
+  1070→  if (struct.className) {
+  1071→    const exact = students.filter((s) => s.className === struct.className)
+  1072→    if (exact.length > 0) return exact.length
+  1073→  }
+  1074→  // 3. classLevel fallback (last resort)
+  1075→  return students.filter((s) => studentClassLevel(s.className) === struct.classLevel).length
+  1076→}
+  1077→
+  1078→// PHASE 5 — derive a student's AcademicClassDef.id from their className.
+  1079→// Looks up the canonical class catalogue to find the matching id (e.g.
+  1080→// "Class 9" → "C12", "Pre-Nursery" → "C01"). Returns undefined if no
+  1081→// academic class matches (e.g. custom draft className "Class 9 — Copy").
+  1082→// Used by countStudentsForStructure's classId path. Cached at module
+  1083→// scope so the lookup happens once per className.
+  1084→const _studentClassNameToClassId = new Map<string, string | undefined>()
+  1085→export function deriveStudentClassId(className: string): string | undefined {
+  1086→  if (_studentClassNameToClassId.has(className)) {
+  1087→    return _studentClassNameToClassId.get(className)
+  1088→  }
+  1089→  const def = ACADEMIC_CLASSES.find((c) => c.name === className)
+  1090→  _studentClassNameToClassId.set(className, def?.id)
+  1091→  return def?.id
+  1092→}
+  1093→
+  1094→// ─── Legacy alias — kept for any external caller that still imports
+  1095→// `countStudentsForClassLevel`. Internal callers have been migrated to
+  1096→// `countStudentsForStructure` (which considers className first). The
+  1097→// legacy signature accepts a classLevel string and ignores className.
+  1098→function countStudentsForClassLevel(classLevel: string): number {
+  1099→  return countStudentsForStructure({ className: '', classLevel })
+  1100→}
+  1101→
+  1102→// ─── Helper: cross-store notification (Phase 3 — wire announcements) ─
+  1103→// Calls into the communication store so that fee-structure publishes
+  1104→// automatically notify affected parents via Push/SMS/Email. The cross-
+  1105→// store call mirrors the existing pattern at line 436
+  1106→// (`useStudentsStore.getState()`). The communication store is imported
+  1107→// at the top of this file — no circular dep (communication-store only
+  1108→// depends on students-store + teachers mock, never on fee-store).
+  1109→function notifyFeeStructureChange(
+  1110→  structureId: string,
+  1111→  structureName: string,
+  1112→  action: 'published' | 'scheduled' | 'archived' | 'rolled_back' | 'created' | 'deleted',
+  1113→  affectedStudents: number,
+  1114→  effectiveFrom: string,
+  1115→  actor: string,
+  1116→  reason?: string,
+  1117→): void {
+  1118→  const store = useCommunicationStore.getState()
+  1119→  if (!store.createAnnouncement || !store.sendAnnouncement) return
+  1120→  const verb: Record<typeof action, string> = {
+  1121→    published: 'published',
+  1122→    scheduled: 'scheduled',
+  1123→    archived: 'archived',
+  1124→    rolled_back: 'rolled back to',
+  1125→    created: 'created',
+  1126→    deleted: 'deleted',
+  1127→  }
+  1128→  const id = store.createAnnouncement({
+  1129→    title: `Fee Structure ${verb[action]} — ${structureName}`,
+  1130→    message: `The fee structure for ${structureName} has been ${verb[action]}. Effective from ${effectiveFrom}.${reason ? ` Reason: ${reason}.` : ''} ${affectedStudents} students are impacted.`,
+  1131→    category: 'Parents',
+  1132→    audience: 'All Parents',
+  1133→    channels: ['Push', 'SMS', 'Email'],
+  1134→    author: actor,
+  1135→    recipientCount: affectedStudents,
+  1136→    relatedModule: 'Fee Management',
+  1137→    relatedItemId: structureId,
+  1138→  })
+  1139→  store.sendAnnouncement(id)
+  1140→}
+  1141→
+  1142→// ─── Zustand Store ───────────────────────────────────────────────────
+  1143→
+  1144→interface FeeState {
+  1145→  transactions: FeeTransaction[]
+  1146→  cashRequests: CashRequest[]
+  1147→  audit: AuditRecord[]
+  1148→  feeStructures: FeeStructureConfig[]
+  1149→  /** Immutable version snapshots for every Fee Structure (Phase 3). */
+  1150→  versions: FeeStructureVersion[]
+  1151→  /** Immutable audit trail for every version-affecting mutation (Phase 3). */
+  1152→  changeLog: FeeChangeLog[]
+  1153→  /** STRUCT-REV — mid-session revision proposals + acknowledgements. */
+  1154→  structureRevisions: StructureRevision[]
+  1155→  /** STRUCT-REV — the single temporary editing window (salary-pattern). */
+  1156→  structureEditWindow: StructureEditWindow
+  1157→  /** Event-based Additional Charges — INDEPENDENT of the standard annual
+  1158→   *  class fee structures. Never mixed into core fee totals. */
+  1159→  additionalCharges: AdditionalCharge[]
+  1160→  paymentModes: PaymentModeConfig[]
+  1161→  lateFeeRule: LateFeeRule
+  1162→  concessionRule: ConcessionRule
+  1163→  /** One-time entry-fee policy (admission events only — never monthly billing).
+  1164→   *  Applicability is the extensible EntryFeeAudience model; amounts stay
+  1165→   *  canonical (admission: admissionAmount — the engine's own value). */
+  1166→  entryFeePolicy: EntryFeePolicy
+  1167→  receiptSettings: ReceiptSettings
+  1168→  receiptCounter: number
+  1169→  // ─── Payment infrastructure state (Phase 4) ───
+  1170→  gatewayConfig: GatewayConfig | null
+  1171→  bankAccounts: BankAccount[]
+  1172→  upiQrConfigs: UpiQrConfig[]
+  1173→  settlements: Settlement[]
+  1174→  reconciliationRecords: ReconciliationRecord[]
+  1175→  webhookEvents: WebhookEvent[]
+  1176→  /** Approved/pending concession records — the auditable source of every
+  1177→   *  rupee reduced from an account's applicable amount. */
+  1178→  concessions: StudentConcession[]
+  1179→  /** Per-student OPTIONAL-head opt-ins (PART 9 applicability boundary):
+  1180→   *  studentId → FeeHead.ids of optional heads (Books, Uniform…) the
+  1181→   *  school explicitly applied to THIS student. Never auto-populated —
+  1182→   *  optional ≠ automatic. */
+  1183→  optionalHeadApplicability: Record<string, string[]>
+  1184→
+  1185→  // mutations
+  1186→  recordPayment: (input: PaymentInput) => { success: boolean; transaction?: FeeTransaction; error?: string; duplicateTransactionId?: string }
+  1187→  approveCashRequest: (id: string, actor: string) => void
+  1188→  rejectCashRequest: (id: string, actor: string, reason: string) => void
+  1189→  requestClarification: (id: string, actor: string, reason: string) => void
+  1190→  reprintReceipt: (transactionId: string, actor: string) => void
+  1191→  /** Principal verifies a cash transaction that was recorded DIRECTLY
+  1192→   *  (e.g. student self-service / application payment) and is sitting at
+  1193→   *  'Under Verification'. Flips to Success + issues the receipt no it
+  1194→   *  already carries. Additive — does not touch the cashRequests queue. */
+  1195→  approveDirectCashTxn: (transactionId: string, actor: string) => { success: boolean; error?: string }
+  1196→  /** Principal rejects a direct cash entry — status becomes 'Failed' with
+  1197→   *  the reason preserved on the transaction. No money ever moved. */
+  1198→  rejectDirectCashTxn: (transactionId: string, actor: string, reason: string) => { success: boolean; error?: string }
+  1199→  /** Receipt lifecycle — stamp receiptHandledAt the first time an
+  1200→   *  authorised user prints or downloads this payment's receipt. The
+  1201→   *  payment record is never modified beyond this marker (audit:
+  1202→   *  receipt.generated on first handling, receipt.reprinted afterwards). */
+  1203→  markReceiptHandled: (transactionId: string, actor: string) => void
+  1204→  // ─── Additional Charge mutations (event-based collections) ─────────
+  1205→  /** Create an Additional Charge (event-based collection) for the given
+  1206→   *  classes/students. Does NOT touch any class fee structure. Emits an
+  1207→   *  immutable audit entry. New `status` input (APPS-IA-1): 'Draft'
+  1208→   *  creates a private, fully-editable, deletable collection; omitted →
+  1209→   *  'Active' (legacy callers keep their behaviour). */
+  1210→  createAdditionalCharge: (input: Omit<AdditionalCharge, 'id' | 'createdAt' | 'createdBy' | 'status'> & { actor?: string; status?: 'Draft' | 'Active' }) => { success: boolean; charge?: AdditionalCharge; error?: string }
+  1211→  /** Edit a collection. DRAFT: every field may change. ACTIVE: only
+  1212→   *  presentation/scope fields (description, dates, instructions,
+  1213→   *  target scope, targetAmount) — amount is locked once any payment
+  1214→   *  exists and name changes are refused while Active. Closed/Archived/
+  1215→   *  Cancelled are immutable. */
+  1216→  updateAdditionalCharge: (id: string, patch: Partial<Omit<AdditionalCharge, 'id' | 'createdAt' | 'createdBy'>>, actor?: string) => { success: boolean; error?: string }
+  1217→  /** Publish a DRAFT collection — it becomes an Active obligation for
+  1218→   *  its scoped students and appears in the collect-payment wizard. */
+  1219→  publishAdditionalCharge: (id: string, actor?: string) => { success: boolean; error?: string }
+  1220→  /** Archive a Closed (or Cancelled) collection — permanent read-only
+  1221→   *  historical record; payment history stays accessible. */
+  1222→  archiveAdditionalCharge: (id: string, actor?: string, note?: string) => { success: boolean; error?: string }
+  1223→  /** Permanently remove a collection. ONLY possible while it is a DRAFT
+  1224→   *  with zero bound transactions (payments) — published/closed/archived
+  1225→   *  collections can never be destructively deleted (financial
+  1226→   *  integrity). The UI additionally blocks deleting a draft that a
+  1227→   *  form links to. */
+  1228→  deleteAdditionalCharge: (id: string, actor?: string) => { success: boolean; error?: string }
+  1229→  /** Close an Active collection (FIN-COLLECTION). Stops future
+  1230→   *  obligation; collected payments + full history are preserved and
+  1231→   *  the collection moves to the Record File view. */
+  1232→  closeAdditionalCharge: (id: string, actor?: string, note?: string) => { success: boolean; error?: string }
+  1233→  /** Soft-cancel an Additional Charge. Active student balances stop
+  1234→   *  including it immediately; historical payments + audit entries are
+  1235→   *  preserved (never destructive). */
+  1236→  cancelAdditionalCharge: (id: string, actor: string, reason?: string) => { success: boolean; error?: string }
+  1237→  addFeeHead: (structureId: string, head: Omit<FeeHead, 'id'>) => { success: boolean; error?: string }
+  1238→  updateFeeHead: (structureId: string, headId: string, patch: Partial<FeeHead>) => { success: boolean; error?: string }
+  1239→  archiveFeeHead: (structureId: string, headId: string) => void
+  1240→  // ─── Phase 6 — catalogue normalization mutations ──────────────────
+  1241→  /**
+  1242→   * Link a single per-structure FeeHead to a master catalogue entry.
+  1243→   *
+  1244→   * Patches ONLY the catalogueId + category fields on the matching
+  1245→   * FeeHead. Does NOT bump the structure's version (this is a metadata
+  1246→   * link, not a financial change — historical payments stay on their
+  1247→   * original version, and the live structure's financial totals don't
+  1248→   * change because the head's amount/frequency are already snapshotted).
+  1249→   *
+  1250→   * If `catalogueId` is empty, UNLINKS the head (clears catalogueId +
+  1251→   * category). Used by the Normalize drawer's "Unlink" action.
+  1252→   *
+  1253→   * Emits an immutable audit entry (`fee_head.updated`) so the audit
+  1254→   * trail captures who normalized which head when.
+  1255→   */
+  1256→  linkHeadToCatalogue: (structureId: string, headId: string, catalogueId: string, category?: FeeHeadCategory) => { success: boolean; error?: string }
+  1257→  /**
+  1258→   * Bulk-link every per-structure FeeHead whose name matches `name`
+  1259→   * (case-insensitive) across ALL structures (or a single structure when
+  1260→   * `structureId` is provided). Returns counts so the UI can toast
+  1261→   * "Linked 4 heads across 3 structures".
+  1262→   *
+  1263→   * Uses the master catalogue entry's `type` as the `category` (falls
+  1264→   * back to 'Other' if the catalogue entry is missing — though that
+  1265→   * should never happen since the caller passes a real catalogue id).
+  1266→   */
+  1267→  bulkLinkHeadsByName: (name: string, catalogueId: string, structureId?: string) => { structures: number; heads: number }
+  1268→  togglePaymentMode: (id: PaymentMode) => void
+  1269→  updateLateFeeRule: (patch: Partial<LateFeeRule>) => void
+  1270→  updateConcessionRule: (patch: Partial<ConcessionRule>) => void
+  1271→  updateEntryFeePolicy: (patch: Partial<EntryFeePolicy>) => void
+  1272→  updateReceiptSettings: (patch: Partial<ReceiptSettings>) => void
+  1273→  // ─── Concessions (auditable records) ────────────────────────────────
+  1274→  /** Request (or directly grant, when the school's concession rule does
+  1275→   *  not require approval) a concession for a student. Audited. */
+  1276→  requestConcession: (input: { studentId: string; type: ConcessionType; basis: 'percent' | 'amount'; value: number; reason: string; effectiveFrom?: string; actor?: string }) => { success: boolean; concession?: StudentConcession; error?: string }
+  1277→  /** Approve a Pending concession — it starts reducing the account's
+  1278→   *  applicable amount on its effectiveFrom. Audited. */
+  1279→  approveConcession: (id: string, actor?: string) => { success: boolean; error?: string }
+  1280→  /** Reject a Pending concession. Reason preserved. Audited. */
+  1281→  rejectConcession: (id: string, actor?: string, reason?: string) => { success: boolean; error?: string }
+  1282→  // ─── Optional-head applicability (PART 9 boundary) ────────────────
+  1283→  /** Apply / remove an OPTIONAL structure head (Books, Uniform…) for ONE
+  1284→   *  student. Only affects future applicability + ledger charges — never
+  1285→   *  rewrites historical payments. Audited. */
+  1286→  setOptionalHeadApplicable: (studentId: string, headId: string, applicable: boolean, actor?: string) => { success: boolean; error?: string }
+  1287→  // ─── Phase 4 — payment infrastructure mutations ──────────────────
+  1288→  connectGateway: (provider: GatewayProvider, merchantId: string, apiKeyId: string, environment: GatewayEnvironment) => void
+  1289→  disconnectGateway: () => void
+  1290→  updateGatewayStatus: (status: GatewayStatus, lastWebhookAt?: string) => void
+  1291→  addBankAccount: (account: Omit<BankAccount, 'id' | 'addedAt' | 'addedBy'>) => void
+  1292→  updateBankAccount: (id: string, updates: Partial<BankAccount>) => void
+  1293→  setPrimaryBankAccount: (id: string) => void
+  1294→  deactivateBankAccount: (id: string) => void
+  1295→  addUpiQrConfig: (config: Omit<UpiQrConfig, 'id' | 'addedAt' | 'addedBy'>) => void
+  1296→  updateUpiQrConfig: (id: string, updates: Partial<UpiQrConfig>) => void
+  1297→  recordSettlement: (settlement: Omit<Settlement, 'id' | 'createdAt'>) => void
+  1298→  reconcileTransaction: (transactionId: string, settlementId: string | undefined, utr: string | undefined, reconciledBy: string) => void
+  1299→  recordWebhookEvent: (event: Omit<WebhookEvent, 'id'>) => void
+  1300→
+  1301→  // ─── Phase 3 — versioned Fee Structure mutations ──────────────────
+  1302→  /** Create a brand-new Fee Structure + its Version 1 (draft). Returns new structureId. */
+  1303→  createFeeStructure: (input: {
+  1304→    category: string
+  1305→    className: string
+  1306→    classLevel: string
+  1307→    heads: FeeHead[]
+  1308→    effectiveFrom: string
+  1309→    notes?: string
+  1310→    actor?: string
+  1311→    /** FEE-EXAM: optional exam fee schedule for the new structure. Backward
+  1312→     *  compatible — callers that omit this create a structure with no
+  1313→     *  per-exam fees (which is fine — exam fee resolution returns null). */
+  1314→    examFeeSchedule?: ExamFeeSchedule
+  1315→    /** PHASE 5 — class-wise binding. Optional for backward compat.
+  1316→     *  When set, the structure matches students by classId before
+  1317→     *  falling back to className/classLevel. */
+  1318→    classId?: string
+  1319→    applicableClassIds?: string[]
+  1320→    /** SaaS-STAGE-1 — session snapshot. The caller derives it from the
+  1321→     *  ACTIVE academic session (lib/academic-session.ts) — the Principal
+  1322→     *  never types it. Omitting falls back to CURRENT_ACADEMIC_YEAR so
+  1323→     *  legacy callers keep the session-scoped behaviour. */
+  1324→    academicYear?: string
+  1325→  }) => string
+  1326→  /** Publish a new CURRENT version (immediately effective). Marks prior as archived.
+  1327→   *  Returns new versionId. Triggers parent notification.
+  1328→   *
+  1329→   *  FEE-EXAM: the optional 6th parameter snapshots the new exam fee
+  1330→   *  schedule onto the new version (and onto the live FeeStructureConfig).
+  1331→   *  Backward compatible — callers that omit it leave the existing
+  1332→   *  schedule unchanged. */
+  1333→  publishFeeStructureVersion: (structureId: string, newHeads: FeeHead[], effectiveFrom: string, reason: string, actor?: string, examFeeSchedule?: ExamFeeSchedule) => string
+  1334→  /** Schedule a new version for a future effective date. Returns scheduled versionId.
+  1335→   *
+  1336→   *  FEE-EXAM: optional 6th parameter snapshots the exam fee schedule. */
+  1337→  scheduleFeeStructureVersion: (structureId: string, newHeads: FeeHead[], effectiveFrom: string, reason: string, actor?: string, examFeeSchedule?: ExamFeeSchedule) => string
+  1338→  /** Archive a version (draft or scheduled). Cannot archive the only current version. */
+  1339→  archiveFeeStructureVersion: (versionId: string, actor?: string) => void
+  1340→  /** Roll back to a target version by creating a NEW version with the target's heads.
+  1341→   *  Preserves the audit trail — never destroys history. Returns new versionId.
+  1342→   *
+  1343→   *  FEE-EXAM: the target version's `examFeeSchedule` is also restored on
+  1344→   *  the new (rolled-back) version + the live FeeStructureConfig. No
+  1345→   *  signature change required. */
+  1346→  revertFeeStructureVersion: (structureId: string, targetVersionId: string, reason: string, actor?: string) => string
+  1347→  /** Update a DRAFT version's heads/notes before publishing. No audit entry (drafts are mutable).
+  1348→   *
+  1349→   *  FEE-EXAM: the changes payload accepts an optional `examFeeSchedule`
+  1350→   *  so drafts can stage exam fee edits without going through publish. */
+  1351→  updateFeeStructureDraft: (versionId: string, changes: { heads?: FeeHead[]; notes?: string; changeReason?: string; examFeeSchedule?: ExamFeeSchedule }) => void
+  1352→  /**
+  1353→   * Delete an entire Fee Structure + all its version snapshots.
+  1354→   *
+  1355→   * Rules (FEE-CORRECT Fix 4):
+  1356→   *   - DRAFT structures: can be deleted (removes from `feeStructures` + `versions`).
+  1357→   *   - CURRENT / PUBLISHED structures: CANNOT be deleted — return error
+  1358→   *     "Cannot delete a published structure. Archive it instead."
+  1359→   *   - ARCHIVED structures: CANNOT be deleted if any transaction references
+  1360→   *     the structure's id or any of its version ids — return error
+  1361→   *     "Cannot delete — financial records depend on this structure."
+  1362→   *   - ARCHIVED structures with no financial references: can be deleted.
+  1363→   *
+  1364→   * Always emits an immutable audit entry (`fee_structure.changed`) and a
+  1365→   * FeeChangeLog entry (`action: 'deleted'`). Financial records are NEVER
+  1366→   * deleted — the audit log preserves the deletion record forever.
+  1367→   */
+  1368→  deleteFeeStructure: (structureId: string, actor: string) => { success: boolean; error?: string }
+  1369→
+  1370→  // ─── STRUCT-SESSION / STRUCT-REV — session lifecycle mutations ─────
+  1371→  /** Auto-create one DRAFT / Not-Configured structure per active class
+  1372→   *  that has no structure bound for the CURRENT session. Idempotent —
+  1373→   *  call on module mount; it only fills the gaps (new classes too). */
+  1374→  syncFeeStructuresForSession: (actor?: string) => { created: number; classes: string[] }
+  1375→  /** Open a temporary editing window on a LOCKED current-session structure
+  1376→   *  (3 hours, salary-pattern). Required before any live edit. */
+  1377→  requestStructureEditWindow: (structureId: string, actor: string) => { success: boolean; error?: string; expiresAt?: number }
+  1378→  /** Close the editing window early. */
+  1379→  closeStructureEditWindow: (actor?: string) => void
+  1380→  /** Submit a PROPOSED new version for a locked current-session structure.
+  1381→   *  Never overwrites: the published version keeps applying. Sends
+  1382→   *  acknowledgement requests to the affected students/guardians. */
+  1383→  createStructureRevision: (input: {
+  1384→    structureId: string
+  1385→    proposedHeads: FeeHead[]
+  1386→    effectiveFrom: string
+  1387→    reason?: string
+  1388→    actor?: string
+  1389→  }) => { success: boolean; revision?: StructureRevision; error?: string }
+  1390→  /** Record a student/guardian acknowledgement. Flips the revision to
+  1391→   *  'Threshold Reached' when ≥ 60% of affected students approved. */
+  1392→  respondStructureRevision: (revisionId: string, studentId: string, accept: boolean) => { success: boolean; error?: string; thresholdReached?: boolean }
+  1393→  /** Publish an approved revision (only when the 60% threshold is met).
+  1394→   *  Creates the new version, supersedes the old one, notifies users. */
+  1395→  publishStructureRevision: (revisionId: string, actor?: string) => { success: boolean; error?: string; versionId?: string }
+  1396→  /** Cancel a pending/threshold revision. History preserved. */
+  1397→  cancelStructureRevision: (revisionId: string, actor?: string, reason?: string) => { success: boolean; error?: string }
+  1398→}
+  1399→
+  1400→export interface PaymentInput {
+  1401→  studentId: string
+  1402→  amount: number
+  1403→  mode: PaymentMode
+  1404→  purpose: string
+  1405→  feeHead: string
+  1406→  collectedBy: string
+  1407→  referenceNo?: string
+  1408→  meta?: FeeTransaction['meta']
+  1409→  /** Financial category of the payment. When additionalChargeId is set
+  1410→   *  this is forced to 'ADDITIONAL' regardless of the caller's value. */
+  1411→  category?: TransactionCategory
+  1412→  /** When collecting against an Additional Charge — its id. The payment
+  1413→   *  then reduces the student's ADDITIONAL outstanding, never core. */
+  1414→  additionalChargeId?: string
+  1415→  /** When collecting against an Applications & Forms submission — the
+  1416→   *  application id, stamped on the transaction for permanent linkage. */
+  1417→  applicationId?: string
+  1418→  /** WHO is recording the payment (PAY-REWORK-1). 'principal' → verified
+  1419→   *  immediately (authorised finance role at the counter). 'teacher' /
+  1420→   *  'class_teacher' → Under Verification (cannot self-verify). 'self' →
+  1421→   *  Under Verification (student/guardian manual submission — never
+  1422→   *  auto-paid). */
+  1423→  collectorRole?: CollectorRole
+  1424→  // ─── Gateway-confirmed payments (spec: gateway confirmations are NEVER
+  1425→  // held for manual Principal verification) ───
+  1426→  /** Provider that processed and CONFIRMED the payment (razorpay/cashfree/
+  1427→   *  payu). Presence of gatewayPaymentId marks the payment as gateway-
+  1428→   *  confirmed → recorded as Success automatically. */
+  1429→  gateway?: GatewayProvider
+  1430→  /** Gateway payment id (e.g. pay_… ) — the stored transaction/reference ID. */
+  1431→  gatewayPaymentId?: string
+  1432→  gatewayOrderId?: string
+  1433→  paymentSource?: FeeTransaction['paymentSource']
+  1434→}
+  1435→
+  1436→function pushAudit(state: FeeState, record: Omit<AuditRecord, 'id' | 'timestamp' | '_immutable'>): AuditRecord[] {
+  1437→  const audit: AuditRecord = {
+  1438→    ...record,
+  1439→    id: `AUD-${(state.audit.length + 1).toString().padStart(3, '0')}-${Date.now().toString(36)}`,
+  1440→    timestamp: new Date().toISOString(),
+  1441→    _immutable: true,
+  1442→  }
+  1443→  return [audit, ...state.audit]
+  1444→}
+  1445→
+  1446→// ─── Phase 3 helper: push an immutable FeeChangeLog entry ──────────
+  1447→function pushChangeLog(
+  1448→  state: FeeState,
+  1449→  entry: Omit<FeeChangeLog, 'id' | 'changedAt'>,
+  1450→): FeeChangeLog[] {
+  1451→  const log: FeeChangeLog = {
+  1452→    ...entry,
+  1453→    id: `FCL-${(state.changeLog.length + 1).toString().padStart(3, '0')}-${Date.now().toString(36)}`,
+  1454→    changedAt: new Date().toISOString(),
+  1455→  }
+  1456→  return [log, ...state.changeLog]
+  1457→}
+  1458→
+  1459→// Compute the diff between two head arrays for the changeLog `changes` field.
+  1460→function diffHeads(oldHeads: FeeHead[], newHeads: FeeHead[]): { headName: string; oldValue: number; newValue: number }[] {
+  1461→  const changes: { headName: string; oldValue: number; newValue: number }[] = []
+  1462→  const seen = new Set<string>()
+  1463→  for (const h of newHeads) {
+  1464→    seen.add(h.name)
+  1465→    const old = oldHeads.find((o) => o.name === h.name)
+  1466→    if (!old) {
+  1467→      changes.push({ headName: h.name, oldValue: 0, newValue: h.amount })
+  1468→    } else if (old.amount !== h.amount) {
+  1469→      changes.push({ headName: h.name, oldValue: old.amount, newValue: h.amount })
+  1470→    }
+  1471→  }
+  1472→  for (const h of oldHeads) {
+  1473→    if (!seen.has(h.name)) {
+  1474→      changes.push({ headName: h.name, oldValue: h.amount, newValue: 0 })
+  1475→    }
+  1476→  }
+  1477→  return changes
+  1478→}
+  1479→
+  1480→function genReceiptNo(prefix: string, counter: number): string {
+  1481→  return `${prefix}${counter}`
+  1482→}
+  1483→
+  1484→// SaaS-STAGE-2A — ONE-TIME legacy migration: data persisted before tenant
+  1485→// scoping lived under the un-scoped key; copy it into the DEFAULT tenant's
+  1486→// namespace (the demo school) so the verified demo experience survives the
+  1487→// upgrade, then remove the legacy key. Runs once, at module eval, BEFORE
+  1488→// the store (and its persist hydration) is created.
+  1489→migrateLegacyScopedStore(TENANT_SCOPED_BASES.fee, DEFAULT_TENANT_ID)
+  1490→
+  1491→export const useFeeStore = create<FeeState>()(
+  1492→  persist((set, get) => ({
+  1493→  transactions: SEED_TRANSACTIONS,
+  1494→  cashRequests: SEED_CASH_REQUESTS,
+  1495→  audit: SEED_AUDIT,
+  1496→  feeStructures: FEE_STRUCTURES,
+  1497→  versions: SEED_VERSIONS,
+  1498→  changeLog: [],
+  1499→  structureRevisions: [],
+  1500→  structureEditWindow: { structureId: null, openedAt: null, expiresAt: null },
+  1501→  additionalCharges: SEED_ADDITIONAL_CHARGES,
+  1502→  paymentModes: DEFAULT_PAYMENT_MODES,
+  1503→  lateFeeRule: DEFAULT_LATE_FEE_RULE,
+  1504→  concessionRule: DEFAULT_CONCESSION_RULE,
+  1505→  entryFeePolicy: DEFAULT_ENTRY_FEE_POLICY,
+  1506→  receiptSettings: DEFAULT_RECEIPT_SETTINGS,
+  1507→  receiptCounter: 1060,
+  1508→  // ─── Payment infrastructure state (Phase 4) ───
+  1509→  gatewayConfig: SEED_GATEWAY_CONFIG,
+  1510→  bankAccounts: SEED_BANK_ACCOUNTS,
+  1511→  upiQrConfigs: SEED_UPI_QR_CONFIGS,
+  1512→  settlements: SEED_SETTLEMENTS,
+  1513→  reconciliationRecords: SEED_RECONCILIATION_RECORDS,
+  1514→  webhookEvents: SEED_WEBHOOK_EVENTS,
+  1515→  concessions: SEED_CONCESSIONS,
+  1516→  optionalHeadApplicability: SEED_OPTIONAL_HEAD_OPTINS,
+  1517→
+  1518→  recordPayment: (input) => {
+  1519→    const state = get()
+  1520→    // ─── §20 school payment-channel policy (SaaS-STAGE-2A) ────────────
+  1521→    // Office/Teacher/Class-Teacher collections require the school's Fee
+  1522→    // Collection capability; student self-service requires the Online
+  1523→    // Payment capability. Gateway is a CHANNEL behind these — never a
+  1524→    // source. A school without gateway runs purely manual collections.
+  1525→    const tenantConfig = getActiveTenantConfigSync()
+  1526→    if (input.collectorRole !== 'self' && !tenantConfig.subFeatures.fee_collect) {
+  1527→      return { success: false, error: 'Fee collection is disabled for your school by the platform configuration.' }
+  1528→    }
+  1529→    if (input.collectorRole === 'self' && !tenantConfig.subFeatures.fee_online_payments) {
+  1530→      return { success: false, error: 'Online payments are not enabled for your school. Please contact the school office.' }
+  1531→    }
+  1532→    // Validation: amount must be positive
+  1533→    if (!input.amount || input.amount <= 0) {
+  1534→      return { success: false, error: 'Amount must be greater than zero.' }
+  1535→    }
+  1536→    // Validation: payment mode must be active
+  1537→    const modeConfig = state.paymentModes.find((m) => m.id === input.mode)
+  1538→    if (!modeConfig || !modeConfig.active) {
+  1539→      return { success: false, error: `Payment mode ${input.mode} is not active.` }
+  1540→    }
+  1541→    // GATEWAY-CONFIRMED (spec): a payment the actual gateway has confirmed
+  1542→    // (gatewayPaymentId present) is NEVER held for manual Principal
+  1543→    // verification — it is Paid automatically, the transaction/reference ID
+  1544→    // is stored on the record and the receipt is immediately available.
+  1545→    // The gateway payment id SATISFIES the reference requirement (it IS the
+  1546→    // canonical transaction reference for gateway rails).
+  1547→    const gatewayConfirmed = !!input.gatewayPaymentId
+  1548→    // Validation: reference required for some modes (gateway payments exempt
+  1549→    // — the gateway transaction id is stored as the reference)
+  1550→    if (modeConfig.requiresReference && !input.referenceNo && !gatewayConfirmed) {
+  1551→      return { success: false, error: `${input.mode} requires a reference number.` }
+  1552→    }
+  1553→    // Validation: student must exist
+  1554→    const student = useStudentsStore.getState().students.find((s) => s.id === input.studentId)
+  1555→    if (!student) {
+  1556→      return { success: false, error: 'Student not found in canonical record.' }
+  1557→    }
+  1558→    // ─── Idempotency (strong) — issue #7 fix ──────────────────────────
+  1559→    // Complements the referenceNo-based check below. Catches duplicate
+  1560→    // submissions that the referenceNo check misses:
+  1561→    //   1. Cash payments (no referenceNo → the block below is skipped).
+  1562→    //   2. Double-clicks on the Pay button that fire handleSubmit twice
+  1563→    //      before React re-renders the button away.
+  1564→    //   3. Webhook redeliveries where the gateway retries with a new
+  1565→    //      reference but the underlying payment intent is the same.
+  1566→    // Hash key: (studentId, amount, feeHead, referenceNo||''). Window: 5 min.
+  1567→    // A legitimate same-day retry of the same head will typically differ in
+  1568→    // amount (partial payment) or referenceNo, so it won't be blocked.
+  1569→    const idemRef = input.referenceNo ?? ''
+  1570→    const fiveMinAgo = Date.now() - 5 * 60 * 1000
+  1571→    const recentDup = state.transactions.find((t) => {
+  1572→      if (t.studentId !== input.studentId) return false
+  1573→      if (t.amount !== input.amount) return false
+  1574→      if (t.feeHead !== input.feeHead) return false
+  1575→      if ((t.referenceNo ?? '') !== idemRef) return false
+  1576→      if (t.status !== 'Success' && t.status !== 'Under Verification') return false
+  1577→      // Transaction ids are `TXN-<epochMs>` — parse the timestamp.
+  1578→      const ts = Number(t.id.replace(/^TXN-/, ''))
+  1579→      return Number.isFinite(ts) && ts >= fiveMinAgo
+  1580→    })
+  1581→    if (recentDup) {
+  1582→      return {
+  1583→        success: false,
+  1584→        error: `Duplicate payment blocked (idempotency). A matching ${recentDup.status === 'Under Verification' ? 'cash ' : ''}payment of ₹${input.amount.toLocaleString('en-IN')} for ${student.name} (${input.feeHead}) was recorded just now${recentDup.referenceNo ? ` with ref ${recentDup.referenceNo}` : ''}.`,
+  1585→        duplicateTransactionId: recentDup.id,
+  1586→      }
+  1587→    }
+  1588→    // Validation: duplicate reference check (within last 24h)
+  1589→    if (input.referenceNo) {
+  1590→      const dup = state.transactions.find((t) => t.referenceNo === input.referenceNo && t.status === 'Success')
+  1591→      if (dup) {
+  1592→        return { success: false, error: `Duplicate reference number detected (${input.referenceNo}).` }
+  1593→      }
+  1594→    }
+  1595→    const counter = state.receiptCounter + 1
+  1596→    const receiptNo = genReceiptNo(state.receiptSettings.prefix, counter)
+  1597→    // FINANCIAL CATEGORY — what obligation this payment is collected
+  1598→    // against. A payment bound to an AdditionalCharge is ALWAYS 'ADDITIONAL'
+  1599→    // (never silently becomes part of core fee collection); otherwise the
+  1600→    // caller's explicit category wins; legacy callers default to the
+  1601→    // feeHead-derived category (e.g. "Exam Fee — Unit Test" → EXAMINATION).
+  1602→    const resolvedCategory: TransactionCategory = input.additionalChargeId
+  1603→      ? 'ADDITIONAL'
+  1604→      : input.category ?? (/exam/i.test(input.feeHead) ? 'EXAMINATION' : 'CORE')
+  1605→    const txn: FeeTransaction = {
+  1606→      id: `TXN-${Date.now()}`,
+  1607→      receiptNo,
+  1608→      studentId: student.id,
+  1609→      studentName: student.name,
+  1610→      admissionNo: student.admissionNo,
+  1611→      className: student.className,
+  1612→      classId: student.classId,
+  1613→      amount: input.amount,
+  1614→      mode: input.mode,
+  1615→      // VERIFICATION LIFECYCLE (PAY-REWORK-1) — one canonical record whose
+  1616→      // status is decided by WHO recorded it, not just the mode:
+  1617→      //   gateway-confirmed → the payment gateway itself confirmed the money
+  1618→      //     → Paid automatically (never queued for manual verification).
+  1619→      //   principal/office → the authorised finance person confirmed the
+  1620→      //     money at the counter → verified immediately (any mode).
+  1621→      //   teacher / student-self → the money was NOT confirmed by the
+  1622→      //     office → 'Under Verification' regardless of mode. A teacher can
+  1623→      //     never self-verify; a manual transfer is never auto-paid.
+  1624→      // Legacy callers (no collectorRole) keep the historic mode-based rule.
+  1625→      status:
+  1626→        gatewayConfirmed || input.collectorRole === 'principal'
+  1627→          ? 'Success'
+  1628→          : input.collectorRole === 'teacher' || input.collectorRole === 'class_teacher' || input.collectorRole === 'self' || input.mode === 'Cash'
+  1629→            ? 'Under Verification'
+  1630→            : 'Success',
+  1631→      date: new Date().toISOString().split('T')[0],
+  1632→      recordedAt: new Date().toISOString(),
+  1633→      purpose: input.purpose,
+  1634→      feeHead: input.feeHead,
+  1635→      collectedBy: input.collectedBy,
+  1636→      ...(input.collectorRole ? { collectorRole: input.collectorRole } : {}),
+  1637→      verifiedBy:
+  1638→        gatewayConfirmed
+  1639→          ? `${input.gateway ?? 'gateway'} · auto-confirmed`
+  1640→          : input.collectorRole === 'principal' || (!input.collectorRole && input.mode !== 'Cash')
+  1641→            ? input.collectedBy
+  1642→            : null,
+  1643→      verifiedAt:
+  1644→        gatewayConfirmed || input.collectorRole === 'principal' || (!input.collectorRole && input.mode !== 'Cash')
+  1645→          ? new Date().toISOString()
+  1646→          : null,
+  1647→      referenceNo: input.referenceNo ?? input.gatewayPaymentId ?? null,
+  1648→      academicYear: CURRENT_ACADEMIC_YEAR,
+  1649→      category: resolvedCategory,
+  1650→      ...(input.additionalChargeId ? { additionalChargeId: input.additionalChargeId } : {}),
+  1651→      ...(input.applicationId ? { applicationId: input.applicationId } : {}),
+  1652→      // Gateway infrastructure fields — stored so the payment is fully
+  1653→      // reconcilable (Transactions detail, exports, settlements).
+  1654→      ...(gatewayConfirmed
+  1655→        ? {
+  1656→            paymentSource: input.paymentSource ?? 'gateway',
+  1657→            gateway: input.gateway ?? 'none',
+  1658→            gatewayPaymentId: input.gatewayPaymentId,
+  1659→            ...(input.gatewayOrderId ? { gatewayOrderId: input.gatewayOrderId } : {}),
+  1660→            utr: input.referenceNo ?? input.gatewayPaymentId,
+  1661→          }
+  1662→        : {}),
+  1663→      meta: input.meta,
+  1664→    }
+  1665→    set({
+  1666→      transactions: [txn, ...state.transactions],
+  1667→      receiptCounter: counter,
+  1668→      audit: pushAudit(state, {
+  1669→        action: 'payment.recorded',
+  1670→        actor: input.collectedBy,
+  1671→        entityId: txn.id,
+  1672→        entityType: 'transaction',
+  1673→        description: `Payment ₹${input.amount.toLocaleString('en-IN')} recorded for ${student.name} via ${input.mode} (${receiptNo})`,
+  1674→      }),
+  1675→    })
+  1676→    return { success: true, transaction: txn }
+  1677→  },
+  1678→
+  1679→  approveCashRequest: (id, actor) => {
+  1680→    const state = get()
+  1681→    const req = state.cashRequests.find((r) => r.id === id)
+  1682→    if (!req) return
+  1683→    // Bug fix (Phase 4): look up the student's actual classId from the
+  1684→    // canonical students store so that auto-created transactions group
+  1685→    // correctly in the class-wise analytics (was hardcoded to '' before,
+  1686→    // which broke aggregation in useFeeData at the classMap grouping).
+  1687→    const student = useStudentsStore.getState().students.find((s) => s.id === req.studentId)
+  1688→    const classId = student?.classId ?? ''
+  1689→    const counter = state.receiptCounter + 1
+  1690→    const receiptNo = genReceiptNo(state.receiptSettings.prefix, counter)
+  1691→    const txn: FeeTransaction = {
+  1692→      id: `TXN-${Date.now()}`,
+  1693→      receiptNo,
+  1694→      studentId: req.studentId,
+  1695→      studentName: req.studentName,
+  1696→      admissionNo: req.admissionNo,
+  1697→      className: req.className,
+  1698→      classId,
+  1699→      amount: req.amount,
+  1700→      mode: 'Cash',
+  1701→      status: 'Success',
+  1702→      date: new Date().toISOString().split('T')[0],
+  1703→      recordedAt: new Date().toISOString(),
+  1704→      purpose: req.notes ?? 'Cash payment approved',
+  1705→      feeHead: req.feeHead,
+  1706→      collectedBy: req.collectedBy,
+  1707→      verifiedBy: actor,
+  1708→      verifiedAt: new Date().toISOString(),
+  1709→      referenceNo: null,
+  1710→      academicYear: CURRENT_ACADEMIC_YEAR,
+  1711→      paymentSource: 'offline',
+  1712→    }
+  1713→    set({
+  1714→      cashRequests: state.cashRequests.map((r) => r.id === id ? { ...r, status: 'Confirmed by Principal' } : r),
+  1715→      transactions: [txn, ...state.transactions],
+  1716→      receiptCounter: counter,
+  1717→      audit: pushAudit(state, {
+  1718→        action: 'cash.approved',
+  1719→        actor,
+  1720→        entityId: id,
+  1721→        entityType: 'cash_request',
+  1722→        description: `Cash ₹${req.amount.toLocaleString('en-IN')} approved for ${req.studentName} (${receiptNo})`,
+  1723→      }),
+  1724→    })
+  1725→  },
+  1726→
+  1727→  rejectCashRequest: (id, actor, reason) => {
+  1728→    const state = get()
+  1729→    const req = state.cashRequests.find((r) => r.id === id)
+  1730→    if (!req) return
+  1731→    set({
+  1732→      cashRequests: state.cashRequests.map((r) => r.id === id ? { ...r, status: 'Rejected', reason } : r),
+  1733→      audit: pushAudit(state, {
+  1734→        action: 'cash.rejected',
+  1735→        actor,
+  1736→        entityId: id,
+  1737→        entityType: 'cash_request',
+  1738→        description: `Cash ₹${req.amount.toLocaleString('en-IN')} rejected for ${req.studentName} — ${reason}`,
+  1739→      }),
+  1740→    })
+  1741→  },
+  1742→
+  1743→  requestClarification: (id, actor, reason) => {
+  1744→    const state = get()
+  1745→    const req = state.cashRequests.find((r) => r.id === id)
+  1746→    if (!req) return
+  1747→    set({
+  1748→      cashRequests: state.cashRequests.map((r) => r.id === id ? { ...r, status: 'Clarification Requested', reason } : r),
+  1749→      audit: pushAudit(state, {
+  1750→        action: 'cash.clarification',
+  1751→        actor,
+  1752→        entityId: id,
+  1753→        entityType: 'cash_request',
+  1754→        description: `Clarification requested for ${req.studentName} — ${reason}`,
+  1755→      }),
+  1756→    })
+  1757→  },
+  1758→
+  1759→  reprintReceipt: (transactionId, actor) => {
+  1760→    const state = get()
+  1761→    const txn = state.transactions.find((t) => t.id === transactionId)
+  1762→    if (!txn) return
+  1763→    set({
+  1764→      audit: pushAudit(state, {
+  1765→        action: 'receipt.reprinted',
+  1766→        actor,
+  1767→        entityId: transactionId,
+  1768→        entityType: 'receipt',
+  1769→        description: `Receipt ${txn.receiptNo} reprinted (no second transaction created)`,
+  1770→      }),
+  1771→    })
+  1772→  },
+  1773→
+  1774→  // ─── Direct cash verification (student/application self-service path) ──
+  1775→  approveDirectCashTxn: (transactionId, actor) => {
+  1776→    const state = get()
+  1777→    const txn = state.transactions.find((t) => t.id === transactionId)
+  1778→    if (!txn) return { success: false, error: 'Transaction not found.' }
+  1779→    if (txn.status !== 'Under Verification') {
+  1780→      return { success: false, error: `Transaction is ${txn.status} — only Under Verification entries can be approved.` }
+  1781→    }
+  1782→    set({
+  1783→      transactions: state.transactions.map((t) => t.id !== transactionId ? t : {
+  1784→        ...t,
+  1785→        status: 'Success' as const,
+  1786→        verifiedBy: actor,
+  1787→        verifiedAt: new Date().toISOString(),
+  1788→      }),
+  1789→      audit: pushAudit(state, {
+  1790→        action: 'cash.approved',
+  1791→        actor,
+  1792→        entityId: transactionId,
+  1793→        entityType: 'transaction',
+  1794→        description: `Direct cash ${txn.receiptNo} (₹${txn.amount.toLocaleString('en-IN')}, ${txn.feeHead}) verified by ${actor} for ${txn.studentName}.`,
+  1795→      }),
+  1796→    })
+  1797→    return { success: true }
+  1798→  },
+  1799→
+  1800→  rejectDirectCashTxn: (transactionId, actor, reason) => {
+  1801→    const state = get()
+  1802→    const txn = state.transactions.find((t) => t.id === transactionId)
+  1803→    if (!txn) return { success: false, error: 'Transaction not found.' }
+  1804→    if (txn.status !== 'Under Verification') {
+  1805→      return { success: false, error: `Transaction is ${txn.status} — nothing to reject.` }
+  1806→    }
+  1807→    set({
+  1808→      transactions: state.transactions.map((t) => t.id !== transactionId ? t : {
+  1809→        ...t,
+  1810→        status: 'Failed' as const,
+  1811→        verificationNote: reason,
+  1812→        verifiedBy: actor,
+  1813→        verifiedAt: new Date().toISOString(),
+  1814→      }),
+  1815→      audit: pushAudit(state, {
+  1816→        action: 'cash.rejected',
+  1817→        actor,
+  1818→        entityId: transactionId,
+  1819→        entityType: 'transaction',
+  1820→        description: `Direct cash ${txn.receiptNo} (₹${txn.amount.toLocaleString('en-IN')}) REJECTED by ${actor} for ${txn.studentName} — ${reason}. No money recorded.`,
+  1821→      }),
+  1822→    })
+  1823→    return { success: true }
+  1824→  },
+  1825→
+  1826→  // ─── Receipt lifecycle (PAY-REWORK-1) ───────────────────────────────
+  1827→  markReceiptHandled: (transactionId, actor) => {
+  1828→    const state = get()
+  1829→    const txn = state.transactions.find((t) => t.id === transactionId)
+  1830→    if (!txn || txn.receiptHandledAt) return // already handled — no double audit
+  1831→    const alreadyGenerated = state.audit.some((a) => a.action === 'receipt.generated' && a.entityId === transactionId)
+  1832→    set({
+  1833→      transactions: state.transactions.map((t) => t.id !== transactionId ? t : { ...t, receiptHandledAt: new Date().toISOString() }),
+  1834→      audit: pushAudit(state, {
+  1835→        action: alreadyGenerated ? 'receipt.reprinted' : 'receipt.generated',
+  1836→        actor,
+  1837→        entityId: transactionId,
+  1838→        entityType: 'receipt',
+  1839→        description: `Receipt ${txn.receiptNo} issued for ${txn.studentName} (₹${txn.amount.toLocaleString('en-IN')}) by ${actor}.`,
+  1840→      }),
+  1841→    })
+  1842→  },
+  1843→
+  1844→  // ─── Additional Charges (event-based collections) ───────────────────
+  1845→  //
+  1846→  // An Additional Charge is created INDEPENDENTLY of the class fee
+  1847→  // structure — no structure is versioned, no core total changes. Student
+  1848→  // accounts pick the charge up automatically via computeAccount (matched
+  1849→  // by applicableClassIds / studentIds, status 'Active' only).
+  1850→  createAdditionalCharge: (input) => {
+  1851→    const state = get()
+  1852→    const { actor: actorInput, status: statusInput, ...rest } = input
+  1853→    const actor = actorInput ?? 'Principal'
+  1854→    const status: AdditionalChargeStatus = statusInput ?? 'Active'
+  1855→    // ─── Validation ─────────────────────────────────────────────────
+  1856→    if (!input.name || !input.name.trim()) {
+  1857→      return { success: false, error: 'Charge name is required.' }
+  1858→    }
+  1859→    // Custom-amount drives (donations) may ship a 0 amount — the payer
+  1860→    // chooses; a positive `amount` acts as the suggested figure.
+  1861→    if (typeof input.amount !== 'number' || input.amount < 0) {
+  1862→      return { success: false, error: 'Amount must be zero or greater.' }
+  1863→    }
+  1864→    if (!input.allowCustomAmount && input.amount <= 0) {
+  1865→      return { success: false, error: 'Amount must be greater than zero.' }
+  1866→    }
+  1867→    if (!input.dueDate) {
+  1868→      return { success: false, error: 'Due date is required.' }
+  1869→    }
+  1870→    // DRAFT collections support an explicit student scope with no class
+  1871→    // binding yet (the Principal may still be picking targets) — but a
+  1872→    // published collection always needs a real scope.
+  1873→    const hasScope = (Array.isArray(input.applicableClassIds) && input.applicableClassIds.length > 0)
+  1874→      || (Array.isArray(input.studentIds) && input.studentIds.length > 0)
+  1875→    if (!hasScope && status !== 'Draft') {
+  1876→      return { success: false, error: 'Select at least one class for this charge.' }
+  1877→    }
+  1878→    // Duplicate-name guard (case-insensitive, live charges only — a
+  1879→    // cancelled tour can legitimately be re-created next year).
+  1880→    const dup = state.additionalCharges.find(
+  1881→      (c) => (c.status === 'Active' || c.status === 'Draft') && c.name.trim().toLowerCase() === input.name.trim().toLowerCase(),
+  1882→    )
+  1883→    if (dup) {
+  1884→      return { success: false, error: `A collection named "${dup.name}" already exists.` }
+  1885→    }
+  1886→    const charge: AdditionalCharge = {
+  1887→      ...rest,
+  1888→      name: input.name.trim(),
+  1889→      id: `AC-${Date.now().toString(36)}`,
+  1890→      createdBy: actor,
+  1891→      createdAt: new Date().toISOString(),
+  1892→      status,
+  1893→      ...(status === 'Active' ? { publishedAt: new Date().toISOString() } : {}),
+  1894→    }
+  1895→    // How many students the charge applies to (for the audit trail).
+  1896→    const students = useStudentsStore.getState().students.filter((s) => s.status === 'Active')
+  1897→    const appliesTo = charge.studentIds
+  1898→      ? students.filter((s) => charge.studentIds!.includes(s.id)).length
+  1899→      : students.filter((s) => {
+  1900→          const sid = s.classId ?? deriveStudentClassId(s.className)
+  1901→          return sid != null && charge.applicableClassIds.includes(sid)
+  1902→        }).length
+  1903→    set({
+  1904→      additionalCharges: [charge, ...state.additionalCharges],
+  1905→      audit: pushAudit(state, {
+  1906→        action: status === 'Draft' ? 'additional_charge.draft_created' : 'additional_charge.created',
+  1907→        actor,
+  1908→        entityId: charge.id,
+  1909→        entityType: 'additional_charge',
+  1910→        description: `Collection "${charge.name}" (${formatINR(charge.amount)}${charge.allowCustomAmount ? ' suggested · custom amounts' : ' per student'}) created ${status === 'Draft' ? 'as a DRAFT' : ''} for ${appliesTo} student(s), due ${charge.dueDate}`,
+  1911→      }),
+  1912→    })
+  1913→    return { success: true, charge }
+  1914→  },
+  1915→
+  1916→  // ─── APPS-IA-1: edit a collection (Draft = full; Active = safe fields). ──
+  1917→  updateAdditionalCharge: (id, patch, actorInput) => {
+  1918→    const state = get()
+  1919→    const actor = actorInput ?? 'Principal'
+  1920→    const charge = state.additionalCharges.find((c) => c.id === id)
+  1921→    if (!charge) return { success: false, error: 'Collection not found.' }
+  1922→    if (charge.status === 'Closed' || charge.status === 'Archived' || charge.status === 'Cancelled') {
+  1923→      return { success: false, error: `This collection is ${charge.status.toLowerCase()} — its record is permanent. Duplicate it instead if you need a new one.` }
+  1924→    }
+  1925→    const isDraft = charge.status === 'Draft'
+  1926→    // Money integrity: the per-student amount is only mutable while NO
+  1927→    // payment exists against the charge (drafts by definition have none,
+  1928→    // but an Active collection with zero payments may still be adjusted).
+  1929→    const boundPayments = state.transactions.filter((t) => t.additionalChargeId === id)
+  1930→    if (patch.amount !== undefined && boundPayments.length > 0) {
+  1931→      return { success: false, error: 'Payments already exist against this collection — the amount cannot change. Close it and create a new collection instead.' }
+  1932→    }
+  1933→    if (!isDraft) {
+  1934→      // ACTIVE — safe, presentation/scope fields only.
+  1935→      const forbidden = ['name', 'amount', 'mandatory', 'allowCustomAmount'] as const
+  1936→      const chargeRecord = charge as unknown as Record<string, unknown>
+  1937→      for (const key of forbidden) {
+  1938→        if (patch[key] !== undefined && patch[key] !== chargeRecord[key]) {
+  1939→          return { success: false, error: `"${key}" cannot change once the collection is live. Close this collection and create a new one for different terms.` }
+  1940→        }
+  1941→      }
+  1942→    }
+  1943→    if (patch.name !== undefined) {
+  1944→      const nextName = patch.name.trim()
+  1945→      if (!nextName) return { success: false, error: 'Collection name is required.' }
+  1946→      const dup = state.additionalCharges.find(
+  1947→        (c) => c.id !== id && (c.status === 'Active' || c.status === 'Draft') && c.name.trim().toLowerCase() === nextName.toLowerCase(),
+  1948→      )
+  1949→      if (dup) return { success: false, error: `A collection named "${dup.name}" already exists.` }
+  1950→    }
+  1951→    if (patch.applicableClassIds !== undefined && patch.applicableClassIds.length === 0 && !(patch.studentIds ?? charge.studentIds ?? []).length) {
+  1952→      return { success: false, error: 'Select at least one class (or specific students) for this collection.' }
+  1953→    }
+  1954→    const nowIso = new Date().toISOString()
+  1955→    set({
+  1956→      additionalCharges: state.additionalCharges.map((c) => c.id !== id ? c : {
+  1957→        ...c,
+  1958→        ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+  1959→        ...(patch.category !== undefined ? { category: patch.category } : {}),
+  1960→        ...(patch.description !== undefined ? { description: patch.description?.trim() || undefined } : {}),
+  1961→        ...(patch.amount !== undefined ? { amount: Math.max(0, patch.amount) } : {}),
+  1962→        ...(patch.applicableClassIds !== undefined ? { applicableClassIds: [...patch.applicableClassIds] } : {}),
+  1963→        ...(patch.studentIds !== undefined ? { studentIds: patch.studentIds.length ? [...patch.studentIds] : undefined } : {}),
+  1964→        ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate } : {}),
+  1965→        ...(patch.startDate !== undefined ? { startDate: patch.startDate || undefined } : {}),
+  1966→        ...(patch.mandatory !== undefined ? { mandatory: patch.mandatory } : {}),
+  1967→        ...(patch.allowCustomAmount !== undefined ? { allowCustomAmount: patch.allowCustomAmount } : {}),
+  1968→        ...(patch.targetAmount !== undefined ? { targetAmount: patch.targetAmount || undefined } : {}),
+  1969→        ...(patch.instructions !== undefined ? { instructions: patch.instructions?.trim() || undefined } : {}),
+  1970→        ...(patch.reference !== undefined ? { reference: patch.reference?.trim() || undefined } : {}),
+  1971→        updatedAt: nowIso,
+  1972→      }),
+  1973→      audit: pushAudit(state, {
+  1974→        action: 'additional_charge.updated',
+  1975→        actor,
+  1976→        entityId: id,
+  1977→        entityType: 'additional_charge',
+  1978→        description: `Collection "${charge.name}" updated${isDraft ? ' (draft)' : ' (safe fields)'}${patch.amount !== undefined ? ` — amount now ${formatINR(Math.max(0, patch.amount))}` : ''}`,
+  1979→      }),
+  1980→    })
+  1981→    return { success: true }
+  1982→  },
+  1983→
+  1984→  // ─── APPS-IA-1: publish a DRAFT collection → Active obligation. ───
+  1985→  publishAdditionalCharge: (id, actorInput) => {
+  1986→    const state = get()
+  1987→    const actor = actorInput ?? 'Principal'
+  1988→    const charge = state.additionalCharges.find((c) => c.id === id)
+  1989→    if (!charge) return { success: false, error: 'Collection not found.' }
+  1990→    if (charge.status !== 'Draft') {
+  1991→      return { success: false, error: 'Only a draft collection can be published.' }
+  1992→    }
+  1993→    if (!charge.applicableClassIds.length && !(charge.studentIds ?? []).length) {
+  1994→      return { success: false, error: 'Select at least one class (or specific students) before publishing.' }
+  1995→    }
+  1996→    const nowIso = new Date().toISOString()
+  1997→    set({
+  1998→      additionalCharges: state.additionalCharges.map((c) =>
+  1999→        c.id === id ? { ...c, status: 'Active' as const, publishedAt: nowIso, updatedAt: nowIso } : c,
+  2000→      ),
+
+[showing lines 1-2000 of 4844; use offset=2001 with limit to continue reading]

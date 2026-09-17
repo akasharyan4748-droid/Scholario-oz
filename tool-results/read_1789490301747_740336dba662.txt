@@ -1,0 +1,787 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→/**
+     4→     4→ * Class Attendance — the daily attendance workspace.
+     5→     5→ *
+     6→     6→ * WORKFLOW (server-backed, /api/teacher/attendance):
+     7→     7→ *   · Classes listed here are the ones the session teacher is authorized
+     8→     8→ *     for — class teacher of the class OR subject teacher with an active
+     9→     9→ *     ClassSubjectAssignment. Nothing is hardcoded per teacher.
+    10→    10→ *   · SAVE DRAFT persists the working state (editable, re-saveable).
+    11→    11→ *   · SUBMIT ATTENDANCE finalizes the teacher's own submission — after
+    12→    12→ *     which it is read-only. One teacher's submission never overwrites
+    13→    13→ *     another's: class teacher and each subject teacher own separate,
+    14→    14→ *     auditable submissions for the same class/date.
+    15→    15→ *   · Subject teachers are never blocked: with no class-teacher record
+    16→    16→ *     they get a blank workspace; once the class teacher SUBMITS, they
+    17→    17→ *     see the pre-filled roster ("Pre-filled from Class Teacher") which
+    18→    18→ *     they can review, adjust, save and submit as their own record.
+    19→    19→ *   · If the class teacher submits while a subject teacher already has a
+    20→    20→ *     draft, the draft is preserved and a subtle notice with a
+    21→    21→ *     "Review latest class attendance" action appears.
+    22→    22→ *
+    23→    23→ * DATA DISCIPLINE (same as the Teacher Hub modules):
+    24→    24→ *   · { cache: 'no-store', credentials: 'same-origin' } — the httpOnly
+    25→    25→ *     erp_session cookie is the ONLY auth source; the server resolves
+    26→    26→ *     teacher / school / authorized classes on every call.
+    27→    27→ *   · { ok, data } envelope; 401 → signOut() once.
+    28→    28→ *   · Honest states everywhere: first-load skeleton, quiet reloads,
+    29→    29→ *     section-level errors with retry, purposeful empty states.
+    30→    30→ *
+    31→    31→ * VISUAL LANGUAGE: the four summary cards + roster rows preserve the
+    32→    32→ * established attendance recipe verbatim (compact icon chip, label,
+    33→    33→ * value/total, semantic tint, GlassCard). This module is the design
+    34→    34→ * benchmark for the Teacher Workspace.
+    35→    35→ */
+    36→    36→
+    37→    37→import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+    38→    38→import { motion, AnimatePresence } from 'framer-motion'
+    39→    39→import {
+    40→    40→  Check, X, Clock, Plane, Save, CheckCircle2, Users, Sparkles, Search,
+    41→    41→  Info, BellRing, Lock, Loader2, CalendarDays,
+    42→    42→} from 'lucide-react'
+    43→    43→import { GlassCard, StatusBadge, GradientAvatar } from '@/components/shared/ui'
+    44→    44→import { ModuleToolbar } from '../teacher-panel/module-toolbar'
+    45→    45→import { HubEmptyState, HubSectionError } from './shared/hub-stat-cards'
+    46→    46→import { Button } from '@/components/ui/button'
+    47→    47→import { Input } from '@/components/ui/input'
+    48→    48→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    49→    49→import { toast } from 'sonner'
+    50→    50→import { signOut } from '@/lib/signout'
+    51→    51→import { useTeacherHubStore } from '@/lib/store/teacher-hub-store'
+    52→    52→import type {
+    53→    53→  AttendanceDetail,
+    54→    54→  AttendancePayload,
+    55→    55→  AttendanceStatusValue,
+    56→    56→} from '@/lib/teacher-attendance-types'
+    57→    57→import { cn } from '@/lib/utils'
+    58→    58→
+    59→    59→// ---------- display vocabulary (server speaks PRESENT/…; UI speaks present/…) ----------
+    60→    60→
+    61→    61→type Status = 'present' | 'absent' | 'late' | 'leave'
+    62→    62→
+    63→    63→const statusConfig: Record<Status, { label: string; icon: React.ReactNode; active: string; inactive: string }> = {
+    64→    64→  present: {
+    65→    65→    label: 'Present',
+    66→    66→    icon: <Check className="h-3.5 w-3.5" />,
+    67→    67→    active: 'bg-emerald-500 text-white border-emerald-500 shadow-sm shadow-emerald-500/30',
+    68→    68→    inactive: 'text-emerald-600 hover:bg-emerald-500/10 border-emerald-500/30',
+    69→    69→  },
+    70→    70→  absent: {
+    71→    71→    label: 'Absent',
+    72→    72→    icon: <X className="h-3.5 w-3.5" />,
+    73→    73→    active: 'bg-rose-500 text-white border-rose-500 shadow-sm shadow-rose-500/30',
+    74→    74→    inactive: 'text-rose-600 hover:bg-rose-500/10 border-rose-500/30',
+    75→    75→  },
+    76→    76→  late: {
+    77→    77→    label: 'Late',
+    78→    78→    icon: <Clock className="h-3.5 w-3.5" />,
+    79→    79→    active: 'bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/30',
+    80→    80→    inactive: 'text-amber-600 hover:bg-amber-500/10 border-amber-500/30',
+    81→    81→  },
+    82→    82→  leave: {
+    83→    83→    label: 'Leave',
+    84→    84→    icon: <Plane className="h-3.5 w-3.5" />,
+    85→    85→    active: 'bg-info text-white border-info shadow-sm',
+    86→    86→    inactive: 'text-info hover:bg-info/10 border-info/30',
+    87→    87→  },
+    88→    88→}
+    89→    89→
+    90→    90→const toServer = (s: Status): AttendanceStatusValue => s.toUpperCase() as AttendanceStatusValue
+    91→    91→
+    92→    92→function todayISO(): string {
+    93→    93→  const d = new Date()
+    94→    94→  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`)
+    95→    95→  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    96→    96→}
+    97→    97→
+    98→    98→function longDate(iso: string): string {
+    99→    99→  const d = new Date(`${iso}T00:00:00`)
+   100→   100→  return d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+   101→   101→}
+   102→   102→
+   103→   103→function shortTime(iso: string | null): string {
+   104→   104→  if (!iso) return ''
+   105→   105→  return new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+   106→   106→}
+   107→   107→
+   108→   108→// ---------- transport (same discipline as the Teacher Hub modules) ----------
+   109→   109→
+   110→   110→let reAuthInFlight = false
+   111→   111→
+   112→   112→function handleExpiredSession(): void {
+   113→   113→  if (reAuthInFlight) return
+   114→   114→  reAuthInFlight = true
+   115→   115→  void signOut()
+   116→   116→    .catch(() => {
+   117→   117→      try {
+   118→   118→        window.localStorage.removeItem('scholario-auth')
+   119→   119→        window.location.reload()
+   120→   120→      } catch {
+   121→   121→        /* nothing more we can honestly do here */
+   122→   122→      }
+   123→   123→    })
+   124→   124→    .finally(() => {
+   125→   125→      window.setTimeout(() => {
+   126→   126→        reAuthInFlight = false
+   127→   127→      }, 2000)
+   128→   128→    })
+   129→   129→}
+   130→   130→
+   131→   131→async function request<T>(url: string, init?: RequestInit): Promise<T> {
+   132→   132→  const r = await fetch(url, {
+   133→   133→    ...init,
+   134→   134→    cache: 'no-store',
+   135→   135→    credentials: 'same-origin',
+   136→   136→    headers: init?.body ? { 'Content-Type': 'application/json', ...init?.headers } : init?.headers,
+   137→   137→  })
+   138→   138→  if (!r.ok) {
+   139→   139→    if (r.status === 401) {
+   140→   140→      handleExpiredSession()
+   141→   141→      throw new Error('Your session has expired. Please sign in again.')
+   142→   142→    }
+   143→   143→    let message = `Request failed (${r.status})`
+   144→   144→    try {
+   145→   145→      const j: unknown = await r.json()
+   146→   146→      if (j && typeof j === 'object' && typeof (j as { error?: unknown }).error === 'string') {
+   147→   147→        message = (j as { error: string }).error
+   148→   148→      }
+   149→   149→    } catch {
+   150→   150→      /* non-JSON error body — keep the concise fallback */
+   151→   151→    }
+   152→   152→    throw new Error(message)
+   153→   153→  }
+   154→   154→  const j: unknown = await r.json()
+   155→   155→  if (!j || typeof j !== 'object' || (j as { ok?: unknown }).ok !== true || !('data' in j)) {
+   156→   156→    throw new Error('Unexpected response from the server.')
+   157→   157→  }
+   158→   158→  return (j as { data: T }).data
+   159→   159→}
+   160→   160→
+   161→   161→// ---------- working state ----------
+   162→   162→
+   163→   163→/** Build the working status map for a detail: own submission → prefill → default. */
+   164→   164→function initialWorking(detail: AttendanceDetail | null): Record<string, Status> {
+   165→   165→  const w: Record<string, Status> = {}
+   166→   166→  if (!detail) return w
+   167→   167→  const source = detail.you?.entries ?? detail.prefill?.entries ?? null
+   168→   168→  const map = source ? new Map(source.map((e) => [e.studentId, e.status.toLowerCase() as Status])) : null
+   169→   169→  for (const s of detail.roster) {
+   170→   170→    w[s.id] = map?.get(s.id) ?? 'present'
+   171→   171→  }
+   172→   172→  return w
+   173→   173→}
+   174→   174→
+   175→   175→function sameWorking(a: Record<string, Status>, b: Record<string, Status>): boolean {
+   176→   176→  const ka = Object.keys(a)
+   177→   177→  if (ka.length !== Object.keys(b).length) return false
+   178→   178→  return ka.every((k) => a[k] === b[k])
+   179→   179→}
+   180→   180→
+   181→   181→// ---------- submission status chip (Part 15: readable without colour alone) ----------
+   182→   182→
+   183→   183→type PersistedStatus = 'not-started' | 'draft' | 'prefilled' | 'submitted'
+   184→   184→
+   185→   185→const STATUS_CHIP: Record<PersistedStatus, { label: string; cls: string; dot: string }> = {
+   186→   186→  'not-started': { label: 'Not Started', cls: 'border-border text-muted-foreground', dot: 'bg-muted-foreground/40' },
+   187→   187→  draft: { label: 'Draft', cls: 'border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400', dot: 'bg-amber-500' },
+   188→   188→  prefilled: { label: 'Pre-filled from Class Teacher', cls: 'border-info/30 bg-info/5 text-info', dot: 'bg-info' },
+   189→   189→  submitted: { label: 'Submitted', cls: 'border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
+   190→   190→}
+   191→   191→
+   192→   192→function StatusChip({ status }: { status: PersistedStatus }) {
+   193→   193→  const cfg = STATUS_CHIP[status]
+   194→   194→  return (
+   195→   195→    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', cfg.cls)}>
+   196→   196→      <span className={cn('h-1.5 w-1.5 rounded-full', cfg.dot)} aria-hidden="true" />
+   197→   197→      {cfg.label}
+   198→   198→    </span>
+   199→   199→  )
+   200→   200→}
+   201→   201→
+   202→   202→// ---------- module ----------
+   203→   203→
+   204→   204→export function AttendanceModule() {
+   205→   205→  const [date, setDate] = useState<string>(todayISO())
+   206→   206→  const [classId, setClassId] = useState<string | null>(null)
+   207→   207→  const [payload, setPayload] = useState<AttendancePayload | null>(null)
+   208→   208→  const [loading, setLoading] = useState(true) // first load only — drives the skeleton
+   209→   209→  const [error, setError] = useState<string | null>(null)
+   210→   210→  const [tick, setTick] = useState(0)
+   211→   211→  const hasData = useRef(false)
+   212→   212→
+   213→   213→  const [working, setWorking] = useState<Record<string, Status>>({})
+   214→   214→  const [baseline, setBaseline] = useState<Record<string, Status>>({})
+   215→   215→  const [search, setSearch] = useState('')
+   216→   216→  const [saving, setSaving] = useState(false)
+   217→   217→  const [savedFlash, setSavedFlash] = useState(false)
+   218→   218→  const [submitting, setSubmitting] = useState(false)
+   219→   219→  const [detailError, setDetailError] = useState<string | null>(null)
+   220→   220→
+   221→   221→  const reload = useCallback(() => setTick((t) => t + 1), [])
+   222→   222→
+   223→   223→  // ── aggregate fetch: authorized classes + working detail ──
+   224→   224→  useEffect(() => {
+   225→   225→    let cancelled = false
+   226→   226→    setError(null)
+   227→   227→    setDetailError(null)
+   228→   228→    if (!hasData.current) setLoading(true)
+   229→   229→    const qs = new URLSearchParams({ date })
+   230→   230→    if (classId) qs.set('classId', classId)
+   231→   231→    request<AttendancePayload>(`/api/teacher/attendance?${qs.toString()}`)
+   232→   232→      .then((d) => {
+   233→   233→        hasData.current = true
+   234→   234→        if (cancelled) return
+   235→   235→        setPayload(d)
+   236→   236→        // auto-select the first authorized class on first load
+   237→   237→        if (!classId && d.classes.length > 0) setClassId(d.classes[0].id)
+   238→   238→      })
+   239→   239→      .catch((e: unknown) => {
+   240→   240→        if (cancelled) return
+   241→   241→        // a class-scoped failure (e.g. stale selection) keeps the class list usable
+   242→   242→        if (classId) {
+   243→   243→          setDetailError(e instanceof Error ? e.message : 'Attendance could not load.')
+   244→   244→        } else {
+   245→   245→          setError(e instanceof Error ? e.message : 'Attendance could not load.')
+   246→   246→        }
+   247→   247→      })
+   248→   248→      .finally(() => {
+   249→   249→        if (!cancelled) setLoading(false)
+   250→   250→      })
+   251→   251→    return () => {
+   252→   252→      cancelled = true
+   253→   253→    }
+   254→   254→  }, [date, classId, tick])
+   255→   255→
+   256→   256→  const detail = payload?.detail ?? null
+   257→   257→  const selectedClass = payload?.classes.find((c) => c.id === classId) ?? null
+   258→   258→
+   259→   259→  // ── (re)initialize the working state whenever the detail changes ──
+   260→   260→  useEffect(() => {
+   261→   261→    const w = initialWorking(detail)
+   262→   262→    setWorking(w)
+   263→   263→    setBaseline(w)
+   264→   264→    setSearch('')
+   265→   265→  }, [detail])
+   266→   266→
+   267→   267→  // ── honest sidebar badge: classes not yet submitted TODAY ──
+   268→   268→  useEffect(() => {
+   269→   269→    if (!payload || payload.date !== todayISO()) return
+   270→   270→    const pending = payload.classes.filter((c) => c.submission?.status !== 'SUBMITTED').length
+   271→   271→    useTeacherHubStore.getState().setCounts({ attendancePending: pending })
+   272→   272→  }, [payload])
+   273→   273→
+   274→   274→  const readOnly = detail?.you?.status === 'SUBMITTED'
+   275→   275→  const persistedStatus: PersistedStatus = readOnly
+   276→   276→    ? 'submitted'
+   277→   277→    : detail?.you?.status === 'DRAFT'
+   278→   278→      ? 'draft'
+   279→   279→      : detail?.prefill
+   280→   280→        ? 'prefilled'
+   281→   281→        : 'not-started'
+   282→   282→  const dirty = !sameWorking(working, baseline)
+   283→   283→
+   284→   284→  // ── unsaved-changes guards (Part 19) ──
+   285→   285→  useEffect(() => {
+   286→   286→    if (!dirty) return
+   287→   287→    const handler = (e: BeforeUnloadEvent) => {
+   288→   288→      e.preventDefault()
+   289→   289→      e.returnValue = ''
+   290→   290→    }
+   291→   291→    window.addEventListener('beforeunload', handler)
+   292→   292→    return () => window.removeEventListener('beforeunload', handler)
+   293→   293→  }, [dirty])
+   294→   294→
+   295→   295→  const guarded = useCallback(
+   296→   296→    (action: () => void) => {
+   297→   297→      if (!dirty || readOnly) {
+   298→   298→        action()
+   299→   299→        return
+   300→   300→      }
+   301→   301→      if (window.confirm('You have unsaved attendance changes. Discard them?')) action()
+   302→   302→    },
+   303→   303→    [dirty, readOnly],
+   304→   304→  )
+   305→   305→
+   306→   306→  const changeClass = (id: string) => guarded(() => setClassId(id))
+   307→   307→  const changeDate = (d: string) => {
+   308→   308→    if (!d || d === date) return
+   309→   309→    guarded(() => setDate(d))
+   310→   310→  }
+   311→   311→
+   312→   312→  // ── marking ──
+   313→   313→  const setStatus = (studentId: string, status: Status) => {
+   314→   314→    if (readOnly) return
+   315→   315→    setWorking((prev) => ({ ...prev, [studentId]: status }))
+   316→   316→  }
+   317→   317→
+   318→   318→  const roster = detail?.roster ?? []
+   319→   319→  const filtered = roster.filter(
+   320→   320→    (r) => r.name.toLowerCase().includes(search.toLowerCase()) || (r.rollNo ?? '').includes(search),
+   321→   321→  )
+   322→   322→  const total = roster.length
+   323→   323→
+   324→   324→  const counts = useMemo(() => {
+   325→   325→    const c = { present: 0, absent: 0, late: 0, leave: 0 }
+   326→   326→    for (const s of roster) c[working[s.id] ?? 'present']++
+   327→   327→    return c
+   328→   328→  }, [roster, working])
+   329→   329→
+   330→   330→  const bulkMarkPresent = () => {
+   331→   331→    if (readOnly) return
+   332→   332→    const w: Record<string, Status> = {}
+   333→   333→    roster.forEach((r) => {
+   334→   334→      w[r.id] = 'present'
+   335→   335→    })
+   336→   336→    setWorking(w)
+   337→   337→    toast.success('All students marked present', { description: 'Review and save the attendance.' })
+   338→   338→  }
+   339→   339→
+   340→   340→  // ── mutations ──
+   341→   341→  const entriesPayload = () => roster.map((s) => ({ studentId: s.id, status: toServer(working[s.id] ?? 'present') }))
+   342→   342→
+   343→   343→  const handleSaveDraft = async () => {
+   344→   344→    if (!classId || !detail || readOnly || saving || submitting) return
+   345→   345→    setSaving(true)
+   346→   346→    try {
+   347→   347→      const r = await request<{ saved: { status: string }; payload: AttendancePayload }>(
+   348→   348→        '/api/teacher/attendance',
+   349→   349→        {
+   350→   350→          method: 'POST',
+   351→   351→          body: JSON.stringify({ intent: 'draft', classId, date, entries: entriesPayload() }),
+   352→   352→        },
+   353→   353→      )
+   354→   354→      setPayload(r.payload)
+   355→   355→      setSavedFlash(true)
+   356→   356→      window.setTimeout(() => setSavedFlash(false), 2000)
+   357→   357→      toast.success('Draft saved', {
+   358→   358→        description: `${detail.classLabel} · ${counts.present} present, ${counts.absent} absent, ${counts.late} late, ${counts.leave} on leave · editable until submitted`,
+   359→   359→      })
+   360→   360→    } catch (e) {
+   361→   361→      toast.error(e instanceof Error ? e.message : 'Draft could not be saved.')
+   362→   362→      reload() // re-sync with server truth
+   363→   363→    } finally {
+   364→   364→      setSaving(false)
+   365→   365→    }
+   366→   366→  }
+   367→   367→
+   368→   368→  const handleSubmit = async () => {
+   369→   369→    if (!classId || !detail || readOnly || saving || submitting) return
+   370→   370→    const ok = window.confirm(
+   371→   371→      `Submit attendance for ${detail.classLabel}?\n\n${total} students · ${counts.present} present, ${counts.absent} absent, ${counts.late} late, ${counts.leave} on leave\n\nOnce submitted, this record becomes read-only.`,
+   372→   372→    )
+   373→   373→    if (!ok) return
+   374→   374→    setSubmitting(true)
+   375→   375→    try {
+   376→   376→      const r = await request<{ saved: { status: string }; payload: AttendancePayload }>(
+   377→   377→        '/api/teacher/attendance',
+   378→   378→        {
+   379→   379→          method: 'POST',
+   380→   380→          body: JSON.stringify({ intent: 'submit', classId, date, entries: entriesPayload() }),
+   381→   381→        },
+   382→   382→      )
+   383→   383→      setPayload(r.payload)
+   384→   384→      toast.success('Attendance submitted', {
+   385→   385→        description: `${detail.classLabel} · ${counts.present} present, ${counts.absent} absent, ${counts.late} late, ${counts.leave} on leave · the record is now read-only`,
+   386→   386→      })
+   387→   387→    } catch (e) {
+   388→   388→      toast.error(e instanceof Error ? e.message : 'Attendance could not be submitted.')
+   389→   389→      reload() // re-sync with server truth
+   390→   390→    } finally {
+   391→   391→      setSubmitting(false)
+   392→   392→    }
+   393→   393→  }
+   394→   394→
+   395→   395→  /** Part 17: apply the class teacher's submitted entries as the new baseline (explicit user action — never silent). */
+   396→   396→  const applyClassTeacherAttendance = () => {
+   397→   397→    if (!detail?.classTeacherUpdate || readOnly) return
+   398→   398→    const entries = detail.classTeacherUpdate.entries
+   399→   399→    const map = new Map(entries.map((e) => [e.studentId, e.status.toLowerCase() as Status]))
+   400→   400→    const w: Record<string, Status> = {}
+   401→   401→    for (const s of roster) {
+   402→   402→      w[s.id] = map.get(s.id) ?? 'present'
+   403→   403→    }
+   404→   404→    setWorking(w)
+   405→   405→    toast.info("Class Teacher's attendance applied", {
+   406→   406→      description: 'Review the entries, adjust if needed, then save or submit.',
+   407→   407→    })
+   408→   408→  }
+   409→   409→
+   410→   410→  // ── render ──
+   411→   411→
+   412→   412→  const today = longDate(date)
+   413→   413→  const busy = saving || submitting
+   414→   414→
+   415→   415→  if (loading && !payload) {
+   416→   416→    return (
+   417→   417→      <div className="space-y-5" aria-busy="true" aria-label="Loading attendance">
+   418→   418→        <div className="h-9 animate-pulse rounded-lg bg-muted/60" />
+   419→   419→        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+   420→   420→          {[0, 1, 2, 3].map((i) => (
+   421→   421→            <div key={i} className="h-[104px] animate-pulse rounded-xl border border-border bg-muted/30" />
+   422→   422→          ))}
+   423→   423→        </div>
+   424→   424→        <div className="h-[420px] animate-pulse rounded-xl border border-border bg-muted/30" />
+   425→   425→      </div>
+   426→   426→    )
+   427→   427→  }
+   428→   428→
+   429→   429→  if (error && !payload) {
+   430→   430→    return (
+   431→   431→      <GlassCard className="p-6">
+   432→   432→        <HubSectionError message={error} onRetry={reload} />
+   433→   433→      </GlassCard>
+   434→   434→    )
+   435→   435→  }
+   436→   436→
+   437→   437→  if (payload && payload.classes.length === 0) {
+   438→   438→    return (
+   439→   439→      <GlassCard className="p-6">
+   440→   440→        <HubEmptyState
+   441→   441→          icon={CalendarDays}
+   442→   442→          title="No classes assigned for attendance"
+   443→   443→          hint="Classes where you are the class teacher or a subject teacher will appear here."
+   444→   444→        />
+   445→   445→      </GlassCard>
+   446→   446→    )
+   447→   447→  }
+   448→   448→
+   449→   449→  return (
+   450→   450→    <div className="space-y-5">
+   451→   451→      <ModuleToolbar
+   452→   452→        context={`Mark daily attendance · ${today}`}
+   453→   453→        action={
+   454→   454→          <div className="flex items-center gap-2">
+   455→   455→            <Input
+   456→   456→              type="date"
+   457→   457→              value={date}
+   458→   458→              onChange={(e) => changeDate(e.target.value)}
+   459→   459→              aria-label="Attendance date"
+   460→   460→              className="h-9 w-[150px]"
+   461→   461→            />
+   462→   462→            <Select value={classId ?? undefined} onValueChange={changeClass}>
+   463→   463→              <SelectTrigger className="w-44 h-9" aria-label="Class">
+   464→   464→                <SelectValue placeholder="Select class" />
+   465→   465→              </SelectTrigger>
+   466→   466→              <SelectContent>
+   467→   467→                {payload?.classes.map((c) => (
+   468→   468→                  <SelectItem key={c.id} value={c.id}>
+   469→   469→                    {c.label}
+   470→   470→                    {c.subjects.length > 0 ? ` · ${c.subjects[0]}` : ''}
+   471→   471→                  </SelectItem>
+   472→   472→                ))}
+   473→   473→              </SelectContent>
+   474→   474→            </Select>
+   475→   475→          </div>
+   476→   476→        }
+   477→   477→      />
+   478→   478→
+   479→   479→      {/* Role + submission-status context (Part 14) */}
+   480→   480→      {selectedClass && (
+   481→   481→        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card/50 px-3 py-2 sm:px-4">
+   482→   482→          <div className="flex flex-wrap items-center gap-2 text-xs">
+   483→   483→            <span
+   484→   484→              className={cn(
+   485→   485→                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
+   486→   486→                selectedClass.isClassTeacher
+   487→   487→                  ? 'border-primary/30 bg-primary/5 text-primary'
+   488→   488→                  : 'border-violet-500/30 bg-violet-500/5 text-violet-600 dark:text-violet-400',
+   489→   489→              )}
+   490→   490→            >
+   491→   491→              {selectedClass.isClassTeacher ? 'Class Teacher' : 'Subject Teacher'}
+   492→   492→            </span>
+   493→   493→            <span className="text-muted-foreground">
+   494→   494→              {selectedClass.isClassTeacher
+   495→   495→                ? selectedClass.label
+   496→   496→                : `${selectedClass.subjects.join(', ') || 'Subject'} · ${selectedClass.label}`}
+   497→   497→              {' '}· Attendance for {longDate(date)}
+   498→   498→            </span>
+   499→   499→          </div>
+   500→   500→          <div className="flex flex-wrap items-center gap-2">
+   501→   501→            {detail?.classTeacher && detail.classTeacher.submission && (
+   502→   502→              <span className="text-[11px] text-muted-foreground">
+   503→   503→                Class Teacher: {detail.classTeacher.teacherName} ·{' '}
+   504→   504→                {detail.classTeacher.submission.status === 'SUBMITTED'
+   505→   505→                  ? `Submitted ${shortTime(detail.classTeacher.submission.submittedAt)}`
+   506→   506→                  : 'Draft'}
+   507→   507→              </span>
+   508→   508→            )}
+   509→   509→            <StatusChip status={persistedStatus} />
+   510→   510→          </div>
+   511→   511→        </div>
+   512→   512→      )}
+   513→   513→
+   514→   514→      {/* Live summary cards — the workspace design benchmark (kept verbatim) */}
+   515→   515→      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+   516→   516→        {[
+   517→   517→          { label: 'Present', value: counts.present, color: 'emerald', icon: <Check className="h-4 w-4" /> },
+   518→   518→          { label: 'Absent', value: counts.absent, color: 'rose', icon: <X className="h-4 w-4" /> },
+   519→   519→          { label: 'Late', value: counts.late, color: 'amber', icon: <Clock className="h-4 w-4" /> },
+   520→   520→          { label: 'On Leave', value: counts.leave, color: 'info', icon: <Plane className="h-4 w-4" /> },
+   521→   521→        ].map((c, i) => (
+   522→   522→          <motion.div
+   523→   523→            key={c.label}
+   524→   524→            initial={{ opacity: 0, y: 12 }}
+   525→   525→            animate={{ opacity: 1, y: 0 }}
+   526→   526→            transition={{ delay: i * 0.05 }}
+   527→   527→          >
+   528→   528→            <GlassCard className="p-3 sm:p-4">
+   529→   529→              <div className="flex items-center justify-between mb-2">
+   530→   530→                <span className="text-xs text-muted-foreground font-medium">{c.label}</span>
+   531→   531→                <div className={cn(
+   532→   532→                  'flex h-7 w-7 items-center justify-center rounded-lg',
+   533→   533→                  c.color === 'emerald' && 'bg-emerald-500/10 text-emerald-600',
+   534→   534→                  c.color === 'rose' && 'bg-rose-500/10 text-rose-600',
+   535→   535→                  c.color === 'amber' && 'bg-amber-500/10 text-amber-600',
+   536→   536→                  c.color === 'info' && 'bg-info/10 text-info',
+   537→   537→                )}>
+   538→   538→                  {c.icon}
+   539→   539→                </div>
+   540→   540→              </div>
+   541→   541→              <p className={cn(
+   542→   542→                'font-display text-2xl font-bold',
+   543→   543→                c.color === 'emerald' && 'text-emerald-600 dark:text-emerald-400',
+   544→   544→                c.color === 'rose' && 'text-rose-600 dark:text-rose-400',
+   545→   545→                c.color === 'amber' && 'text-amber-600 dark:text-amber-400',
+   546→   546→                c.color === 'info' && 'text-info',
+   547→   547→              )}>
+   548→   548→                <motion.span key={c.value} initial={{ scale: 1.3 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }}>
+   549→   549→                  {c.value}
+   550→   550→                </motion.span>
+   551→   551→                <span className="text-base text-muted-foreground font-normal">/{total}</span>
+   552→   552→              </p>
+   553→   553→            </GlassCard>
+   554→   554→          </motion.div>
+   555→   555→        ))}
+   556→   556→      </div>
+   557→   557→
+   558→   558→      {/* Roster + bottom action area */}
+   559→   559→      <GlassCard className="p-3 sm:p-4 lg:p-5">
+   560→   560→        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+   561→   561→          <div>
+   562→   562→            <h3 className="font-semibold text-sm">
+   563→   563→              {detail ? `${detail.classLabel} · Student Roster` : 'Student Roster'}
+   564→   564→            </h3>
+   565→   565→            <p className="text-xs text-muted-foreground mt-0.5">
+   566→   566→              Tap a status button for each student. Attendance rate: {total > 0 ? ((counts.present / total) * 100).toFixed(1) : '0.0'}%
+   567→   567→            </p>
+   568→   568→          </div>
+   569→   569→          <div className="flex items-center gap-2">
+   570→   570→            <div className="relative">
+   571→   571→              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+   572→   572→              <Input
+   573→   573→                value={search}
+   574→   574→                onChange={(e) => setSearch(e.target.value)}
+   575→   575→                placeholder="Search student…"
+   576→   576→                className="pl-8 w-44 h-9"
+   577→   577→              />
+   578→   578→            </div>
+   579→   579→            <Button variant="outline" size="sm" onClick={bulkMarkPresent} disabled={readOnly} className="h-9">
+   580→   580→              <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Mark all present
+   581→   581→            </Button>
+   582→   582→          </div>
+   583→   583→        </div>
+   584→   584→
+   585→   585→        {/* Pre-filled status banner (Part 8/14 — subtle, informational) */}
+   586→   586→        {detail?.prefill && !readOnly && (
+   587→   587→          <div className="mb-3 flex items-start gap-2 rounded-lg border border-info/25 bg-info/5 px-3 py-2 text-xs text-info">
+   588→   588→            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+   589→   589→            <p>
+   590→   590→              Pre-filled from Class Teacher — submitted {shortTime(detail.prefill.submittedAt)}. Review, adjust if
+   591→   591→              needed, then save or submit.
+   592→   592→            </p>
+   593→   593→          </div>
+   594→   594→        )}
+   595→   595→
+   596→   596→        {/* Class teacher submitted after this draft existed (Part 17 — draft preserved) */}
+   597→   597→        {detail?.classTeacherUpdate && !readOnly && (
+   598→   598→          <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs">
+   599→   599→            <BellRing className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden="true" />
+   600→   600→            <p className="flex-1 text-amber-700 dark:text-amber-400">
+   601→   601→              Class Teacher attendance has been submitted. Your draft is preserved.
+   602→   602→            </p>
+   603→   603→            <button
+   604→   604→              type="button"
+   605→   605→              onClick={applyClassTeacherAttendance}
+   606→   606→              className="shrink-0 rounded-md border border-amber-500/30 bg-card px-2.5 py-1 font-semibold text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+   607→   607→            >
+   608→   608→              Review latest class attendance
+   609→   609→            </button>
+   610→   610→          </div>
+   611→   611→        )}
+   612→   612→
+   613→   613→        {/* Read-only after submit */}
+   614→   614→        {readOnly && detail?.you?.submittedAt && (
+   615→   615→          <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
+   616→   616→            <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+   617→   617→            <p>
+   618→   618→              Submitted {shortTime(detail.you.submittedAt)} — this attendance record is read-only.
+   619→   619→              {detail.classTeacher && detail.classTeacher.submission
+   620→   620→                ? ` Class Teacher record: ${detail.classTeacher.submission.status === 'SUBMITTED' ? `submitted ${shortTime(detail.classTeacher.submission.submittedAt)}` : 'draft'}.`
+   621→   621→                : ''}
+   622→   622→            </p>
+   623→   623→          </div>
+   624→   624→        )}
+   625→   625→
+   626→   626→        {/* class-scoped failure keeps the page usable */}
+   627→   627→        {detailError && (
+   628→   628→          <div className="mb-3">
+   629→   629→            <HubSectionError message={detailError} onRetry={reload} />
+   630→   630→          </div>
+   631→   631→        )}
+   632→   632→
+   633→   633→        {/* Attendance grid */}
+   634→   634→        <div className="space-y-2 max-h-[640px] overflow-y-auto pr-1 -mr-1">
+   635→   635→          {filtered.map((r, i) => {
+   636→   636→            const current = working[r.id] ?? 'present'
+   637→   637→            return (
+   638→   638→              <motion.div
+   639→   639→                key={r.id}
+   640→   640→                initial={{ opacity: 0, y: 8 }}
+   641→   641→                animate={{ opacity: 1, y: 0 }}
+   642→   642→                transition={{ delay: Math.min(i * 0.02, 0.3) }}
+   643→   643→                className={cn(
+   644→   644→                  'flex items-center gap-3 rounded-xl border p-3 transition-colors',
+   645→   645→                  current === 'present' ? 'border-emerald-500/20 bg-emerald-500/5' :
+   646→   646→                  current === 'absent' ? 'border-rose-500/20 bg-rose-500/5' :
+   647→   647→                  current === 'late' ? 'border-amber-500/20 bg-amber-500/5' :
+   648→   648→                  current === 'leave' ? 'border-info/20 bg-info/5' :
+   649→   649→                  'border-border bg-card/40',
+   650→   650→                  readOnly && 'opacity-70',
+   651→   651→                )}
+   652→   652→              >
+   653→   653→                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
+   654→   654→                  {r.rollNo ?? '—'}
+   655→   655→                </div>
+   656→   656→                <GradientAvatar name={r.name} size="sm" />
+   657→   657→                <div className="min-w-0 flex-1">
+   658→   658→                  <p className="font-medium text-sm truncate">{r.name}</p>
+   659→   659→                  <p className="text-[11px] text-muted-foreground">
+   660→   660→                    Roll #{r.rollNo ?? '—'}{detail ? ` · ${detail.classLabel}` : ''}
+   661→   661→                  </p>
+   662→   662→                </div>
+   663→   663→                <div className="flex items-center gap-1.5">
+   664→   664→                  {(Object.keys(statusConfig) as Status[]).map((s) => {
+   665→   665→                    const cfg = statusConfig[s]
+   666→   666→                    const isActive = current === s
+   667→   667→                    return (
+   668→   668→                      <motion.button
+   669→   669→                        key={s}
+   670→   670→                        whileTap={{ scale: 0.92 }}
+   671→   671→                        whileHover={readOnly ? undefined : { y: -1 }}
+   672→   672→                        onClick={() => setStatus(r.id, s)}
+   673→   673→                        disabled={readOnly}
+   674→   674→                        className={cn(
+   675→   675→                          'flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-all',
+   676→   676→                          isActive ? cfg.active : cn('bg-transparent', cfg.inactive),
+   677→   677→                          readOnly && 'cursor-not-allowed opacity-60',
+   678→   678→                        )}
+   679→   679→                        title={cfg.label}
+   680→   680→                        aria-label={`Mark ${r.name} as ${cfg.label}`}
+   681→   681→                        aria-pressed={isActive}
+   682→   682→                      >
+   683→   683→                        {cfg.icon}
+   684→   684→                        <span className="hidden sm:inline">{cfg.label}</span>
+   685→   685→                      </motion.button>
+   686→   686→                    )
+   687→   687→                  })}
+   688→   688→                </div>
+   689→   689→              </motion.div>
+   690→   690→            )
+   691→   691→          })}
+   692→   692→          {filtered.length === 0 && total > 0 && (
+   693→   693→            <div className="py-10 text-center">
+   694→   694→              <Users className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
+   695→   695→              <p className="text-sm font-medium text-muted-foreground">No students match “{search}”</p>
+   696→   696→            </div>
+   697→   697→          )}
+   698→   698→          {total === 0 && !detailError && (
+   699→   699→            <div className="py-10 text-center">
+   700→   700→              <Users className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
+   701→   701→              <p className="text-sm font-medium text-muted-foreground">No students found</p>
+   702→   702→              <p className="text-xs text-muted-foreground/70 mt-1">
+   703→   703→                Students enrolled in this class will appear here.
+   704→   704→              </p>
+   705→   705→            </div>
+   706→   706→          )}
+   707→   707→        </div>
+   708→   708→
+   709→   709→        {/* Bottom action area (Parts 5/19/20 — always visible under the internally
+   710→   710→            scrolling roster, never covering student rows) */}
+   711→   711→        <div className="mt-4 pt-4 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+   712→   712→          <div className="flex flex-wrap items-center gap-2 text-xs">
+   713→   713→            <Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+   714→   714→            <span className="text-muted-foreground">
+   715→   715→              <span className="font-semibold text-foreground">{total} students</span>
+   716→   716→              {' '}· {counts.present} Present · {counts.absent} Absent
+   717→   717→            </span>
+   718→   718→            <StatusBadge
+   719→   719→              status={total > 0 && counts.present / total >= 0.85 ? 'Healthy' : total > 0 && counts.present / total >= 0.65 ? 'Average' : 'Low'}
+   720→   720→              variant={total > 0 && counts.present / total >= 0.85 ? 'success' : total > 0 && counts.present / total >= 0.65 ? 'warning' : 'danger'}
+   721→   721→              dot
+   722→   722→            />
+   723→   723→            <span className="text-[11px] text-muted-foreground">
+   724→   724→              {readOnly ? (
+   725→   725→                <span className="font-medium text-emerald-600 dark:text-emerald-400">
+   726→   726→                  Submitted · read-only
+   727→   727→                </span>
+   728→   728→              ) : dirty ? (
+   729→   729→                <span className="font-medium text-amber-600 dark:text-amber-400">Unsaved changes</span>
+   730→   730→              ) : detail?.you?.status === 'DRAFT' ? (
+   731→   731→                <span className="font-medium text-emerald-600 dark:text-emerald-400">
+   732→   732→                  Draft saved · {shortTime(detail.you.updatedAt)}
+   733→   733→                </span>
+   734→   734→              ) : detail?.prefill ? (
+   735→   735→                <span>Pre-filled · not saved yet</span>
+   736→   736→              ) : (
+   737→   737→                <span>Not started</span>
+   738→   738→              )}
+   739→   739→            </span>
+   740→   740→          </div>
+   741→   741→          <div className="flex items-center gap-2">
+   742→   742→            <Button
+   743→   743→              variant="outline"
+   744→   744→              onClick={handleSaveDraft}
+   745→   745→              disabled={readOnly || busy || total === 0 || !detail}
+   746→   746→              className="h-9"
+   747→   747→            >
+   748→   748→              <AnimatePresence mode="wait" initial={false}>
+   749→   749→                {saving ? (
+   750→   750→                  <motion.span key="saving" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2">
+   751→   751→                    <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+   752→   752→                  </motion.span>
+   753→   753→                ) : savedFlash ? (
+   754→   754→                  <motion.span key="saved" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2">
+   755→   755→                    <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Saved
+   756→   756→                  </motion.span>
+   757→   757→                ) : (
+   758→   758→                  <motion.span key="save" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2">
+   759→   759→                    <Save className="h-4 w-4" /> Save Draft
+   760→   760→                  </motion.span>
+   761→   761→                )}
+   762→   762→              </AnimatePresence>
+   763→   763→            </Button>
+   764→   764→            <Button
+   765→   765→              onClick={handleSubmit}
+   766→   766→              disabled={readOnly || busy || total === 0 || !detail}
+   767→   767→              className="bg-gradient-to-r from-emerald-600 to-teal-600 h-9"
+   768→   768→            >
+   769→   769→              <AnimatePresence mode="wait" initial={false}>
+   770→   770→                {submitting ? (
+   771→   771→                  <motion.span key="submitting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2">
+   772→   772→                    <Loader2 className="h-4 w-4 animate-spin" /> Submitting…
+   773→   773→                  </motion.span>
+   774→   774→                ) : (
+   775→   775→                  <motion.span key="submit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2">
+   776→   776→                    <CheckCircle2 className="h-4 w-4" /> Submit Attendance
+   777→   777→                  </motion.span>
+   778→   778→                )}
+   779→   779→              </AnimatePresence>
+   780→   780→            </Button>
+   781→   781→          </div>
+   782→   782→        </div>
+   783→   783→      </GlassCard>
+   784→   784→    </div>
+   785→   785→  )
+   786→   786→}
+   787→   787→

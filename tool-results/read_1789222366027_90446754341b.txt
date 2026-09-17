@@ -1,0 +1,1922 @@
+     1→     1→SCHOLARIO-OS — STUDENT WORKSPACE
+     2→     2→MODULE: FEES
+     3→     3→FULL PRODUCTION-GRADE REDESIGN + FUNCTIONALITY UPGRADE
+     4→     4→
+     5→     5→IMPORTANT:
+     6→     6→
+     7→     7→You are NOT being asked to merely redesign the existing Fees page.
+     8→     8→
+     9→     9→You are being asked to evolve Fees into a complete, production-grade,
+    10→    10→secure, transparent and extremely easy-to-use financial experience
+    11→    11→inside the Scholario Student Workspace.
+    12→    12→
+    13→    13→The existing screenshot/page is a VISUAL REFERENCE and starting point.
+    14→    14→
+    15→    15→Do not blindly preserve its limitations.
+    16→    16→
+    17→    17→Study the existing application, architecture, database models,
+    18→    18→authentication, permissions, School Settings, existing Student Workspace,
+    19→    19→navigation patterns and previously implemented modules BEFORE making changes.
+    20→    20→
+    21→    21→DO NOT break existing functionality.
+    22→    22→
+    23→    23→DO NOT create fake backend functionality merely to make the UI look complete.
+    24→    24→
+    25→    25→Everything that appears actionable must either:
+    26→    26→1. work end-to-end, or
+    27→    27→2. clearly communicate that the capability is not configured/enabled.
+    28→    28→
+    29→    29→Never simulate successful payments, receipts, balances, messages or financial records.
+    30→    30→
+    31→    31→========================================================
+    32→    32→1. PRODUCT PRINCIPLE
+    33→    33→========================================================
+    34→    34→
+    35→    35→Fees should feel like:
+    36→    36→
+    37→    37→A premium digital school finance desk.
+    38→    38→
+    39→    39→Not:
+    40→    40→
+    41→    41→"a page showing ₹9,500".
+    42→    42→
+    43→    43→The student/parent should be able to understand their financial position
+    44→    44→within seconds.
+    45→    45→
+    46→    46→The system should answer:
+    47→    47→
+    48→    48→• What do I owe?
+    49→    49→• What have I already paid?
+    50→    50→• What is due now?
+    51→    51→• What is due later?
+    52→    52→• What exactly is each charge for?
+    53→    53→• Was any concession/discount applied?
+    54→    54→• When was the payment made?
+    55→    55→• What payment method was used?
+    56→    56→• Where is my receipt?
+    57→    57→• What happens if I cannot pay online?
+    58→    58→• Who can I contact?
+    59→    59→• What is the status of my request?
+    60→    60→• Is there any pending action?
+    61→    61→• Can I safely raise a question/dispute?
+    62→    62→• Can I download official documents?
+    63→    63→
+    64→    64→The experience must maximize:
+    65→    65→
+    66→    66→TRANSPARENCY
+    67→    67→SECURITY
+    68→    68→CLARITY
+    69→    69→ACCOUNTABILITY
+    70→    70→EASE OF USE
+    71→    71→
+    72→    72→while minimizing:
+    73→    73→
+    74→    74→TEXT
+    75→    75→CLUTTER
+    76→    76→CONFUSION
+    77→    77→UNNECESSARY CLICKS
+    78→    78→UNNECESSARY FORMS
+    79→    79→REPEATED INFORMATION
+    80→    80→
+    81→    81→========================================================
+    82→    82→2. DO NOT OVER-REPEAT CONTEXT
+    83→    83→========================================================
+    84→    84→
+    85→    85→One of the biggest problems in the current Student Workspace is
+    86→    86→repeated text such as:
+    87→    87→
+    88→    88→Class 2-A
+    89→    89→Section A
+    90→    90→AY 2026–2027
+    91→    91→School name
+    92→    92→
+    93→    93→appearing repeatedly in every module.
+    94→    94→
+    95→    95→STOP doing this.
+    96→    96→
+    97→    97→The global Student Workspace already knows:
+    98→    98→
+    99→    99→student
+   100→   100→school
+   101→   101→class
+   102→   102→section
+   103→   103→academic year
+   104→   104→
+   105→   105→Use that context intelligently.
+   106→   106→
+   107→   107→Fees should primarily say:
+   108→   108→
+   109→   109→"My Fees"
+   110→   110→
+   111→   111→and then show the relevant financial period.
+   112→   112→
+   113→   113→For example:
+   114→   114→
+   115→   115→My Fees
+   116→   116→2026–27
+   117→   117→
+   118→   118→Instead of:
+   119→   119→
+   120→   120→My Fees
+   121→   121→Academic Year 2026–2027 · Demo School of Scholario
+   122→   122→Class 2-A · Section A · AY 2026–2027
+   123→   123→
+   124→   124→Do not waste valuable visual space repeating information
+   125→   125→the workspace already establishes.
+   126→   126→
+   127→   127→========================================================
+   128→   128→3. VISUAL DIRECTION
+   129→   129→========================================================
+   130→   130→
+   131→   131→The existing Student Workspace has established a premium visual language.
+   132→   132→
+   133→   133→Timetable is the benchmark for:
+   134→   134→
+   135→   135→• spacing
+   136→   136→• hierarchy
+   137→   137→• readability
+   138→   138→• information density
+   139→   139→• card geometry
+   140→   140→• interaction quality
+   141→   141→
+   142→   142→My Progress is the benchmark for:
+   143→   143→
+   144→   144→• tasteful colourfulness
+   145→   145→• student-friendly personality
+   146→   146→• visual richness
+   147→   147→• multi-accent design
+   148→   148→
+   149→   149→Fees should combine BOTH.
+   150→   150→
+   151→   151→Do NOT make the entire Fees module green.
+   152→   152→
+   153→   153→Green may represent:
+   154→   154→
+   155→   155→PAID
+   156→   156→SUCCESS
+   157→   157→CONFIRMED
+   158→   158→HEALTHY FINANCIAL STATUS
+   159→   159→
+   160→   160→but it must not dominate every surface.
+   161→   161→
+   162→   162→Use a controlled financial colour system:
+   163→   163→
+   164→   164→GREEN / EMERALD
+   165→   165→→ Paid
+   166→   166→→ Successful
+   167→   167→→ Cleared
+   168→   168→
+   169→   169→VIOLET
+   170→   170→→ Financial information
+   171→   171→→ statements
+   172→   172→→ account/ledger insights
+   173→   173→
+   174→   174→AMBER / ORANGE
+   175→   175→→ Due soon
+   176→   176→→ upcoming payment
+   177→   177→→ attention
+   178→   178→
+   179→   179→CORAL / RED
+   180→   180→→ overdue
+   181→   181→→ failed
+   182→   182→→ disputed
+   183→   183→→ action required
+   184→   184→
+   185→   185→CYAN / BLUE
+   186→   186→→ information
+   187→   187→→ support
+   188→   188→→ payment methods
+   189→   189→→ informational states
+   190→   190→
+   191→   191→NEUTRAL
+   192→   192→→ normal content
+   193→   193→→ inactive
+   194→   194→→ future
+   195→   195→→ background
+   196→   196→
+   197→   197→The overall interface should remain:
+   198→   198→
+   199→   199→~70% neutral
+   200→   200→~15% primary/positive
+   201→   201→~15% contextual accents
+   202→   202→
+   203→   203→Do not turn it into a rainbow interface.
+   204→   204→
+   205→   205→========================================================
+   206→   206→4. FEES HOME — INFORMATION HIERARCHY
+   207→   207→========================================================
+   208→   208→
+   209→   209→The top of the page should immediately communicate the student's
+   210→   210→financial state.
+   211→   211→
+   212→   212→Recommended structure:
+   213→   213→
+   214→   214→MY FEES
+   215→   215→
+   216→   216→2026–27
+   217→   217→
+   218→   218→[Financial period selector if multiple periods exist]
+   219→   219→
+   220→   220→------------------------------------------------
+   221→   221→
+   222→   222→TOTAL PAYABLE
+   223→   223→₹9,500
+   224→   224→
+   225→   225→PAID
+   226→   226→₹4,750
+   227→   227→
+   228→   228→BALANCE DUE
+   229→   229→₹4,750
+   230→   230→
+   231→   231→DUE NEXT
+   232→   232→₹2,000
+   233→   233→18 Sep
+   234→   234→
+   235→   235→------------------------------------------------
+   236→   236→
+   237→   237→A visual payment progress indicator:
+   238→   238→
+   239→   239→₹4,750 paid
+   240→   240→50% complete
+   241→   241→
+   242→   242→₹4,750 remaining
+   243→   243→
+   244→   244→The balance should be the most important actionable figure.
+   245→   245→
+   246→   246→Do NOT create four huge equal cards if the information hierarchy
+   247→   247→does not justify it.
+   248→   248→
+   249→   249→The interface should clearly distinguish:
+   250→   250→
+   251→   251→TOTAL
+   252→   252→PAID
+   253→   253→DUE
+   254→   254→OVERDUE
+   255→   255→
+   256→   256→========================================================
+   257→   257→5. FINANCIAL STATUS
+   258→   258→========================================================
+   259→   259→
+   260→   260→Create an intelligent financial status state.
+   261→   261→
+   262→   262→Examples:
+   263→   263→
+   264→   264→ALL CLEAR
+   265→   265→No payment currently due.
+   266→   266→
+   267→   267→PAYMENT DUE
+   268→   268→A payment is approaching.
+   269→   269→
+   270→   270→DUE SOON
+   271→   271→Payment due within configured reminder period.
+   272→   272→
+   273→   273→OVERDUE
+   274→   274→Payment deadline has passed.
+   275→   275→
+   276→   276→PARTIALLY PAID
+   277→   277→Some amount has been paid.
+   278→   278→
+   279→   279→PAYMENT UNDER REVIEW
+   280→   280→A payment has been submitted but not yet reconciled.
+   281→   281→
+   282→   282→PAYMENT FAILED
+   283→   283→A payment attempt failed.
+   284→   284→
+   285→   285→DISPUTE OPEN
+   286→   286→A fee/payment issue is under review.
+   287→   287→
+   288→   288→These states must be database-driven.
+   289→   289→
+   290→   290→Never hardcode them.
+   291→   291→
+   292→   292→School fee policies and due dates must come from the school's
+   293→   293→configured financial settings.
+   294→   294→
+   295→   295→========================================================
+   296→   296→6. FEE BREAKDOWN
+   297→   297→========================================================
+   298→   298→
+   299→   299→Students/parents must be able to see EXACTLY what they are being charged.
+   300→   300→
+   301→   301→Create a clean expandable:
+   302→   302→
+   303→   303→FEE BREAKDOWN
+   304→   304→
+   305→   305→Tuition Fee                         ₹4,000
+   306→   306→Transport                          ₹1,500
+   307→   307→Annual Charges                     ₹1,000
+   308→   308→Development Fee                   ₹1,000
+   309→   309→Books                              ₹1,000
+   310→   310→Computer / Lab Fee                ₹1,000
+   311→   311→
+   312→   312→Subtotal                           ₹9,500
+   313→   313→
+   314→   314→Concession                         -₹500
+   315→   315→
+   316→   316→TOTAL                              ₹9,000
+   317→   317→
+   318→   318→The actual items must come from the school's fee configuration.
+   319→   319→
+   320→   320→Do not invent categories.
+   321→   321→
+   322→   322→Do not hardcode fees.
+   323→   323→
+   324→   324→Each line should optionally expose:
+   325→   325→
+   326→   326→• fee category
+   327→   327→• billing period
+   328→   328→• quantity if applicable
+   329→   329→• original amount
+   330→   330→• concession
+   331→   331→• final amount
+   332→   332→• due date
+   333→   333→• status
+   334→   334→
+   335→   335→========================================================
+   336→   336→7. CONCESSIONS / DISCOUNTS
+   337→   337→========================================================
+   338→   338→
+   339→   339→Financial transparency is extremely important.
+   340→   340→
+   341→   341→If a concession exists, clearly show it.
+   342→   342→
+   343→   343→Example:
+   344→   344→
+   345→   345→Sibling concession
+   346→   346→-₹500
+   347→   347→
+   348→   348→However, respect school configuration.
+   349→   349→
+   350→   350→The school may configure:
+   351→   351→
+   352→   352→SHOW_DISCOUNT_BREAKDOWN = true/false
+   353→   353→
+   354→   354→If disabled:
+   355→   355→
+   356→   356→Do NOT expose confidential/internal discount details.
+   357→   357→
+   358→   358→Instead show:
+   359→   359→
+   360→   360→Adjusted total
+   361→   361→₹9,000
+   362→   362→
+   363→   363→This must be controlled through School Settings.
+   364→   364→
+   365→   365→Never leak internal financial information.
+   366→   366→
+   367→   367→========================================================
+   368→   368→8. INSTALLMENTS
+   369→   369→========================================================
+   370→   370→
+   371→   371→Support structured installment schedules.
+   372→   372→
+   373→   373→Example:
+   374→   374→
+   375→   375→TERM 1
+   376→   376→₹3,000
+   377→   377→Paid
+   378→   378→
+   379→   379→TERM 2
+   380→   380→₹3,000
+   381→   381→Due 15 Sep
+   382→   382→
+   383→   383→TERM 3
+   384→   384→₹3,000
+   385→   385→Upcoming
+   386→   386→
+   387→   387→Each installment should show:
+   388→   388→
+   389→   389→amount
+   390→   390→due date
+   391→   391→status
+   392→   392→payment date if paid
+   393→   393→receipt if available
+   394→   394→
+   395→   395→Use a timeline or compact payment schedule.
+   396→   396→
+   397→   397→Do NOT make the student scroll through enormous tables
+   398→   398→for simple installment information.
+   399→   399→
+   400→   400→========================================================
+   401→   401→9. PAYMENT ACTION
+   402→   402→========================================================
+   403→   403→
+   404→   404→If online payments are configured:
+   405→   405→
+   406→   406→Show:
+   407→   407→
+   408→   408→PAY NOW
+   409→   409→
+   410→   410→Then present a clean payment flow.
+   411→   411→
+   412→   412→Step 1:
+   413→   413→Select payable item/installment.
+   414→   414→
+   415→   415→Step 2:
+   416→   416→Review amount.
+   417→   417→
+   418→   418→Step 3:
+   419→   419→Select configured payment method.
+   420→   420→
+   421→   421→Step 4:
+   422→   422→Secure payment gateway.
+   423→   423→
+   424→   424→Step 5:
+   425→   425→Payment result.
+   426→   426→
+   427→   427→Step 6:
+   428→   428→Receipt.
+   429→   429→
+   430→   430→Do not ask users to manually enter information that Scholario
+   431→   431→already knows.
+   432→   432→
+   433→   433→Never expose sensitive gateway information unnecessarily.
+   434→   434→
+   435→   435→Never store card credentials.
+   436→   436→
+   437→   437→Use the configured payment provider.
+   438→   438→
+   439→   439→========================================================
+   440→   440→10. PAYMENT STATES
+   441→   441→========================================================
+   442→   442→
+   443→   443→Handle every realistic state:
+   444→   444→
+   445→   445→idle
+   446→   446→initiated
+   447→   447→processing
+   448→   448→success
+   449→   449→failed
+   450→   450→cancelled
+   451→   451→expired
+   452→   452→pending
+   453→   453→under_review
+   454→   454→refunded
+   455→   455→
+   456→   456→The UI must NOT say "Paid" merely because a payment button
+   457→   457→was clicked.
+   458→   458→
+   459→   459→Only confirmed/reconciled backend state can mark a transaction
+   460→   460→as successful.
+   461→   461→
+   462→   462→If the gateway reports uncertain status:
+   463→   463→
+   464→   464→PAYMENT PROCESSING
+   465→   465→
+   466→   466→and explain briefly:
+   467→   467→
+   468→   468→"We're confirming your payment. You don't need to pay again."
+   469→   469→
+   470→   470→Avoid duplicated payments.
+   471→   471→
+   472→   472→========================================================
+   473→   473→11. ONLINE PAYMENTS NOT CONFIGURED
+   474→   474→========================================================
+   475→   475→
+   476→   476→The screenshot currently shows:
+   477→   477→
+   478→   478→Online payments unavailable.
+   479→   479→
+   480→   480→This is acceptable IF the school genuinely has no payment
+   481→   481→gateway configured.
+   482→   482→
+   483→   483→But improve the experience.
+   484→   484→
+   485→   485→Instead of a dead informational box:
+   486→   486→
+   487→   487→ONLINE PAYMENTS UNAVAILABLE
+   488→   488→
+   489→   489→Online payments are currently not enabled by your school.
+   490→   490→
+   491→   491→Then show:
+   492→   492→
+   493→   493→HOW TO PAY
+   494→   494→
+   495→   495→configured offline methods from School Settings.
+   496→   496→
+   497→   497→Examples:
+   498→   498→
+   499→   499→Cash
+   500→   500→School Office
+   501→   501→Bank Transfer
+   502→   502→UPI
+   503→   503→Cheque
+   504→   504→
+   505→   505→Only show methods actually configured.
+   506→   506→
+   507→   507→If the school provides instructions:
+   508→   508→
+   509→   509→Office timing
+   510→   510→office location
+   511→   511→bank details
+   512→   512→UPI information
+   513→   513→
+   514→   514→display them securely.
+   515→   515→
+   516→   516→Never fabricate payment information.
+   517→   517→
+   518→   518→========================================================
+   519→   519→12. OFFLINE PAYMENT REQUEST
+   520→   520→========================================================
+   521→   521→
+   522→   522→If the school supports offline payment reporting,
+   523→   523→allow:
+   524→   524→
+   525→   525→"Report a payment"
+   526→   526→
+   527→   527→The student/parent can submit:
+   528→   528→
+   529→   529→amount
+   530→   530→date
+   531→   531→method
+   532→   532→reference number
+   533→   533→optional proof/document
+   534→   534→
+   535→   535→Status:
+   536→   536→
+   537→   537→Submitted
+   538→   538→Under Review
+   539→   539→Verified
+   540→   540→Rejected
+   541→   541→
+   542→   542→The student cannot mark their own payment as "paid".
+   543→   543→
+   544→   544→Only an authorized school financial/admin role can verify it.
+   545→   545→
+   546→   546→========================================================
+   547→   547→13. PAYMENT HISTORY
+   548→   548→========================================================
+   549→   549→
+   550→   550→Payment History should be highly polished.
+   551→   551→
+   552→   552→Each transaction should show:
+   553→   553→
+   554→   554→Receipt No.
+   555→   555→Date
+   556→   556→Purpose
+   557→   557→Amount
+   558→   558→Method
+   559→   559→Status
+   560→   560→
+   561→   561→But optimize for scanning.
+   562→   562→
+   563→   563→Example:
+   564→   564→
+   565→   565→₹4,750
+   566→   566→Term 1 Fees
+   567→   567→10 Jul 2026
+   568→   568→UPI
+   569→   569→SUCCESS
+   570→   570→
+   571→   571→[View receipt]
+   572→   572→
+   573→   573→Avoid giant spreadsheet-like tables on smaller screens.
+   574→   574→
+   575→   575→Desktop may use table layout.
+   576→   576→
+   577→   577→Tablet/mobile should transform into compact transaction cards.
+   578→   578→
+   579→   579→========================================================
+   580→   580→14. RECEIPTS
+   581→   581→========================================================
+   582→   582→
+   583→   583→Every confirmed payment should have an official receipt
+   584→   584→when the school configuration requires one.
+   585→   585→
+   586→   586→Receipt actions:
+   587→   587→
+   588→   588→View
+   589→   589→Download
+   590→   590→Print
+   591→   591→
+   592→   592→The receipt must be generated from the official school
+   593→   593→document/template system.
+   594→   594→
+   595→   595→Include appropriate:
+   596→   596→
+   597→   597→School identity
+   598→   598→Receipt number
+   599→   599→Student
+   600→   600→Financial period
+   601→   601→Payment date
+   602→   602→Amount
+   603→   603→Purpose
+   604→   604→Payment method
+   605→   605→Transaction/reference number
+   606→   606→Authorized information
+   607→   607→
+   608→   608→Do not expose unnecessary personal data.
+   609→   609→
+   610→   610→Receipt numbers must be immutable.
+   611→   611→
+   612→   612→Students cannot edit receipts.
+   613→   613→
+   614→   614→========================================================
+   615→   615→15. STATEMENT
+   616→   616→========================================================
+   617→   617→
+   618→   618→Add:
+   619→   619→
+   620→   620→VIEW FEE STATEMENT
+   621→   621→
+   622→   622→This should provide a chronological financial statement.
+   623→   623→
+   624→   624→Example:
+   625→   625→
+   626→   626→Opening balance
+   627→   627→Charges
+   628→   628→Concessions
+   629→   629→Payments
+   630→   630→Adjustments
+   631→   631→Refunds
+   632→   632→Closing balance
+   633→   633→
+   634→   634→Allow:
+   635→   635→
+   636→   636→Download PDF
+   637→   637→Print
+   638→   638→
+   639→   639→The statement must reflect the actual ledger.
+   640→   640→
+   641→   641→Never calculate a separate fake balance in the frontend.
+   642→   642→
+   643→   643→========================================================
+   644→   644→16. FINANCIAL TIMELINE
+   645→   645→========================================================
+   646→   646→
+   647→   647→Create a compact timeline for transparency.
+   648→   648→
+   649→   649→Example:
+   650→   650→
+   651→   651→10 Jul
+   652→   652→₹4,750 payment received
+   653→   653→✓ Reconciled
+   654→   654→
+   655→   655→01 Jul
+   656→   656→Term 1 fee posted
+   657→   657→₹4,750
+   658→   658→
+   659→   659→15 Jun
+   660→   660→Sibling concession applied
+   661→   661→-₹500
+   662→   662→
+   663→   663→This gives the student/parent confidence that
+   664→   664→the ledger is explainable.
+   665→   665→
+   666→   666→========================================================
+   667→   667→17. DUE DATES & REMINDERS
+   668→   668→========================================================
+   669→   669→
+   670→   670→Show only useful reminders.
+   671→   671→
+   672→   672→Example:
+   673→   673→
+   674→   674→DUE IN 3 DAYS
+   675→   675→Term 2 fee · ₹3,000
+   676→   676→
+   677→   677→Do not spam the user.
+   678→   678→
+   679→   679→Reminder frequency must respect school settings.
+   680→   680→
+   681→   681→Students/parents should see:
+   682→   682→
+   683→   683→Upcoming
+   684→   684→Due today
+   685→   685→Overdue
+   686→   686→
+   687→   687→Do not repeatedly display the same warning everywhere.
+   688→   688→
+   689→   689→========================================================
+   690→   690→18. DIRECT COMMUNICATION
+   691→   691→========================================================
+   692→   692→
+   693→   693→THIS IS A MAJOR REQUIREMENT.
+   694→   694→
+   695→   695→Students must be able to connect with the appropriate
+   696→   696→authorized school personnel.
+   697→   697→
+   698→   698→Do NOT simply expose a generic "Contact us" button.
+   699→   699→
+   700→   700→Create contextual communication.
+   701→   701→
+   702→   702→Example:
+   703→   703→
+   704→   704→Question about this fee?
+   705→   705→
+   706→   706→[Ask about this payment]
+   707→   707→
+   708→   708→The system should route the conversation based on
+   709→   709→configured responsibility.
+   710→   710→
+   711→   711→Possible recipients:
+   712→   712→
+   713→   713→Accounts Office
+   714→   714→Class Teacher
+   715→   715→Principal
+   716→   716→School Admin
+   717→   717→Authorized Fee Officer
+   718→   718→
+   719→   719→IMPORTANT:
+   720→   720→
+   721→   721→Do not automatically route every financial question to
+   722→   722→the class teacher.
+   723→   723→
+   724→   724→Use responsibility rules.
+   725→   725→
+   726→   726→Examples:
+   727→   727→
+   728→   728→Fee amount / ledger / receipt
+   729→   729→→ Accounts / authorized finance staff
+   730→   730→
+   731→   731→Fee concession request
+   732→   732→→ Authorized school admin / principal
+   733→   733→
+   734→   734→General student concern
+   735→   735→→ Class Teacher
+   736→   736→
+   737→   737→Escalated unresolved issue
+   738→   738→→ Principal / designated authority
+   739→   739→
+   740→   740→========================================================
+   741→   741→19. STUDENT ↔ CLASS TEACHER
+   742→   742→========================================================
+   743→   743→
+   744→   744→The student should be able to communicate with their
+   745→   745→currently assigned Class Teacher through Scholario's
+   746→   746→existing secure messaging system.
+   747→   747→
+   748→   748→However:
+   749→   749→
+   750→   750→Do NOT create a second messaging system inside Fees.
+   751→   751→
+   752→   752→Reuse the central Messages/Communication architecture.
+   753→   753→
+   754→   754→Fees should create contextual entry points.
+   755→   755→
+   756→   756→Example:
+   757→   757→
+   758→   758→"Ask my Class Teacher"
+   759→   759→
+   760→   760→This opens the existing secure conversation system
+   761→   761→with context attached:
+   762→   762→
+   763→   763→Subject:
+   764→   764→Fee question
+   765→   765→
+   766→   766→Context:
+   767→   767→Term 2 fee
+   768→   768→
+   769→   769→Student:
+   770→   770→[student]
+   771→   771→
+   772→   772→The teacher should not receive sensitive financial information
+   773→   773→that they are not authorized to see.
+   774→   774→
+   775→   775→Only minimum necessary information should be exposed.
+   776→   776→
+   777→   777→========================================================
+   778→   778→20. STUDENT ↔ PRINCIPAL
+   779→   779→========================================================
+   780→   780→
+   781→   781→Provide an escalation pathway.
+   782→   782→
+   783→   783→Do NOT put a giant "Message Principal" button everywhere.
+   784→   784→
+   785→   785→Use:
+   786→   786→
+   787→   787→Need further help?
+   788→   788→
+   789→   789→[Request school review]
+   790→   790→
+   791→   791→The request should follow the school's configured workflow.
+   792→   792→
+   793→   793→Example:
+   794→   794→
+   795→   795→Student
+   796→   796→↓
+   797→   797→Accounts / designated staff
+   798→   798→↓
+   799→   799→Escalation if unresolved
+   800→   800→↓
+   801→   801→Principal
+   802→   802→
+   803→   803→The student should be able to see:
+   804→   804→
+   805→   805→Request ID
+   806→   806→Submitted
+   807→   807→Assigned to
+   808→   808→Current status
+   809→   809→Last update
+   810→   810→Expected next action
+   811→   811→
+   812→   812→This is critical for transparency.
+   813→   813→
+   814→   814→========================================================
+   815→   815→21. FEE QUERY / DISPUTE
+   816→   816→========================================================
+   817→   817→
+   818→   818→Allow students/parents to raise a structured issue.
+   819→   819→
+   820→   820→Example:
+   821→   821→
+   822→   822→"Something doesn't look right"
+   823→   823→
+   824→   824→Form should be minimal:
+   825→   825→
+   826→   826→Issue type:
+   827→   827→• Incorrect amount
+   828→   828→• Payment missing
+   829→   829→• Receipt issue
+   830→   830→• Concession issue
+   831→   831→• Duplicate charge
+   832→   832→• Other
+   833→   833→
+   834→   834→Related transaction/fee:
+   835→   835→[automatically selected]
+   836→   836→
+   837→   837→Message:
+   838→   838→[short field]
+   839→   839→
+   840→   840→Attachment:
+   841→   841→optional
+   842→   842→
+   843→   843→Submit.
+   844→   844→
+   845→   845→Then provide a case timeline.
+   846→   846→
+   847→   847→Status:
+   848→   848→
+   849→   849→OPEN
+   850→   850→ASSIGNED
+   851→   851→UNDER REVIEW
+   852→   852→WAITING FOR INFORMATION
+   853→   853→RESOLVED
+   854→   854→CLOSED
+   855→   855→
+   856→   856→The user must never wonder:
+   857→   857→
+   858→   858→"Did the school receive my complaint?"
+   859→   859→
+   860→   860→========================================================
+   861→   861→22. SECURITY
+   862→   862→========================================================
+   863→   863→
+   864→   864→This is financial information.
+   865→   865→
+   866→   866→Treat Fees as a HIGH-SENSITIVITY module.
+   867→   867→
+   868→   868→Implement strict authorization.
+   869→   869→
+   870→   870→Student can:
+   871→   871→
+   872→   872→VIEW own fees
+   873→   873→VIEW own payments
+   874→   874→VIEW own receipts
+   875→   875→MAKE authorized payment
+   876→   876→REPORT offline payment
+   877→   877→RAISE issue
+   878→   878→VIEW own requests
+   879→   879→
+   880→   880→Student CANNOT:
+   881→   881→
+   882→   882→edit fee amounts
+   883→   883→edit ledger
+   884→   884→delete payments
+   885→   885→modify receipts
+   886→   886→verify own payment
+   887→   887→change concessions
+   888→   888→change due dates
+   889→   889→view another student's fees
+   890→   890→view school-wide financial information
+   891→   891→access internal accounting notes
+   892→   892→
+   893→   893→Parent:
+   894→   894→
+   895→   895→Only authorized children/wards.
+   896→   896→
+   897→   897→Teacher:
+   898→   898→
+   899→   899→Only financial information explicitly required
+   900→   900→for their role.
+   901→   901→
+   902→   902→Class Teacher should NOT automatically receive:
+   903→   903→
+   904→   904→full fee ledger
+   905→   905→payment method
+   906→   906→bank reference
+   907→   907→concession details
+   908→   908→financial history
+   909→   909→
+   910→   910→unless school policy explicitly grants permission.
+   911→   911→
+   912→   912→Principal:
+   913→   913→
+   914→   914→Broader visibility according to school permissions.
+   915→   915→
+   916→   916→Finance/Admin:
+   917→   917→
+   918→   918→Full financial workflows according to permission.
+   919→   919→
+   920→   920→Super Admin:
+   921→   921→
+   922→   922→Platform-level controls only.
+   923→   923→Do not mix school financial data casually.
+   924→   924→
+   925→   925→========================================================
+   926→   926→23. TENANCY
+   927→   927→========================================================
+   928→   928→
+   929→   929→Every financial query MUST be scoped to:
+   930→   930→
+   931→   931→schoolId
+   932→   932→studentId
+   933→   933→academicSessionId
+   934→   934→
+   935→   935→where applicable.
+   936→   936→
+   937→   937→Never rely on frontend filtering for tenant isolation.
+   938→   938→
+   939→   939→Every server-side query must enforce authorization.
+   940→   940→
+   941→   941→Never trust:
+   942→   942→
+   943→   943→schoolId
+   944→   944→studentId
+   945→   945→role
+   946→   946→
+   947→   947→coming directly from the client.
+   948→   948→
+   949→   949→Resolve identity server-side from authenticated context.
+   950→   950→
+   951→   951→========================================================
+   952→   952→24. AUDIT LOGGING
+   953→   953→========================================================
+   954→   954→
+   955→   955→Financial operations require auditability.
+   956→   956→
+   957→   957→Log important events:
+   958→   958→
+   959→   959→fee_created
+   960→   960→fee_updated
+   961→   961→fee_assigned
+   962→   962→concession_applied
+   963→   963→payment_initiated
+   964→   964→payment_success
+   965→   965→payment_failed
+   966→   966→payment_reconciled
+   967→   967→offline_payment_submitted
+   968→   968→offline_payment_verified
+   969→   969→offline_payment_rejected
+   970→   970→receipt_generated
+   971→   971→receipt_downloaded if policy requires
+   972→   972→refund_created
+   973→   973→dispute_created
+   974→   974→dispute_updated
+   975→   975→dispute_resolved
+   976→   976→
+   977→   977→Audit records should capture:
+   978→   978→
+   979→   979→actor
+   980→   980→role
+   981→   981→school
+   982→   982→timestamp
+   983→   983→action
+   984→   984→target
+   985→   985→relevant metadata
+   986→   986→
+   987→   987→Never allow normal users to alter audit records.
+   988→   988→
+   989→   989→========================================================
+   990→   990→25. ROLE-AWARE EXPERIENCE
+   991→   991→========================================================
+   992→   992→
+   993→   993→The same Fees module must adapt to the authenticated role.
+   994→   994→
+   995→   995→STUDENT:
+   996→   996→
+   997→   997→"My Fees"
+   998→   998→
+   999→   999→View
+  1000→  1000→Pay
+  1001→  1001→Receipts
+  1002→  1002→Statement
+  1003→  1003→Raise issue
+  1004→  1004→Ask for help
+  1005→  1005→
+  1006→  1006→PARENT:
+  1007→  1007→
+  1008→  1008→Children selector
+  1009→  1009→Per-child financial view
+  1010→  1010→Pay
+  1011→  1011→Receipts
+  1012→  1012→Statements
+  1013→  1013→Issues
+  1014→  1014→
+  1015→  1015→CLASS TEACHER:
+  1016→  1016→
+  1017→  1017→Only relevant student fee signals if authorized.
+  1018→  1018→
+  1019→  1019→Example:
+  1020→  1020→
+  1021→  1021→"3 students have fee-related communication pending"
+  1022→  1022→
+  1023→  1023→Do not expose financial details unnecessarily.
+  1024→  1024→
+  1025→  1025→PRINCIPAL:
+  1026→  1026→
+  1027→  1027→Financial overview appropriate to their school-level permissions.
+  1028→  1028→
+  1029→  1029→Examples:
+  1030→  1030→
+  1031→  1031→Outstanding
+  1032→  1032→Collections
+  1033→  1033→Pending verification
+  1034→  1034→Disputes
+  1035→  1035→Escalations
+  1036→  1036→
+  1037→  1037→FINANCE / SCHOOL ADMIN:
+  1038→  1038→
+  1039→  1039→Full fee ledger
+  1040→  1040→fee structures
+  1041→  1041→payments
+  1042→  1042→reconciliation
+  1043→  1043→receipts
+  1044→  1044→concessions
+  1045→  1045→refunds
+  1046→  1046→disputes
+  1047→  1047→reports
+  1048→  1048→
+  1049→  1049→SUPER ADMIN:
+  1050→  1050→
+  1051→  1051→Platform controls only.
+  1052→  1052→
+  1053→  1053→========================================================
+  1054→  1054→26. SCHOOL SETTINGS INTEGRATION
+  1055→  1055→========================================================
+  1056→  1056→
+  1057→  1057→DO NOT hardcode financial configuration.
+  1058→  1058→
+  1059→  1059→Fees must consume School Settings.
+  1060→  1060→
+  1061→  1061→Possible configuration sources:
+  1062→  1062→
+  1063→  1063→Fee categories
+  1064→  1064→Fee templates
+  1065→  1065→Academic sessions
+  1066→  1066→Installment schedules
+  1067→  1067→Due dates
+  1068→  1068→Late fee rules
+  1069→  1069→Concession types
+  1070→  1070→Payment methods
+  1071→  1071→Payment gateway
+  1072→  1072→Offline payment instructions
+  1073→  1073→Reminder policy
+  1074→  1074→Receipt templates
+  1075→  1075→Statement templates
+  1076→  1076→Financial permissions
+  1077→  1077→Escalation workflow
+  1078→  1078→
+  1079→  1079→If a configuration is disabled,
+  1080→  1080→the corresponding feature should disappear or become
+  1081→  1081→clearly unavailable.
+  1082→  1082→
+  1083→  1083→Do not show empty fake functionality.
+  1084→  1084→
+  1085→  1085→========================================================
+  1086→  1086→27. LATE FEES
+  1087→  1087→========================================================
+  1088→  1088→
+  1089→  1089→If the school has a late-fee policy:
+  1090→  1090→
+  1091→  1091→Show:
+  1092→  1092→
+  1093→  1093→Original amount
+  1094→  1094→Late fee
+  1095→  1095→Current payable
+  1096→  1096→
+  1097→  1097→Example:
+  1098→  1098→
+  1099→  1099→Term 2 fee             ₹3,000
+  1100→  1100→Late fee                 ₹150
+  1101→  1101→Current due             ₹3,150
+  1102→  1102→
+  1103→  1103→Explain briefly why the amount changed.
+  1104→  1104→
+  1105→  1105→Do not silently add charges.
+  1106→  1106→
+  1107→  1107→The backend must calculate the authoritative amount.
+  1108→  1108→
+  1109→  1109→========================================================
+  1110→  1110→28. REFUNDS / ADJUSTMENTS
+  1111→  1111→========================================================
+  1112→  1112→
+  1113→  1113→If applicable, show:
+  1114→  1114→
+  1115→  1115→Refund
+  1116→  1116→Adjustment
+  1117→  1117→Credit
+  1118→  1118→
+  1119→  1119→clearly.
+  1120→  1120→
+  1121→  1121→Example:
+  1122→  1122→
+  1123→  1123→Refund issued
+  1124→  1124→₹500
+  1125→  1125→12 Sep 2026
+  1126→  1126→
+  1127→  1127→Do not treat refunds as negative payments without explanation.
+  1128→  1128→
+  1129→  1129→========================================================
+  1130→  1130→29. SEARCH
+  1131→  1131→========================================================
+  1132→  1132→
+  1133→  1133→Use the existing Student Workspace global search architecture.
+  1134→  1134→
+  1135→  1135→Do not add a second large search system inside Fees.
+  1136→  1136→
+  1137→  1137→Search should be able to find relevant:
+  1138→  1138→
+  1139→  1139→receipt numbers
+  1140→  1140→transactions
+  1141→  1141→fee categories
+  1142→  1142→statements
+  1143→  1143→payment requests
+  1144→  1144→
+  1145→  1145→only within the user's authorized scope.
+  1146→  1146→
+  1147→  1147→========================================================
+  1148→  1148→30. RESPONSIVE DESIGN
+  1149→  1149→========================================================
+  1150→  1150→
+  1151→  1151→The application is being viewed on an iPad/tablet.
+  1152→  1152→
+  1153→  1153→But design responsively for:
+  1154→  1154→
+  1155→  1155→desktop
+  1156→  1156→tablet
+  1157→  1157→mobile
+  1158→  1158→
+  1159→  1159→Do not simply shrink desktop tables.
+  1160→  1160→
+  1161→  1161→At tablet/mobile:
+  1162→  1162→
+  1163→  1163→convert complex tables into structured cards.
+  1164→  1164→
+  1165→  1165→Maintain:
+  1166→  1166→
+  1167→  1167→clear hierarchy
+  1168→  1168→touch-friendly targets
+  1169→  1169→comfortable spacing
+  1170→  1170→no horizontal scrolling wherever avoidable.
+  1171→  1171→
+  1172→  1172→========================================================
+  1173→  1173→31. ACCESSIBILITY
+  1174→  1174→========================================================
+  1175→  1175→
+  1176→  1176→Use:
+  1177→  1177→
+  1178→  1178→semantic buttons
+  1179→  1179→proper labels
+  1180→  1180→keyboard navigation
+  1181→  1181→visible focus
+  1182→  1182→sufficient contrast
+  1183→  1183→accessible status indicators
+  1184→  1184→
+  1185→  1185→Never communicate financial status using colour alone.
+  1186→  1186→
+  1187→  1187→For example:
+  1188→  1188→
+  1189→  1189→green + "Paid"
+  1190→  1190→
+  1191→  1191→not merely:
+  1192→  1192→
+  1193→  1193→green dot.
+  1194→  1194→
+  1195→  1195→========================================================
+  1196→  1196→32. EMPTY STATES
+  1197→  1197→========================================================
+  1198→  1198→
+  1199→  1199→Create excellent meaningful empty states.
+  1200→  1200→
+  1201→  1201→No fees:
+  1202→  1202→
+  1203→  1203→"No fees have been posted yet."
+  1204→  1204→
+  1205→  1205→No transactions:
+  1206→  1206→
+  1207→  1207→"No payments recorded yet."
+  1208→  1208→
+  1209→  1209→No receipt:
+  1210→  1210→
+  1211→  1211→"Receipt will appear once the payment is reconciled."
+  1212→  1212→
+  1213→  1213→No upcoming dues:
+  1214→  1214→
+  1215→  1215→"You're all clear for now."
+  1216→  1216→
+  1217→  1217→No disputes:
+  1218→  1218→
+  1219→  1219→"No open requests."
+  1220→  1220→
+  1221→  1221→Never show fake zero-data charts.
+  1222→  1222→
+  1223→  1223→========================================================
+  1224→  1224→33. ERROR STATES
+  1225→  1225→========================================================
+  1226→  1226→
+  1227→  1227→Design real error states.
+  1228→  1228→
+  1229→  1229→Examples:
+  1230→  1230→
+  1231→  1231→Unable to load fees
+  1232→  1232→Payment failed
+  1233→  1233→Receipt unavailable
+  1234→  1234→Statement generation failed
+  1235→  1235→Offline payment submission failed
+  1236→  1236→
+  1237→  1237→Every error should tell the user:
+  1238→  1238→
+  1239→  1239→what happened
+  1240→  1240→what they can do next
+  1241→  1241→
+  1242→  1242→without technical jargon.
+  1243→  1243→
+  1244→  1244→========================================================
+  1245→  1245→34. LOADING STATES
+  1246→  1246→========================================================
+  1247→  1247→
+  1248→  1248→Use elegant skeleton states.
+  1249→  1249→
+  1250→  1250→Do not use giant spinners.
+  1251→  1251→
+  1252→  1252→Layout should remain stable while loading.
+  1253→  1253→
+  1254→  1254→========================================================
+  1255→  1255→35. NO OVER-TEXTING
+  1256→  1256→========================================================
+  1257→  1257→
+  1258→  1258→This is extremely important.
+  1259→  1259→
+  1260→  1260→Do NOT turn every card into a paragraph.
+  1261→  1261→
+  1262→  1262→Prefer:
+  1263→  1263→
+  1264→  1264→Title
+  1265→  1265→value
+  1266→  1266→small context
+  1267→  1267→action
+  1268→  1268→
+  1269→  1269→Example:
+  1270→  1270→
+  1271→  1271→BALANCE DUE
+  1272→  1272→₹4,750
+  1273→  1273→Due 18 Sep
+  1274→  1274→
+  1275→  1275→[Pay now]
+  1276→  1276→
+  1277→  1277→NOT:
+  1278→  1278→
+  1279→  1279→"You currently have an outstanding balance of ₹4,750 which is
+  1280→  1280→due on September 18, 2026 and you can make your payment..."
+  1281→  1281→
+  1282→  1282→Keep text short.
+  1283→  1283→
+  1284→  1284→========================================================
+  1285→  1285→36. MICRO-INTERACTIONS
+  1286→  1286→========================================================
+  1287→  1287→
+  1288→  1288→Use subtle premium interactions:
+  1289→  1289→
+  1290→  1290→hover
+  1291→  1291→press
+  1292→  1292→expand/collapse
+  1293→  1293→success feedback
+  1294→  1294→copy receipt number
+  1295→  1295→download feedback
+  1296→  1296→payment processing state
+  1297→  1297→
+  1298→  1298→No excessive animations.
+  1299→  1299→
+  1300→  1300→No flashy effects.
+  1301→  1301→
+  1302→  1302→No glassmorphism.
+  1303→  1303→
+  1304→  1304→No neon.
+  1305→  1305→
+  1306→  1306→No unnecessary gradients.
+  1307→  1307→
+  1308→  1308→========================================================
+  1309→  1309→37. COLOURFUL BUT PREMIUM
+  1310→  1310→========================================================
+  1311→  1311→
+  1312→  1312→Use colour strategically.
+  1313→  1313→
+  1314→  1314→Example:
+  1315→  1315→
+  1316→  1316→Total Fees
+  1317→  1317→neutral + violet accent
+  1318→  1318→
+  1319→  1319→Paid
+  1320→  1320→soft emerald
+  1321→  1321→
+  1322→  1322→Balance Due
+  1323→  1323→soft amber
+  1324→  1324→
+  1325→  1325→Overdue
+  1326→  1326→soft coral
+  1327→  1327→
+  1328→  1328→Receipt
+  1329→  1329→cyan
+  1330→  1330→
+  1331→  1331→Financial support
+  1332→  1332→violet
+  1333→  1333→
+  1334→  1334→Payment success
+  1335→  1335→emerald
+  1336→  1336→
+  1337→  1337→This should feel closer to:
+  1338→  1338→
+  1339→  1339→Linear
+  1340→  1340→Stripe Dashboard
+  1341→  1341→Apple-quality productivity UI
+  1342→  1342→premium modern education platform
+  1343→  1343→
+  1344→  1344→than a traditional school ERP.
+  1345→  1345→
+  1346→  1346→========================================================
+  1347→  1347→38. FINANCIAL DASHBOARD — OPTIONAL INTELLIGENCE
+  1348→  1348→========================================================
+  1349→  1349→
+  1350→  1350→If enough real data exists, provide subtle insights.
+  1351→  1351→
+  1352→  1352→Examples:
+  1353→  1353→
+  1354→  1354→"50% of this year's fees are paid."
+  1355→  1355→
+  1356→  1356→"Next payment due in 6 days."
+  1357→  1357→
+  1358→  1358→"All previous payments are reconciled."
+  1359→  1359→
+  1360→  1360→"₹1,500 remains after this month's payment."
+  1361→  1361→
+  1362→  1362→Do NOT fabricate insights when data is insufficient.
+  1363→  1363→
+  1364→  1364→========================================================
+  1365→  1365→39. DATA INTEGRITY
+  1366→  1366→========================================================
+  1367→  1367→
+  1368→  1368→CRITICAL.
+  1369→  1369→
+  1370→  1370→Never derive authoritative financial information
+  1371→  1371→from static frontend arrays.
+  1372→  1372→
+  1373→  1373→The backend/database is the source of truth.
+  1374→  1374→
+  1375→  1375→Frontend only displays authorized data.
+  1376→  1376→
+  1377→  1377→Use proper server-side validation.
+  1378→  1378→
+  1379→  1379→Use decimal-safe monetary handling.
+  1380→  1380→
+  1381→  1381→Do not use floating-point arithmetic carelessly for currency.
+  1382→  1382→
+  1383→  1383→Store/display currency correctly.
+  1384→  1384→
+  1385→  1385→Currency should be school-configured,
+  1386→  1386→with INR as the expected default for this deployment.
+  1387→  1387→
+  1388→  1388→========================================================
+  1389→  1389→40. PAYMENT SECURITY
+  1390→  1390→========================================================
+  1391→  1391→
+  1392→  1392→Never store:
+  1393→  1393→
+  1394→  1394→card numbers
+  1395→  1395→CVV
+  1396→  1396→UPI PIN
+  1397→  1397→bank passwords
+  1398→  1398→gateway credentials
+  1399→  1399→
+  1400→  1400→in Scholario's application database.
+  1401→  1401→
+  1402→  1402→Use the payment provider's secure flow.
+  1403→  1403→
+  1404→  1404→Secrets must remain server-side.
+  1405→  1405→
+  1406→  1406→Never expose service-role keys or gateway secrets
+  1407→  1407→to client components.
+  1408→  1408→
+  1409→  1409→========================================================
+  1410→  1410→41. PERFORMANCE
+  1411→  1411→========================================================
+  1412→  1412→
+  1413→  1413→The Fees module must be fast.
+  1414→  1414→
+  1415→  1415→Avoid loading:
+  1416→  1416→
+  1417→  1417→all transactions
+  1418→  1418→all receipts
+  1419→  1419→all statements
+  1420→  1420→all school financial records
+  1421→  1421→
+  1422→  1422→on initial render.
+  1423→  1423→
+  1424→  1424→Use:
+  1425→  1425→
+  1426→  1426→pagination
+  1427→  1427→server-side fetching
+  1428→  1428→lazy loading
+  1429→  1429→appropriate caching
+  1430→  1430→selective queries
+  1431→  1431→
+  1432→  1432→Only load what the student needs.
+  1433→  1433→
+  1434→  1434→========================================================
+  1435→  1435→42. DOCUMENT GENERATION
+  1436→  1436→========================================================
+  1437→  1437→
+  1438→  1438→Receipts and statements must integrate with
+  1439→  1439→Scholario's existing official document/template architecture.
+  1440→  1440→
+  1441→  1441→Do not create random one-off PDF designs inside Fees.
+  1442→  1442→
+  1443→  1443→School branding should come from:
+  1444→  1444→
+  1445→  1445→School Settings
+  1446→  1446→Branding
+  1447→  1447→Document Templates
+  1448→  1448→
+  1449→  1449→Respect:
+  1450→  1450→
+  1451→  1451→logo
+  1452→  1452→school name
+  1453→  1453→address
+  1454→  1454→configured signatures
+  1455→  1455→seal
+  1456→  1456→document numbering
+  1457→  1457→
+  1458→  1458→========================================================
+  1459→  1459→43. NOTIFICATIONS
+  1460→  1460→========================================================
+  1461→  1461→
+  1462→  1462→Integrate with the existing notification architecture.
+  1463→  1463→
+  1464→  1464→Relevant events:
+  1465→  1465→
+  1466→  1466→fee posted
+  1467→  1467→payment due
+  1468→  1468→payment successful
+  1469→  1469→payment failed
+  1470→  1470→receipt available
+  1471→  1471→offline payment verified
+  1472→  1472→offline payment rejected
+  1473→  1473→dispute update
+  1474→  1474→refund issued
+  1475→  1475→
+  1476→  1476→Notifications must be configurable.
+  1477→  1477→
+  1478→  1478→Avoid notification spam.
+  1479→  1479→
+  1480→  1480→========================================================
+  1481→  1481→44. TRANSPARENCY PRINCIPLE
+  1482→  1482→========================================================
+  1483→  1483→
+  1484→  1484→At every financial interaction, the user should be able to answer:
+  1485→  1485→
+  1486→  1486→WHAT
+  1487→  1487→HOW MUCH
+  1488→  1488→WHY
+  1489→  1489→WHEN
+  1490→  1490→STATUS
+  1491→  1491→WHAT NEXT
+  1492→  1492→
+  1493→  1493→Example:
+  1494→  1494→
+  1495→  1495→TERM 2 TUITION
+  1496→  1496→₹3,000
+  1497→  1497→Due 18 Sep
+  1498→  1498→Unpaid
+  1499→  1499→
+  1500→  1500→[Pay ₹3,000]
+  1501→  1501→
+  1502→  1502→That's better than a paragraph explaining the same thing.
+  1503→  1503→
+  1504→  1504→========================================================
+  1505→  1505→45. PRINCIPAL / CLASS TEACHER CONNECTION
+  1506→  1506→========================================================
+  1507→  1507→
+  1508→  1508→This requirement must be implemented architecturally,
+  1509→  1509→not merely visually.
+  1510→  1510→
+  1511→  1511→Student should have a trusted communication path.
+  1512→  1512→
+  1513→  1513→Example:
+  1514→  1514→
+  1515→  1515→FEE SUPPORT
+  1516→  1516→
+  1517→  1517→Accounts Office
+  1518→  1518→For payment, ledger and receipt questions
+  1519→  1519→
+  1520→  1520→Class Teacher
+  1521→  1521→For class-related concerns
+  1522→  1522→
+  1523→  1523→School Review
+  1524→  1524→For escalation
+  1525→  1525→
+  1526→  1526→Principal
+  1527→  1527→For authorized escalation
+  1528→  1528→
+  1529→  1529→But do not necessarily show all four as giant buttons.
+  1530→  1530→
+  1531→  1531→Use progressive disclosure.
+  1532→  1532→
+  1533→  1533→Primary:
+  1534→  1534→
+  1535→  1535→[Get help]
+  1536→  1536→
+  1537→  1537→Then:
+  1538→  1538→
+  1539→  1539→Payment / receipt
+  1540→  1540→→ Accounts
+  1541→  1541→
+  1542→  1542→Class-related
+  1543→  1543→→ Class Teacher
+  1544→  1544→
+  1545→  1545→Need escalation
+  1546→  1546→→ School Review
+  1547→  1547→
+  1548→  1548→Principal becomes an escalation endpoint where configured.
+  1549→  1549→
+  1550→  1550→Reuse the central Messages system.
+  1551→  1551→
+  1552→  1552→========================================================
+  1553→  1553→46. ADMIN-SIDE COMPATIBILITY
+  1554→  1554→========================================================
+  1555→  1555→
+  1556→  1556→Do not design Student Fees in isolation.
+  1557→  1557→
+  1558→  1558→Any student-facing action must map cleanly
+  1559→  1559→to corresponding school-side workflows.
+  1560→  1560→
+  1561→  1561→For example:
+  1562→  1562→
+  1563→  1563→Student raises dispute
+  1564→  1564→→ Finance/Admin sees case
+  1565→  1565→→ staff responds
+  1566→  1566→→ student sees response
+  1567→  1567→
+  1568→  1568→Offline payment submitted
+  1569→  1569→→ Finance/Admin reviews
+  1570→  1570→→ verifies
+  1571→  1571→→ ledger updates
+  1572→  1572→→ receipt becomes available
+  1573→  1573→
+  1574→  1574→Concession applied
+  1575→  1575→→ authorized staff action
+  1576→  1576→→ audit entry
+  1577→  1577→→ student sees adjusted amount
+  1578→  1578→
+  1579→  1579→Payment successful
+  1580→  1580→→ gateway
+  1581→  1581→→ webhook/backend verification
+  1582→  1582→→ ledger reconciliation
+  1583→  1583→→ receipt
+  1584→  1584→→ notification
+  1585→  1585→
+  1586→  1586→The student UI must represent the REAL workflow.
+  1587→  1587→
+  1588→  1588→========================================================
+  1589→  1589→47. DO NOT CREATE DUPLICATE SYSTEMS
+  1590→  1590→========================================================
+  1591→  1591→
+  1592→  1592→Do not create:
+  1593→  1593→
+  1594→  1594→another messaging system
+  1595→  1595→another notification system
+  1596→  1596→another document system
+  1597→  1597→another permission system
+  1598→  1598→another school settings system
+  1599→  1599→another audit system
+  1600→  1600→
+  1601→  1601→Reuse the existing Scholario architecture.
+  1602→  1602→
+  1603→  1603→Fees is a module,
+  1604→  1604→not a separate application.
+  1605→  1605→
+  1606→  1606→========================================================
+  1607→  1607→48. IMPLEMENTATION PROCESS
+  1608→  1608→========================================================
+  1609→  1609→
+  1610→  1610→Before coding:
+  1611→  1611→
+  1612→  1612→1. Inspect the existing repository.
+  1613→  1613→
+  1614→  1614→2. Read ARCHITECTURE_CONSTITUTION_v1.md.
+  1615→  1615→
+  1616→  1616→3. Inspect current Prisma schema.
+  1617→  1617→
+  1618→  1618→4. Inspect Supabase policies.
+  1619→  1619→
+  1620→  1620→5. Inspect Student Workspace layout.
+  1621→  1621→
+  1622→  1622→6. Inspect existing Messages architecture.
+  1623→  1623→
+  1624→  1624→7. Inspect School Settings.
+  1625→  1625→
+  1626→  1626→8. Inspect existing document/PDF architecture.
+  1627→  1627→
+  1628→  1628→9. Inspect existing role/permission system.
+  1629→  1629→
+  1630→  1630→10. Inspect existing notification system.
+  1631→  1631→
+  1632→  1632→11. Inspect existing Fee-related models/API/routes if present.
+  1633→  1633→
+  1634→  1634→12. Identify what already works.
+  1635→  1635→
+  1636→  1636→13. Preserve working functionality.
+  1637→  1637→
+  1638→  1638→14. Refactor only where necessary.
+  1639→  1639→
+  1640→  1640→Do not duplicate existing abstractions.
+  1641→  1641→
+  1642→  1642→========================================================
+  1643→  1643→49. DATABASE / BACKEND
+  1644→  1644→========================================================
+  1645→  1645→
+  1646→  1646→If existing fee models are insufficient,
+  1647→  1647→design proper normalized financial entities.
+  1648→  1648→
+  1649→  1649→Potential concepts:
+  1650→  1650→
+  1651→  1651→FeeTemplate
+  1652→  1652→FeeStructure
+  1653→  1653→FeeAssignment
+  1654→  1654→FeeComponent
+  1655→  1655→Installment
+  1656→  1656→Concession
+  1657→  1657→Payment
+  1658→  1658→PaymentAllocation
+  1659→  1659→Receipt
+  1660→  1660→Refund
+  1661→  1661→FeeAdjustment
+  1662→  1662→PaymentRequest
+  1663→  1663→FeeDispute
+  1664→  1664→FinancialStatement
+  1665→  1665→PaymentMethod
+  1666→  1666→FeeNotification
+  1667→  1667→
+  1668→  1668→BUT:
+  1669→  1669→
+  1670→  1670→Do not blindly create all of these.
+  1671→  1671→
+  1672→  1672→First inspect the existing schema.
+  1673→  1673→
+  1674→  1674→Reuse existing models where appropriate.
+  1675→  1675→
+  1676→  1676→Every model must support strict school tenancy.
+  1677→  1677→
+  1678→  1678→Every financial record should have appropriate immutable identifiers.
+  1679→  1679→
+  1680→  1680→========================================================
+  1681→  1681→50. API / SERVER ACTIONS
+  1682→  1682→========================================================
+  1683→  1683→
+  1684→  1684→All financial operations must be server-authorized.
+  1685→  1685→
+  1686→  1686→Examples:
+  1687→  1687→
+  1688→  1688→getStudentFeeSummary
+  1689→  1689→getStudentFeeBreakdown
+  1690→  1690→getInstallmentSchedule
+  1691→  1691→getPaymentHistory
+  1692→  1692→getReceipt
+  1693→  1693→getFeeStatement
+  1694→  1694→createPaymentIntent
+  1695→  1695→verifyPayment
+  1696→  1696→submitOfflinePayment
+  1697→  1697→raiseFeeIssue
+  1698→  1698→getFeeSupportContacts
+  1699→  1699→
+  1700→  1700→Names should follow the existing project conventions.
+  1701→  1701→
+  1702→  1702→Do not invent a parallel API style.
+  1703→  1703→
+  1704→  1704→========================================================
+  1705→  1705→51. AUTHORIZATION
+  1706→  1706→========================================================
+  1707→  1707→
+  1708→  1708→Implement authorization at the server boundary.
+  1709→  1709→
+  1710→  1710→Do not rely on:
+  1711→  1711→
+  1712→  1712→hidden buttons
+  1713→  1713→frontend role checks
+  1714→  1714→URL obscurity
+  1715→  1715→
+  1716→  1716→A student manually calling an endpoint must still only receive
+  1717→  1717→their own authorized financial data.
+  1718→  1718→
+  1719→  1719→========================================================
+  1720→  1720→52. FINAL UX STRUCTURE
+  1721→  1721→========================================================
+  1722→  1722→
+  1723→  1723→Preferred high-level layout:
+  1724→  1724→
+  1725→  1725→MY FEES
+  1726→  1726→2026–27
+  1727→  1727→
+  1728→  1728→[Period / relevant filter]
+  1729→  1729→
+  1730→  1730→----------------------------------------
+  1731→  1731→
+  1732→  1732→FINANCIAL OVERVIEW
+  1733→  1733→
+  1734→  1734→Total
+  1735→  1735→₹9,500
+  1736→  1736→
+  1737→  1737→Paid
+  1738→  1738→₹4,750
+  1739→  1739→
+  1740→  1740→Balance
+  1741→  1741→₹4,750
+  1742→  1742→
+  1743→  1743→[Progress]
+  1744→  1744→
+  1745→  1745→----------------------------------------
+  1746→  1746→
+  1747→  1747→NEXT PAYMENT
+  1748→  1748→
+  1749→  1749→Term 2
+  1750→  1750→₹3,000
+  1751→  1751→Due 18 Sep
+  1752→  1752→
+  1753→  1753→[Pay now]
+  1754→  1754→
+  1755→  1755→----------------------------------------
+  1756→  1756→
+  1757→  1757→FEE BREAKDOWN
+  1758→  1758→
+  1759→  1759→Tuition
+  1760→  1760→Transport
+  1761→  1761→Books
+  1762→  1762→Other configured charges
+  1763→  1763→
+  1764→  1764→----------------------------------------
+  1765→  1765→
+  1766→  1766→PAYMENT HISTORY
+  1767→  1767→
+  1768→  1768→10 Jul
+  1769→  1769→₹4,750
+  1770→  1770→Term 1
+  1771→  1771→UPI
+  1772→  1772→Paid
+  1773→  1773→
+  1774→  1774→[Receipt]
+  1775→  1775→
+  1776→  1776→----------------------------------------
+  1777→  1777→
+  1778→  1778→STATEMENT
+  1779→  1779→
+  1780→  1780→[View statement]
+  1781→  1781→[Download]
+  1782→  1782→
+  1783→  1783→----------------------------------------
+  1784→  1784→
+  1785→  1785→NEED HELP?
+  1786→  1786→
+  1787→  1787→[Get help]
+  1788→  1788→
+  1789→  1789→----------------------------------------
+  1790→  1790→
+  1791→  1791→Only add additional sections when real data
+  1792→  1792→or enabled school functionality justifies them.
+  1793→  1793→
+  1794→  1794→========================================================
+  1795→  1795→53. VISUAL QUALITY BAR
+  1796→  1796→========================================================
+  1797→  1797→
+  1798→  1798→The final page must feel:
+  1799→  1799→
+  1800→  1800→PREMIUM
+  1801→  1801→CALM
+  1802→  1802→TRUSTWORTHY
+  1803→  1803→COLOURFUL
+  1804→  1804→INTELLIGENT
+  1805→  1805→MODERN
+  1806→  1806→FAST
+  1807→  1807→SECURE
+  1808→  1808→STUDENT-FRIENDLY
+  1809→  1809→
+  1810→  1810→It should NOT feel:
+  1811→  1811→
+  1812→  1812→cheap
+  1813→  1813→crowded
+  1814→  1814→childish
+  1815→  1815→generic ERP
+  1816→  1816→finance spreadsheet
+  1817→  1817→green everywhere
+  1818→  1818→text-heavy
+  1819→  1819→over-designed
+  1820→  1820→
+  1821→  1821→========================================================
+  1822→  1822→54. FINAL DESIGN SYSTEM RULE
+  1823→  1823→========================================================
+  1824→  1824→
+  1825→  1825→Timetable = benchmark for structure.
+  1826→  1826→
+  1827→  1827→My Progress = benchmark for colourfulness.
+  1828→  1828→
+  1829→  1829→Results = benchmark for academic sophistication.
+  1830→  1830→
+  1831→  1831→Attendance = benchmark for status-driven colour.
+  1832→  1832→
+  1833→  1833→Fees = benchmark for transparency + trust.
+  1834→  1834→
+  1835→  1835→All modules must look like they belong to ONE
+  1836→  1836→Scholario Student Workspace.
+  1837→  1837→
+  1838→  1838→Do not make every module identical.
+  1839→  1839→
+  1840→  1840→They should share the same design system
+  1841→  1841→while having their own visual personality.
+  1842→  1842→
+  1843→  1843→========================================================
+  1844→  1844→55. QUALITY CHECK BEFORE COMPLETION
+  1845→  1845→========================================================
+  1846→  1846→
+  1847→  1847→Before declaring the module complete, verify:
+  1848→  1848→
+  1849→  1849→[ ] Student sees only own authorized financial data.
+  1850→  1850→[ ] Parent sees only authorized children.
+  1851→  1851→[ ] Teacher access follows permissions.
+  1852→  1852→[ ] Principal access follows permissions.
+  1853→  1853→[ ] Every financial operation is server-authorized.
+  1854→  1854→[ ] Tenant isolation is enforced.
+  1855→  1855→[ ] RLS/policies are respected.
+  1856→  1856→[ ] No financial data is trusted from client input.
+  1857→  1857→[ ] No fake payment success exists.
+  1858→  1858→[ ] No fake receipt exists.
+  1859→  1859→[ ] Offline payment workflow is real if enabled.
+  1860→  1860→[ ] Payment states are handled correctly.
+  1861→  1861→[ ] Fee breakdown comes from database.
+  1862→  1862→[ ] Concessions respect school configuration.
+  1863→  1863→[ ] Due dates come from configuration.
+  1864→  1864→[ ] Late fees are calculated authoritatively.
+  1865→  1865→[ ] Receipts use official document architecture.
+  1866→  1866→[ ] Statements reflect actual ledger data.
+  1867→  1867→[ ] Disputes have trackable status.
+  1868→  1868→[ ] Student can reach appropriate authorized support.
+  1869→  1869→[ ] Class Teacher does not see unauthorized financial data.
+  1870→  1870→[ ] Principal escalation is permission-controlled.
+  1871→  1871→[ ] Messages architecture is reused.
+  1872→  1872→[ ] Notifications architecture is reused.
+  1873→  1873→[ ] School Settings is the source of configuration.
+  1874→  1874→[ ] No duplicated systems were introduced.
+  1875→  1875→[ ] No unnecessary repeated Class/Section/Session text.
+  1876→  1876→[ ] No excessive explanatory paragraphs.
+  1877→  1877→[ ] Tablet experience is excellent.
+  1878→  1878→[ ] Mobile experience is usable.
+  1879→  1879→[ ] Desktop experience is polished.
+  1880→  1880→[ ] Loading states exist.
+  1881→  1881→[ ] Empty states exist.
+  1882→  1882→[ ] Error states exist.
+  1883→  1883→[ ] Accessibility is considered.
+  1884→  1884→[ ] Currency calculations are safe.
+  1885→  1885→[ ] Sensitive payment credentials are never stored.
+  1886→  1886→[ ] Secrets remain server-side.
+  1887→  1887→[ ] Audit logging exists for sensitive operations.
+  1888→  1888→[ ] Performance is optimized.
+  1889→  1889→[ ] Existing modules are not broken.
+  1890→  1890→
+  1891→  1891→========================================================
+  1892→  1892→FINAL INSTRUCTION
+  1893→  1893→========================================================
+  1894→  1894→
+  1895→  1895→Do not rush into implementation.
+  1896→  1896→
+  1897→  1897→First understand the existing Scholario architecture.
+  1898→  1898→
+  1899→  1899→Then produce the best possible production implementation.
+  1900→  1900→
+  1901→  1901→Do not make the page merely LOOK advanced.
+  1902→  1902→
+  1903→  1903→Make the underlying workflow advanced.
+  1904→  1904→
+  1905→  1905→Do not make the UI complicated in the name of advanced functionality.
+  1906→  1906→
+  1907→  1907→Hide complexity behind excellent UX.
+  1908→  1908→
+  1909→  1909→The user should experience:
+  1910→  1910→
+  1911→  1911→"Everything is clear.
+  1912→  1912→Everything is accounted for.
+  1913→  1913→I know what I owe.
+  1914→  1914→I know what I paid.
+  1915→  1915→I know where my receipt is.
+  1916→  1916→I know who to contact.
+  1917→  1917→I know what happens next."
+  1918→  1918→
+  1919→  1919→That is the standard.
+  1920→  1920→
+  1921→  1921→Build Fees as a serious financial product inside
+  1922→  1922→Scholario — not as a traditional school ERP page.

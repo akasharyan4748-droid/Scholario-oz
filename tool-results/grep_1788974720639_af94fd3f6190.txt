@@ -1,0 +1,252 @@
+/home/z/my-project/src/components/shared/charts/legacy.tsx:16:import { GlassCard } from '../ui'
+/home/z/my-project/src/components/shared/charts/legacy.tsx:35:    <GlassCard className={cn('chart-card-premium p-3 sm:p-4 lg:p-5', className)}>
+/home/z/my-project/src/components/shared/charts/legacy.tsx:72:    </GlassCard>
+/home/z/my-project/src/components/shared/ui.tsx:7:interface GlassCardProps extends HTMLMotionProps<'div'> {
+/home/z/my-project/src/components/shared/ui.tsx:12:export const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
+/home/z/my-project/src/components/shared/ui.tsx:29:GlassCard.displayName = 'GlassCard'
+/home/z/my-project/src/components/student/modules/flashcards/notes-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/flashcards/notes-tab.tsx:27:            <GlassCard className="p-3 sm:p-4 lg:p-5 h-full">
+/home/z/my-project/src/components/student/modules/flashcards/notes-tab.tsx:74:            </GlassCard>
+/home/z/my-project/src/components/student/modules/flashcards/cards-tab.tsx:5:// STU-PREMIUM-7b — Panel from the shared kit replaces GlassCard, and each
+/home/z/my-project/src/components/student/modules/achievements/badge-collection.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/achievements/badge-collection.tsx:16:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/achievements/badge-collection.tsx:79:    </GlassCard>
+/home/z/my-project/src/components/student/modules/achievements/daily-quests.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/achievements/daily-quests.tsx:13:      <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/achievements/daily-quests.tsx:54:      </GlassCard>
+/home/z/my-project/src/components/student/modules/achievements/daily-quests.tsx:56:      <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/achievements/daily-quests.tsx:98:      </GlassCard>
+/home/z/my-project/src/components/student/modules/achievements/leaderboard.tsx:5:import { GlassCard, StatusBadge, GradientAvatar } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/achievements/leaderboard.tsx:19:      <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
+/home/z/my-project/src/components/student/modules/achievements/leaderboard.tsx:70:      </GlassCard>
+/home/z/my-project/src/components/student/modules/achievements/leaderboard.tsx:74:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/achievements/leaderboard.tsx:93:        </GlassCard>
+/home/z/my-project/src/components/student/modules/achievements/leaderboard.tsx:95:        <GlassCard className="p-3 sm:p-4 lg:p-5 flex flex-col items-center">
+/home/z/my-project/src/components/student/modules/achievements/leaderboard.tsx:100:        </GlassCard>
+/home/z/my-project/src/components/student/modules/career-explorer/roadmap-tab.tsx:5:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/career-explorer/roadmap-tab.tsx:12:      <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/career-explorer/roadmap-tab.tsx:57:      </GlassCard>
+/home/z/my-project/src/components/student/modules/career-explorer/explore-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/career-explorer/explore-tab.tsx:28:          <GlassCard className="p-0 overflow-hidden h-full hover:shadow-premium-lg transition-shadow">
+/home/z/my-project/src/components/student/modules/career-explorer/explore-tab.tsx:52:          </GlassCard>
+/home/z/my-project/src/components/student/modules/career-explorer/streams-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/career-explorer/streams-tab.tsx:15:          <GlassCard className="p-3 sm:p-4 lg:p-5 h-full">
+/home/z/my-project/src/components/student/modules/career-explorer/streams-tab.tsx:70:          </GlassCard>
+/home/z/my-project/src/components/student/modules/homework/stats-row.tsx:7:// the GlassCard tiles. Values derive from the live lists in the module
+/home/z/my-project/src/components/student/modules/dashboard/school-notices.tsx:12:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/dashboard/school-notices.tsx:17:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/dashboard/school-notices.tsx:58:    </GlassCard>
+/home/z/my-project/src/components/student/modules/dashboard/smart-up-next.tsx:7:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/dashboard/smart-up-next.tsx:92:      <GlassCard className="relative overflow-hidden p-4 sm:p-5 lg:p-6 border-l-4 border-l-violet-500">
+/home/z/my-project/src/components/student/modules/dashboard/smart-up-next.tsx:146:      </GlassCard>
+/home/z/my-project/src/components/student/modules/dashboard/study-streak.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/dashboard/study-streak.tsx:17:      <GlassCard className="relative overflow-hidden p-4 sm:p-5 lg:p-6">
+/home/z/my-project/src/components/student/modules/dashboard/study-streak.tsx:101:      </GlassCard>
+/home/z/my-project/src/components/student/modules/portfolio/showcase-tab.tsx:5:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/portfolio/showcase-tab.tsx:26:            <GlassCard className="p-0 overflow-hidden h-full hover:shadow-premium-lg transition-shadow">
+/home/z/my-project/src/components/student/modules/portfolio/showcase-tab.tsx:45:            </GlassCard>
+/home/z/my-project/src/components/student/modules/portfolio/journey-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/portfolio/journey-tab.tsx:12:      <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/portfolio/journey-tab.tsx:50:      </GlassCard>
+/home/z/my-project/src/components/student/modules/portfolio/activities-tab.tsx:5:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/portfolio/activities-tab.tsx:13:          <GlassCard className="p-3 sm:p-4 lg:p-5 h-full">
+/home/z/my-project/src/components/student/modules/portfolio/activities-tab.tsx:31:          </GlassCard>
+/home/z/my-project/src/components/student/modules/portfolio/skills-tab.tsx:4:import { GlassCard, } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/portfolio/skills-tab.tsx:11:      <GlassCard className="p-3 sm:p-4 lg:p-5 flex flex-col items-center">
+/home/z/my-project/src/components/student/modules/portfolio/skills-tab.tsx:15:      </GlassCard>
+/home/z/my-project/src/components/student/modules/portfolio/skills-tab.tsx:17:      <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
+/home/z/my-project/src/components/student/modules/portfolio/skills-tab.tsx:30:      </GlassCard>
+/home/z/my-project/src/components/student/modules/assignments/assignment-card.tsx:5:// STU-PREMIUM-7b — Panel from the shared kit replaces GlassCard, and the
+/home/z/my-project/src/components/student/modules/assignments/kpi-row.tsx:7:// the GlassCard tiles. Every value derives from the live filtered lists
+/home/z/my-project/src/components/student/modules/wellness/mood-tab.tsx:4:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/wellness/mood-tab.tsx:36:      <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/wellness/mood-tab.tsx:67:      </GlassCard>
+/home/z/my-project/src/components/student/modules/wellness/badges-row.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/wellness/badges-row.tsx:11:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/wellness/badges-row.tsx:30:    </GlassCard>
+/home/z/my-project/src/components/student/modules/wellness/dashboard-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/wellness/dashboard-tab.tsx:14:      <GlassCard className="p-3 sm:p-4 lg:p-5 flex flex-col items-center">
+/home/z/my-project/src/components/student/modules/wellness/dashboard-tab.tsx:27:      </GlassCard>
+/home/z/my-project/src/components/student/modules/wellness/nutrition-tab.tsx:5:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/wellness/nutrition-tab.tsx:13:      <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/wellness/nutrition-tab.tsx:50:      </GlassCard>
+/home/z/my-project/src/components/student/modules/wellness/goals-tab.tsx:5:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/wellness/goals-tab.tsx:19:            <GlassCard className="p-3 sm:p-4 lg:p-5 h-full">
+/home/z/my-project/src/components/student/modules/wellness/goals-tab.tsx:47:            </GlassCard>
+/home/z/my-project/src/components/student/modules/peer-collab/qa-tab.tsx:5:import { GlassCard, GradientAvatar, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/peer-collab/qa-tab.tsx:18:          <GlassCard className="p-3 sm:p-4 hover:shadow-premium transition-shadow cursor-pointer">
+/home/z/my-project/src/components/student/modules/peer-collab/qa-tab.tsx:46:          </GlassCard>
+/home/z/my-project/src/components/student/modules/peer-collab/shares-tab.tsx:5:import { GlassCard, GradientAvatar } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/peer-collab/shares-tab.tsx:18:            <GlassCard className="p-3 sm:p-4 h-full hover:shadow-premium-lg transition-shadow">
+/home/z/my-project/src/components/student/modules/peer-collab/shares-tab.tsx:42:            </GlassCard>
+/home/z/my-project/src/components/student/modules/peer-collab/groups-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/peer-collab/groups-tab.tsx:14:          <GlassCard className="p-0 overflow-hidden h-full hover:shadow-premium-lg transition-shadow cursor-pointer">
+/home/z/my-project/src/components/student/modules/peer-collab/groups-tab.tsx:40:          </GlassCard>
+/home/z/my-project/src/components/student/modules/fees/payment-history.tsx:5:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/fees/payment-history.tsx:21:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/fees/payment-history.tsx:83:    </GlassCard>
+/home/z/my-project/src/components/student/modules/fees/outstanding-section.tsx:5:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/fees/outstanding-section.tsx:23:      <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2 relative overflow-hidden">
+/home/z/my-project/src/components/student/modules/fees/outstanding-section.tsx:68:      </GlassCard>
+/home/z/my-project/src/components/student/modules/fees/outstanding-section.tsx:71:      <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/fees/outstanding-section.tsx:101:      </GlassCard>
+/home/z/my-project/src/components/student/modules/fees/index.tsx:5:import { GlassCard, SectionHeading } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/fees/index.tsx:228:        <GlassCard className="p-4 border border-border">
+/home/z/my-project/src/components/student/modules/fees/index.tsx:244:        </GlassCard>
+/home/z/my-project/src/components/student/modules/study-planner/tasks-tab.tsx:10:// list rule; the reminders sidebar Panel-ifies (kit Panel, no GlassCard).
+/home/z/my-project/src/components/student/modules/study-planner/pomodoro-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/study-planner/pomodoro-tab.tsx:31:      <GlassCard className="p-6 lg:col-span-2 flex flex-col items-center justify-center">
+/home/z/my-project/src/components/student/modules/study-planner/pomodoro-tab.tsx:90:      </GlassCard>
+/home/z/my-project/src/components/student/modules/study-planner/pomodoro-tab.tsx:94:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/study-planner/pomodoro-tab.tsx:114:        </GlassCard>
+/home/z/my-project/src/components/student/modules/study-planner/pomodoro-tab.tsx:116:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/study-planner/pomodoro-tab.tsx:124:        </GlassCard>
+/home/z/my-project/src/components/student/modules/study-planner/schedule-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/study-planner/schedule-tab.tsx:15:      <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
+/home/z/my-project/src/components/student/modules/study-planner/schedule-tab.tsx:47:      </GlassCard>
+/home/z/my-project/src/components/student/modules/study-planner/schedule-tab.tsx:51:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/study-planner/schedule-tab.tsx:54:        </GlassCard>
+/home/z/my-project/src/components/student/modules/study-planner/schedule-tab.tsx:55:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/study-planner/schedule-tab.tsx:58:        </GlassCard>
+/home/z/my-project/src/components/student/modules/my-class/index.tsx:18:import { GlassCard, SectionHeading, GradientAvatar, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/my-class/index.tsx:117:      <GlassCard className="p-4 sm:p-5 overflow-hidden relative">
+/home/z/my-project/src/components/student/modules/my-class/index.tsx:154:      </GlassCard>
+/home/z/my-project/src/components/student/modules/my-class/index.tsx:193:          <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/my-class/index.tsx:209:          </GlassCard>
+/home/z/my-project/src/components/student/modules/my-class/index.tsx:212:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/my-class/index.tsx:255:        </GlassCard>
+/home/z/my-project/src/components/student/modules/my-class/index.tsx:260:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/my-class/index.tsx:284:        </GlassCard>
+/home/z/my-project/src/components/student/modules/resources/resource-grid.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/resources/resource-grid.tsx:29:      <GlassCard className="p-12 text-center">
+/home/z/my-project/src/components/student/modules/resources/resource-grid.tsx:35:      </GlassCard>
+/home/z/my-project/src/components/student/modules/resources/resource-grid.tsx:54:            <GlassCard className="p-0 overflow-hidden h-full hover:shadow-premium-lg transition-shadow cursor-pointer">
+/home/z/my-project/src/components/student/modules/resources/resource-grid.tsx:126:            </GlassCard>
+/home/z/my-project/src/components/student/modules/resources/progress-section.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/resources/progress-section.tsx:24:      <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
+/home/z/my-project/src/components/student/modules/resources/progress-section.tsx:47:      </GlassCard>
+/home/z/my-project/src/components/student/modules/resources/progress-section.tsx:49:      <GlassCard className="p-3 sm:p-4 lg:p-5 flex flex-col items-center">
+/home/z/my-project/src/components/student/modules/resources/progress-section.tsx:63:      </GlassCard>
+/home/z/my-project/src/components/student/modules/resources/filter-bar.tsx:4:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/resources/filter-bar.tsx:27:    <GlassCard className="p-3 sm:p-4">
+/home/z/my-project/src/components/student/modules/resources/filter-bar.tsx:70:    </GlassCard>
+/home/z/my-project/src/components/student/modules/attendance.tsx:14: *   - Containers converted from GlassCard to the Student kit (StudentPage /
+/home/z/my-project/src/components/student/modules/digital-diary/mood-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/digital-diary/mood-tab.tsx:23:      <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/digital-diary/mood-tab.tsx:65:      </GlassCard>
+/home/z/my-project/src/components/student/modules/digital-diary/mood-tab.tsx:71:            <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/digital-diary/mood-tab.tsx:78:            </GlassCard>
+/home/z/my-project/src/components/student/modules/digital-diary/reflections-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/digital-diary/reflections-tab.tsx:21:          <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/digital-diary/reflections-tab.tsx:58:          </GlassCard>
+/home/z/my-project/src/components/student/modules/digital-diary/goals-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/digital-diary/goals-tab.tsx:36:              <GlassCard className="p-3 sm:p-4 lg:p-5 h-full">
+/home/z/my-project/src/components/student/modules/digital-diary/goals-tab.tsx:77:              </GlassCard>
+/home/z/my-project/src/components/student/modules/digital-diary/entries-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/student/modules/digital-diary/entries-tab.tsx:33:              <GlassCard className="p-3 sm:p-4 lg:p-5 hover:shadow-premium-lg transition-shadow">
+/home/z/my-project/src/components/student/modules/digital-diary/entries-tab.tsx:55:              </GlassCard>
+/home/z/my-project/src/components/student/modules/digital-diary/entries-tab.tsx:63:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/digital-diary/entries-tab.tsx:80:        </GlassCard>
+/home/z/my-project/src/components/student/modules/digital-diary/entries-tab.tsx:82:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/student/modules/digital-diary/entries-tab.tsx:96:        </GlassCard>
+/home/z/my-project/src/components/teacher/modules/marks/selectors-bar.tsx:4:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/marks/selectors-bar.tsx:27:    <GlassCard className="p-3 sm:p-4">
+/home/z/my-project/src/components/teacher/modules/marks/selectors-bar.tsx:69:    </GlassCard>
+/home/z/my-project/src/components/teacher/modules/marks/stat-strip.tsx:7:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/marks/stat-strip.tsx:26:          <GlassCard className="p-3">
+/home/z/my-project/src/components/teacher/modules/marks/stat-strip.tsx:39:          </GlassCard>
+/home/z/my-project/src/components/teacher/modules/marks/marks-table.tsx:5:import { GlassCard, GradientAvatar, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/marks/marks-table.tsx:31:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/marks/marks-table.tsx:129:    </GlassCard>
+/home/z/my-project/src/components/teacher/modules/parent-connect/index.tsx:7:import { GlassCard, SectionHeading } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/parent-connect/index.tsx:102:      <GlassCard className="p-0 overflow-hidden">
+/home/z/my-project/src/components/teacher/modules/parent-connect/index.tsx:121:      </GlassCard>
+/home/z/my-project/src/components/teacher/modules/lesson-planner/weekly-plans-tab.tsx:8:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/lesson-planner/weekly-plans-tab.tsx:28:            <GlassCard className="p-3 sm:p-4 lg:p-5 h-full hover:shadow-premium-lg transition-shadow cursor-pointer" >
+/home/z/my-project/src/components/teacher/modules/lesson-planner/weekly-plans-tab.tsx:104:            </GlassCard>
+/home/z/my-project/src/components/teacher/modules/lesson-planner/curriculum-tab.tsx:7:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/lesson-planner/curriculum-tab.tsx:32:      <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
+/home/z/my-project/src/components/teacher/modules/lesson-planner/curriculum-tab.tsx:76:      </GlassCard>
+/home/z/my-project/src/components/teacher/modules/lesson-planner/curriculum-tab.tsx:80:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/lesson-planner/curriculum-tab.tsx:94:        </GlassCard>
+/home/z/my-project/src/components/teacher/modules/lesson-planner/curriculum-tab.tsx:96:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/lesson-planner/curriculum-tab.tsx:117:        </GlassCard>
+/home/z/my-project/src/components/teacher/modules/classroom-resources.tsx:10:import { GlassCard, SectionHeading, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/classroom-resources.tsx:133:                <GlassCard className="p-0 overflow-hidden h-full hover:shadow-premium-lg transition-shadow">
+/home/z/my-project/src/components/teacher/modules/classroom-resources.tsx:151:                </GlassCard>
+/home/z/my-project/src/components/teacher/modules/classroom-resources.tsx:163:                  <GlassCard className="p-0 overflow-hidden h-full hover:shadow-premium-lg transition-shadow cursor-pointer" >
+/home/z/my-project/src/components/teacher/modules/classroom-resources.tsx:182:                  </GlassCard>
+/home/z/my-project/src/components/teacher/modules/classroom-resources.tsx:193:                <GlassCard className="p-3 sm:p-4 lg:p-5 h-full hover:shadow-premium-lg transition-shadow">
+/home/z/my-project/src/components/teacher/modules/classroom-resources.tsx:218:                </GlassCard>
+/home/z/my-project/src/components/teacher/modules/mentoring/sessions-tab.tsx:5:import { GlassCard, GradientAvatar } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/mentoring/sessions-tab.tsx:18:          <GlassCard className="p-3 sm:p-4">
+/home/z/my-project/src/components/teacher/modules/mentoring/sessions-tab.tsx:54:          </GlassCard>
+/home/z/my-project/src/components/teacher/modules/mentoring/groups-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/mentoring/groups-tab.tsx:16:          <GlassCard className="p-0 overflow-hidden h-full">
+/home/z/my-project/src/components/teacher/modules/mentoring/groups-tab.tsx:42:          </GlassCard>
+/home/z/my-project/src/components/teacher/modules/mentoring/mentees-tab.tsx:5:import { GlassCard, GradientAvatar } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/mentoring/mentees-tab.tsx:29:            <GlassCard className="p-3 sm:p-4 lg:p-5 h-full hover:shadow-premium-lg transition-shadow">
+/home/z/my-project/src/components/teacher/modules/mentoring/mentees-tab.tsx:76:            </GlassCard>
+/home/z/my-project/src/components/teacher/modules/homework/homework-list.tsx:5:import { GlassCard, StatusBadge, GradientAvatar } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/homework/homework-list.tsx:29:            <GlassCard className="p-3 sm:p-4 lg:p-5 h-full" hover>
+/home/z/my-project/src/components/teacher/modules/homework/homework-list.tsx:82:            </GlassCard>
+/home/z/my-project/src/components/teacher/modules/homework/stat-strip.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/homework/stat-strip.tsx:24:          <GlassCard className="p-3 sm:p-4">
+/home/z/my-project/src/components/teacher/modules/homework/stat-strip.tsx:36:          </GlassCard>
+/home/z/my-project/src/components/teacher/modules/performance-reviews/observations-tab.tsx:7:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/performance-reviews/observations-tab.tsx:17:          <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/performance-reviews/observations-tab.tsx:80:          </GlassCard>
+/home/z/my-project/src/components/teacher/modules/performance-reviews/overview-tab.tsx:4:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/performance-reviews/overview-tab.tsx:16:      <GlassCard className="p-3 sm:p-4 lg:p-5 flex flex-col items-center justify-center">
+/home/z/my-project/src/components/teacher/modules/performance-reviews/overview-tab.tsx:20:      </GlassCard>
+/home/z/my-project/src/components/teacher/modules/performance-reviews/overview-tab.tsx:23:      <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
+/home/z/my-project/src/components/teacher/modules/performance-reviews/overview-tab.tsx:36:      </GlassCard>
+/home/z/my-project/src/components/teacher/modules/performance-reviews/overview-tab.tsx:39:      <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/performance-reviews/overview-tab.tsx:58:      </GlassCard>
+/home/z/my-project/src/components/teacher/modules/performance-reviews/feedback-tab.tsx:7:import { GlassCard, GradientAvatar } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/performance-reviews/feedback-tab.tsx:25:            <GlassCard className={cn('p-5 border', cfg.bg)}>
+/home/z/my-project/src/components/teacher/modules/performance-reviews/feedback-tab.tsx:41:            </GlassCard>
+/home/z/my-project/src/components/teacher/modules/performance-reviews/self-eval-tab.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/performance-reviews/self-eval-tab.tsx:14:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/performance-reviews/self-eval-tab.tsx:21:        </GlassCard>
+/home/z/my-project/src/components/teacher/modules/performance-reviews/self-eval-tab.tsx:22:        <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/performance-reviews/self-eval-tab.tsx:29:        </GlassCard>
+/home/z/my-project/src/components/teacher/modules/performance-reviews/self-eval-tab.tsx:33:      <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/performance-reviews/self-eval-tab.tsx:80:      </GlassCard>
+/home/z/my-project/src/components/teacher/modules/communication/parent-directory.tsx:5:import { GlassCard, SectionHeading, GradientAvatar } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/communication/parent-directory.tsx:23:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/communication/parent-directory.tsx:70:    </GlassCard>
+/home/z/my-project/src/components/teacher/modules/communication/notice-board.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/communication/notice-board.tsx:16:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/communication/notice-board.tsx:63:    </GlassCard>
+/home/z/my-project/src/components/teacher/modules/communication/stat-cards.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/communication/stat-cards.tsx:21:          <GlassCard className="p-3 sm:p-4">
+/home/z/my-project/src/components/teacher/modules/communication/stat-cards.tsx:33:          </GlassCard>
+/home/z/my-project/src/components/teacher/modules/communication/announcements-list.tsx:7:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/communication/announcements-list.tsx:21:    <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
+/home/z/my-project/src/components/teacher/modules/communication/announcements-list.tsx:61:    </GlassCard>
+/home/z/my-project/src/components/teacher/modules/exam-proctoring.tsx:10:import { GlassCard, SectionHeading, StatusBadge, GradientAvatar } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/exam-proctoring.tsx:100:                  <GlassCard className="p-0 overflow-hidden h-full hover:shadow-premium-lg transition-shadow">
+/home/z/my-project/src/components/teacher/modules/exam-proctoring.tsx:128:                  </GlassCard>
+/home/z/my-project/src/components/teacher/modules/exam-proctoring.tsx:141:                  <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/exam-proctoring.tsx:188:                  </GlassCard>
+/home/z/my-project/src/components/teacher/modules/exam-proctoring.tsx:199:                <GlassCard className="p-3 sm:p-4">
+/home/z/my-project/src/components/teacher/modules/exam-proctoring.tsx:221:                </GlassCard>
+/home/z/my-project/src/components/teacher/modules/exam-proctoring.tsx:231:                <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/exam-proctoring.tsx:287:                </GlassCard>
+/home/z/my-project/src/components/teacher/modules/dashboard/today-classes.tsx:7:import { GlassCard, SectionHeading, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/dashboard/today-classes.tsx:19:      <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
+/home/z/my-project/src/components/teacher/modules/dashboard/today-classes.tsx:77:      </GlassCard>
+/home/z/my-project/src/components/teacher/modules/dashboard/widgets.tsx:5:import { GlassCard } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/dashboard/widgets.tsx:19:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/dashboard/widgets.tsx:24:    </GlassCard>
+/home/z/my-project/src/components/teacher/modules/dashboard/widgets.tsx:30:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/dashboard/widgets.tsx:50:    </GlassCard>
+/home/z/my-project/src/components/teacher/modules/dashboard/widgets.tsx:56:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/dashboard/widgets.tsx:78:    </GlassCard>
+/home/z/my-project/src/components/teacher/modules/dashboard/quick-actions.tsx:8:import { GlassCard, StatusBadge } from '@/components/shared/ui'
+/home/z/my-project/src/components/teacher/modules/dashboard/quick-actions.tsx:28:    <GlassCard className="p-3 sm:p-4 lg:p-5">
+/home/z/my-project/src/components/teacher/modules/dashboard/quick-actions.tsx:51:    </GlassCard>
+/home/z/my-project/src/components/teacher/modules/dashboard/quick-actions.tsx:57:    <GlassCard className="p-3 sm:p-4 lg:p-5 lg:col-span-2">
+
+[Showing results with pagination = limit: 250]
