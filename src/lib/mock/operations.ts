@@ -102,18 +102,18 @@ export interface Announcement {
 }
 
 export const announcements: Announcement[] = [
-  { id: 'AN01', title: 'Annual Sports Day — 15th December', content: 'The Annual Sports Day will be held on 15th December 2024 at the school ground. All students must report by 7:30 AM in sports uniform. Parents are cordially invited.', category: 'Event', date: '2025-11-26', audience: 'All', postedBy: 'Dr. Ananya Iyer' },
-  { id: 'AN02', title: 'Pre-Board Examination Schedule Released', content: 'Pre-Board examinations for Class 10 & 12 will commence from 9th December 2024. Detailed timetable is available in the Examination module.', category: 'Academic', date: '2025-11-25', audience: 'All', postedBy: 'Pooja Bhatt' },
-  { id: 'AN03', title: 'Parent–Teacher Meeting — Class 1 to 5', content: 'PTM for primary classes is scheduled on Saturday, 7th December 2024 from 9:00 AM to 12:00 PM. Please be on time.', category: 'General', date: '2025-11-24', audience: 'Parents', postedBy: 'Deepa Menon' },
-  { id: 'AN04', title: 'Winter Vacation Notice', content: 'School will remain closed for winter vacation from 24th December 2024 to 1st January 2025. School reopens on 2nd January 2025.', category: 'Holiday', date: '2025-11-22', audience: 'All', postedBy: 'Dr. Ananya Iyer' },
-  { id: 'AN05', title: 'Diwali Break — School Closed', content: 'School will remain closed from 28th October to 3rd November for Diwali celebrations. Wishing all a safe and happy Diwali!', category: 'Holiday', date: '2025-10-25', audience: 'All', postedBy: 'Dr. Ananya Iyer' },
+  { id: 'AN01', title: 'Annual Sports Day — 15th December', content: 'The Annual Sports Day will be held on 15th December 2026 at the school ground. All students must report by 7:30 AM in sports uniform. Parents are cordially invited.', category: 'Event', date: '2026-09-14', audience: 'All', postedBy: 'Dr. Ananya Iyer' },
+  { id: 'AN02', title: 'Mid-Term Examination Schedule Released', content: 'Mid-Term examinations for Grade 9 & 10 will commence from 28th August 2026. Detailed timetable is available in the Examination module.', category: 'Academic', date: '2026-09-12', audience: 'All', postedBy: 'Pooja Bhatt' },
+  { id: 'AN03', title: 'PA1 Progress PTM — Grade 9', content: 'PTM for Grade 9 is scheduled on Thursday, 17th September 2026 from 9:00 AM to 12:00 PM in Room 201. Please be on time.', category: 'General', date: '2026-09-11', audience: 'Parents', postedBy: 'Deepa Menon' },
+  { id: 'AN04', title: 'Dussehra Break — School Closed', content: 'School will remain closed for the Dussehra break from 17th October to 20th October 2026. School reopens on 21st October 2026.', category: 'Holiday', date: '2026-09-08', audience: 'All', postedBy: 'Dr. Ananya Iyer' },
+  { id: 'AN05', title: 'Half-Yearly PTM — Save the Date', content: 'The combined Half-Yearly PTM for Grade 9 & 10 is scheduled for 21st November 2026 in the Auditorium. Slot booking opens soon.', category: 'Event', date: '2026-09-05', audience: 'All', postedBy: 'Dr. Ananya Iyer' },
 ]
 
 export const noticeBoard = [
-  { id: 'NB01', title: 'Inter-House Quiz Competition', date: '2025-12-05', tag: 'Competition', color: 'oklch(0.55 0.14 162)' },
-  { id: 'NB02', title: 'Science Exhibition — Class 6 to 10', date: '2025-12-12', tag: 'Exhibition', color: 'oklch(0.65 0.16 75)' },
-  { id: 'NB03', title: 'Annual Day Rehearsals Begin', date: '2025-12-02', tag: 'Cultural', color: 'oklch(0.6 0.18 300)' },
-  { id: 'NB04', title: 'Vaccination Camp — Class 5 & 6', date: '2025-11-30', tag: 'Health', color: 'oklch(0.7 0.15 200)' },
+  { id: 'NB01', title: 'Inter-House Quiz Competition', date: '2026-09-25', tag: 'Competition', color: 'oklch(0.55 0.14 162)' },
+  { id: 'NB02', title: 'Science Exhibition — Grade 6 to 10', date: '2026-10-02', tag: 'Exhibition', color: 'oklch(0.65 0.16 75)' },
+  { id: 'NB03', title: 'Annual Day Rehearsals Begin', date: '2026-09-22', tag: 'Cultural', color: 'oklch(0.6 0.18 300)' },
+  { id: 'NB04', title: 'Vaccination Camp — Grade 5 & 6', date: '2026-09-30', tag: 'Health', color: 'oklch(0.7 0.15 200)' },
 ]
 
 // CALENDAR
