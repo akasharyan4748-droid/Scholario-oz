@@ -1,43 +1,36 @@
 'use client'
 
-/** Student Directory (TWC-QA) — shared types + the module's data hook. */
+/**
+ * Student Directory (Task 2-c) — the module's data hook.
+ *
+ * ONE fetch to GET /api/teacher/students returns every authorized class
+ * and its full roster (identity, guardian contact, attendance summary,
+ * latest exam marks). The hook owns only the selected class — every
+ * rendered value comes from the server payload; search/filter views are
+ * derived in the grid, never fabricated here.
+ *
+ * Fetch discipline mirrors the house pattern (parent-connect/marks):
+ * `{ cache: 'no-store', credentials: 'same-origin' }`, a `{ ok, data }`
+ * envelope, and a 401 that routes through the shared signOut() exactly
+ * once.
+ */
 
 import { useEffect, useMemo, useState } from 'react'
 import { signOut } from '@/lib/signout'
+import type { DirectoryPayload } from './types'
 
-// ─── API contract ─────────────────────────────────────────────────────
+// A dead server session cannot be retried — reset auth ONCE, land on login.
+let sessionExpiredInFlight = false
 
-export interface DirectoryStudent {
-  id: string
-  name: string
-  email: string
-  rollNo: string | null
-  admissionNo: string | null
-  guardianName: string | null
-  guardianPhone: string | null
-  dob: string | null
-  gender: string | null
-  bloodGroup: string | null
-  address: string | null
-  attendancePct: number | null
-  attendanceRecords: number
-  recentAttendance: { date: string; status: string }[]
+function handleExpiredSession(): void {
+  if (sessionExpiredInFlight) return
+  sessionExpiredInFlight = true
+  void signOut().finally(() => {
+    window.setTimeout(() => {
+      sessionExpiredInFlight = false
+    }, 2000)
+  })
 }
-
-export interface DirectoryClass {
-  id: string
-  label: string
-  isClassTeacher: boolean
-  subjects: string[]
-  studentCount: number
-}
-
-export interface DirectoryPayload {
-  classes: DirectoryClass[]
-  studentsByClass: Record<string, DirectoryStudent[]>
-}
-
-// ─── envelope fetch (house pattern) ───────────────────────────────────
 
 async function directoryFetch(): Promise<DirectoryPayload> {
   const res = await fetch('/api/teacher/students', {
@@ -45,16 +38,25 @@ async function directoryFetch(): Promise<DirectoryPayload> {
     credentials: 'same-origin',
   })
   if (res.status === 401) {
-    void signOut()
+    handleExpiredSession()
     throw new Error('Your session has expired. Please sign in again.')
   }
-  if (!res.ok) throw new Error(`Request failed (${res.status})`)
-  const body = (await res.json()) as { ok?: boolean; data?: DirectoryPayload; error?: string }
-  if (!body.ok || !body.data) throw new Error(body.error || 'Failed to load the student directory')
-  return body.data
+  let json: unknown = null
+  try {
+    json = await res.json()
+  } catch {
+    /* non-JSON error body — fall through to the generic message */
+  }
+  const envelope = json as { ok?: unknown; error?: unknown; data?: DirectoryPayload } | null
+  if (!res.ok || !envelope || envelope.ok !== true) {
+    const message =
+      envelope && typeof envelope.error === 'string' && envelope.error
+        ? envelope.error
+        : `Request failed (${res.status})`
+    throw new Error(message)
+  }
+  return envelope.data as DirectoryPayload
 }
-
-// ─── module hook: one fetch + selected class ─────────────────────────
 
 export function useStudentDirectory() {
   const [data, setData] = useState<DirectoryPayload | null>(null)
@@ -70,7 +72,8 @@ export function useStudentDirectory() {
       .then((payload) => {
         if (cancelled) return
         setData(payload)
-        // Default = the class-teacher class, else the first assigned class.
+        // Keep the current selection when it is still authorized; default
+        // to the class-teacher class, else the first assigned class.
         setClassId((prev) => {
           if (prev && payload.classes.some((c) => c.id === prev)) return prev
           return payload.classes.find((c) => c.isClassTeacher)?.id ?? payload.classes[0]?.id ?? null
@@ -79,7 +82,9 @@ export function useStudentDirectory() {
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load')
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [reload])
 
   const activeClass = useMemo(

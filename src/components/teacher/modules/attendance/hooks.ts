@@ -126,12 +126,23 @@ export function useAttendanceModule(): AttendanceModuleState {
   useEffect(() => {
     let cancelled = false
     setClassesError(null)
-    attendanceFetch<{ classes: AttendanceClassInfo[] }>('/api/teacher/class-attendance')
-      .then((payload) => {
+    // TS-SETTINGS — the teacher's saved default class (if any) wins over
+    // the first assigned class. Both calls are cheap; prefs failure must
+    // never block the module (fall back silently).
+    Promise.all([
+      attendanceFetch<{ classes: AttendanceClassInfo[] }>('/api/teacher/class-attendance'),
+      fetch('/api/teacher/settings', { cache: 'no-store', credentials: 'same-origin' })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    ])
+      .then(([payload, settings]) => {
         if (cancelled) return
         setClasses(payload.classes)
-        // Default to the first assigned class; a retry keeps her pick.
-        setClassId((cur) => cur ?? payload.classes[0]?.classId ?? null)
+        const preferred = settings?.data?.workspace?.defaultClassId as string | null | undefined
+        const validPreferred =
+          preferred && payload.classes.some((c) => c.classId === preferred) ? preferred : null
+        // Saved default class → else first assigned class; a retry keeps her pick.
+        setClassId((cur) => cur ?? validPreferred ?? payload.classes[0]?.classId ?? null)
       })
       .catch((e: unknown) => {
         if (!cancelled) {

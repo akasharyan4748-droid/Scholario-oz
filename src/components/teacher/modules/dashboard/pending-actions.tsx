@@ -9,21 +9,19 @@
  * Sources (existing Teacher Hub APIs, teacher-session scoped):
  *   • GET /api/teacher/parent-connect  → stats.unread + follow-ups
  *   • GET /api/teacher/behavior        → stats.openConcerns
- *   • GET /api/teacher/mentoring       → stats.followUpsOpen
  * Every number rendered here traces to a real row — the widget renders an
  * honest empty state when nothing needs attention.
  */
 
 import { useEffect, useState } from 'react'
 import {
-  AlarmClock, ArrowRight, MessageSquareHeart, Shield, Heart, Inbox,
+  AlarmClock, ArrowRight, MessageSquareHeart, Shield, Inbox,
 } from 'lucide-react'
 import { GlassCard, GradientAvatar } from '@/components/shared/ui'
 import { cn } from '@/lib/utils'
 import type {
   BehaviorPayload,
   FollowUpItem,
-  MentoringPayload,
   ParentConnectPayload,
 } from '@/lib/teacher-hub-types'
 
@@ -32,7 +30,7 @@ interface PendingActionsProps {
 }
 
 interface FollowUpRow extends FollowUpItem {
-  moduleKey: 'parent-connect' | 'behavior' | 'mentoring'
+  moduleKey: 'parent-connect' | 'behavior'
 }
 
 function dueLabel(due: string): { text: string; tone: 'overdue' | 'today' | 'later' } {
@@ -65,23 +63,18 @@ export function PendingActions({ onNavigate }: PendingActionsProps) {
     let cancelled = false
     const load = async () => {
       try {
-        const [pc, beh, men] = await Promise.allSettled([
+        const [pc, beh] = await Promise.allSettled([
           fetch('/api/teacher/parent-connect', { cache: 'no-store', credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('pc')))),
           fetch('/api/teacher/behavior', { cache: 'no-store', credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('beh')))),
-          fetch('/api/teacher/mentoring', { cache: 'no-store', credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('men')))),
         ])
         if (cancelled) return
         const pcData = pc.status === 'fulfilled' ? (pc.value.data as ParentConnectPayload) : null
         const behData = beh.status === 'fulfilled' ? (beh.value.data as BehaviorPayload) : null
-        const menData = men.status === 'fulfilled' ? (men.value.data as MentoringPayload) : null
 
         const rows: FollowUpRow[] = []
         pcData?.followUps
           ?.filter((f) => f.status === 'open')
           .forEach((f) => rows.push({ ...f, moduleKey: 'parent-connect' }))
-        menData?.followUps
-          ?.filter((f) => f.status === 'open')
-          .forEach((f) => rows.push({ ...f, moduleKey: 'mentoring' }))
         rows.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 
         setState({
@@ -204,43 +197,29 @@ export function PendingActions({ onNavigate }: PendingActionsProps) {
       </GlassCard>
 
       <div className="space-y-4">
-        <MentoringCard onNavigate={onNavigate} />
+        <TeacherHubCard onNavigate={onNavigate} />
       </div>
     </div>
   )
 }
 
-function MentoringCard({ onNavigate }: { onNavigate: (key: string) => void }) {
-  const [count, setCount] = useState<number | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/teacher/mentoring', { cache: 'no-store', credentials: 'same-origin' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('mentoring'))))
-      .then((j) => { if (!cancelled) setCount(j.data?.mentees?.length ?? 0) })
-      .catch(() => { if (!cancelled) setCount(null) })
-    return () => { cancelled = true }
-  }, [])
-
+/** Quiet secondary card — the teacher's Class Teacher Hub entry point,
+ *  driven by the same live payloads already fetched above (no extra call). */
+function TeacherHubCard({ onNavigate }: { onNavigate: (key: string) => void }) {
   return (
     <GlassCard className="p-3 sm:p-4 lg:p-5">
       <h3 className="font-semibold text-sm mb-1 flex items-center gap-2">
-        <Heart className="h-4 w-4 text-rose-400" /> Student Mentoring
+        <Shield className="h-4 w-4 text-emerald-500" /> Class Teacher Hub
       </h3>
-      <p className="text-xs text-muted-foreground mb-3">Your mentees this term</p>
-      {count === null ? (
-        <div className="h-16 rounded-xl bg-muted/40 animate-pulse" aria-hidden />
-      ) : (
-        <button
-          onClick={() => onNavigate('mentoring')}
-          className="w-full rounded-xl border border-border bg-card/40 p-3 text-left hover:bg-accent/40 transition-colors"
-        >
-          <p className="font-display text-2xl font-bold text-rose-600 dark:text-rose-400">{count}</p>
-          <p className="text-[11px] text-muted-foreground">
-            {count === 0 ? 'No mentees assigned yet' : `Active mentee${count === 1 ? '' : 's'} · open mentoring hub`}
-          </p>
-        </button>
-      )}
+      <p className="text-xs text-muted-foreground mb-3">Parents, behaviour & meetings</p>
+      <button
+        onClick={() => onNavigate('parent-connect')}
+        className="w-full rounded-xl border border-border bg-card/40 p-3 text-left hover:bg-accent/40 transition-colors"
+      >
+        <p className="text-[11px] text-muted-foreground">
+          Open Parent Connect, Student Behavior & PTM Scheduler
+        </p>
+      </button>
     </GlassCard>
   )
 }

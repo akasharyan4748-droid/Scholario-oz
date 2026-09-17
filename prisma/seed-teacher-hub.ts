@@ -1,14 +1,14 @@
 /**
- * seed-teacher-hub — demo data for the three Teacher Hub modules
- * (Parent Connect / Student Behavior / Student Mentoring).
+ * seed-teacher-hub — demo data for the Teacher Hub modules
+ * (Parent Connect / Student Behavior).
  *
  * Principles (same as seed-student-dashboard.ts):
  *  • runtime-resolved ids only — school by slug, teacher by email, students
  *    by class roster; NO hardcoded cuids;
  *  • idempotent — deletes this school's Teacher Hub rows, then re-creates;
  *  • relative dates (daysAgo/daysAhead) so the demo never goes stale;
- *  • honest data — every conversation message, behavior record, session,
- *    goal and follow-up is a real row the modules will actually read.
+ *  • honest data — every conversation message, behavior record and
+ *    follow-up is a real row the modules will actually read.
  *
  * Run: bun run db:seed-teacher-hub
  */
@@ -74,9 +74,6 @@ async function main() {
   await db.parentMessage.deleteMany({ where: { schoolId: school.id } })
   await db.parentConversation.deleteMany({ where: { schoolId: school.id } })
   await db.behaviorRecord.deleteMany({ where: { schoolId: school.id } })
-  await db.mentoringSession.deleteMany({ where: { schoolId: school.id } })
-  await db.mentoringGoal.deleteMany({ where: { schoolId: school.id } })
-  await db.mentoringAssignment.deleteMany({ where: { schoolId: school.id } })
   await db.behaviorCategory.deleteMany({ where: { schoolId: school.id } })
   await db.messageTemplate.deleteMany({ where: { schoolId: school.id, kind: 'parent-connect' } })
 
@@ -478,190 +475,6 @@ async function main() {
     void studentName
   }
 
-  // 8. Mentoring assignments, sessions, goals.
-  const menteeSeeds: { roll: string; status: string; supportType: string; notes: string }[] = [
-    { roll: '01', status: 'on-track', supportType: 'academic', notes: 'Strong in Mathematics; needs extension work to stay challenged.' },
-    { roll: '02', status: 'on-track', supportType: 'general', notes: 'Well-rounded; keep encouraging lab-work confidence.' },
-    { roll: '03', status: 'watch', supportType: 'social', notes: 'Group-work focus — seating and pairing strategies in place.' },
-    { roll: '10', status: 'needs-support', supportType: 'wellbeing', notes: 'Exam anxiety — weekly check-ins agreed with parents.' },
-    { roll: '09', status: 'watch', supportType: 'attendance', notes: 'Morning lateness — linked to bus Route A timing.' },
-  ]
-  const assignmentIds = new Map<string, string>()
-  for (const m of menteeSeeds) {
-    const student = byRoll.get(m.roll)
-    if (!student) continue
-    const assignment = await db.mentoringAssignment.create({
-      data: {
-        schoolId: school.id,
-        teacherId: teacherUser.id,
-        studentId: student.id,
-        status: m.status,
-        supportType: m.supportType,
-        notes: m.notes,
-      },
-    })
-    assignmentIds.set(m.roll, assignment.id)
-  }
-
-  interface SeedSession {
-    roll: string
-    daysAgo: number
-    type: string
-    discussion: string
-    actionItems?: string[]
-    durationMinutes?: number
-    followUpInDays?: number
-  }
-  const sessionSeeds: SeedSession[] = [
-    {
-      roll: '01',
-      daysAgo: 28,
-      type: 'academic',
-      discussion: 'Discussed maths olympiad preparation — Aarav is confident with algebra but wants practice with combinatorics problems.',
-      actionItems: ['Share two combinatorics practice sets', 'Book library time for past papers'],
-      durationMinutes: 20,
-    },
-    {
-      roll: '01',
-      daysAgo: 14,
-      type: 'academic',
-      discussion: 'Reviewed the first practice set — 8 of 10 correct. Aarav is self-correcting his errors now, which is a good sign.',
-      actionItems: ['Final mock paper next week'],
-      durationMinutes: 15,
-    },
-    {
-      roll: '01',
-      daysAgo: 2,
-      type: 'personal-development',
-      discussion: 'Talked about leading the science fair team — reflected on delegating work instead of doing everything himself.',
-      actionItems: ['Assign the presentation section to a teammate'],
-      durationMinutes: 15,
-      followUpInDays: 5,
-    },
-    {
-      roll: '10',
-      daysAgo: 21,
-      type: 'wellbeing',
-      discussion: 'First check-in about exam stress — Myra described racing thoughts the night before tests. Introduced the box-breathing technique.',
-      actionItems: ['Practise breathing exercise before bedtime', 'Note down worry thoughts in a journal'],
-      durationMinutes: 25,
-    },
-    {
-      roll: '10',
-      daysAgo: 10,
-      type: 'wellbeing',
-      discussion: 'Journal review — Myra identified that perfectionism about marks is the main trigger. We agreed on a "good enough" scale for practice tests.',
-      actionItems: ['Use the 80% rule on practice papers'],
-      durationMinutes: 20,
-    },
-    {
-      roll: '10',
-      daysAgo: 3,
-      type: 'wellbeing',
-      discussion: 'Positive shift — Myra reported sleeping better on three nights. Discussed what changed and how to keep it going before the exams.',
-      actionItems: ['Keep the wind-down routine', 'Parents informed of progress'],
-      durationMinutes: 20,
-      followUpInDays: 4,
-    },
-    {
-      roll: '03',
-      daysAgo: 17,
-      type: 'personal-development',
-      discussion: 'Discussed the classroom incident — Vivaan recognises he seeks attention during revision. Agreed on a quiet hand-signal instead of calling out.',
-      actionItems: ['Try the hand-signal for a week'],
-      durationMinutes: 15,
-    },
-    {
-      roll: '03',
-      daysAgo: 6,
-      type: 'personal-development',
-      discussion: 'One week review — hand-signal worked four of five days. Vivaan proud of the improvement; classmates noticed too.',
-      durationMinutes: 10,
-    },
-    {
-      roll: '09',
-      daysAgo: 12,
-      type: 'attendance',
-      discussion: 'Discussed morning routine — Reyansh wakes on time but the bus pickup has shifted later. Not his fault; coordinating with transport.',
-      actionItems: ['Confirm revised bus timing with the office'],
-      durationMinutes: 15,
-    },
-    {
-      roll: '09',
-      daysAgo: 5,
-      type: 'attendance',
-      discussion: 'Still arriving late — transport office confirmed the route review is pending. Reyansh will use the early bus stop as a stop-gap.',
-      actionItems: ['Use the Sector 14 stop this week', 'Recheck route timing next week'],
-      durationMinutes: 10,
-      followUpInDays: -2, // overdue
-    },
-    {
-      roll: '02',
-      daysAgo: 9,
-      type: 'general',
-      discussion: 'Light check-in — Diya is settling well and enjoying the lab sessions. No concerns raised; agreed to meet monthly.',
-      durationMinutes: 10,
-    },
-  ]
-
-  const sessionIds: { roll: string; sessionId: string; followUpInDays?: number }[] = []
-  for (const s of sessionSeeds) {
-    const student = byRoll.get(s.roll)
-    const assignmentId = assignmentIds.get(s.roll)
-    if (!student || !assignmentId) continue
-    const session = await db.mentoringSession.create({
-      data: {
-        schoolId: school.id,
-        assignmentId,
-        studentId: student.id,
-        teacherId: teacherUser.id,
-        date: daysAgo(s.daysAgo, 14, 0),
-        type: s.type,
-        discussion: s.discussion,
-        actionItems: s.actionItems ? JSON.stringify(s.actionItems) : null,
-        durationMinutes: s.durationMinutes ?? null,
-        followUpDate: s.followUpInDays != null ? daysAhead(s.followUpInDays, 15, 0) : null,
-      },
-    })
-    sessionIds.push({ roll: s.roll, sessionId: session.id, followUpInDays: s.followUpInDays })
-  }
-
-  interface SeedGoal {
-    roll: string
-    title: string
-    target?: string
-    reviewInDays?: number
-    status: string
-    createdDaysAgo: number
-  }
-  const goalSeeds: SeedGoal[] = [
-    { roll: '01', title: 'Improve Mathematics performance', target: '85% average across term tests', reviewInDays: 10, status: 'on-track', createdDaysAgo: 30 },
-    { roll: '01', title: 'Complete the Olympiad problem set', target: '12 problems, unaided', reviewInDays: -4, status: 'achieved', createdDaysAgo: 28 },
-    { roll: '10', title: 'Build exam-day confidence', target: 'Complete two practice papers without stopping', reviewInDays: 12, status: 'in-progress', createdDaysAgo: 21 },
-    { roll: '03', title: 'Positive participation in group work', target: 'Two peer praises this month', reviewInDays: 7, status: 'not-started', createdDaysAgo: 17 },
-    { roll: '09', title: 'Reach school by 8:25 daily', target: 'Zero late arrivals this month', reviewInDays: 5, status: 'in-progress', createdDaysAgo: 12 },
-    { roll: '02', title: 'Read two books this term', target: 'Finish + present one review', status: 'paused', createdDaysAgo: 25 },
-    { roll: '07', title: 'Mentor two junior quiz members', target: 'Run one practice session solo', reviewInDays: 9, status: 'in-progress', createdDaysAgo: 18 },
-  ]
-  for (const g of goalSeeds) {
-    const student = byRoll.get(g.roll)
-    const assignmentId = assignmentIds.get(g.roll)
-    if (!student || !assignmentId) continue
-    await db.mentoringGoal.create({
-      data: {
-        schoolId: school.id,
-        assignmentId,
-        studentId: student.id,
-        teacherId: teacherUser.id,
-        title: g.title,
-        target: g.target ?? null,
-        reviewDate: g.reviewInDays != null ? daysAhead(g.reviewInDays, 12, 0) : null,
-        status: g.status,
-        createdAt: daysAgo(g.createdDaysAgo, 12, 0),
-      },
-    })
-  }
-
   // 9. Follow-ups (unified queue) — linked to their sources.
   const studentIdOf = (roll: string) => byRoll.get(roll)?.id ?? null
 
@@ -719,31 +532,11 @@ async function main() {
     })
   }
 
-  for (const s of sessionIds) {
-    if (s.followUpInDays == null) continue
-    const student = byRoll.get(s.roll)
-    await db.teacherFollowUp.create({
-      data: {
-        schoolId: school.id,
-        teacherId: teacherUser.id,
-        kind: 'mentoring',
-        studentId: student?.id ?? null,
-        sessionId: s.sessionId,
-        reason: `Mentoring follow-up — ${student?.rollNo ? `Roll ${student.rollNo}` : 'student'}`,
-        dueDate: daysAhead(s.followUpInDays, 15, 0),
-        priority: 'normal',
-      },
-    })
-  }
-
   // Summary
   const counts = {
     conversations: await db.parentConversation.count({ where: { schoolId: school.id } }),
     messages: await db.parentMessage.count({ where: { schoolId: school.id } }),
     behaviorRecords: await db.behaviorRecord.count({ where: { schoolId: school.id } }),
-    mentees: await db.mentoringAssignment.count({ where: { schoolId: school.id } }),
-    sessions: await db.mentoringSession.count({ where: { schoolId: school.id } }),
-    goals: await db.mentoringGoal.count({ where: { schoolId: school.id } }),
     followUps: await db.teacherFollowUp.count({ where: { schoolId: school.id } }),
     categories: await db.behaviorCategory.count({ where: { schoolId: school.id } }),
     templates: await db.messageTemplate.count({ where: { schoolId: school.id } }),

@@ -67,7 +67,7 @@ async function main() {
       accentColor: '#f59e0b',
       plan: 'ENTERPRISE',
       status: 'ACTIVE',
-      academicYear: '2025-2026',
+      academicYear: '2026-2027',
       isDemo: true,
     },
   })
@@ -141,7 +141,7 @@ async function main() {
         userId: u.id,
         classId: cls.id,
         rollNo: String(i + 1).padStart(2, '0'),
-        admissionNo: 'DEMO-2025-' + String(i + 1).padStart(4, '0'),
+        admissionNo: 'DEMO-2026-' + String(i + 1).padStart(4, '0'),
         guardianId: parentUser.id,
         guardianName: parentName,
         guardianPhone: parentUser.phone,
@@ -170,8 +170,8 @@ async function main() {
   }
 
   // Exams
-  const exam1 = await db.exam.create({ data: { schoolId: demoSchool.id, name: 'Mid-Term Examination', term: 'TERM1', classId: demoClass9.id, startDate: new Date('2025-09-15'), endDate: new Date('2025-09-25'), status: 'COMPLETED' } })
-  const exam2 = await db.exam.create({ data: { schoolId: demoSchool.id, name: 'Unit Test 2', term: 'UNIT', classId: demoClass10.id, startDate: new Date('2025-10-10'), status: 'ONGOING' } })
+  const exam1 = await db.exam.create({ data: { schoolId: demoSchool.id, name: 'Mid-Term Examination', term: 'TERM1', classId: demoClass9.id, startDate: new Date('2026-09-14'), endDate: new Date('2026-09-24'), status: 'COMPLETED' } })
+  const exam2 = await db.exam.create({ data: { schoolId: demoSchool.id, name: 'Unit Test 2', term: 'UNIT', classId: demoClass10.id, startDate: new Date('2026-10-12'), status: 'ONGOING' } })
   await db.exam.create({ data: { schoolId: demoSchool.id, name: 'Final Examination', term: 'FINAL', classId: demoClass9.id, startDate: new Date('2026-02-10'), endDate: new Date('2026-02-20'), status: 'SCHEDULED' } })
 
   // Results
@@ -204,7 +204,7 @@ async function main() {
     const paid = Math.random() > 0.4
     if (paid) paidStudents.push({ idx })
     const fee = await db.fee.create({
-      data: { schoolId: demoSchool.id, studentId: s.id, title: 'Tuition Fee Q1', amount: 25000, paid: paid ? 25000 : 0, type: 'TUITION', dueDate: new Date('2025-09-30'), status: paid ? 'PAID' : 'UNPAID', method: paid ? 'UPI' : null, paidDate: paid ? new Date('2025-09-20') : null },
+      data: { schoolId: demoSchool.id, studentId: s.id, title: 'Tuition Fee Q1', amount: 25000, paid: paid ? 25000 : 0, type: 'TUITION', dueDate: new Date('2026-09-30'), status: paid ? 'PAID' : 'UNPAID', method: paid ? 'UPI' : null, paidDate: paid ? new Date('2026-09-20') : null },
     })
     if (paid) {
       const monthsBack = 5 - Math.floor((paidStudents.length - 1) / Math.max(1, students.length / 5))
@@ -326,7 +326,7 @@ async function main() {
       userId: greenwoodStudent.id,
       classId: demoClass9.id,
       rollNo: '18',
-      admissionNo: 'GWS2024018',
+      admissionNo: 'GWS2026018',
       guardianName: 'Rahul Sharma',
       guardianPhone: '+91 98100 12345',
       dob: '2015-04-12',

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { withUser } from '@/lib/api'
-import { getUserPreferences } from '@/lib/user-preferences'
+import { getUserPreferences, getTeacherPreferences } from '@/lib/user-preferences'
 import { audienceAllows } from '@/lib/notices'
 
 export const runtime = 'nodejs'
@@ -22,15 +22,20 @@ export async function GET() {
 
     const schoolId = user.schoolId
 
-    // SS-1 — server-enforced notification preferences for students. The
-    // bell feed is the MESSAGE/ANNOUNCEMENT surface, so those two channels
-    // are honored HERE (the rest of the channels gate the student Notices
-    // module client-side against the same server-persisted prefs).
+    // SS-1 — server-enforced notification preferences. The bell feed is
+    // the MESSAGE/ANNOUNCEMENT surface, so those channels are honored
+    // HERE for both students and teachers (the student's other channels
+    // gate the Notices module client-side against the same prefs).
     let prefMessages = true
     let prefAnnouncements = true
     if (user.role === 'STUDENT') {
       const prefs = await getUserPreferences(user.id).catch(() => null)
       prefMessages = prefs?.notifications.messages ?? true
+      prefAnnouncements = prefs?.notifications.announcements ?? true
+    } else if (user.role === 'TEACHER') {
+      // TS-SETTINGS — teacher channel keys (parentMessages / announcements).
+      const prefs = await getTeacherPreferences(user.id).catch(() => null)
+      prefMessages = prefs?.notifications.parentMessages ?? true
       prefAnnouncements = prefs?.notifications.announcements ?? true
     }
 

@@ -4,9 +4,9 @@
  * student-profile-dialog — one student's behavior profile.
  *
  * A right-side Sheet (full-width on mobile): identity header, four mini
- * count tiles (positive / observation / concern / open), real
- * cross-module actions (Mentoring, Parent Connect — rendered only when
- * the link exists), the full record timeline newest-first with private
+ * count tiles (positive / observation / concern / open), the real
+ * cross-module action (Parent Connect — rendered only when the link
+ * exists), the full record timeline newest-first with private
  * staff notes, and the student's open follow-ups with Complete.
  *
  * Data is fetched on open (GET /api/teacher/behavior/student/[id]) with
@@ -15,7 +15,7 @@
  */
 
 import { useState } from 'react'
-import { AlarmClock, Bell, Heart, Loader2, Lock, MessageSquare, Plus } from 'lucide-react'
+import { AlarmClock, Bell, Loader2, Lock, MessageSquare, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { GradientAvatar } from '@/components/shared/ui'
 import { HubSectionError } from '@/components/teacher/modules/shared/hub-stat-cards'
@@ -145,19 +145,6 @@ export function StudentProfileDialog({
 
               {/* cross-module actions — only what really exists */}
               <div className="flex flex-wrap items-center gap-2">
-                {body.mentoring.isMentee && (
-                  <button
-                    type="button"
-                    className={GHOST_ACTION_CLASS}
-                    onClick={() => {
-                      onOpenChange(false)
-                      onNavigate?.('mentoring')
-                    }}
-                  >
-                    <Heart className="h-3.5 w-3.5" aria-hidden="true" />
-                    Open Mentoring
-                  </button>
-                )}
                 {body.conversationId && (
                   <button
                     type="button"

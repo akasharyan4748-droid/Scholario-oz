@@ -46,7 +46,7 @@ export const DEFAULT_POSITIONS: PositionDefinition[] = [
     title: 'House Master / Mistress',
     category: 'Co-Curricular',
     description: 'Leads student house competitions, mentorship, and house points allocation.',
-    permissions: ['manage_house_activities', 'house_points_entry', 'mentoring_lead'],
+    permissions: ['manage_house_activities', 'house_points_entry'],
   },
   {
     id: 'pos-lab-incharge',

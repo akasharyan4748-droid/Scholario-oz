@@ -1,15 +1,14 @@
 /**
- * teacher-hub — server-side authorization + serialization for the three
- * Teacher Hub modules (Parent Connect / Student Behavior / Mentoring).
+ * teacher-hub — server-side authorization + serialization for the
+ * Teacher Hub modules (Parent Connect / Student Behavior).
  *
  * SECURITY MODEL (mirrors learning.ts's requireStudent pattern):
  *   erp_session cookie → getCurrentUser → requireTeacher → Teacher row →
  *   school scope → class-teacher classes → authorized student set.
  * Client-supplied ids are NEVER trusted — every mutation re-validates that
- * the target student/conversation/record/session belongs to the
+ * the target student/conversation/record belongs to the
  * authenticated teacher's scope:
  *   • Parent Connect conversations are owned by the teacher (teacherId).
- *   • Mentoring data is mentor-private (teacherId on every row).
  *   • Behavior records are visible to their recorder AND to the class
  *     teacher of the student's class (the class teacher sees the whole
  *     picture for their class — that is what a class teacher is for).
@@ -78,14 +77,13 @@ export async function requireTeacher(user: AuthUser): Promise<TeacherHubContext>
 /**
  * Prisma `where` for students this teacher may act on:
  * students of her class-teacher classes ∪ students already connected to her
- * through any Teacher Hub relation (mentee, conversation, behavior record).
+ * through any Teacher Hub relation (conversation, behavior record).
  */
 export function authorizedStudentWhere(ctx: TeacherHubContext) {
   const classIds = ctx.classTeacherOf.map((c) => c.id)
   const clauses: Record<string, unknown>[] = classIds.length
     ? [{ classId: { in: classIds } }]
     : []
-  clauses.push({ mentoringAssignments: { some: { teacherId: ctx.userId } } })
   clauses.push({ parentConversations: { some: { teacherId: ctx.userId } } })
   clauses.push({ behaviorRecords: { some: { recordedById: ctx.userId } } })
   return { schoolId: ctx.schoolId, OR: clauses }
@@ -157,7 +155,6 @@ type FollowUpRow = {
   status: string
   conversationId: string | null
   recordId: string | null
-  sessionId: string | null
   createdAt: Date
   student: StudentRow | null
 }
@@ -174,7 +171,6 @@ export function toFollowUpItem(f: FollowUpRow): FollowUpItem {
     student: f.student ? toStudentRef(f.student) : null,
     conversationId: f.conversationId,
     recordId: f.recordId,
-    sessionId: f.sessionId,
     createdAt: f.createdAt.toISOString(),
   }
 }

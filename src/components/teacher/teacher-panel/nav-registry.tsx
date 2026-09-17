@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CalendarCheck, BookMarked,
   FileText, Users, BarChart3, Megaphone, CalendarClock,
-  Shield, MessageSquareHeart, Heart, ClipboardCheck, Wallet, ClipboardList,
+  Shield, MessageSquareHeart, ClipboardCheck, Wallet, ClipboardList, Settings,
 } from 'lucide-react'
 import type { NavGroup } from '@/components/shell/app-shell'
 import type { TeacherRecord, PositionAssignment } from '@/lib/store/teachers-store'
@@ -63,7 +63,6 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions, hubUnread
         { key: 'ptm', label: 'PTM Scheduler', icon: <CalendarClock className="h-4.5 w-4.5" /> },
         { key: 'behavior', label: 'Student Behavior', icon: <Shield className="h-4.5 w-4.5" /> },
         { key: 'parent-connect', label: 'Parent Connect', icon: <MessageSquareHeart className="h-4.5 w-4.5" />, badge: hubUnread > 0 ? hubUnread : undefined },
-        { key: 'mentoring', label: 'Student Mentoring', icon: <Heart className="h-4.5 w-4.5" /> },
       ],
     })
   }
@@ -74,6 +73,7 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions, hubUnread
     items: [
       { key: 'analytics', label: 'Performance Analytics', icon: <BarChart3 className="h-4.5 w-4.5" /> },
       { key: 'communication', label: 'Communication Hub', icon: <Megaphone className="h-4.5 w-4.5" /> },
+      { key: 'settings', label: 'Settings', icon: <Settings className="h-4.5 w-4.5" /> },
     ],
   })
 

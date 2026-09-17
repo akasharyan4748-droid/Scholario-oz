@@ -77,9 +77,6 @@ model School {
   parentMessages       ParentMessage[]
   behaviorRecords      BehaviorRecord[]
   behaviorCategories   BehaviorCategory[]
-  mentoringAssignments MentoringAssignment[]
-  mentoringSessions    MentoringSession[]
-  mentoringGoals       MentoringGoal[]
   teacherFollowUps     TeacherFollowUp[]
   messageTemplates     MessageTemplate[]
 
@@ -119,14 +116,11 @@ model User {
   notificationReads  NotificationRead[]
   preferences        UserPreference?
 
-  // Teacher Hub (Parent Connect / Behavior / Mentoring) — v2.14
+  // Teacher Hub (Parent Connect / Behavior) — v2.14
   teacherConversations     ParentConversation[] @relation("ParentConversationTeacher")
   guardianConversations    ParentConversation[] @relation("ParentConversationParent")
   sentParentMessages       ParentMessage[]      @relation("ParentMessageSender")
   recordedBehavior         BehaviorRecord[]     @relation("BehaviorRecordRecorder")
-  mentoringAssignments     MentoringAssignment[] @relation("MentoringAssignmentTeacher")
-  mentoringSessions        MentoringSession[]    @relation("MentoringSessionTeacher")
-  mentoringGoals           MentoringGoal[]       @relation("MentoringGoalTeacher")
   ownedTeacherFollowUps    TeacherFollowUp[]     @relation("TeacherFollowUpTeacher")
 }
 
@@ -186,12 +180,9 @@ model Student {
   flashcardReviews    FlashcardReviewState[]
   materialTargets     StudyMaterialTarget[]
 
-  // Teacher Hub (Parent Connect / Behavior / Mentoring) — v2.14
+  // Teacher Hub (Parent Connect / Behavior) — v2.14
   parentConversations  ParentConversation[]
   behaviorRecords      BehaviorRecord[]
-  mentoringAssignments MentoringAssignment[]
-  mentoringSessions    MentoringSession[]
-  mentoringGoals       MentoringGoal[]
   teacherFollowUps     TeacherFollowUp[]
 }
 
@@ -866,6 +857,8 @@ model UserPreference {
   school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   notifications String   @default("{}")
   learning      String   @default("{}")
+  /// TS-SETTINGS — role-specific workspace prefs (e.g. teacher default class).
+  workspace     String   @default("{}")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1588,88 +1581,9 @@ model BehaviorCategory {
   @@unique([schoolId, key])
 }
 
-/// A mentor ↔ mentee relationship. One row per teacher-student pair;
-/// `active = false` archives the relationship (history preserved).
-model MentoringAssignment {
-  id          String    @id @default(cuid())
-  schoolId    String
-  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  /// User.id of the mentor
-  teacherId   String
-  teacher     User      @relation("MentoringAssignmentTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
-  studentId   String
-  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  /// on-track | watch | needs-support | critical
-  status      String    @default("on-track")
-  /// academic | attendance | social | wellbeing | career | general
-  supportType String    @default("general")
-  notes       String?
-  active      Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  sessions MentoringSession[]
-  goals    MentoringGoal[]
-
-  @@unique([teacherId, studentId])
-  @@index([schoolId, teacherId, active])
-}
-
-/// A logged mentoring session (discussion, action items, follow-up date).
-model MentoringSession {
-  id              String              @id @default(cuid())
-  schoolId        String
-  school          School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  assignmentId    String
-  assignment      MentoringAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  studentId       String
-  student         Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  /// User.id of the mentor (denormalised from assignment for direct scoping)
-  teacherId       String
-  teacher         User                @relation("MentoringSessionTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
-  date            DateTime
-  /// academic | wellbeing | attendance | career | personal-development | general
-  type            String              @default("general")
-  discussion      String
-  /// JSON string array of action items
-  actionItems     String?
-  durationMinutes Int?
-  followUpDate    DateTime?
-  createdAt       DateTime            @default(now())
-
-  followUps TeacherFollowUp[]
-
-  @@index([schoolId, teacherId, date])
-  @@index([assignmentId, date])
-}
-
-/// A student goal created by a mentor, with review date and lifecycle status.
-model MentoringGoal {
-  id           String              @id @default(cuid())
-  schoolId     String
-  school       School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  assignmentId String
-  assignment   MentoringAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  studentId    String
-  student      Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  /// User.id of the mentor
-  teacherId    String
-  teacher      User                @relation("MentoringGoalTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
-  title        String
-  target       String?
-  reviewDate   DateTime?
-  /// not-started | in-progress | on-track | achieved | paused
-  status       String              @default("in-progress")
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-
-  @@index([schoolId, teacherId, status])
-  @@index([assignmentId])
-}
-
-/// Unified teacher follow-up queue across the three Teacher Hub modules.
+/// Unified teacher follow-up queue across the Teacher Hub modules.
 /// `kind` routes it to the owning module; the optional refs keep the
-/// link to the originating conversation/record/session.
+/// link to the originating conversation/record.
 model TeacherFollowUp {
   id             String              @id @default(cuid())
   schoolId       String
@@ -1677,7 +1591,7 @@ model TeacherFollowUp {
   /// User.id of the owning teacher
   teacherId      String
   teacher        User                @relation("TeacherFollowUpTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
-  /// parent-connect | behavior | mentoring
+  /// parent-connect | behavior
   kind           String
   studentId      String?
   student        Student?            @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -1685,8 +1599,6 @@ model TeacherFollowUp {
   conversation   ParentConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   recordId       String?
   record         BehaviorRecord?     @relation(fields: [recordId], references: [id], onDelete: Cascade)
-  sessionId      String?
-  session        MentoringSession?   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   reason         String
   note           String?
   dueDate        DateTime

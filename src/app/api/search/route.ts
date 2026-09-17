@@ -350,13 +350,13 @@ export async function GET(req: NextRequest) {
     }
 
     // 8. TEACHER HUB (teacher role only) — the teacher's OWN conversations,
-    //    visible behavior records, active mentees and open follow-ups.
+    //    visible behavior records and open follow-ups.
     //    Strictly scope-respecting (requireTeacher); behavior snippets NEVER
     //    include descriptions or private notes — identity + category only.
     if (user.role === 'TEACHER') {
       try {
         const ctx = await requireTeacher(user)
-        const [conversations, behaviorRecords, mentees, followUps, categoryRows] =
+        const [conversations, behaviorRecords, followUps, categoryRows] =
           await Promise.all([
             db.parentConversation.findMany({
               where: {
@@ -402,30 +402,12 @@ export async function GET(req: NextRequest) {
                 },
               },
             }),
-            db.mentoringAssignment.findMany({
-              where: {
-                schoolId,
-                teacherId: user.id,
-                active: true,
-                student: { user: { name: { contains: q } } },
-              },
-              take: 4,
-              orderBy: { createdAt: 'asc' },
-              include: {
-                student: {
-                  select: {
-                    rollNo: true,
-                    class: { select: { name: true, section: true } },
-                    user: { select: { name: true } },
-                  },
-                },
-              },
-            }),
             db.teacherFollowUp.findMany({
               where: {
                 schoolId,
                 teacherId: user.id,
                 status: 'open',
+                kind: { in: ['parent-connect', 'behavior'] },
                 OR: [{ reason: { contains: q } }, { student: { user: { name: { contains: q } } } }],
               },
               take: 4,
@@ -479,22 +461,6 @@ export async function GET(req: NextRequest) {
               r.type === 'positive' ? 'success' : r.type === 'concern' ? 'destructive' : 'warning',
             keywords: `behavior observation conduct ${r.category} ${r.type}`,
             timestamp: r.date.getTime(),
-          })
-        })
-
-        mentees.forEach((m) => {
-          results.push({
-            id: `mnt-${m.studentId}`,
-            title: m.student.user?.name ?? 'Student',
-            subtitle: `Mentee · ${labelOf(m.student)}`,
-            category: 'Students',
-            type: 'mentee',
-            moduleKey: 'mentoring',
-            iconName: 'Heart',
-            badge: 'Mentee',
-            badgeVariant:
-              m.status === 'needs-support' || m.status === 'critical' ? 'warning' : 'success',
-            keywords: `mentee mentoring mentor support ${m.supportType}`,
           })
         })
 

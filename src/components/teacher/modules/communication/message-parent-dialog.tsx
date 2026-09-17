@@ -1,209 +1,271 @@
 'use client'
 
+/**
+ * communication/message-parent-dialog — message the guardian of an
+ * in-scope student. Uses the SAME authorization model and backend tables as
+ * Parent Connect: the server re-validates the student scope
+ * (assertStudentInScope), resolves the guardian from the student row and
+ * upserts the shared conversation — so the thread stays unified and appears
+ * in Parent Connect immediately.
+ *
+ * Real send states only: sending spinner, success toast with the guardian's
+ * name, error toast carrying the server's honest message.
+ */
+
+import { useEffect, useState } from 'react'
+import { Loader2, Send } from 'lucide-react'
 import {
-  Bell, Mail, Smartphone, Send, Eye,
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog'
-import { GradientAvatar } from '@/components/shared/ui'
-import { students } from '@/lib/mock/students'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import type { MsgChannel } from './data'
-import { sampleTemplates } from './data'
-import { GraduationCap } from './icons'
+import type {
+  ConversationCategory,
+  MessageTemplateItem,
+  ParentLinkableStudent,
+} from '@/lib/teacher-hub-types'
+import { CONVERSATION_CATEGORY_LABELS } from '@/lib/teacher-hub-types'
+import { sendMessageToParent } from './hooks'
+import { applyTemplateBody, firstName } from './shared'
 
 interface MessageParentDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  selectedStudent: typeof students[number]
-  onSelectStudent: (id: string) => void
-  msgChannel: MsgChannel
-  onChannelChange: (channel: MsgChannel) => void
-  msgText: string
-  onMsgTextChange: (text: string) => void
-  msgTemplate: string
-  onApplyTemplate: (id: string) => void
-  onSend: () => void
+  students: ParentLinkableStudent[]
+  templates: MessageTemplateItem[]
+  teacherName: string
+  /** called after a successful send so the hub can reload its counts */
+  onSent: () => void
 }
 
+const CATEGORY_OPTIONS = (Object.keys(CONVERSATION_CATEGORY_LABELS) as ConversationCategory[]).map(
+  (value) => ({ value, label: CONVERSATION_CATEGORY_LABELS[value] }),
+)
+
 export function MessageParentDialog({
-  open, onOpenChange, selectedStudent, onSelectStudent,
-  msgChannel, onChannelChange, msgText, onMsgTextChange,
-  msgTemplate, onApplyTemplate, onSend,
+  open,
+  onOpenChange,
+  students,
+  templates,
+  teacherName,
+  onSent,
 }: MessageParentDialogProps) {
+  const [studentId, setStudentId] = useState('')
+  const [category, setCategory] = useState<ConversationCategory>('general')
+  const [templateId, setTemplateId] = useState('none')
+  const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
+
+  // Fresh form on every open.
+  useEffect(() => {
+    if (open) {
+      setStudentId('')
+      setCategory('general')
+      setTemplateId('none')
+      setMessage('')
+      setSending(false)
+    }
+  }, [open])
+
+  const selected = students.find((s) => s.student.id === studentId) ?? null
+
+  const handleTemplate = (id: string) => {
+    setTemplateId(id)
+    const t = templates.find((x) => x.id === id)
+    if (t) {
+      setMessage(
+        applyTemplateBody(
+          t.body,
+          selected ? firstName(selected.student.name) : '',
+          teacherName,
+        ),
+      )
+    }
+  }
+
+  const handleSend = async () => {
+    if (!selected) {
+      toast.error('Select a student first')
+      return
+    }
+    if (!selected.parentUserId) {
+      toast.error('This student has no linked guardian account')
+      return
+    }
+    if (!message.trim()) {
+      toast.error('Write a message first')
+      return
+    }
+    setSending(true)
+    try {
+      const result = await sendMessageToParent({
+        studentId: selected.student.id,
+        category,
+        message: message.trim(),
+      })
+      toast.success('Message sent', {
+        description: `To ${result.parentName} — the conversation continues in Parent Connect.`,
+      })
+      onOpenChange(false)
+      onSent()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Message could not be sent')
+    } finally {
+      setSending(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[calc(100vw-1.5rem)] sm:max-w-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Message Parent</DialogTitle>
-          <DialogDescription>
-            Send a message to <span className="font-semibold text-foreground">{selectedStudent.fatherName}</span> (parent of {selectedStudent.name})
+          <DialogTitle className="text-sm font-semibold">Message a parent</DialogTitle>
+          <DialogDescription className="text-xs">
+            Send a message to the guardian of a student you teach. Threads live in Parent Connect.
           </DialogDescription>
         </DialogHeader>
 
-        <RecipientSelector
-          selectedStudent={selectedStudent}
-          onSelectStudent={onSelectStudent}
-          msgText={msgText}
-          onMsgTextChange={onMsgTextChange}
-        />
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="ch-student">Student</Label>
+            <Select value={studentId} onValueChange={setStudentId}>
+              <SelectTrigger id="ch-student" className="w-full">
+                <SelectValue placeholder="Select student" />
+              </SelectTrigger>
+              <SelectContent>
+                {students.map((s) => (
+                  <SelectItem key={s.student.id} value={s.student.id} disabled={!s.parentUserId}>
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate">
+                        {s.student.name} · {s.student.classLabel}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {s.parentUserId
+                          ? `Guardian: ${s.guardianName ?? 'Guardian'}`
+                          : 'No guardian account'}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {students.length === 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                No students with a linked guardian are in your scope yet.
+              </p>
+            )}
+          </div>
 
-        <ChannelTabs
-          msgChannel={msgChannel}
-          onChannelChange={onChannelChange}
-          msgText={msgText}
-          selectedStudent={selectedStudent}
-        />
+          {selected?.parentUserId && (
+            <div className="rounded-xl border border-border bg-muted/30 px-3.5 py-2.5">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                To
+              </p>
+              <p className="mt-0.5 text-sm font-medium">
+                {selected.guardianName ?? 'Guardian'}
+                {selected.guardianPhone ? (
+                  <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                    · {selected.guardianPhone}
+                  </span>
+                ) : null}
+              </p>
+              {selected.existingConversationId && (
+                <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                  You already have a conversation with this guardian — your message continues that
+                  thread.
+                </p>
+              )}
+            </div>
+          )}
 
-        <TemplateSelector msgTemplate={msgTemplate} onApplyTemplate={onApplyTemplate} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <Select value={category} onValueChange={(v) => setCategory(v as ConversationCategory)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Template</Label>
+              <Select value={templateId} onValueChange={handleTemplate}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No template</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate">{t.label}</span>
+                        <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {t.category}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="msg-text">Message</Label>
-          <Textarea
-            id="msg-text"
-            value={msgText}
-            onChange={(e) => onMsgTextChange(e.target.value)}
-            className="min-h-20 text-xs"
-          />
+          <div className="space-y-1.5">
+            <Label htmlFor="ch-message">
+              Message <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="ch-message"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Write to the guardian…"
+              className="min-h-24 text-sm"
+              maxLength={2000}
+            />
+          </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => toast.success('Saved as draft')}>
-            <Eye className="h-4 w-4" /> Save Draft
-          </Button>
-          <Button onClick={onSend} className="bg-gradient-to-r from-emerald-600 to-teal-600">
-            <Send className="h-4 w-4" /> Send Now
-          </Button>
-        </DialogFooter>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            onClick={() => onOpenChange(false)}
+            disabled={sending}
+            className="rounded-xl px-3.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void handleSend()}
+            disabled={sending || !selected?.parentUserId || !message.trim()}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
+            {sending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Send className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            Send Message
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function RecipientSelector({
-  selectedStudent, onSelectStudent, msgText, onMsgTextChange,
-}: {
-  selectedStudent: typeof students[number]
-  onSelectStudent: (id: string) => void
-  msgText: string
-  onMsgTextChange: (text: string) => void
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-muted/30 p-2.5 flex items-center gap-2.5">
-      <GradientAvatar name={selectedStudent.name} size="sm" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium truncate">{selectedStudent.fatherName}</p>
-        <p className="text-[11px] text-muted-foreground">{selectedStudent.guardianPhone} · {selectedStudent.email}</p>
-      </div>
-      <Select
-        value={selectedStudent.id}
-        onValueChange={(v) => {
-          const s = students.find((s) => s.id === v)
-          if (s) {
-            onSelectStudent(v)
-            onMsgTextChange(msgText.replace(selectedStudent.name, s.name))
-          }
-        }}
-      >
-        <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {students.slice(0, 8).map((s) => (
-            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  )
-}
-
-function ChannelTabs({
-  msgChannel, onChannelChange, msgText, selectedStudent,
-}: {
-  msgChannel: MsgChannel
-  onChannelChange: (c: MsgChannel) => void
-  msgText: string
-  selectedStudent: typeof students[number]
-}) {
-  return (
-    <Tabs value={msgChannel} onValueChange={(v) => onChannelChange(v as MsgChannel)}>
-      <TabsList className="w-full grid grid-cols-3 h-9">
-        <TabsTrigger value="sms" className="text-xs"><Smartphone className="h-3.5 w-3.5" /> SMS</TabsTrigger>
-        <TabsTrigger value="email" className="text-xs"><Mail className="h-3.5 w-3.5" /> Email</TabsTrigger>
-        <TabsTrigger value="push" className="text-xs"><Bell className="h-3.5 w-3.5" /> Push</TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="sms" className="mt-3">
-        <div className="rounded-xl border border-border bg-card p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase">SMS Preview</span>
-            <span className="text-[10px] text-muted-foreground">{msgText.length}/160</span>
-          </div>
-          <div className="rounded-lg bg-muted/40 p-2.5 text-xs">
-            <p className="font-mono leading-relaxed">{msgText}</p>
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-2">From: GW-EDU · To: {selectedStudent.guardianPhone}</p>
-        </div>
-      </TabsContent>
-
-      <TabsContent value="email" className="mt-3">
-        <div className="rounded-xl border border-border bg-card p-3">
-          <div className="border-b border-border pb-2 mb-2">
-            <p className="text-[10px] text-muted-foreground">From: rohan.mehta@greenwood.edu.in</p>
-            <p className="text-[10px] text-muted-foreground">To: {selectedStudent.email}</p>
-            <p className="text-xs font-semibold mt-1">Subject: Update regarding {selectedStudent.name}</p>
-          </div>
-          <div className="text-xs leading-relaxed space-y-2">
-            <p>Dear {selectedStudent.fatherName},</p>
-            <p>{msgText}</p>
-            <p>Warm regards,<br />Rohan Mehta<br />Class Teacher, 2-A<br />Demo School of Scholario</p>
-          </div>
-        </div>
-      </TabsContent>
-
-      <TabsContent value="push" className="mt-3">
-        <div className="rounded-xl border border-border bg-card p-3">
-          <div className="flex items-start gap-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 text-white">
-              <GraduationCap className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold">SCHOLARIO ERP</p>
-                <span className="text-[10px] text-muted-foreground">now</span>
-              </div>
-              <p className="text-xs font-medium mt-0.5">Message from Class Teacher</p>
-              <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{msgText}</p>
-            </div>
-          </div>
-        </div>
-      </TabsContent>
-    </Tabs>
-  )
-}
-
-function TemplateSelector({
-  msgTemplate, onApplyTemplate,
-}: {
-  msgTemplate: string
-  onApplyTemplate: (id: string) => void
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-[11px] uppercase tracking-wider">Quick Template</Label>
-      <Select value={msgTemplate} onValueChange={onApplyTemplate}>
-        <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {sampleTemplates.map((t) => (
-            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
   )
 }

@@ -18,7 +18,7 @@ export interface SearchResultItem {
     | 'Features & Pages'
     | 'Settings & System'
     | 'Learning'
-  type: 'student' | 'teacher' | 'class' | 'parent' | 'exam' | 'notice' | 'book' | 'fee' | 'feature' | 'setting' | 'subject' | 'material' | 'deck' | 'group' | 'behavior' | 'mentee' | 'followup'
+  type: 'student' | 'teacher' | 'class' | 'parent' | 'exam' | 'notice' | 'book' | 'fee' | 'feature' | 'setting' | 'subject' | 'material' | 'deck' | 'group' | 'behavior' | 'followup'
   moduleKey: string
   iconName: string
   badge?: string

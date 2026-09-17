@@ -1,8 +1,8 @@
 'use client'
 
 /**
- * hub-stat-cards — the shared summary-card system for the three Teacher Hub
- * modules (Parent Connect / Student Behavior / Student Mentoring).
+ * hub-stat-cards — the shared summary-card system for the Teacher Hub
+ * modules (Parent Connect / Student Behavior).
  *
  * Visual recipe copied VERBATIM from "My Attendance" (personal-attendance.tsx),
  * the documented design benchmark:

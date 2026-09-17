@@ -42,7 +42,6 @@ export const PERMISSION_LABELS: Record<string, string> = {
   // House Master
   manage_house_activities: 'Can manage house activities',
   house_points_entry: 'Can enter house points',
-  mentoring_lead: 'Can lead mentoring',
 
   // Lab Incharge
   manage_lab: 'Can manage labs',

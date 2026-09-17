@@ -14,8 +14,8 @@ import type { StudentBehaviorProfile } from '@/lib/teacher-hub-types'
 export const runtime = 'nodejs'
 
 // GET /api/teacher/behavior/student/[studentId] — one student's behavior
-// profile: full visible record timeline, counts, open follow-ups, plus REAL
-// cross-module links (mentoring status + existing parent conversation).
+// profile: full visible record timeline, counts, open follow-ups, plus the
+// existing parent conversation link (when any).
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ studentId: string }> },
@@ -26,7 +26,7 @@ export async function GET(
       const { studentId } = await params
       const student = await assertStudentInScope(ctx, studentId)
 
-      const [records, followUpRows, assignment, conversation] = await Promise.all([
+      const [records, followUpRows, conversation] = await Promise.all([
         db.behaviorRecord.findMany({
           where: { ...visibleBehaviorWhere(ctx), studentId: student.id },
           include: {
@@ -63,9 +63,6 @@ export async function GET(
           },
           orderBy: { dueDate: 'asc' },
         }),
-        db.mentoringAssignment.findFirst({
-          where: { schoolId: ctx.schoolId, teacherId: ctx.userId, studentId: student.id, active: true },
-        }),
         db.parentConversation.findFirst({
           where: { schoolId: ctx.schoolId, teacherId: ctx.userId, studentId: student.id },
           select: { id: true },
@@ -83,10 +80,6 @@ export async function GET(
           open: items.filter((r) => r.type === 'concern' && r.status !== 'resolved').length,
         },
         followUps: followUpRows.map(toFollowUpItem),
-        mentoring: {
-          isMentee: Boolean(assignment),
-          status: assignment?.status ?? null,
-        },
         conversationId: conversation?.id ?? null,
       }
       return payload

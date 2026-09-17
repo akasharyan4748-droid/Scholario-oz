@@ -12,7 +12,7 @@ import {
 
 export const runtime = 'nodejs'
 
-const KINDS = ['parent-connect', 'behavior', 'mentoring']
+const KINDS = ['parent-connect', 'behavior']
 const PRIORITIES = ['low', 'normal', 'high']
 
 // POST /api/teacher/follow-ups — create a follow-up owned by the authenticated
@@ -75,21 +75,6 @@ export async function POST(req: NextRequest) {
         studentId = studentId ?? record.studentId
       }
 
-      let sessionId: string | null = null
-      if (body.sessionId != null) {
-        const session = await db.mentoringSession.findFirst({
-          where: {
-            id: typeof body.sessionId === 'string' ? body.sessionId : '',
-            schoolId: ctx.schoolId,
-            teacherId: ctx.userId,
-          },
-          select: { id: true, studentId: true },
-        })
-        if (!session) throw new Error('Mentoring session not found')
-        sessionId = session.id
-        studentId = studentId ?? session.studentId
-      }
-
       const created = await db.teacherFollowUp.create({
         data: {
           schoolId: ctx.schoolId,
@@ -98,7 +83,6 @@ export async function POST(req: NextRequest) {
           studentId,
           conversationId,
           recordId,
-          sessionId,
           reason,
           note,
           dueDate,

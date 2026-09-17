@@ -1,6 +1,6 @@
 /**
- * teacher-hub-types — the shared DTO contract for the three Teacher Hub
- * modules (Parent Connect / Student Behavior / Student Mentoring).
+ * teacher-hub-types — the shared DTO contract for the Teacher Hub
+ * modules (Parent Connect / Student Behavior).
  *
  * Pure types + tiny config maps: NO server imports — this file is safe for
  * client components. Server routes in /api/teacher/** serialize rows into
@@ -20,7 +20,7 @@ export interface StudentRef {
   classId: string | null
 }
 
-export type FollowUpKind = 'parent-connect' | 'behavior' | 'mentoring'
+export type FollowUpKind = 'parent-connect' | 'behavior'
 export type FollowUpPriority = 'low' | 'normal' | 'high'
 export type FollowUpStatus = 'open' | 'done' | 'cancelled'
 
@@ -35,7 +35,6 @@ export interface FollowUpItem {
   student: StudentRef | null
   conversationId: string | null
   recordId: string | null
-  sessionId: string | null
   createdAt: string
 }
 
@@ -179,83 +178,7 @@ export interface StudentBehaviorProfile {
   records: BehaviorRecordItem[]
   counts: { positive: number; observation: number; concern: number; open: number }
   followUps: FollowUpItem[]
-  mentoring: { isMentee: boolean; status: string | null }
   conversationId: string | null
-}
-
-// ---------- Student Mentoring ----------
-
-export type MenteeStatus = 'on-track' | 'watch' | 'needs-support' | 'critical'
-export type SupportType =
-  | 'academic'
-  | 'attendance'
-  | 'social'
-  | 'wellbeing'
-  | 'career'
-  | 'general'
-export type SessionType =
-  | 'academic'
-  | 'wellbeing'
-  | 'attendance'
-  | 'career'
-  | 'personal-development'
-  | 'general'
-export type GoalStatus = 'not-started' | 'in-progress' | 'on-track' | 'achieved' | 'paused'
-
-export interface MenteeItem {
-  id: string
-  status: MenteeStatus
-  supportType: SupportType
-  notes: string | null
-  active: boolean
-  createdAt: string
-  student: StudentRef
-  lastSessionAt: string | null
-  nextFollowUpAt: string | null
-  goals: { total: number; achieved: number; inProgress: number }
-  sessionCount: number
-}
-
-export interface SessionItem {
-  id: string
-  date: string
-  type: SessionType
-  discussion: string
-  actionItems: string[]
-  durationMinutes: number | null
-  followUpDate: string | null
-  student: StudentRef
-}
-
-export interface GoalItem {
-  id: string
-  title: string
-  target: string | null
-  reviewDate: string | null
-  status: GoalStatus
-  createdAt: string
-  student: StudentRef
-}
-
-export interface MentoringStats {
-  activeMentees: number
-  sessionsThisMonth: number
-  followUpsOpen: number
-  followUpsDue: number
-  /** status in (needs-support, critical) AND active */
-  needingSupport: number
-  totalSessions: number
-}
-
-export interface MentoringPayload {
-  teacher: { name: string; classLabel: string }
-  assignments: MenteeItem[]
-  sessions: SessionItem[]
-  goals: GoalItem[]
-  followUps: FollowUpItem[]
-  /** students the teacher may add as mentees / log sessions for */
-  students: StudentRef[]
-  stats: MentoringStats
 }
 
 // ---------- client-side config (labels / tones shared by the modules) ----------
@@ -264,39 +187,6 @@ export const FOLLOW_UP_PRIORITY_LABELS: Record<FollowUpPriority, string> = {
   low: 'Low',
   normal: 'Normal',
   high: 'High',
-}
-
-export const MENTEE_STATUS_LABELS: Record<MenteeStatus, string> = {
-  'on-track': 'On Track',
-  watch: 'Watch',
-  'needs-support': 'Needs Support',
-  critical: 'Critical',
-}
-
-export const SESSION_TYPE_LABELS: Record<SessionType, string> = {
-  academic: 'Academic',
-  wellbeing: 'Wellbeing',
-  attendance: 'Attendance',
-  career: 'Career',
-  'personal-development': 'Personal Development',
-  general: 'General',
-}
-
-export const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {
-  'not-started': 'Not Started',
-  'in-progress': 'In Progress',
-  'on-track': 'On Track',
-  achieved: 'Achieved',
-  paused: 'Paused',
-}
-
-export const SUPPORT_TYPE_LABELS: Record<SupportType, string> = {
-  academic: 'Academic Support',
-  attendance: 'Attendance Support',
-  social: 'Social Support',
-  wellbeing: 'Wellbeing Check-in',
-  career: 'Career Guidance',
-  general: 'General Support',
 }
 
 export const BEHAVIOR_TYPE_LABELS: Record<BehaviorType, string> = {

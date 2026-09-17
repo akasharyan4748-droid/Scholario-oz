@@ -11,9 +11,9 @@ import { LessonPlannerModule } from '../modules/lesson-planner'
 import { PTMSchedulerModule } from '../modules/ptm-scheduler'
 import { StudentBehaviorModule } from '../modules/student-behavior'
 import { ParentConnectModule } from '../modules/parent-connect'
-import { MentoringModule } from '../modules/mentoring'
 import { ExamProctoringModule } from '../modules/exam-proctoring'
 import { ApplicationReviewsModule } from '../modules/applications'
+import { TeacherSettingsModule } from '../modules/settings'
 
 interface ModuleRouterProps {
   active: string
@@ -34,9 +34,9 @@ export function ModuleRouter({ active, onNavigate }: ModuleRouterProps) {
       {active === 'ptm' && <PTMSchedulerModule />}
       {active === 'behavior' && <StudentBehaviorModule onNavigate={onNavigate} />}
       {active === 'parent-connect' && <ParentConnectModule onNavigate={onNavigate} />}
-      {active === 'mentoring' && <MentoringModule onNavigate={onNavigate} />}
-      {active === 'analytics' && <TeacherAnalyticsModule />}
-      {active === 'communication' && <CommunicationModule />}
+      {active === 'analytics' && <TeacherAnalyticsModule onNavigate={onNavigate} />}
+      {active === 'settings' && <TeacherSettingsModule />}
+      {active === 'communication' && <CommunicationModule onNavigate={onNavigate} />}
     </>
   )
 }
