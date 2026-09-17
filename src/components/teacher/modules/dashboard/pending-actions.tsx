@@ -38,7 +38,10 @@ interface FollowUpRow extends FollowUpItem {
 function dueLabel(due: string): { text: string; tone: 'overdue' | 'today' | 'later' } {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const d = new Date(`${due}T00:00:00`)
+  // `due` may be a plain "YYYY-MM-DD" day key OR a full ISO timestamp —
+  // parse it as-is when it already carries a time part.
+  const d = new Date(due.includes('T') ? due : `${due}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return { text: 'Scheduled', tone: 'later' }
   const days = Math.round((d.getTime() - today.getTime()) / 86_400_000)
   if (days < 0) return { text: `Overdue ${Math.abs(days)}d`, tone: 'overdue' }
   if (days === 0) return { text: 'Due today', tone: 'today' }

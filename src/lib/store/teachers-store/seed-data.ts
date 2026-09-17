@@ -123,7 +123,7 @@ export const SEED_TEACHERS: TeacherRecord[] = [
     positions: [
       { id: 'pa-102', positionId: 'pos-subject-teacher', positionTitle: 'Subject Teacher', assignedDate: '2015-06-01', assignedBy: 'Dr. Ananya Iyer', status: 'Active', effectiveDate: '2015-06-01' },
       { id: 'pa-103', positionId: 'pos-class-teacher', positionTitle: 'Class Teacher', assignedDate: '2023-04-01', assignedBy: 'Dr. Ananya Iyer', status: 'Active', effectiveDate: '2023-04-01' },
-      { id: 'pa-104', positionId: 'pos-exam-incharge', positionTitle: 'Examination Incharge', assignedDate: '2025-07-20', assignedBy: 'Dr. Ananya Iyer', status: 'Pending Acceptance', effectiveDate: '2025-08-01' },
+      { id: 'pa-104', positionId: 'pos-exam-incharge', positionTitle: 'Examination Incharge', assignedDate: '2026-07-20', assignedBy: 'Dr. Ananya Iyer', status: 'Pending Acceptance', effectiveDate: '2026-08-01' },
     ],
     documents: [
       { id: 'doc-10', title: 'M.Sc Degree Certificate', category: 'Qualification', fileName: 'MSc_Math_Rohan.pdf', uploadDate: '2015-06-01', status: 'Verified' },

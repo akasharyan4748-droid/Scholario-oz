@@ -1,8 +1,23 @@
 /**
- * seed-exam-ops — real exam-operation records for the Teacher Exam
- * Proctoring module: ExamScheduleItems (papers with rooms, times and
- * invigilators) and ExamSeatAssignments (room + seat per student) for the
- * school's real exams, classes, subjects, students and teachers.
+ * seed-exam-ops — the examination world for the Teacher Exam Proctoring
+ * module, rebuilt around ONE question: "Which exam duty do I have, when is
+ * it, where is it, and what do I need to do?"
+ *
+ * The dataset (all Academic Session 2026–2027, today = 17 Sep 2026):
+ *
+ *   · Mid-Term Examination   Aug 31 – Sep 3   COMPLETED  — duty HISTORY,
+ *     with historical attendance + incidents recorded by the invigilator.
+ *   · Periodic Assessment 1  Sep 9 – Sep 12   COMPLETED  — duty HISTORY
+ *     (keeps its ExamSubjectConfigs — Marks Entry still uses them).
+ *   · Unit Test 2            Sep 17 – Sep 21  ONGOING    — papers TODAY
+ *     (morning + afternoon for Rohan Mehta) and upcoming (19 & 21 Sep).
+ *   · Final Examination      Mar 1 – Mar 12, 2027  SCHEDULED — no papers
+ *     published yet (honest "papers not scheduled" state).
+ *
+ * Rooms: Grade 9-A writes in Room 201, Grade 10-A in Room 202 (one class
+ * per room, one paper per room-slot — no double-booking). Every schedule
+ * item carries the invigilator's user id AND name so authorization is
+ * enforced server-side on ids, never on display strings alone.
  *
  * Run: bun run db:seed-exam-ops
  */
@@ -10,32 +25,34 @@ import { PrismaClient } from '@prisma/client'
 
 const db = new PrismaClient()
 
-/** Exam-suitable rooms (classrooms upstairs + labs). */
-const EXAM_ROOMS = ['Room 201', 'Room 202', 'Room 203', 'Room 204', 'Room 205', 'Room 206']
-/** Seating grid per room (rows × cols). */
+/** Seating grid per room (rows × cols) → capacity 24. */
 const ROOM_GRID = { rows: 4, cols: 6 }
+const CLASS_ROOMS: Record<string, string> = {} // filled after classes load
 
-/** Morning / afternoon paper slots. */
-const SLOTS = [
-  { start: '09:00', end: '11:30' },
-  { start: '13:30', end: '16:00' },
-]
+/** Slot lengths per exam kind. */
+const LONG_SLOT = { start: '09:00', end: '11:30' }
+const LONG_SLOT_PM = { start: '13:30', end: '16:00' }
+const SHORT_SLOT = { start: '09:00', end: '11:00' }
+const SHORT_SLOT_PM = { start: '13:30', end: '15:30' }
 
-function dayKey(d: Date): string {
-  return `${d.getUTCFullYear()}-${`${d.getUTCMonth() + 1}`.padStart(2, '0')}-${`${d.getUTCDate()}`.padStart(2, '0')}`
+function day(y: number, m: number, d: number): Date {
+  return new Date(Date.UTC(y, m - 1, d))
 }
 
-/** Working days (Mon–Sat) inside [start, end], capped at maxDays. */
-function workingDays(start: Date, end: Date, maxDays: number): Date[] {
-  const days: Date[] = []
-  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()))
-  const stop = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()))
-  while (cursor <= stop && days.length < maxDays) {
-    const wd = cursor.getUTCDay()
-    if (wd >= 1 && wd <= 6) days.push(new Date(cursor))
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
-  }
-  return days
+/** Duty date (UTC midnight) + "HH:MM" start time + offset minutes. */
+function duringPaper(dutyDate: Date, startTime: string, offsetMinutes: number): Date {
+  const [h, m] = startTime.split(':').map((x) => Number.parseInt(x, 10))
+  return new Date(dutyDate.getTime() + ((h || 0) * 60 + (m || 0) + offsetMinutes) * 60 * 1000)
+}
+
+/** A paper slot in the hand-authored plans below. */
+interface PaperPlan {
+  exam: 'MID_TERM' | 'PA1' | 'UT2'
+  className: 'G9' | 'G10'
+  subject: string
+  date: Date
+  slot: { start: string; end: string }
+  invigilator: string
 }
 
 async function main() {
@@ -43,138 +60,340 @@ async function main() {
   if (!school) throw new Error('No school found')
   console.log(`School: ${school.name}`)
 
-  // Clean previous exam-ops seeds (schedule items + seat assignments only —
-  // exams, classes, subject configs and students are owned by other seeds).
-  const delSched = await db.examScheduleItem.deleteMany({})
-  const delSeats = await db.examSeatAssignment.deleteMany({})
-  console.log(`  Cleared ${delSched.count} schedule items, ${delSeats.count} seat assignments`)
-
-  // Real invigilators: the teachers who actually teach this school's classes.
-  const invigilators = await db.timetable.findMany({
-    select: { teacherName: true },
-    distinct: ['teacherName'],
-    where: { schoolId: school.id, teacherName: { not: null } },
+  // ── Ground truth: classes, subjects, teachers, students ────────────────
+  const classes = await db.class.findMany({
+    where: { schoolId: school.id },
+    select: { id: true, name: true, section: true },
   })
-  const invNames = invigilators.map((t) => t.teacherName!).filter(Boolean)
-  if (invNames.length === 0) throw new Error('No teachers found in timetable')
-  console.log(`  Invigilators: ${invNames.join(', ')}`)
+  const g9 = classes.find((c) => c.name.includes('9'))
+  const g10 = classes.find((c) => c.name.includes('10'))
+  if (!g9 || !g10) throw new Error('Expected Grade 9 and Grade 10 classes')
+  const classIdOf: Record<'G9' | 'G10', string> = { G9: g9.id, G10: g10.id }
+  CLASS_ROOMS[g9.id] = 'Room 201'
+  CLASS_ROOMS[g10.id] = 'Room 202'
 
-  // ── Schedule items: one paper per ExamSubjectConfig ──────────────────
-  const configs = await db.examSubjectConfig.findMany({
-    where: { exam: { schoolId: school.id } },
-    include: {
-      exam: { select: { name: true, startDate: true, endDate: true } },
-      class: { select: { name: true, section: true } },
-      subject: { select: { name: true } },
-    },
-    orderBy: [{ examId: 'asc' }, { classId: 'asc' }, { subjectId: 'asc' }],
-  })
-
-  // Group by exam → assign papers across the exam's working days, two slots
-  // per day, cycling rooms and invigilators.
-  const byExam = new Map<string, typeof configs>()
-  for (const c of configs) {
-    const list = byExam.get(c.examId) ?? []
-    list.push(c)
-    byExam.set(c.examId, list)
-  }
-
-  let schedCount = 0
-  for (const [examId, list] of byExam) {
-    const exam = list[0].exam
-    const days = workingDays(exam.startDate, exam.endDate, 10)
-    let slotIdx = 0
-    for (let i = 0; i < list.length; i++) {
-      const cfg = list[i]
-      const day = days[Math.floor(slotIdx / SLOTS.length)] ?? days[days.length - 1]
-      const slot = SLOTS[slotIdx % SLOTS.length]
-      const room = EXAM_ROOMS[i % EXAM_ROOMS.length]
-      const invigilator = invNames[(i + 1) % invNames.length]
-      await db.examScheduleItem.create({
-        data: {
-          examId,
-          classId: cfg.classId,
-          subjectId: cfg.subjectId,
-          date: day,
-          startTime: slot.start,
-          endTime: slot.end,
-          room,
-          invigilatorName: invigilator,
-        },
-      })
-      schedCount++
-      slotIdx++
-    }
-  }
-  console.log(`  Created ${schedCount} schedule items (papers with rooms + invigilators)`)
-
-  // ── Seat assignments: every student of every exam class ──────────────
-  // Classes are INTERLEAVED in each room (seat 1 = class A student 1,
-  // seat 2 = class B student 1, …) — standard exam-hall practice to
-  // avoid neighbours from the same class. Rooms fill to 24 seats (4×6).
-  const examsWithClasses = await db.exam.findMany({
-    where: { schoolId: school.id, examClasses: { some: {} } },
+  const subjects = await db.subject.findMany({
+    where: { schoolId: school.id },
     select: { id: true, name: true },
   })
+  const subjectId = (name: string): string => {
+    const s = subjects.find(
+      (x) => x.name.toLowerCase() === name.toLowerCase(),
+    )
+    if (!s) throw new Error(`Subject not found: ${name}`)
+    return s.id
+  }
 
-  let seatCount = 0
-  for (const exam of examsWithClasses) {
-    const rosters = await db.examClass.findMany({
-      where: { examId: exam.id },
-      select: { classId: true },
+  const teachers = await db.user.findMany({
+    where: { schoolId: school.id, role: 'TEACHER', status: 'ACTIVE' },
+    select: { id: true, name: true },
+  })
+  const teacher = (name: string): { id: string; name: string } => {
+    const t = teachers.find((x) => (x.name || '').includes(name))
+    if (!t) throw new Error(`Teacher not found: ${name}`)
+    return { id: t.id, name: t.name || name }
+  }
+  const ROHAN = teacher('Rohan')
+  const KAVITA = teacher('Kavita')
+  const PRIYA = teacher('Priya')
+  const ARJUN = teacher('Arjun')
+
+  const studentsByClass: Record<'G9' | 'G10', { id: string; name: string }[]> = {
+    G9: [],
+    G10: [],
+  }
+  for (const key of ['G9', 'G10'] as const) {
+    const rows = await db.student.findMany({
+      where: { classId: classIdOf[key], user: { status: 'ACTIVE' } },
+      orderBy: [{ rollNo: 'asc' }],
+      select: { id: true, user: { select: { name: true } } },
     })
-    const classStudents: { id: string }[][] = []
-    for (const rc of rosters) {
-      const students = await db.student.findMany({
-        where: { classId: rc.classId, user: { status: 'ACTIVE' } },
-        orderBy: [{ rollNo: 'asc' }],
-        select: { id: true },
-      })
-      classStudents.push(students)
-    }
-    // Interleave: seat 1 = class A student 1, seat 2 = class B student 1…
-    const withClass: { studentId: string; classId: string }[] = []
-    const maxLen = Math.max(0, ...classStudents.map((s) => s.length))
-    for (let i = 0; i < maxLen; i++) {
-      classStudents.forEach((students, ci) => {
-        if (i < students.length) {
-          withClass.push({
-            studentId: students[i].id,
-            classId: rosters[ci].classId,
-          })
-        }
-      })
-    }
+    studentsByClass[key] = rows.map((r) => ({ id: r.id, name: r.user.name ?? 'Unknown' }))
+  }
+  console.log(
+    `  Students: Grade 9-A ${studentsByClass.G9.length} · Grade 10-A ${studentsByClass.G10.length}`,
+  )
 
-    for (let i = 0; i < withClass.length; i++) {
-      const room = EXAM_ROOMS[Math.floor(i / (ROOM_GRID.rows * ROOM_GRID.cols))]
-      const seatInRoom = (i % (ROOM_GRID.rows * ROOM_GRID.cols)) + 1
-      const row = Math.floor((seatInRoom - 1) / ROOM_GRID.cols) + 1
-      const col = ((seatInRoom - 1) % ROOM_GRID.cols) + 1
-      await db.examSeatAssignment.create({
-        data: {
-          examId: exam.id,
-          classId: withClass[i].classId,
-          studentId: withClass[i].studentId,
-          room,
-          seatNumber: seatInRoom,
-          row,
-          column: col,
-        },
+  // ── Exams: align every row to the 2026–27 session ─────────────────────
+  const exams = await db.exam.findMany({ where: { schoolId: school.id } })
+  const byName = (frag: string) => {
+    const e = exams.find((x) => x.name.includes(frag))
+    if (!e) throw new Error(`Exam not found: ${frag}`)
+    return e
+  }
+  const MID_TERM = byName('Mid-Term')
+  const PA1 = byName('Periodic Assessment 1')
+  const UT2 = byName('Unit Test 2')
+  const FINAL = byName('Final')
+
+  await db.exam.update({
+    where: { id: MID_TERM.id },
+    data: { session: '2026-2027', startDate: day(2026, 8, 31), endDate: day(2026, 9, 3) },
+  })
+  await db.exam.update({
+    where: { id: PA1.id },
+    data: { session: '2026-2027', startDate: day(2026, 9, 9), endDate: day(2026, 9, 12) },
+  })
+  await db.exam.update({
+    where: { id: UT2.id },
+    data: {
+      session: '2026-2027',
+      status: 'ONGOING',
+      startDate: day(2026, 9, 17),
+      endDate: day(2026, 9, 21),
+    },
+  })
+  await db.exam.update({
+    where: { id: FINAL.id },
+    data: {
+      session: '2026-2027',
+      type: 'Final Exam',
+      status: 'SCHEDULED',
+      startDate: day(2027, 3, 1),
+      endDate: day(2027, 3, 12),
+    },
+  })
+
+  // Every exam involves both classes (ExamClass upsert).
+  for (const exam of [MID_TERM, PA1, UT2, FINAL]) {
+    for (const key of ['G9', 'G10'] as const) {
+      await db.examClass.upsert({
+        where: { examId_classId: { examId: exam.id, classId: classIdOf[key] } },
+        update: {},
+        create: { examId: exam.id, classId: classIdOf[key] },
       })
-      seatCount++
+    }
+  }
+
+  // ── Clean previous exam-ops rows (configs + marks are owned elsewhere) ─
+  const delI = await db.examIncident.deleteMany({})
+  const delA = await db.examAttendance.deleteMany({})
+  const delS = await db.examScheduleItem.deleteMany({})
+  const delSeats = await db.examSeatAssignment.deleteMany({})
+  console.log(
+    `  Cleared ${delS.count} schedule items, ${delSeats.count} seats, ${delA.count} attendance, ${delI.count} incidents`,
+  )
+
+  // ── Hand-authored paper plans ──────────────────────────────────────────
+  // One class per room, one paper per room-slot, invigilation spread across
+  // the four teachers. Rohan Mehta's duties are the demo spine:
+  //   history  ×4 (Mid-Term + PA1 maths), today ×2 (UT2 maths), future ×2.
+  const plans: PaperPlan[] = [
+    // Mid-Term Examination — Aug 31 (Mon) → Sep 3 (Thu), 2.5h papers
+    { exam: 'MID_TERM', className: 'G9', subject: 'Mathematics', date: day(2026, 8, 31), slot: LONG_SLOT, invigilator: ROHAN.name },
+    { exam: 'MID_TERM', className: 'G9', subject: 'English', date: day(2026, 8, 31), slot: LONG_SLOT_PM, invigilator: PRIYA.name },
+    { exam: 'MID_TERM', className: 'G9', subject: 'Physics', date: day(2026, 9, 1), slot: LONG_SLOT, invigilator: KAVITA.name },
+    { exam: 'MID_TERM', className: 'G9', subject: 'Social Science', date: day(2026, 9, 1), slot: LONG_SLOT_PM, invigilator: ARJUN.name },
+    { exam: 'MID_TERM', className: 'G9', subject: 'Chemistry', date: day(2026, 9, 2), slot: LONG_SLOT, invigilator: KAVITA.name },
+    { exam: 'MID_TERM', className: 'G9', subject: 'Biology', date: day(2026, 9, 2), slot: LONG_SLOT_PM, invigilator: PRIYA.name },
+    { exam: 'MID_TERM', className: 'G9', subject: 'Hindi', date: day(2026, 9, 3), slot: LONG_SLOT, invigilator: ARJUN.name },
+    { exam: 'MID_TERM', className: 'G10', subject: 'English', date: day(2026, 8, 31), slot: LONG_SLOT, invigilator: PRIYA.name },
+    { exam: 'MID_TERM', className: 'G10', subject: 'Physics', date: day(2026, 8, 31), slot: LONG_SLOT_PM, invigilator: KAVITA.name },
+    { exam: 'MID_TERM', className: 'G10', subject: 'Mathematics', date: day(2026, 9, 1), slot: LONG_SLOT, invigilator: ROHAN.name },
+    { exam: 'MID_TERM', className: 'G10', subject: 'Chemistry', date: day(2026, 9, 1), slot: LONG_SLOT_PM, invigilator: KAVITA.name },
+    { exam: 'MID_TERM', className: 'G10', subject: 'Social Science', date: day(2026, 9, 2), slot: LONG_SLOT, invigilator: ARJUN.name },
+    { exam: 'MID_TERM', className: 'G10', subject: 'Biology', date: day(2026, 9, 2), slot: LONG_SLOT_PM, invigilator: PRIYA.name },
+    { exam: 'MID_TERM', className: 'G10', subject: 'Hindi', date: day(2026, 9, 3), slot: LONG_SLOT, invigilator: ARJUN.name },
+
+    // Periodic Assessment 1 — Sep 9 (Wed) → Sep 12 (Sat), 2.5h papers
+    { exam: 'PA1', className: 'G9', subject: 'Mathematics', date: day(2026, 9, 9), slot: LONG_SLOT, invigilator: ROHAN.name },
+    { exam: 'PA1', className: 'G9', subject: 'Physics', date: day(2026, 9, 9), slot: LONG_SLOT_PM, invigilator: KAVITA.name },
+    { exam: 'PA1', className: 'G9', subject: 'Chemistry', date: day(2026, 9, 10), slot: LONG_SLOT, invigilator: KAVITA.name },
+    { exam: 'PA1', className: 'G9', subject: 'English', date: day(2026, 9, 10), slot: LONG_SLOT_PM, invigilator: PRIYA.name },
+    { exam: 'PA1', className: 'G9', subject: 'Biology', date: day(2026, 9, 11), slot: LONG_SLOT, invigilator: PRIYA.name },
+    { exam: 'PA1', className: 'G9', subject: 'Social Science', date: day(2026, 9, 11), slot: LONG_SLOT_PM, invigilator: ARJUN.name },
+    { exam: 'PA1', className: 'G9', subject: 'Hindi', date: day(2026, 9, 12), slot: LONG_SLOT, invigilator: ARJUN.name },
+    { exam: 'PA1', className: 'G10', subject: 'Physics', date: day(2026, 9, 9), slot: LONG_SLOT, invigilator: KAVITA.name },
+    { exam: 'PA1', className: 'G10', subject: 'English', date: day(2026, 9, 9), slot: LONG_SLOT_PM, invigilator: PRIYA.name },
+    { exam: 'PA1', className: 'G10', subject: 'Hindi', date: day(2026, 9, 10), slot: LONG_SLOT, invigilator: ARJUN.name },
+    { exam: 'PA1', className: 'G10', subject: 'Mathematics', date: day(2026, 9, 10), slot: LONG_SLOT_PM, invigilator: ROHAN.name },
+    { exam: 'PA1', className: 'G10', subject: 'Chemistry', date: day(2026, 9, 11), slot: LONG_SLOT, invigilator: KAVITA.name },
+    { exam: 'PA1', className: 'G10', subject: 'Social Science', date: day(2026, 9, 11), slot: LONG_SLOT_PM, invigilator: ARJUN.name },
+    { exam: 'PA1', className: 'G10', subject: 'Biology', date: day(2026, 9, 12), slot: LONG_SLOT, invigilator: PRIYA.name },
+
+    // Unit Test 2 — Sep 17 (Thu, TODAY) → Sep 21 (Mon, skipping Sunday),
+    // 2h papers. Rohan: both maths papers TODAY + English (Sat) + Hindi (Mon).
+    { exam: 'UT2', className: 'G9', subject: 'Mathematics', date: day(2026, 9, 17), slot: SHORT_SLOT, invigilator: ROHAN.name },
+    { exam: 'UT2', className: 'G9', subject: 'Physics', date: day(2026, 9, 17), slot: SHORT_SLOT_PM, invigilator: KAVITA.name },
+    { exam: 'UT2', className: 'G9', subject: 'Chemistry', date: day(2026, 9, 18), slot: SHORT_SLOT, invigilator: KAVITA.name },
+    { exam: 'UT2', className: 'G9', subject: 'Biology', date: day(2026, 9, 18), slot: SHORT_SLOT_PM, invigilator: PRIYA.name },
+    { exam: 'UT2', className: 'G9', subject: 'English', date: day(2026, 9, 19), slot: SHORT_SLOT, invigilator: ROHAN.name },
+    { exam: 'UT2', className: 'G9', subject: 'Social Science', date: day(2026, 9, 19), slot: SHORT_SLOT_PM, invigilator: ARJUN.name },
+    { exam: 'UT2', className: 'G9', subject: 'Hindi', date: day(2026, 9, 21), slot: SHORT_SLOT, invigilator: ARJUN.name },
+    { exam: 'UT2', className: 'G10', subject: 'English', date: day(2026, 9, 17), slot: SHORT_SLOT, invigilator: PRIYA.name },
+    { exam: 'UT2', className: 'G10', subject: 'Mathematics', date: day(2026, 9, 17), slot: SHORT_SLOT_PM, invigilator: ROHAN.name },
+    { exam: 'UT2', className: 'G10', subject: 'Physics', date: day(2026, 9, 18), slot: SHORT_SLOT, invigilator: KAVITA.name },
+    { exam: 'UT2', className: 'G10', subject: 'Chemistry', date: day(2026, 9, 18), slot: SHORT_SLOT_PM, invigilator: KAVITA.name },
+    { exam: 'UT2', className: 'G10', subject: 'Biology', date: day(2026, 9, 19), slot: SHORT_SLOT, invigilator: PRIYA.name },
+    { exam: 'UT2', className: 'G10', subject: 'Social Science', date: day(2026, 9, 19), slot: SHORT_SLOT_PM, invigilator: ARJUN.name },
+    { exam: 'UT2', className: 'G10', subject: 'Hindi', date: day(2026, 9, 21), slot: SHORT_SLOT, invigilator: ROHAN.name },
+  ]
+
+  const examIdOf: Record<PaperPlan['exam'], string> = {
+    MID_TERM: MID_TERM.id,
+    PA1: PA1.id,
+    UT2: UT2.id,
+  }
+
+  const createdItems: {
+    id: string
+    exam: PaperPlan['exam']
+    className: 'G9' | 'G10'
+    subject: string
+    date: Date
+    startTime: string
+    invigilator: string
+  }[] = []
+
+  for (const p of plans) {
+    const inv = teacher(p.invigilator)
+    const item = await db.examScheduleItem.create({
+      data: {
+        examId: examIdOf[p.exam],
+        classId: classIdOf[p.className],
+        subjectId: subjectId(p.subject),
+        date: p.date,
+        startTime: p.slot.start,
+        endTime: p.slot.end,
+        room: CLASS_ROOMS[classIdOf[p.className]],
+        invigilatorId: inv.id,
+        invigilatorName: inv.name,
+      },
+    })
+    createdItems.push({
+      id: item.id,
+      exam: p.exam,
+      className: p.className,
+      subject: p.subject,
+      date: p.date,
+      startTime: p.slot.start,
+      invigilator: inv.name,
+    })
+  }
+  console.log(`  Created ${createdItems.length} papers (schedule items)`)
+
+  // ── Seat assignments: one class per room, roll order → seat order ─────
+  let seatCount = 0
+  for (const exam of [MID_TERM, PA1, UT2]) {
+    for (const key of ['G9', 'G10'] as const) {
+      const room = CLASS_ROOMS[classIdOf[key]]
+      const roster = studentsByClass[key]
+      for (let i = 0; i < roster.length; i++) {
+        const seatNumber = i + 1
+        await db.examSeatAssignment.create({
+          data: {
+            examId: exam.id,
+            classId: classIdOf[key],
+            studentId: roster[i].id,
+            room,
+            seatNumber,
+            row: Math.floor(i / ROOM_GRID.cols) + 1,
+            column: (i % ROOM_GRID.cols) + 1,
+          },
+        })
+        seatCount++
+      }
     }
   }
   console.log(`  Created ${seatCount} seat assignments`)
 
-  // ── Verify ────────────────────────────────────────────────────────────
+  // ── Historical exam attendance (Rohan's four completed duties) ─────────
+  const historyDuties = createdItems.filter(
+    (c) => c.invigilator === ROHAN.name && c.exam !== 'UT2',
+  )
+  let attCount = 0
+  for (const duty of historyDuties) {
+    const roster = studentsByClass[duty.className]
+    for (let i = 0; i < roster.length; i++) {
+      // Quiet, believable variety — a couple of absences and one late.
+      let status = 'PRESENT'
+      if (duty.exam === 'MID_TERM' && duty.subject === 'Mathematics' && duty.className === 'G9' && i === 6) status = 'ABSENT'
+      if (duty.exam === 'MID_TERM' && duty.subject === 'Mathematics' && duty.className === 'G10' && i === 4) status = 'LATE'
+      if (duty.exam === 'PA1' && duty.subject === 'Mathematics' && duty.className === 'G9' && i === 2) status = 'ABSENT'
+      await db.examAttendance.create({
+        data: {
+          examId: examIdOf[duty.exam],
+          scheduleItemId: duty.id,
+          classId: classIdOf[duty.className],
+          studentId: roster[i].id,
+          subjectId: subjectId(duty.subject),
+          date: duty.date,
+          status,
+          markedBy: ROHAN.name,
+          // Plausible historical marking time (20 minutes into the paper) —
+          // otherwise @updatedAt stamps "now" and history reads like it was
+          // marked today.
+          updatedAt: duringPaper(duty.date, duty.startTime, 20),
+        },
+      })
+      attCount++
+    }
+  }
+  console.log(`  Created ${attCount} historical attendance records`)
+
+  // ── Historical incidents (professional records from past duties) ───────
+  const incidentSeeds: {
+    duty: (typeof createdItems)[number]
+    studentIdx: number | null
+    incidentType: string
+    at: Date
+    description: string
+  }[] = [
+    {
+      duty: historyDuties.find((d) => d.exam === 'MID_TERM' && d.subject === 'Mathematics' && d.className === 'G9')!,
+      studentIdx: null,
+      incidentType: 'PAPER_ISSUE',
+      at: duringPaper(day(2026, 8, 31), '09:00', 20),
+      description:
+        'Three question papers had blurred print in Section B. Replacements were collected from the exam office within five minutes and the affected students were given equal extra time.',
+    },
+    {
+      duty: historyDuties.find((d) => d.exam === 'MID_TERM' && d.subject === 'Mathematics' && d.className === 'G10')!,
+      studentIdx: studentsByClass.G10.length - 1,
+      incidentType: 'MEDICAL_ISSUE',
+      at: duringPaper(day(2026, 9, 1), '09:00', 100),
+      description:
+        'Student felt dizzy during the final half hour. A supervised water break was allowed; the student continued writing afterwards and completed the paper.',
+    },
+    {
+      duty: historyDuties.find((d) => d.exam === 'PA1' && d.subject === 'Mathematics' && d.className === 'G9')!,
+      studentIdx: 9,
+      incidentType: 'LATE_ARRIVAL',
+      at: duringPaper(day(2026, 9, 9), '09:00', 12),
+      description:
+        'Arrived twelve minutes after the bell. Admitted under the late-arrival policy; no extra time was granted.',
+    },
+  ]
+  for (const inc of incidentSeeds) {
+    if (!inc.duty) continue
+    await db.examIncident.create({
+      data: {
+        schoolId: school.id,
+        examId: examIdOf[inc.duty.exam],
+        scheduleItemId: inc.duty.id,
+        studentId:
+          inc.studentIdx == null ? null : studentsByClass[inc.duty.className][inc.studentIdx]?.id ?? null,
+        incidentType: inc.incidentType,
+        occurredAt: inc.at,
+        description: inc.description,
+        reportedById: ROHAN.id,
+        reportedByName: ROHAN.name,
+      },
+    })
+  }
+  console.log(`  Created ${incidentSeeds.length} historical incidents`)
+
+  // ── Verify ─────────────────────────────────────────────────────────────
   const verify = await db.examScheduleItem.findMany({
+    where: { invigilatorId: ROHAN.id },
     include: { exam: { select: { name: true } }, subject: { select: { name: true } }, class: { select: { name: true, section: true } } },
-    orderBy: [{ date: 'asc' }],
-    take: 5,
+    orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
   })
+  console.log(`\n  Rohan Mehta's duties (${verify.length}):`)
   for (const v of verify) {
-    console.log(`    ${dayKey(v.date)} ${v.startTime} ${v.exam.name} ${v.class.name}-${v.class.section} ${v.subject.name} @ ${v.room} (${v.invigilatorName})`)
+    console.log(
+      `    ${v.date.toISOString().slice(0, 10)} ${v.startTime}–${v.endTime} ${v.room} · ${v.exam.name} · ${v.class.name} ${v.subject.name}`,
+    )
   }
 }
 

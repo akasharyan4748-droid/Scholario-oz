@@ -35,7 +35,9 @@ export const useTeachersStore = create<TeachersStoreState>()(
       // v2 — faculty list now derives the full 20-member canonical roster
       // (was 2 detailed records). Version bump discards the stale 2-teacher
       // persisted state once and re-seeds the full faculty.
-      version: 2,
+      // v3 — pending Examination Incharge assignment re-dated to the
+      // 2026–27 session (was a stale 2025 date on a 2026 screen).
+      version: 3,
     }
   )
 )

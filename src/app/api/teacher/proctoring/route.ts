@@ -1,28 +1,165 @@
 import { db } from '@/lib/db'
 import { withUser, schoolScoped } from '@/lib/api'
 import { classLabelOf } from '@/lib/teacher-hub'
+import {
+  dayKey,
+  deriveDutyStatus,
+  type DutyStatus,
+} from '@/lib/exam-duty'
 
 export const runtime = 'nodejs'
 
 /**
- * GET /api/teacher/proctoring — the Exam Proctoring payload, derived
- * entirely from real exam-operation records:
- *   • exams with their papers (ExamScheduleItem: subject, date, slot,
- *     room, invigilator) and class labels;
- *   • the room-level seating plan (ExamSeatAssignment grouped by room);
- *   • the invigilation duty roster (papers with a named invigilator,
- *     the signed-in teacher's own duties flagged);
- *   • hall tickets for the students of the teacher's own classes
- *     (class-teacher classes and subject-teaching classes).
+ * GET /api/teacher/proctoring — the logged-in teacher's examination DUTY
+ * workspace payload (not an exam-administration dashboard):
+ *
+ *   · duties — every invigilation duty assigned to THIS teacher, with its
+ *     derived status (Upcoming / In Progress / Completed / Cancelled),
+ *     room roster size, attendance summary and incident count;
+ *   · stats — the four teacher-specific metrics (upcoming duties in the
+ *     next 30 days, duties today, students to supervise, scheduled hours);
+ *   · schedule — exams the teacher is authorized to see: exams with one of
+ *     her duties, or exams involving a class she teaches / is class
+ *     teacher of. School-wide exam administration stays out.
  */
 export async function GET() {
   return withUser(
     async (user) => {
       const schoolId = schoolScoped(user)
       const teacherName = (user.name || '').trim()
-      const today = new Date()
-      const todayKey = today.toISOString().slice(0, 10)
+      const now = new Date()
+      const today = dayKey(now)
 
+      const school = await db.school.findUnique({
+        where: { id: schoolId },
+        select: { academicYear: true },
+      })
+
+      // ── My duties: schedule items assigned to me in this school ────────
+      const allItems = await db.examScheduleItem.findMany({
+        where: { exam: { schoolId } },
+        include: {
+          exam: { select: { id: true, name: true, type: true, status: true } },
+          class: { select: { id: true, name: true, section: true } },
+          subject: { select: { name: true } },
+        },
+        orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+      })
+      const nameMatch = teacherName.toLowerCase()
+      const myItems = allItems.filter((i) => {
+        if (i.invigilatorId != null) return i.invigilatorId === user.id
+        return (
+          nameMatch.length > 0 &&
+          (i.invigilatorName || '').trim().toLowerCase() === nameMatch
+        )
+      })
+
+      // Room roster size per (exam, room) + attendance + incidents in bulk.
+      const seats = await db.examSeatAssignment.findMany({
+        where: { exam: { schoolId } },
+        select: { examId: true, room: true, studentId: true },
+      })
+      const roomSize = new Map<string, number>()
+      for (const s of seats) {
+        const key = `${s.examId}|${s.room}`
+        roomSize.set(key, (roomSize.get(key) ?? 0) + 1)
+      }
+      const myExamIds = new Set(myItems.map((i) => i.examId))
+      const attendanceRows = await db.examAttendance.findMany({
+        where: { examId: { in: [...myExamIds] } },
+        select: { scheduleItemId: true, studentId: true, status: true },
+      })
+      const attByDuty = new Map<string, { P: number; A: number; L: number }>()
+      for (const a of attendanceRows) {
+        if (!a.scheduleItemId) continue
+        const slot = attByDuty.get(a.scheduleItemId) ?? { P: 0, A: 0, L: 0 }
+        if (a.status === 'ABSENT') slot.A++
+        else if (a.status === 'LATE') slot.L++
+        else slot.P++
+        attByDuty.set(a.scheduleItemId, slot)
+      }
+      const incidentRows = await db.examIncident.findMany({
+        where: { examId: { in: [...myExamIds] } },
+        select: { scheduleItemId: true },
+      })
+      const incidentsByDuty = new Map<string, number>()
+      for (const inc of incidentRows) {
+        if (!inc.scheduleItemId) continue
+        incidentsByDuty.set(
+          inc.scheduleItemId,
+          (incidentsByDuty.get(inc.scheduleItemId) ?? 0) + 1,
+        )
+      }
+
+      const dutyDTOs = myItems.map((i) => {
+        const status: DutyStatus = deriveDutyStatus(
+          i.date,
+          i.startTime,
+          i.endTime,
+          i.exam.status,
+          now,
+        )
+        const att = attByDuty.get(i.id)
+        return {
+          id: i.id,
+          examId: i.examId,
+          examName: i.exam.name,
+          examType: i.exam.type,
+          subject: i.subject.name,
+          classLabel: classLabelOf(i.class),
+          date: dayKey(i.date),
+          startTime: i.startTime,
+          endTime: i.endTime,
+          room: i.room,
+          role: 'Invigilator',
+          studentCount: (i.room && roomSize.get(`${i.examId}|${i.room}`)) || 0,
+          status,
+          attendance: att
+            ? { present: att.P, absent: att.A, late: att.L }
+            : null,
+          incidentCount: incidentsByDuty.get(i.id) ?? 0,
+        }
+      })
+
+      // ── Teacher-specific stats (no school-wide numbers) ────────────────
+      const in30 = dayKey(new Date(now.getTime() + 30 * 24 * 3600 * 1000))
+      const notCompleted = dutyDTOs.filter(
+        (d) => d.status === 'Upcoming' || d.status === 'In Progress',
+      )
+      let dutyMinutes = 0
+      for (const d of notCompleted) {
+        const [sh, sm] = d.startTime.split(':').map(Number)
+        const [eh, em] = d.endTime.split(':').map(Number)
+        dutyMinutes += eh * 60 + em - (sh * 60 + sm)
+      }
+      const stats = {
+        upcomingDuties: dutyDTOs.filter(
+          (d) => d.date > today && d.date <= in30 && d.status === 'Upcoming',
+        ).length,
+        todaysDuties: dutyDTOs.filter((d) => d.date === today && d.status !== 'Cancelled').length,
+        studentsToSupervise: notCompleted.reduce((acc, d) => acc + d.studentCount, 0),
+        dutyMinutes,
+        completedDuties: dutyDTOs.filter((d) => d.status === 'Completed').length,
+      }
+
+      // ── Authorized exam schedule ───────────────────────────────────────
+      // Exams I have a duty in, or exams involving a class I teach / am
+      // class teacher of. Everything else stays invisible to me.
+      const myClassIds = new Set<string>()
+      const ttRows = await db.timetable.findMany({
+        where: { schoolId, teacherName: { not: null } },
+        select: { classId: true, teacherName: true },
+      })
+      for (const r of ttRows) {
+        if ((r.teacherName || '').trim().toLowerCase() === nameMatch) {
+          myClassIds.add(r.classId)
+        }
+      }
+      const classTeacherOf = await db.class.findMany({
+        where: { schoolId, classTeacherId: user.id },
+        select: { id: true },
+      })
+      for (const c of classTeacherOf) myClassIds.add(c.id)
 
       const exams = await db.exam.findMany({
         where: { schoolId },
@@ -30,184 +167,51 @@ export async function GET() {
           id: true,
           name: true,
           type: true,
-          term: true,
           status: true,
           startDate: true,
           endDate: true,
-          examClasses: { select: { class: { select: { name: true, section: true } } } },
+          examClasses: { select: { classId: true, class: { select: { name: true, section: true } } } },
         },
         orderBy: { startDate: 'asc' },
       })
 
-      const scheduleItems = await db.examScheduleItem.findMany({
-        where: { exam: { schoolId } },
-        include: {
-          exam: { select: { id: true, name: true } },
-          class: { select: { name: true, section: true } },
-          subject: { select: { name: true } },
-        },
-        orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
-      })
-
-      const seatAssignments = await db.examSeatAssignment.findMany({
-        where: { exam: { schoolId } },
-        include: {
-          exam: { select: { id: true, name: true } },
-          student: { select: { id: true, rollNo: true, user: { select: { name: true } }, class: { select: { id: true, name: true, section: true } } } },
-        },
-        orderBy: [{ room: 'asc' }, { seatNumber: 'asc' }],
-      })
-
-      // Teacher's own classes (class-teacher of, or teaches a subject in)
-      const myClassIds = new Set<string>()
-      const ttRows = await db.timetable.findMany({
-        where: { schoolId, teacherName: { not: null } },
-        select: { classId: true, teacherName: true },
-      })
-      for (const r of ttRows) {
-        if ((r.teacherName || '').trim().toLowerCase() === teacherName.toLowerCase()) {
-          myClassIds.add(r.classId)
-        }
-      }
-      // Classes where this teacher is class teacher (Class.classTeacherId)
-      const classTeacherOf = await db.class.findMany({
-        where: { schoolId, classTeacherId: user.id },
-        select: { id: true },
-      })
-      for (const c of classTeacherOf) myClassIds.add(c.id)
-
-      // ── Papers per exam (schedule items) ───────────────────────────────
-      const papersByExam = new Map<string, typeof scheduleItems>()
-      for (const item of scheduleItems) {
-        const list = papersByExam.get(item.examId) ?? []
-        list.push(item)
-        papersByExam.set(item.examId, list)
-      }
-
-      const examDTOs = exams.map((e) => {
-        const papers = papersByExam.get(e.id) ?? []
-        const classes = [...new Set(e.examClasses.map((ec) => classLabelOf(ec.class)))]
-        return {
-          id: e.id,
+      const schedule = exams
+        .filter((e) => {
+          if (myExamIds.has(e.id)) return true
+          return e.examClasses.some((ec) => myClassIds.has(ec.classId))
+        })
+        .map((e) => ({
+          examId: e.id,
           name: e.name,
           type: e.type,
-          term: e.term,
           status: e.status,
-          startDate: e.startDate.toISOString().slice(0, 10),
-          endDate: e.endDate.toISOString().slice(0, 10),
-          classes,
-          paperCount: papers.length,
-          studentCount: seatAssignments.filter((s) => s.examId === e.id).length,
-        }
-      })
-
-      const paperDTOs = scheduleItems.map((item) => ({
-        id: item.id,
-        examId: item.examId,
-        examName: item.exam.name,
-        subject: item.subject.name,
-        classLabel: classLabelOf(item.class),
-        date: item.date.toISOString().slice(0, 10),
-        startTime: item.startTime,
-        endTime: item.endTime,
-        room: item.room,
-        invigilator: item.invigilatorName,
-        isMine: (item.invigilatorName || '').trim().toLowerCase() === teacherName.toLowerCase(),
-        done: item.date.toISOString().slice(0, 10) < todayKey,
-      }))
-
-      // ── Seating plan per room ──────────────────────────────────────────
-      const ROOM_CAPACITY = 24 // 4 rows × 6 cols — mirrors the seeded grid
-      const roomMap = new Map<string, { room: string; examName: string; examId: string; seats: typeof seatAssignments }>()
-      for (const s of seatAssignments) {
-        const key = `${s.exam.id}|${s.room}`
-        let entry = roomMap.get(key)
-        if (!entry) {
-          entry = { room: s.room, examName: s.exam.name, examId: s.exam.id, seats: [] }
-          roomMap.set(key, entry)
-        }
-        entry.seats.push(s)
-      }
-      // Invigilator for each room = the invigilator of the first paper in it
-      const roomInvigilator = new Map<string, string>()
-      for (const p of scheduleItems) {
-        if (p.room && !roomInvigilator.has(`${p.examId}|${p.room}`)) {
-          roomInvigilator.set(`${p.examId}|${p.room}`, p.invigilatorName || '—')
-        }
-      }
-      const seatingDTOs = [...roomMap.values()].map((r) => ({
-        room: r.room,
-        examName: r.examName,
-        allocated: r.seats.length,
-        capacity: ROOM_CAPACITY,
-        rows: 4,
-        cols: 6,
-        invigilator: roomInvigilator.get(`${r.examId}|${r.room}`) ?? '—',
-        seatNumbers: r.seats.map((s) => s.seatNumber),
-        students: r.seats.map((s) => ({
-          name: s.student.user.name,
-          rollNo: s.student.rollNo,
-          classLabel: s.student.class ? classLabelOf(s.student.class) : '',
-          seatNumber: s.seatNumber,
-        })),
-      }))
-
-      // ── Hall tickets: students of MY classes that have seat assignments ─
-      const myTickets = seatAssignments
-        .filter((s) => s.student.class && myClassIds.has(s.student.class.id))
-        .map((s) => {
-          const papers = (papersByExam.get(s.examId) ?? [])
-            .filter((p) => p.classId === s.student.class!.id)
-            .map((p) => ({ subject: p.subject.name, date: p.date.toISOString().slice(0, 10), time: p.startTime }))
-          return {
-            studentId: s.student.id,
-            studentName: s.student.user.name,
-            rollNo: s.student.rollNo,
-            classLabel: s.student.class ? classLabelOf(s.student.class) : '',
-            examName: s.exam.name,
-            room: s.room,
-            seatNumber: s.seatNumber,
-            subjects: papers,
-          }
-        })
-
-      // ── Stats ──────────────────────────────────────────────────────────
-      const upcomingPapers = paperDTOs.filter((p) => p.date >= todayKey && !p.done)
-      const myDuties = paperDTOs.filter((p) => p.isMine)
-      const roomsUsed = new Set(seatingDTOs.map((r) => r.room))
-
-      // Papers per month (for the bar chart)
-      const monthMap = new Map<string, number>()
-      for (const p of paperDTOs) {
-        const m = p.date.slice(0, 7)
-        monthMap.set(m, (monthMap.get(m) ?? 0) + 1)
-      }
-      const monthLabels: Record<string, string> = {
-        '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr', '05': 'May', '06': 'Jun',
-        '07': 'Jul', '08': 'Aug', '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec',
-      }
-      const monthly = [...monthMap.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .slice(-6)
-        .map(([m, count]) => ({ month: monthLabels[m.slice(5, 7)] ?? m, count }))
+          startDate: e.startDate ? dayKey(e.startDate) : null,
+          endDate: e.endDate ? dayKey(e.endDate) : null,
+          classes: [...new Set(e.examClasses.map((ec) => classLabelOf(ec.class)))],
+          papers: allItems
+            .filter((i) => i.examId === e.id)
+            .map((i) => ({
+              id: i.id,
+              subject: i.subject.name,
+              classLabel: classLabelOf(i.class),
+              date: dayKey(i.date),
+              startTime: i.startTime,
+              endTime: i.endTime,
+              room: i.room,
+              invigilatorName: i.invigilatorName,
+              isMine: myItems.some((m) => m.id === i.id),
+            })),
+        }))
 
       return {
         teacherName,
-        exams: examDTOs,
-        papers: paperDTOs,
-        seating: seatingDTOs,
-        duties: paperDTOs.filter((p) => p.invigilator),
-        tickets: myTickets,
-        stats: {
-          upcomingPapers: upcomingPapers.length,
-          upcomingExams: examDTOs.filter((e) => e.startDate >= todayKey && e.status === 'SCHEDULED').length,
-          studentsSeated: seatAssignments.length,
-          roomsUsed: roomsUsed.size,
-          myDuties: myDuties.length,
-          monthly,
-        },
+        academicSession: school?.academicYear ?? null,
+        todayKey: today,
+        duties: dutyDTOs,
+        stats,
+        schedule,
       }
     },
-    { roles: ['TEACHER'] }
+    { roles: ['TEACHER'] },
   )
 }

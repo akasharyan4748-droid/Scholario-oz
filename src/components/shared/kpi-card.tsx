@@ -8,7 +8,8 @@ import { MiniLine } from './charts'
 
 export interface KpiProps {
   label: string
-  value: number
+  /** Number (animated counter) or a pre-formatted display string ("7 · 4", "—"). */
+  value: number | string
   prefix?: string
   suffix?: string
   decimals?: number
@@ -65,7 +66,11 @@ export function KpiCard({
       <div className="relative mt-2">
         <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium truncate">{label}</p>
         <p className="font-display text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-foreground leading-tight mt-0.5">
-          <AnimatedCounter value={value} prefix={prefix} suffix={suffix} decimals={decimals} format={format} />
+          {typeof value === 'number' ? (
+            <AnimatedCounter value={value} prefix={prefix} suffix={suffix} decimals={decimals} format={format} />
+          ) : (
+            value
+          )}
         </p>
         {trendLabel && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{trendLabel}</p>}
       </div>
