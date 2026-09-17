@@ -81,6 +81,11 @@ model School {
   mentoringGoals       MentoringGoal[]
   teacherFollowUps     TeacherFollowUp[]
   messageTemplates     MessageTemplate[]
+
+  // Teacher Workspace v2.15 — curriculum, lesson planning & subject attendance
+  curriculumTopics        CurriculumTopic[]
+  lessonTopicCompletions  LessonTopicCompletion[]
+  subjectAttendanceSessions SubjectAttendanceSession[]
 }
 
 model User {
@@ -167,6 +172,7 @@ model Student {
   seatAssignments     ExamSeatAssignment[]
   resultOutcomes      ExamResultOutcome[]
   homeworkSubmissions HomeworkSubmission[]
+  subjectAttendanceEntries SubjectAttendanceEntry[]
 
   // L2D — Learning Experience 2.0 (student-scoped, always school-scoped too
   // via the parent rows: material/deck/group carry schoolId).
@@ -213,6 +219,10 @@ model Class {
   examMarks          ExamMark[]
   homeworks          Homework[]
   subjectAssignments ClassSubjectAssignment[]
+
+  // Teacher Workspace v2.15 — curriculum & subject attendance
+  curriculumTopics          CurriculumTopic[]
+  subjectAttendanceSessions SubjectAttendanceSession[]
 }
 
 model Subject {
@@ -241,6 +251,10 @@ model Subject {
   homeworks        Homework[]
   examAttendances  ExamAttendance[]
   classAssignments ClassSubjectAssignment[]
+
+  // Teacher Workspace v2.15
+  curriculumTopics        CurriculumTopic[]
+  subjectAttendanceSessions SubjectAttendanceSession[]
 
   // L2D — Learning Experience 2.0 subject-linked entities.
   flashcardDecks   FlashcardDeck[]
@@ -1674,4 +1688,106 @@ model MessageTemplate {
   createdAt DateTime @default(now())
 
   @@index([schoolId, kind, isActive])
+}
+
+// ─── Teacher Workspace v2.15 — Curriculum & Lesson Planning ─────────────
+//
+// Architecture (Lesson Planner rework):
+//   CurriculumTopic   — the SCHOOL'S curriculum instance for one (class,
+//                      subject): ordered units → topics seeded from a real
+//                      board structure (CBSE / NCERT). Traceable to its
+//                      master-library source via sourceBoard.
+//   LessonTopicCompletion — the ONLY persisted planning state: the day a
+//                      topic was actually completed (history). The day-wise
+//                      schedule itself is DERIVED on read from the school
+//                      calendar + timetable pace, so calendar changes
+//                      automatically reschedule future topics while past
+//                      completions keep their real dates.
+
+model CurriculumTopic {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId       String
+  class         Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId     String
+  subject       Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  /// Master-library traceability (the board structure this instance was
+  /// instantiated from — e.g. "CBSE-2026"). Never AI-generated content.
+  sourceBoard   String   @default("CBSE")
+  unitNo        Int
+  unitName      String
+  /// Sequential topic number within the subject's curriculum.
+  topicNo       Int
+  topicName     String
+  description   String?
+  /// Estimated teaching periods (incl. guided practice & assessment).
+  periodsNeeded Int      @default(4)
+  orderIndex    Int
+  createdAt     DateTime @default(now())
+
+  completions   LessonTopicCompletion[]
+
+  @@unique([classId, subjectId, topicNo])
+  @@index([schoolId, classId, subjectId, orderIndex])
+}
+
+model LessonTopicCompletion {
+  id                String          @id @default(cuid())
+  schoolId          String
+  school            School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  curriculumTopicId String          @unique
+  curriculumTopic   CurriculumTopic @relation(fields: [curriculumTopicId], references: [id], onDelete: Cascade)
+  classId           String
+  subjectId         String
+  /// Teacher.id of the teacher who completed the topic.
+  teacherId         String
+  /// The teaching day the topic was actually completed (history — never
+  /// recomputed when the calendar changes).
+  completedOn       DateTime
+  note              String?
+  createdAt         DateTime        @default(now())
+
+  @@index([schoolId, classId, subjectId])
+}
+
+// ─── Teacher Workspace v2.15 — Subject Attendance Sessions ────────────
+//
+// Attendance model (two layers):
+//   • Baseline: the CLASS TEACHER'S daily attendance — the existing
+//     `Attendance` rows (unique per student+date). This is the school's
+//     official daily record and what students/parents see.
+//   • Subject sessions: a SUBJECT teacher's own session for a class she
+//     teaches (separate, per subject+date+teacher). Opening the roster
+//     PREFILLS from the class teacher's baseline — viewing never writes;
+//     the teacher explicitly submits her session.
+
+model SubjectAttendanceSession {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacherId String
+  date      DateTime
+  createdAt DateTime @default(now())
+
+  entries   SubjectAttendanceEntry[]
+
+  @@unique([classId, subjectId, teacherId, date])
+  @@index([schoolId, classId, date])
+}
+
+model SubjectAttendanceEntry {
+  id        String                   @id @default(cuid())
+  sessionId String
+  session   SubjectAttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// PRESENT | ABSENT | LATE | LEAVE
+  status    String
+
+  @@unique([sessionId, studentId])
 }

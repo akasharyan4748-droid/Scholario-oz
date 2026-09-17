@@ -1,14 +1,10 @@
 'use client'
 
-import { ChartCard, AreaTrend, Donut, RadialGauge } from '@/components/shared/charts'
+import { ChartCard, AreaTrend, BarTrend, RadialGauge } from '@/components/shared/charts'
 import { GlassCard, StatusBadge } from '@/components/shared/ui'
-import { attendanceTrend, completionDonut } from './data'
+import { attendanceTrend, subjectAverages } from './data'
 
-interface Props {
-  avgSubmission: number
-}
-
-export function ChartsRow2({ avgSubmission }: Props) {
+export function ChartsRow2() {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       <ChartCard
@@ -19,8 +15,8 @@ export function ChartsRow2({ avgSubmission }: Props) {
         <AreaTrend data={attendanceTrend} xKey="name" yKey="v" color="oklch(0.7 0.15 200)" height={240} gradientId="teacherAtt" />
       </ChartCard>
 
-      <ChartCard title="Assignment Completion" subtitle="Active homework submission rate">
-        <Donut data={completionDonut} height={240} centerValue={`${Math.round(avgSubmission)}%`} centerLabel="submitted" />
+      <ChartCard title="Subject Averages" subtitle="Latest assessment · by subject">
+        <BarTrend data={subjectAverages} xKey="subject" yKey="avg" height={240} color="oklch(0.55 0.14 162)" />
       </ChartCard>
 
       <GlassCard className="p-3 sm:p-4 lg:p-5">

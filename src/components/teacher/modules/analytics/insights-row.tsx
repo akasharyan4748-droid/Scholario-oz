@@ -21,7 +21,7 @@ export function InsightsRow() {
           {[
             { type: 'success', title: 'Strong Math Improvement', desc: 'Class average jumped from 78% to 88% in Mathematics over 5 months. Multiplication tables strategy is working.', color: 'emerald' },
             { type: 'warning', title: 'Reyansh K. needs attention', desc: 'Attendance dropped to 88% and Math score fell from 78% to 72%. Consider parent meeting.', color: 'amber' },
-            { type: 'info', title: 'Best Submission Day: Monday', desc: '78% of homework submitted on Mondays vs 52% on Fridays. Schedule critical homework early in week.', color: 'cyan' },
+            { type: 'info', title: 'Strongest Subject: Mathematics', desc: 'Class average is 88% in Mathematics vs 80% in Social Studies — cross-subject strength worth celebrating in PTMs.', color: 'cyan' },
             { type: 'success', title: 'Myra I. — Gifted Trajectory', desc: 'Achieving 96%+ consistently. Recommend enrichment materials & Math Olympiad preparation.', color: 'emerald' },
           ].map((insight, i) => (
             <motion.div

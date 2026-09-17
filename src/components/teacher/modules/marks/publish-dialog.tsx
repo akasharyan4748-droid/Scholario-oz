@@ -1,67 +1,138 @@
 'use client'
 
-import { motion } from 'framer-motion'
-import { Send, AlertTriangle, Loader2 } from 'lucide-react'
+/**
+ * marks/publish-dialog — the "Submit marks" confirmation dialog.
+ *
+ * Follows the old publish-dialog pattern (icon header, summary panel,
+ * Cancel/Confirm footer) but on the real submission contract: exam, class,
+ * subject, entered count, class average and pass count from the live
+ * drafts. Confirm is blocked while nothing is entered or any draft is out
+ * of range — the same rules the server enforces.
+ */
+
+import { AlertTriangle, Loader2, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog'
-import type { Exam } from '@/lib/mock/academics'
-import { students } from '@/lib/mock/students'
-import type { MarksStats } from './data'
+import { formatAverage, type MarksStats } from './shared'
+import type { MarksGrid } from './types'
 
-// Publish confirmation dialog. Caller controls `open` and `publishing` state.
-export function PublishDialog({
+export interface SubmitSummary {
+  grid: MarksGrid
+  stats: MarksStats
+  /** Drafts currently out of 0..maxMarks — must be fixed before submitting. */
+  invalidCount: number
+}
+
+export function SubmitMarksDialog({
   open,
   onOpenChange,
-  exam,
-  subject,
-  stats,
-  maxMarks,
-  publishing,
+  summary,
+  submitting,
   onConfirm,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  exam: Exam | undefined
-  subject: string
-  stats: MarksStats
-  maxMarks: number
-  publishing: boolean
+  summary: SubmitSummary | null
+  submitting: boolean
   onConfirm: () => void
 }) {
+  const nothingEntered = summary != null && summary.stats.entered === 0
+  const hasInvalid = summary != null && summary.invalidCount > 0
+  const blocked = summary == null || nothingEntered || hasInvalid
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[calc(100vw-1.5rem)] sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 mb-2">
-            <AlertTriangle className="h-6 w-6" />
+          <div className="mb-1 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <Send className="h-5 w-5" aria-hidden="true" />
           </div>
-          <DialogTitle>Publish Examination Results?</DialogTitle>
+          <DialogTitle>Submit marks?</DialogTitle>
           <DialogDescription>
-            Once published, results will be visible to students and parents. This action cannot be undone without admin approval.
+            Marks for this class and subject are sent for verification and locked for editing.
+            Corrections after submission flow through the exam office.
           </DialogDescription>
         </DialogHeader>
-        <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Examination</span><span className="font-medium">{exam?.name}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Subject</span><span className="font-medium">{subject}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Class</span><span className="font-medium">Class 2-A · {students.length} students</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Class Average</span><span className="font-medium">{stats.avg.toFixed(1)}/{maxMarks}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Pass Rate</span><span className="font-medium text-emerald-600">{((stats.passCount / stats.total) * 100).toFixed(0)}%</span></div>
-        </div>
+
+        {summary && (
+          <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+            <SummaryRow label="Examination" value={summary.grid.exam.name} />
+            <SummaryRow label="Class" value={summary.grid.label} />
+            <SummaryRow label="Subject" value={summary.grid.subjectName} />
+            <SummaryRow
+              label="Entered"
+              value={`${summary.stats.entered} of ${summary.stats.total} students`}
+            />
+            <SummaryRow
+              label="Class average"
+              value={
+                formatAverage(summary.stats.average) != null
+                  ? `${formatAverage(summary.stats.average)} / ${summary.grid.maxMarks}`
+                  : '—'
+              }
+            />
+            <SummaryRow
+              label="Pass count"
+              value={
+                summary.stats.passCount != null
+                  ? `${summary.stats.passCount} of ${summary.stats.entered}`
+                  : '—'
+              }
+            />
+          </div>
+        )}
+
+        {hasInvalid && summary && (
+          <p className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {summary.invalidCount} mark{summary.invalidCount === 1 ? '' : 's'} outside 0&ndash;
+            {summary.grid.maxMarks}. Fix {summary.invalidCount === 1 ? 'it' : 'them'} before
+            submitting.
+          </p>
+        )}
+        {!hasInvalid && nothingEntered && (
+          <p className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            Enter marks before submitting.
+          </p>
+        )}
+
         <DialogFooter>
-          <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-          <Button onClick={onConfirm} disabled={publishing} className="bg-gradient-to-r from-emerald-600 to-teal-600">
-            {publishing ? (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" /> Publishing…
-              </motion.span>
+          <DialogClose asChild>
+            <Button variant="outline" disabled={submitting}>
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button onClick={onConfirm} disabled={blocked || submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Submitting…
+              </>
             ) : (
-              <span className="flex items-center gap-2"><Send className="h-4 w-4" /> Confirm & Publish</span>
+              <>
+                <Send className="h-4 w-4" aria-hidden="true" /> Confirm submission
+              </>
             )}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-xs">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="min-w-0 truncate text-right font-medium text-foreground">{value}</span>
+    </div>
   )
 }

@@ -14,7 +14,8 @@
     "db:seed-study-materials": "bun prisma/seed-study-materials.ts",
     "db:seed-learning": "bun prisma/seed-learning.ts",
     "db:seed-dashboard": "bun prisma/seed-student-dashboard.ts",
-    "db:seed-teacher-hub": "bun prisma/seed-teacher-hub.ts"
+    "db:seed-teacher-hub": "bun prisma/seed-teacher-hub.ts",
+    "db:seed-teacher-academics": "bun prisma/seed-teacher-academics.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
