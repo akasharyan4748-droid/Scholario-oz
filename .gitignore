@@ -54,3 +54,4 @@ server.log
 /skills/
 # RB-1 — study material uploads (server-authorized; never commit user bytes)
 db/uploads/
+tool-results/
