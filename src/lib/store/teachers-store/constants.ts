@@ -17,7 +17,7 @@ export const DEFAULT_POSITIONS: PositionDefinition[] = [
     permissions: [
       'view_assigned_classes', 'enter_subject_marks', 'take_class_attendance', 'view_own_timetable',
       'view_full_class_profile', 'enter_class_attendance', 'generate_marksheets', 'view_parent_info',
-      'view_student_behaviour', 'recommend_promotion', 'ptm_coordination',
+      'view_student_behaviour', 'recommend_promotion',
     ],
   },
   {

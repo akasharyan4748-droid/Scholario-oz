@@ -211,13 +211,13 @@ function TeacherHubCard({ onNavigate }: { onNavigate: (key: string) => void }) {
       <h3 className="font-semibold text-sm mb-1 flex items-center gap-2">
         <Shield className="h-4 w-4 text-emerald-500" /> Class Teacher Hub
       </h3>
-      <p className="text-xs text-muted-foreground mb-3">Parents, behaviour & meetings</p>
+      <p className="text-xs text-muted-foreground mb-3">Parents & behaviour records</p>
       <button
         onClick={() => onNavigate('parent-connect')}
         className="w-full rounded-xl border border-border bg-card/40 p-3 text-left hover:bg-accent/40 transition-colors"
       >
         <p className="text-[11px] text-muted-foreground">
-          Open Parent Connect, Student Behavior & PTM Scheduler
+          Open Parent Connect & Student Behavior
         </p>
       </button>
     </GlassCard>

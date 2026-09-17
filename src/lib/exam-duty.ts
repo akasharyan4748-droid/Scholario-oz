@@ -56,6 +56,12 @@ export function hmToMinutes(hm: string): number {
 /**
  * Derive a duty's status from the paper's date + time window and the exam's
  * own status. Pure — same rule for every consumer.
+ *
+ * SAME-DAY RULE: once the paper starts, the duty stays "In Progress" for the
+ * rest of the exam DAY. Real invigilators typically submit attendance and
+ * incident reports AFTER the paper ends — locking the duty at endTime would
+ * strand unsubmitted attendance permanently (read-only history). The duty
+ * flips to Completed (read-only) only from the next day.
  */
 export function deriveDutyStatus(
   date: Date,
@@ -71,7 +77,7 @@ export function deriveDutyStatus(
   if (paper > today) return 'Upcoming'
   const cur = now.getUTCHours() * 60 + now.getUTCMinutes()
   if (cur < hmToMinutes(startTime)) return 'Upcoming'
-  if (cur > hmToMinutes(endTime)) return 'Completed'
+  // Paper started today — attendance/incident entry stays open until midnight.
   return 'In Progress'
 }
 

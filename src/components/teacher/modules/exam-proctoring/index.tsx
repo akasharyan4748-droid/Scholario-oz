@@ -118,10 +118,10 @@ export function ExamProctoringModule() {
   const nextDuty = upcomingDuties[0] ?? null
 
   const session = sessionLabel(academicSession)
+  // Spec Phase 5: the page must read as "duties assigned to me", not school
+  // exam management — context leads with that, then the quiet session line.
   const toolbarContext = [
-    stats.upcomingDuties === 0
-      ? 'No upcoming duties'
-      : `${stats.upcomingDuties} upcoming ${stats.upcomingDuties === 1 ? 'duty' : 'duties'}`,
+    'Your assigned examination duties',
     session ? `Academic Session ${session}` : null,
   ]
     .filter(Boolean)

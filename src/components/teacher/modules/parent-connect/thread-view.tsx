@@ -13,7 +13,6 @@ import { useEffect, useRef, useState } from 'react'
 import {
   AlarmClockPlus,
   ArrowLeft,
-  CalendarPlus,
   Check,
   CheckCheck,
   Phone,
@@ -226,15 +225,6 @@ export function ThreadView({
             >
               <User className="h-3.5 w-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">View Student</span>
-            </button>
-            <button
-              onClick={() => onNavigate?.('ptm')}
-              aria-label="Schedule meeting"
-              title="Schedule meeting"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground sm:w-auto sm:gap-1.5 sm:px-2.5"
-            >
-              <CalendarPlus className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">Schedule Meeting</span>
             </button>
           </div>
         </div>

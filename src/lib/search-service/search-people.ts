@@ -16,10 +16,13 @@ export function searchPeople(q: string, role: Role): SearchResultItem[] {
   const results: SearchResultItem[] = []
 
   // 1. STUDENTS SEARCH
-  // Teacher role only sees assigned students or Class 2-A students, Principal sees all
+  // Teacher role only sees assigned students or Class 2-A students, Principal sees all.
+  // Students/parents never enumerate classmates (L2D spec §9/§78).
   const allowedStudents = role === 'teacher'
     ? students.filter((s) => s.className === 'Class 2' || s.className === 'Class 2-A')
-    : students
+    : role === 'student' || role === 'parent'
+      ? []
+      : students
 
   allowedStudents.forEach((s) => {
     const title = s.name
@@ -32,7 +35,7 @@ export function searchPeople(q: string, role: Role): SearchResultItem[] {
         subtitle: `${s.className}-${s.section} · Adm: ${s.admissionNo} · Roll: ${s.rollNo}`,
         category: 'Students',
         type: 'student',
-        moduleKey: 'admission',
+        moduleKey: 'students',
         iconName: 'User',
         badge: s.status === 'Active' ? `${s.className}-${s.section}` : s.status,
         badgeVariant: s.feeStatus === 'Paid' ? 'success' : s.feeStatus === 'Pending' ? 'destructive' : 'warning',

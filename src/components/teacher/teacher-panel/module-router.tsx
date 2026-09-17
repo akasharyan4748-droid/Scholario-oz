@@ -3,12 +3,12 @@
 import { TeacherDashboard } from '../modules/dashboard'
 import { AttendanceModule } from '../modules/attendance'
 import { PersonalAttendance } from '../modules/personal-attendance'
+import { MyTimetableModule } from '../modules/my-timetable'
 import { MarksEntryModule } from '../modules/marks'
 import { StudentsModule } from '../modules/students'
 import { TeacherAnalyticsModule } from '../modules/analytics'
 import { CommunicationModule } from '../modules/communication'
 import { LessonPlannerModule } from '../modules/lesson-planner'
-import { PTMSchedulerModule } from '../modules/ptm-scheduler'
 import { StudentBehaviorModule } from '../modules/student-behavior'
 import { ParentConnectModule } from '../modules/parent-connect'
 import { ExamProctoringModule } from '../modules/exam-proctoring'
@@ -25,13 +25,13 @@ export function ModuleRouter({ active, onNavigate }: ModuleRouterProps) {
     <>
       {active === 'dashboard' && <TeacherDashboard onNavigate={onNavigate} />}
       {active === 'my-attendance' && <PersonalAttendance />}
+      {active === 'my-timetable' && <MyTimetableModule />}
       {active === 'attendance' && <AttendanceModule />}
       {active === 'lesson-planner' && <LessonPlannerModule />}
       {active === 'marks' && <MarksEntryModule />}
       {active === 'proctoring' && <ExamProctoringModule />}
       {active === 'students' && <StudentsModule />}
       {active === 'app-reviews' && <ApplicationReviewsModule />}
-      {active === 'ptm' && <PTMSchedulerModule />}
       {active === 'behavior' && <StudentBehaviorModule onNavigate={onNavigate} />}
       {active === 'parent-connect' && <ParentConnectModule onNavigate={onNavigate} />}
       {active === 'analytics' && <TeacherAnalyticsModule onNavigate={onNavigate} />}

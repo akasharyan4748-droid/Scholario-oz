@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: false,
   allowedDevOrigins: ["*.space-z.ai", "*.chatglm.cn", "*.z.ai", "127.0.0.1", "localhost", "*.localhost"],
+  // NOTE (dev stability): dev.log / tmp-scripts / .zscripts are in
+  // .gitignore — Turbopack's watcher honors gitignore, so scratch scripts
+  // and the request log never trigger Fast-Refresh rebuild loops.
   experimental: {
     optimizePackageImports: [
       'lucide-react',

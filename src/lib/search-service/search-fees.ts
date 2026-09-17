@@ -1,9 +1,14 @@
 // Fees & Finance domain search: surfaces overdue/pending student fee records.
+// Fee records are a Principal/Superadmin surface only — teachers, students
+// and parents never get fee-search hits (no dead nav keys, no data leaks).
 
 import { students } from '@/lib/mock/students'
 import type { SearchResultItem } from './types'
 
-export function searchFees(q: string): SearchResultItem[] {
+type Role = 'principal' | 'teacher' | 'student' | 'superadmin' | 'parent'
+
+export function searchFees(q: string, role: Role = 'principal'): SearchResultItem[] {
+  if (role !== 'principal' && role !== 'superadmin') return []
   const matches = (text: string, kw: string = ''): boolean => {
     if (!text) return false
     const lower = text.toLowerCase()

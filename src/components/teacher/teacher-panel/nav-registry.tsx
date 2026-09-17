@@ -1,7 +1,8 @@
 import {
   LayoutDashboard, CalendarCheck, BookMarked,
-  FileText, Users, BarChart3, Megaphone, CalendarClock,
+  FileText, Users, BarChart3, Megaphone,
   Shield, MessageSquareHeart, ClipboardCheck, Wallet, ClipboardList, Settings,
+  CalendarDays,
 } from 'lucide-react'
 import type { NavGroup } from '@/components/shell/app-shell'
 import type { TeacherRecord, PositionAssignment } from '@/lib/store/teachers-store'
@@ -34,6 +35,7 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions, hubUnread
         { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4.5 w-4.5" /> },
         { key: 'payroll', label: 'My Salary & Payments', icon: <Wallet className="h-4.5 w-4.5" /> },
         { key: 'my-attendance', label: 'My Attendance', icon: <CalendarCheck className="h-4.5 w-4.5" /> },
+        { key: 'my-timetable', label: 'My Timetable', icon: <CalendarDays className="h-4.5 w-4.5" /> },
       ],
     },
     {
@@ -42,7 +44,7 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions, hubUnread
         { key: 'attendance', label: 'Class Attendance', icon: <CalendarCheck className="h-4.5 w-4.5" /> },
         { key: 'lesson-planner', label: 'Lesson Planner', icon: <BookMarked className="h-4.5 w-4.5" /> },
         { key: 'marks', label: 'Marks Entry', icon: <FileText className="h-4.5 w-4.5" /> },
-        { key: 'proctoring', label: 'Exam Proctoring', icon: <ClipboardCheck className="h-4.5 w-4.5" /> },
+        { key: 'proctoring', label: 'Exam Duties', icon: <ClipboardCheck className="h-4.5 w-4.5" /> },
         { key: 'students', label: 'Student Directory', icon: <Users className="h-4.5 w-4.5" /> },
       ],
     },
@@ -60,7 +62,6 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions, hubUnread
     navGroups.push({
       label: 'Class Teacher Hub',
       items: [
-        { key: 'ptm', label: 'PTM Scheduler', icon: <CalendarClock className="h-4.5 w-4.5" /> },
         { key: 'behavior', label: 'Student Behavior', icon: <Shield className="h-4.5 w-4.5" /> },
         { key: 'parent-connect', label: 'Parent Connect', icon: <MessageSquareHeart className="h-4.5 w-4.5" />, badge: hubUnread > 0 ? hubUnread : undefined },
       ],
@@ -73,6 +74,13 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions, hubUnread
     items: [
       { key: 'analytics', label: 'Performance Analytics', icon: <BarChart3 className="h-4.5 w-4.5" /> },
       { key: 'communication', label: 'Communication Hub', icon: <Megaphone className="h-4.5 w-4.5" /> },
+    ],
+  })
+
+  // Account — personal settings in their own quiet group
+  navGroups.push({
+    label: 'Account',
+    items: [
       { key: 'settings', label: 'Settings', icon: <Settings className="h-4.5 w-4.5" /> },
     ],
   })

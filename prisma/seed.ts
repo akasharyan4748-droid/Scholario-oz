@@ -232,7 +232,6 @@ async function main() {
 
   // Notifications
   await db.notification.create({ data: { schoolId: demoSchool.id, title: 'Mid-Term Results Published', message: 'The mid-term examination results are now available on the portal.', audience: 'ALL', priority: 'HIGH', senderId: demoPrincipal.id } })
-  await db.notification.create({ data: { schoolId: demoSchool.id, title: 'Parent-Teacher Meeting', message: 'PTM scheduled for Saturday 10 AM in the auditorium.', audience: 'PARENTS', priority: 'NORMAL', senderId: demoPrincipal.id } })
 
   // Library Books
   const books = [

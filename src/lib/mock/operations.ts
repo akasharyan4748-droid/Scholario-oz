@@ -104,9 +104,7 @@ export interface Announcement {
 export const announcements: Announcement[] = [
   { id: 'AN01', title: 'Annual Sports Day — 15th December', content: 'The Annual Sports Day will be held on 15th December 2026 at the school ground. All students must report by 7:30 AM in sports uniform. Parents are cordially invited.', category: 'Event', date: '2026-09-14', audience: 'All', postedBy: 'Dr. Ananya Iyer' },
   { id: 'AN02', title: 'Mid-Term Examination Schedule Released', content: 'Mid-Term examinations for Grade 9 & 10 will commence from 28th August 2026. Detailed timetable is available in the Examination module.', category: 'Academic', date: '2026-09-12', audience: 'All', postedBy: 'Pooja Bhatt' },
-  { id: 'AN03', title: 'PA1 Progress PTM — Grade 9', content: 'PTM for Grade 9 is scheduled on Thursday, 17th September 2026 from 9:00 AM to 12:00 PM in Room 201. Please be on time.', category: 'General', date: '2026-09-11', audience: 'Parents', postedBy: 'Deepa Menon' },
   { id: 'AN04', title: 'Dussehra Break — School Closed', content: 'School will remain closed for the Dussehra break from 17th October to 20th October 2026. School reopens on 21st October 2026.', category: 'Holiday', date: '2026-09-08', audience: 'All', postedBy: 'Dr. Ananya Iyer' },
-  { id: 'AN05', title: 'Half-Yearly PTM — Save the Date', content: 'The combined Half-Yearly PTM for Grade 9 & 10 is scheduled for 21st November 2026 in the Auditorium. Slot booking opens soon.', category: 'Event', date: '2026-09-05', audience: 'All', postedBy: 'Dr. Ananya Iyer' },
 ]
 
 export const noticeBoard = [
@@ -120,7 +118,6 @@ export const noticeBoard = [
 export const calendarEvents = [
   { id: 'E01', date: '2025-12-02', title: 'Annual Day Rehearsals', type: 'Cultural', time: '09:00' },
   { id: 'E02', date: '2025-12-05', title: 'Inter-House Quiz', type: 'Competition', time: '11:00' },
-  { id: 'E03', date: '2025-12-07', title: 'PTM — Primary Section', type: 'Meeting', time: '09:00' },
   { id: 'E04', date: '2025-12-09', title: 'Pre-Board Exam Begins', type: 'Exam', time: '08:00' },
   { id: 'E05', date: '2025-12-12', title: 'Science Exhibition', type: 'Event', time: '10:00' },
   { id: 'E06', date: '2025-12-15', title: 'Annual Sports Day', type: 'Event', time: '07:30' },
@@ -138,7 +135,6 @@ export const notifications = [
   { id: 'N03', title: 'Attendance alert', description: 'Class 7-B attendance below 85%', time: '1 hr ago', type: 'attendance', unread: true },
   { id: 'N04', title: 'Library book overdue', description: '4 books overdue in primary section', time: '2 hrs ago', type: 'library', unread: false },
   { id: 'N05', title: 'Salary processed', description: 'November payroll disbursed to 96 employees', time: '3 hrs ago', type: 'salary', unread: false },
-  { id: 'N06', title: 'PTM reminder', description: 'Primary PTM on 7th December', time: '5 hrs ago', type: 'event', unread: false },
   { id: 'N07', title: 'Exam duty assigned', description: 'Mr. Rajesh Kumar — Mathematics · Class 10 · Room B · 21 Aug, 09:00 AM. Attendance opens 08:30 AM.', time: '12 min ago', type: 'exam', unread: true },
   { id: 'N08', title: 'Exam duty assigned', description: 'Ms. Priya Nair — English · Class 9 · Room A · 22 Aug, 09:00 AM. Attendance opens 08:30 AM.', time: '15 min ago', type: 'exam', unread: true },
   { id: 'N09', title: 'Attendance submitted', description: 'Mr. Rajesh Kumar submitted Class 10 Mathematics attendance — 42 Present, 0 Absent.', time: '45 min ago', type: 'exam', unread: false },

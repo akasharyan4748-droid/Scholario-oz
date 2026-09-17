@@ -134,7 +134,13 @@ export function TeacherAnalyticsModule({ onNavigate }: { onNavigate?: (key: stri
         action={
           data.classes.length > 1 ? (
             <Select value={active.classId} onValueChange={setClassId}>
-              <SelectTrigger className="h-9 w-[132px] sm:w-[156px]" aria-label="Class">
+              <SelectTrigger
+                // Auto-width: the full class label (+ "Class teacher" chip)
+                // must never truncate to "G…" (spec Phase 4) — the selected
+                // context stays completely readable on every breakpoint.
+                className="h-9 w-auto max-w-[280px] gap-1.5"
+                aria-label="Class"
+              >
                 <SelectValue placeholder="Class" />
               </SelectTrigger>
               <SelectContent>

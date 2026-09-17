@@ -5,7 +5,7 @@
  * Workspace (Teacher Workspace cleanup pass §3/§4/§5).
  *
  * RULE (non-negotiable):
- *   TOP BAR = module identity  ("Homework", "Marks Entry", "PTM Scheduler"…)
+ *   TOP BAR = module identity  ("Exam Duties", "Marks Entry", "Lesson Planner"…)
  *   CONTENT = module content   — begins immediately, no giant H1 repeat.
  *
  * The toolbar therefore NEVER renders the module name. It renders only

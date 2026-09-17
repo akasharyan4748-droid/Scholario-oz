@@ -55,3 +55,8 @@ server.log
 # RB-1 — study material uploads (server-authorized; never commit user bytes)
 db/uploads/
 tool-results/
+
+# scratch dirs (Turbopack watcher must ignore these)
+tmp-scripts/
+.zscripts/
+agent-ctx/

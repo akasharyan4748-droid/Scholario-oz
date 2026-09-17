@@ -494,7 +494,7 @@ async function main() {
     },
     {
       roll: '01',
-      reason: 'Send PTM summary notes to Mr. Desai',
+      reason: 'Send assessment summary notes to Mr. Desai',
       dueInDays: -1, // overdue
       priority: 'normal',
     },

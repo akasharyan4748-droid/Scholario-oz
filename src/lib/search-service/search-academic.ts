@@ -1,10 +1,21 @@
 // Academic-domain search: classes, subjects, timetables, and examinations.
+// Role-aware module keys (Teacher Workspace final cleanup): every result
+// must navigate to a module the active role actually has — never a dead key.
 
 import { exams } from '@/lib/mock/academics'
 import { subjects } from '@/lib/mock/school'
 import type { SearchResultItem } from './types'
 
-export function searchAcademic(q: string): SearchResultItem[] {
+type Role = 'principal' | 'teacher' | 'student' | 'superadmin' | 'parent'
+
+/** Where an academic hit lands, per role (all keys exist in that role's nav). */
+const NAV_KEYS: Record<'classes' | 'timetable' | 'exams', Record<Role, string>> = {
+  classes: { principal: 'students', teacher: 'students', student: 'my-class', superadmin: 'students', parent: 'my-class' },
+  timetable: { principal: 'timetable', teacher: 'my-timetable', student: 'timetable', superadmin: 'timetable', parent: 'timetable' },
+  exams: { principal: 'exams', teacher: 'proctoring', student: 'results', superadmin: 'exams', parent: 'results' },
+}
+
+export function searchAcademic(q: string, role: Role = 'principal'): SearchResultItem[] {
   const matches = (text: string, kw: string = ''): boolean => {
     if (!text) return false
     const lower = text.toLowerCase()
@@ -29,7 +40,7 @@ export function searchAcademic(q: string): SearchResultItem[] {
         subtitle: c.desc,
         category: 'Classes & Subjects',
         type: 'class',
-        moduleKey: 'classes',
+        moduleKey: NAV_KEYS.classes[role],
         iconName: 'School',
         badge: 'Section',
         badgeVariant: 'outline',
@@ -47,7 +58,7 @@ export function searchAcademic(q: string): SearchResultItem[] {
         subtitle: `Academic Subject · Code: ${subj.code}`,
         category: 'Classes & Subjects',
         type: 'subject',
-        moduleKey: 'classes',
+        moduleKey: NAV_KEYS.classes[role],
         iconName: 'BookOpen',
         badge: subj.code,
         badgeVariant: 'default',
@@ -65,7 +76,7 @@ export function searchAcademic(q: string): SearchResultItem[] {
       subtitle: 'Manage weekly timetables, period allocations, room assignments, and resolve conflicts',
       category: 'Classes & Subjects',
       type: 'feature',
-      moduleKey: 'timetable',
+      moduleKey: NAV_KEYS.timetable[role],
       iconName: 'School',
       badge: 'Academic Schedule',
       badgeVariant: 'info',
@@ -77,7 +88,7 @@ export function searchAcademic(q: string): SearchResultItem[] {
       subtitle: 'Room 102 · Class Teacher: Rohan Mehta · 8 Periods Daily',
       category: 'Classes & Subjects',
       type: 'class',
-      moduleKey: 'timetable',
+      moduleKey: NAV_KEYS.timetable[role],
       iconName: 'School',
       badge: 'Schedule',
       badgeVariant: 'success',
@@ -89,7 +100,7 @@ export function searchAcademic(q: string): SearchResultItem[] {
       subtitle: 'Room 304 · Class Teacher: Pooja Bhatt · 8 Periods Daily',
       category: 'Classes & Subjects',
       type: 'class',
-      moduleKey: 'timetable',
+      moduleKey: NAV_KEYS.timetable[role],
       iconName: 'School',
       badge: 'Schedule',
       badgeVariant: 'warning',
@@ -108,7 +119,7 @@ export function searchAcademic(q: string): SearchResultItem[] {
         subtitle: `${ex.type} · ${ex.startDate} to ${ex.endDate}`,
         category: 'Examinations',
         type: 'exam',
-        moduleKey: 'exams',
+        moduleKey: NAV_KEYS.exams[role],
         iconName: 'FileText',
         badge: ex.status,
         badgeVariant: ex.status === 'Completed' || ex.status === 'Result Declared' ? 'success' : 'warning',

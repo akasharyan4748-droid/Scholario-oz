@@ -21,7 +21,6 @@ export const PERMISSION_LABELS: Record<string, string> = {
   view_parent_info: 'Can access parent details',
   view_student_behaviour: 'Can view student behaviour',
   recommend_promotion: 'Can recommend promotion',
-  ptm_coordination: 'Can conduct PTM',
 
   // Examination Incharge
   manage_school_exams: 'Can manage exams',
