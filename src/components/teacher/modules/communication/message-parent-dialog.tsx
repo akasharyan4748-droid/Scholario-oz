@@ -16,7 +16,7 @@ import { students } from '@/lib/mock/students'
 import { toast } from 'sonner'
 import type { MsgChannel } from './data'
 import { sampleTemplates } from './data'
-import { GraduationCap } from './shared'
+import { GraduationCap } from './icons'
 
 interface MessageParentDialogProps {
   open: boolean

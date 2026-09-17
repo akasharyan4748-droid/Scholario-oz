@@ -15,6 +15,9 @@ const nextConfig: NextConfig = {
       'motion',
       'date-fns',
     ],
+    // Sandbox has ~3.9GB RAM — keep Turbopack's dev memory in check so the
+    // kernel OOM-killer never takes the server down during route compiles.
+    turbopackMemoryLimit: 2200,
   },
   images: {
     remotePatterns: [

@@ -1,4 +1,4 @@
-// Shared small components for the Teacher Communication module
+// Shared small icons for the Teacher Communication module
 
 export function GraduationCap({ className }: { className?: string }) {
   return (
