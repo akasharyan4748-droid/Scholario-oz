@@ -1,9 +1,8 @@
 'use client'
 
-import { CalendarDays, Clock, MapPin, MessageSquare } from 'lucide-react'
+import { CalendarDays, Clock, MapPin } from 'lucide-react'
 import { GlassCard, StatusBadge } from '@/components/shared/ui'
 import { type PTMEvent } from '@/lib/mock/ptm'
-import { toast } from 'sonner'
 
 export function EventInfoCard({ event }: { event: PTMEvent }) {
   return (
@@ -52,12 +51,9 @@ export function EventInfoCard({ event }: { event: PTMEvent }) {
         </div>
       </div>
 
-      <button
-        onClick={() => toast.success('Reminder sent', { description: 'SMS + email reminder sent to all booked parents' })}
-        className="w-full mt-4 flex items-center justify-center gap-2 rounded-xl border border-border bg-card/50 py-2 text-xs font-medium hover:bg-accent transition-colors"
-      >
-        <MessageSquare className="h-3.5 w-3.5" /> Send Reminders
-      </button>
+      <p className="mt-4 text-center text-[10px] text-muted-foreground">
+        Reminders are dispatched by the school office through the Communication Hub.
+      </p>
     </GlassCard>
   )
 }

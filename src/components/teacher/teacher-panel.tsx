@@ -55,7 +55,6 @@ export function TeacherPanel() {
       onNavigate={setActive}
       role="teacher"
       roleLabel={`Teacher · ${currentTeacher?.name || 'Faculty Member'}`}
-      quickAction={{ label: 'Mark Attendance', onClick: () => setActive('attendance') }}
     >
       <AccountLockedBanner show={!!currentTeacher?.isLocked} />
 

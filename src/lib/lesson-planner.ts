@@ -237,9 +237,14 @@ export async function getLessonPlan(
     if (t.status === 'completed') u.completed += 1
   }
 
-  const todayTopic =
-    topics.find((t) => t.status === 'today') ?? topics.find((t) => t.status === 'in-progress') ?? null
   const todayKeyStr = dayKey(today)
+  const todayTopic =
+    topics.find((t) => t.status === 'today') ?? topics.find((t) => t.status === 'in-progress')
+    // A topic completed TODAY still owns the hero — it renders in its quiet
+    // "Completed · <date>" state with an Undo link, instead of the teacher's
+    // just-finished lesson vanishing into "No lesson scheduled for today".
+    ?? topics.find((t) => t.status === 'completed' && t.completedOn === todayKeyStr)
+    ?? null
   let reason: string | null = null
   if (!todayTopic) {
     const holiday = isHolidayKey(todayKeyStr, holidays)

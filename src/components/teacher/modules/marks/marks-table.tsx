@@ -84,6 +84,7 @@ export function MarksTable({ grid, drafts, shakeCounts, onMarkChange }: MarksTab
               maxMarks={grid.maxMarks}
               draft={drafts[student.id] ?? ''}
               shake={shakeCounts[student.id] ?? 0}
+              gridSubmitted={grid.submitted}
               onMarkChange={onMarkChange}
             />
           ))}
@@ -101,14 +102,16 @@ interface MarksRowProps {
   maxMarks: number
   draft: string
   shake: number
+  /** Exam-level lock — once the sheet is submitted every row is read-only. */
+  gridSubmitted: boolean
   onMarkChange: (studentId: string, raw: string) => void
 }
 
-function MarksRow({ student, index, maxMarks, draft, shake, onMarkChange }: MarksRowProps) {
+function MarksRow({ student, index, maxMarks, draft, shake, gridSubmitted, onMarkChange }: MarksRowProps) {
   const [shakeScope, animate] = useAnimate<HTMLDivElement>()
   const reduceMotion = useReducedMotion()
 
-  const locked = student.workflowStatus === 'SUBMITTED'
+  const locked = gridSubmitted || student.workflowStatus === 'SUBMITTED'
   const invalid = !locked && !isDraftValid(draft, maxMarks)
   const dirty = !locked && isRowDirty(student, draft)
 

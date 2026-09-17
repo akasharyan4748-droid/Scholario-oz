@@ -54,6 +54,12 @@ export async function POST(request: Request) {
       const submittedIds = new Set(
         existing.filter((m) => m.workflowStatus === 'SUBMITTED').map((m) => m.studentId)
       )
+      // Exam-level lock: once ANY row of this exam × class × subject has been
+      // submitted, the whole sheet is locked — including students who had no
+      // mark yet. Corrections flow through the exam office, never here.
+      if (submittedIds.size > 0) {
+        throw new Error('Marks already submitted — corrections flow through the exam office')
+      }
 
       let saved = 0
       for (const e of body.entries) {

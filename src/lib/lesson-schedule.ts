@@ -137,6 +137,14 @@ export function computeSchedule(inputs: ScheduleInputs): ScheduledTopic[] {
       endKey = endKey ?? startKey
     }
 
+    // Completed topics anchor the plan to REALITY: the next topic starts the
+    // day after the actual completion date (not the planned window end), so
+    // finishing early pulls the curriculum forward and finishing late pushes
+    // it back. Seeded history (completedOn = window end) is unaffected.
+    if (completion) {
+      cursor = addDays(parseDayKey(completion.completedOn), 1)
+    }
+
     let status: TopicStatus
     if (completion) {
       status = 'completed'

@@ -81,7 +81,9 @@ export async function GET(request: Request) {
             passed: pct != null ? m!.marksObtained! >= config.passMarks : null,
           }
         }),
-        submitted: marks.length > 0 && marks.every((m) => m.workflowStatus === 'SUBMITTED'),
+        // ANY submitted row means the sheet was submitted — the whole grid
+        // locks (rows for students without marks included).
+        submitted: marks.some((m) => m.workflowStatus === 'SUBMITTED'),
       }
     },
     { roles: ['TEACHER'] }

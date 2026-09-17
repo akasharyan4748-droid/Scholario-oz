@@ -23,11 +23,8 @@ import { Check, Clock, X, Coffee, CalendarOff, Calendar as CalendarIcon } from '
 import { PageTransition } from '@/components/shared/ui'
 import { ModuleToolbar } from '../teacher-panel/module-toolbar'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { STAFF_DEFS } from '@/lib/mock/attendance'
-import {
-  useStaffAttendanceStore,
-  STAFF_TODAY_DATE,
-} from '@/lib/store/staff-attendance-store'
+import { STAFF_DEFS, getStaffAttendanceForDate } from '@/lib/mock/attendance'
+import { useStaffAttendanceStore } from '@/lib/store/staff-attendance-store'
 import {
   isHoliday as isSchoolHoliday,
   getHoliday as getSchoolHoliday,
@@ -40,15 +37,20 @@ import type { AttendanceStatus } from '@/lib/mock/attendance'
 /** The logged-in teacher's staff ID. In production, this comes from auth context. */
 const LOGGED_IN_STAFF_ID = 'T-014'
 
-/** Build month options (last 12 months from Dec 2025). */
-function buildMonthOptions() {
+/** Real clock helpers — the module must always open on the live month. */
+function todayStr(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+/** Build month options (last 12 months, newest first, anchored to the real clock). */
+function buildMonthOptions(): { value: string; label: string }[] {
   const options: { value: string; label: string }[] = []
+  const now = new Date()
   for (let i = 0; i < 12; i++) {
-    let y = 2025, m = 12 - i
-    while (m < 1) { m += 12; y -= 1 }
-    const date = new Date(y, m - 1, 1)
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
     options.push({
-      value: `${y}-${String(m).padStart(2, '0')}`,
+      value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
       label: date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
     })
   }
@@ -56,9 +58,15 @@ function buildMonthOptions() {
 }
 const MONTH_OPTIONS = buildMonthOptions()
 
+/** Default selection = the current real month. */
+function currentMonthValue(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
 export function PersonalAttendance() {
   const reduce = useReducedMotion()
-  const [selectedMonth, setSelectedMonth] = useState('2025-12')
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthValue)
   const byDate = useStaffAttendanceStore((s) => s.byDate)
 
   const staffMember = useMemo(
@@ -85,7 +93,7 @@ export function PersonalAttendance() {
       const weekend = isWeekend(dateStr)
       const holiday = isSchoolHoliday(dateStr)
       const holidayInfo = getSchoolHoliday(dateStr)
-      const future = isFutureDate(dateStr, STAFF_TODAY_DATE)
+      const future = isFutureDate(dateStr, todayStr())
 
       if (weekend) {
         records.push({ dateStr, day: d, status: 'weekend', label: 'Weekend' })
@@ -96,26 +104,23 @@ export function PersonalAttendance() {
       } else {
         // Brief PART 22: look up from the store (draft or submitted)
         const dateState = byDate[dateStr]
-        if (dateState) {
-          // Find this staff member's status in the draft or submitted records
-          const sourceRecords = dateState.submitted ? dateState.submittedRecords : dateState.draft
-          const staffRecord = sourceRecords?.find((r) => r.id === LOGGED_IN_STAFF_ID)
-          if (staffRecord) {
-            records.push({ dateStr, day: d, status: staffRecord.status, label: staffRecord.status })
-          } else {
-            // Staff member not in the record — use default (deterministic per date)
-            records.push({ dateStr, day: d, status: 'present', label: 'present' })
-          }
+        const sourceRecords = dateState
+          ? (dateState.submitted ? dateState.submittedRecords : dateState.draft)
+          : null
+        const staffRecord = sourceRecords?.find((r) => r.id === LOGGED_IN_STAFF_ID)
+        if (staffRecord) {
+          records.push({ dateStr, day: d, status: staffRecord.status, label: staffRecord.status })
         } else {
-          // No stored state for this date — derive deterministic default
-          let seed = 0
-          const key = `${dateStr}-${LOGGED_IN_STAFF_ID}`
-          for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) >>> 0
-          const r = seed / 0x7fffffff
-          if (r < 0.88) records.push({ dateStr, day: d, status: 'present', label: 'present' })
-          else if (r < 0.93) records.push({ dateStr, day: d, status: 'late', label: 'late' })
-          else if (r < 0.97) records.push({ dateStr, day: d, status: 'leave', label: 'leave' })
-          else records.push({ dateStr, day: d, status: 'absent', label: 'absent' })
+          // No stored state for this date — fall back to the SAME canonical
+          // per-date source the staff-attendance system uses for its default
+          // drafts, so the teacher's view never diverges from the official one.
+          const canonical = getStaffAttendanceForDate(dateStr).find((r) => r.id === LOGGED_IN_STAFF_ID)
+          records.push({
+            dateStr,
+            day: d,
+            status: canonical?.status ?? 'present',
+            label: canonical?.status ?? 'present',
+          })
         }
       }
     }
