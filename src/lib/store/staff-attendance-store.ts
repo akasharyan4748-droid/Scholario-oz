@@ -21,10 +21,19 @@
  *   mutate a submitted date). This is the "frontend bypass" guard —
  *   a real backend would also enforce this server-side.
  *
- * Brief §30 + §31: NO date-based hacks (`if date < today → readonly`).
- *   The state is determined entirely by the stored `submitted` flag.
- *   Demo seed data marks Dec 8 + Dec 9 as submitted to demonstrate
- *   the read-only behavior on past dates.
+ * ATTEND-1 (correction pass): the seed is no longer a hardcoded block of
+ * Dec-2025 dates. `STAFF_TODAY_DATE` is computed from the REAL clock at
+ * module load, and the deterministic session history is built lazily by
+ * `ensureSessionData({ sessionStart, today, isWorkingDay })`:
+ *   a) PURGES byDate keys outside [sessionStart, today] (stale seeds),
+ *   b) seeds every MISSING working day before today as SUBMITTED
+ *      (submittedAt ~10:00 that date, records = getStaffAttendanceForDate),
+ *   c) seeds today as a DRAFT,
+ *   d) NEVER overwrites existing dates (idempotent — real marks/edits
+ *      made in the app are preserved),
+ *   e) non-working days get no records.
+ * The action only calls set() when something actually changed, so wiring
+ * it into a React effect cannot loop.
  */
 
 import { create } from 'zustand'
@@ -35,8 +44,17 @@ import {
   type AttendanceStatus,
 } from '@/lib/mock/attendance'
 
-/** Today's canonical date — the only date that starts in DRAFT state. */
-export const STAFF_TODAY_DATE = '2025-12-10'
+/** Local YYYY-MM-DD from a Date (no timezone shift). */
+function toLocalISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Today's canonical date — computed from the REAL clock at module load so
+ * every consumer (teacher My Attendance, principal staff tab) opens on the
+ * live date. Exported as before; staff-tab.tsx imports it.
+ */
+export const STAFF_TODAY_DATE = toLocalISO(new Date())
 
 /**
  * Brief §11: conceptual record model — submitted is explicit, not inferred.
@@ -54,56 +72,32 @@ export interface StaffDateState {
   draft: StaffAttendanceRecord[] | null
 }
 
+/** Options for `ensureSessionData`. */
+export interface EnsureSessionDataOptions {
+  /** First date of the academic session (YYYY-MM-DD). */
+  sessionStart: string
+  /** The real today (YYYY-MM-DD). */
+  today: string
+  /** Working-day predicate for THIS school's staff calendar
+   *  (e.g. not Sunday, not a declared holiday). */
+  isWorkingDay: (dateStr: string) => boolean
+}
+
 interface StaffAttendanceStoreState {
-  /** Date-keyed attendance state. */
+  /** Date-keyed attendance state. Starts empty; `ensureSessionData`
+   *  (or manual marking) populates it. */
   byDate: Record<string, StaffDateState>
   /** Actions */
   getDateString: (date: string) => StaffDateState
   mark: (date: string, staffId: string, status: AttendanceStatus) => void
   markAllPresent: (date: string) => void
   submit: (date: string) => boolean
-  /** Reset to seed (used by tests / dev only). */
+  /** Lazily build the deterministic session history (idempotent, never
+   *  overwrites existing dates). See the header comment. */
+  ensureSessionData: (opts: EnsureSessionDataOptions) => void
+  /** Reset to a blank slate (dev only). The session history rebuilds on
+   *  the next `ensureSessionData` call. */
   reset: () => void
-}
-
-/* ──────────────────────────────────────────────────────────
-   Seed: Dec 8 + Dec 9 are pre-submitted (Brief §30: NOT date-hacks —
-   these are real `submitted: true` records, used to demonstrate the
-   read-only behavior on past dates).
-   ────────────────────────────────────────────────────────── */
-function buildSeed(): Record<string, StaffDateState> {
-  const seed: Record<string, StaffDateState> = {}
-  // Dec 8 — submitted historical record (read-only)
-  const dec8Records = getStaffAttendanceForDate('2025-12-08')
-  seed['2025-12-08'] = {
-    date: '2025-12-08',
-    submitted: true,
-    submittedAt: '2025-12-08T10:15:00.000Z',
-    submittedRecords: dec8Records,
-    draft: dec8Records,
-  }
-  // Dec 9 — submitted historical record (read-only)
-  const dec9Records = getStaffAttendanceForDate('2025-12-09')
-  seed['2025-12-09'] = {
-    date: '2025-12-09',
-    submitted: true,
-    submittedAt: '2025-12-09T10:08:00.000Z',
-    submittedRecords: dec9Records,
-    draft: dec9Records,
-  }
-  // Dec 10 — today: starts as DRAFT with the canonical seeded staff attendance.
-  // This represents "today's attendance entered but not yet submitted" —
-  // editable until the Principal presses Submit.
-  // Uses the same `getStaffAttendanceForDate` builder as defaultDraft so the
-  // hasUnsaved check produces `false` for the unmodified seed.
-  seed[STAFF_TODAY_DATE] = {
-    date: STAFF_TODAY_DATE,
-    submitted: false,
-    submittedAt: null,
-    submittedRecords: [],
-    draft: getStaffAttendanceForDate(STAFF_TODAY_DATE),
-  }
-  return seed
 }
 
 /** Build the "no attendance entered" state for a date with no record yet. */
@@ -119,16 +113,13 @@ function buildEmptyState(date: string): StaffDateState {
 
 /** Build the default draft records for a date (deterministic per date). */
 function buildDefaultDraft(date: string): StaffAttendanceRecord[] {
-  // Use the same date-keyed builder for ALL dates (including today) so
-  // the hasUnsaved comparison is consistent — the seed draft for Dec 10
-  // also uses getStaffAttendanceForDate(STAFF_TODAY_DATE).
   return getStaffAttendanceForDate(date)
 }
 
 export const useStaffAttendanceStore = create<StaffAttendanceStoreState>()(
   persist(
     (set, get) => ({
-      byDate: buildSeed(),
+      byDate: {},
 
       getDateString: (date) => {
         return get().byDate[date] ?? buildEmptyState(date)
@@ -158,7 +149,8 @@ export const useStaffAttendanceStore = create<StaffAttendanceStoreState>()(
             : status === 'late'
             ? '09:00 AM'
             : null
-          return { ...r, status, checkIn }
+          const checkOut = status === 'present' || status === 'late' ? '03:45 PM' : null
+          return { ...r, status, checkIn, checkOut }
         })
         set((state) => ({
           byDate: {
@@ -187,6 +179,7 @@ export const useStaffAttendanceStore = create<StaffAttendanceStoreState>()(
           ...r,
           status: 'present' as AttendanceStatus,
           checkIn: '08:30 AM',
+          checkOut: '03:45 PM',
         }))
         set((state) => ({
           byDate: {
@@ -224,12 +217,74 @@ export const useStaffAttendanceStore = create<StaffAttendanceStoreState>()(
         return true
       },
 
+      /**
+       * ATTEND-1: lazily build the deterministic session history.
+       * Idempotent — existing dates are NEVER overwritten, so real marks,
+       * edits and submissions made in the app always win. Only calls set()
+       * when something actually changed (loop-safe in React effects).
+       */
+      ensureSessionData: ({ sessionStart, today, isWorkingDay }) => {
+        const current = get().byDate
+        const next: Record<string, StaffDateState> = {}
+        let changed = false
+
+        // (a) Purge keys outside [sessionStart, today] — removes stale
+        //     seeds from old localStorage versions.
+        for (const [date, state] of Object.entries(current)) {
+          if (date >= sessionStart && date <= today) {
+            next[date] = state
+          } else {
+            changed = true
+          }
+        }
+
+        // (b) + (c): seed every missing working day in [sessionStart, today].
+        const [sy, sm, sd] = sessionStart.split('-').map(Number)
+        const [ty, tm, td] = today.split('-').map(Number)
+        const cursor = new Date(sy, sm - 1, sd)
+        const end = new Date(ty, tm - 1, td)
+        while (cursor <= end) {
+          const dateStr = toLocalISO(cursor)
+          if (isWorkingDay(dateStr) && !next[dateStr]) {
+            changed = true
+            if (dateStr < today) {
+              // (b) past working day → deterministic SUBMITTED history
+              const records = getStaffAttendanceForDate(dateStr)
+              next[dateStr] = {
+                date: dateStr,
+                submitted: true,
+                submittedAt: `${dateStr}T10:00:00.000Z`,
+                submittedRecords: records,
+                draft: records,
+              }
+            } else {
+              // (c) today → editable DRAFT (submitted by the Principal later)
+              next[dateStr] = {
+                date: dateStr,
+                submitted: false,
+                submittedAt: null,
+                submittedRecords: [],
+                draft: getStaffAttendanceForDate(dateStr),
+              }
+            }
+          }
+          cursor.setDate(cursor.getDate() + 1)
+        }
+
+        if (changed) set({ byDate: next })
+      },
+
       reset: () => {
-        set({ byDate: buildSeed() })
+        set({ byDate: {} })
       },
     }),
     {
       name: 'scholario-staff-attendance',
+      version: 2,
+      // Stale persisted seeds (the old hardcoded Dec-2025 block) are
+      // discarded on upgrade — ensureSessionData rebuilds the session
+      // history deterministically on the next module mount.
+      migrate: () => ({ byDate: {} }),
       storage: createJSONStorage(() => {
         // Brief §10 + §29: persist to localStorage so drafts + submitted
         // states survive page refresh. Falls back to in-memory storage

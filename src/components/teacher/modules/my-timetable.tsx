@@ -4,17 +4,31 @@
  * MyTimetable — the teacher's OWN weekly schedule (Teacher Workspace final
  * sidebar spec: an Overview item alongside My Attendance).
  *
- * Design language: Marks Entry / My Attendance benchmark — quiet toolbar
- * context line, four honest summary cards (HubStatCards recipe), one main
- * weekly card. Purely informational: no primary action (spec Phase 14).
+ * Design language: Marks Entry benchmark — white cards, border-border,
+ * rounded-xl, HubStatCards recipe, quiet ModuleToolbar context line,
+ * emerald accents, text-[10px] uppercase labels, tabular-nums. No
+ * gradients, no glass, no giant colored blocks.
  *
  * Data: GET /api/teacher/timetable — server-scoped to the signed-in
- * teacher (teacherName match, same rule as the Dashboard). Nothing is
- * fabricated; no rows ⇒ honest empty state.
+ * teacher (teacherName match, same rule as the Dashboard) and enriched
+ * with the SCHOOL period ladder (periodTimes, P1–P7 — free periods carry
+ * real times), the school's teaching days and a server-side conflict
+ * scan (teacher/room/class). Nothing is fabricated; no rows ⇒ honest
+ * empty state.
  *
- * Layout: desktop renders the classic period × day grid; small screens
- * get day chips + that day's period list (touch-friendly, no horizontal
- * scroll). Today is highlighted in both views.
+ * Structure:
+ *   · 4 summary cards (HubStatCards) — periods/week, classes, subjects,
+ *     today's periods;
+ *   · conflict banner — only when the API reports conflicts (amber card,
+ *     every conflict explained, footer pointing at the timetable admin);
+ *   · TODAY card — one row per school period with real times, Free rows
+ *     explicit, the current period highlighted ("Now") and the next
+ *     upcoming period marked ("Next"), computed from the client clock;
+ *   · weekly grid (lg+): period rows × day columns, table-fixed so the
+ *     grid never overflows its card, today's column tinted;
+ *   · mobile (<lg): day chips + the selected day's full period list
+ *     including explicit Free rows — the teacher sees the shape of the
+ *     whole day.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -54,6 +68,23 @@ interface TimetableCell {
   room: string | null
 }
 
+interface PeriodTime {
+  period: number
+  startTime: string | null
+  endTime: string | null
+}
+
+interface ConflictEntry {
+  subjectName: string
+  classLabel: string
+  room: string | null
+}
+
+type TimetableConflict =
+  | { kind: 'teacher'; day: string; period: number; entries: ConflictEntry[] }
+  | { kind: 'room'; day: string; period: number; label: string; detail: string }
+  | { kind: 'class'; day: string; period: number; label: string; detail: string }
+
 interface TimetablePayload {
   cells: TimetableCell[]
   stats: {
@@ -63,22 +94,28 @@ interface TimetablePayload {
     teachingDays: number
   }
   academicSession: string | null
+  periodTimes: PeriodTime[]
+  schoolDays: string[]
+  conflicts: TimetableConflict[]
 }
 
 // ── helpers ───────────────────────────────────────────────────────────
 
-const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-function todayWeekday(): string {
-  return WEEKDAY_NAMES[new Date().getDay()]
-}
+/** "Friday, 18 September" — client-local, en-IN day-first style. */
+const TODAY_DATE_FMT = new Intl.DateTimeFormat('en-IN', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+})
 
+/** "2026-2027" / "2026-27" → "2026–27" (en dash, short end). */
 function sessionLabel(session: string | null): string | null {
   if (!session) return null
   const m = session.match(/^(\d{4})[-–/](\d{2,4})$/)
   if (!m) return session
-  const end = m[2].length === 2 ? `${m[1].slice(0, 2)}${m[2]}` : m[2]
+  const end = m[2].length === 2 ? m[2] : m[2].slice(-2)
   return `${m[1]}–${end}`
 }
 
@@ -93,11 +130,30 @@ function prettyTime(t: string | null): string | null {
   return `${h12}:${m} ${ampm}`
 }
 
-function cellTime(c: TimetableCell): string | null {
-  const s = prettyTime(c.startTime)
-  const e = prettyTime(c.endTime)
+/** "8:30 – 9:15 AM" from a period's start/end (either missing → the other). */
+function prettyRange(start: string | null, end: string | null): string {
+  const s = prettyTime(start)
+  const e = prettyTime(end)
   if (s && e) return `${s} – ${e}`
-  return s ?? e
+  return s ?? e ?? ''
+}
+
+/** "08:30" → minutes since midnight (null when unparseable). */
+function minutesOf(t: string | null): number | null {
+  if (!t) return null
+  const [h, m] = t.split(':').map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null
+  return h * 60 + m
+}
+
+/** One line per conflict — the banner's body text. */
+function conflictLine(c: TimetableConflict): string {
+  const slot = `${c.day} · Period ${c.period}`
+  if (c.kind === 'teacher') {
+    const entries = c.entries.map((e) => `${e.subjectName} · ${e.classLabel}`).join(' / ')
+    return `${slot} — ${entries} (two classes share this slot)`
+  }
+  return `${slot} — ${c.label} (${c.detail})`
 }
 
 // ── data hook (house fetch discipline) ────────────────────────────────
@@ -140,6 +196,99 @@ async function fetchTimetable(): Promise<TimetablePayload> {
   return envelope.data as TimetablePayload
 }
 
+// ── shared row renderer (TODAY card + mobile day list) ────────────────
+
+interface LiveSlot {
+  currentPeriod: number | null
+  nextPeriod: number | null
+}
+
+/**
+ * One row per school period (P1–P7 ladder): time range | P-chip |
+ * assignment (subject / class / room) or an explicit muted "Free".
+ * `live` (today only) highlights the current period and marks the next.
+ */
+function DayPeriodList({
+  day,
+  periodTimes,
+  cellsAt,
+  live,
+  reduce,
+}: {
+  day: string
+  periodTimes: PeriodTime[]
+  cellsAt: (day: string, period: number) => TimetableCell[]
+  live: LiveSlot | null
+  reduce: boolean | null
+}) {
+  return (
+    <ol className="divide-y divide-border/40">
+      {periodTimes.map((pt, i) => {
+        const entries = cellsAt(day, pt.period)
+        const isNow = live?.currentPeriod === pt.period
+        const isNext = live?.nextPeriod === pt.period
+        return (
+          <motion.li
+            key={pt.period}
+            initial={reduce ? false : { opacity: 0, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: Math.min(i * 0.03, 0.25), duration: 0.2 }}
+            className={cn(
+              'border-l-2 border-l-transparent px-4 py-2.5 sm:py-3',
+              isNow && 'border-l-emerald-500 bg-emerald-500/[0.04]',
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <p className="w-[88px] shrink-0 text-[11px] leading-tight text-muted-foreground tabular-nums sm:w-[96px]">
+                {prettyRange(pt.startTime, pt.endTime) || '—'}
+              </p>
+              <span className="flex h-7 w-9 shrink-0 items-center justify-center rounded-md bg-muted/60 font-display text-[11px] font-bold tabular-nums text-foreground">
+                P{pt.period}
+              </span>
+              <div className="min-w-0 flex-1">
+                {entries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground/70">Free</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {entries.map((e, idx) => (
+                      <div key={`${day}-${pt.period}-${idx}`} className="min-w-0">
+                        <p className="flex items-center gap-1 text-sm font-medium text-foreground">
+                          <span className="truncate">{e.subjectName}</span>
+                          {entries.length > 1 && (
+                            <AlertTriangle
+                              className="h-3 w-3 shrink-0 text-amber-500"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">{e.classLabel}</p>
+                        <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+                          <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
+                          {e.room ?? 'Room not assigned'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {isNow && (
+                <span className="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                  Now
+                </span>
+              )}
+              {!isNow && isNext && (
+                <span className="shrink-0 rounded-full border border-emerald-500/40 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Next
+                </span>
+              )}
+            </div>
+          </motion.li>
+        )
+      })}
+    </ol>
+  )
+}
+
 // ── module ────────────────────────────────────────────────────────────
 
 export function MyTimetableModule() {
@@ -147,7 +296,17 @@ export function MyTimetableModule() {
   const [data, setData] = useState<TimetablePayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const today = todayWeekday()
+  const [selectedDay, setSelectedDay] = useState<string>('')
+  // Client clock — set after mount (the module is fetch-gated, so the
+  // date-derived UI never renders on the server; no hydration mismatch).
+  // Refreshed every minute so "Now"/"Next" stay honest on an open tab.
+  const [now, setNow] = useState<Date | null>(null)
+
+  useEffect(() => {
+    setNow(new Date())
+    const id = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
 
   const load = useCallback(async () => {
     setError(null)
@@ -167,38 +326,68 @@ export function MyTimetableModule() {
 
   // ── ALL derivations before any early return (hooks discipline) ────
   const cells = useMemo(() => data?.cells ?? [], [data])
+  const periodTimes = useMemo(() => data?.periodTimes ?? [], [data])
+  const schoolDays = useMemo(() => data?.schoolDays ?? [], [data])
+  const conflicts = useMemo(() => data?.conflicts ?? [], [data])
   const stats = data?.stats ?? { periodsPerWeek: 0, classes: 0, subjects: 0, teachingDays: 0 }
   const session = sessionLabel(data?.academicSession ?? null)
 
-  // Day chips: canonical order, only days that actually have cells.
-  const activeDays = useMemo(
-    () => DAY_ORDER.filter((d) => cells.some((c) => c.day === d)),
-    [cells],
-  )
+  const clock = now ?? new Date()
+  const today = WEEKDAY_NAMES[clock.getDay()]
+  const todayDateLabel = TODAY_DATE_FMT.format(clock)
+  const isTeachingDay = schoolDays.includes(today)
 
-  const [selectedDay, setSelectedDay] = useState<string>(today)
-  useEffect(() => {
-    // Keep the mobile selection valid whenever the payload changes.
-    setSelectedDay((cur) => (activeDays.includes(cur) ? cur : (activeDays[0] ?? today)))
-  }, [activeDays, today])
-
-  const todayCells = useMemo(() => cells.filter((c) => c.day === today), [cells, today])
-  const maxPeriod = useMemo(
-    () => cells.reduce((m, c) => Math.max(m, c.period), 0),
-    [cells],
-  )
-  const periodNumbers = useMemo(
-    () => Array.from({ length: maxPeriod }, (_, i) => i + 1),
-    [maxPeriod],
-  )
   // Cells grouped per (day, period) — a slot may hold MORE than one class
-  // (the timetable manager can double-book a period; the teacher must see
-  // every entry, never a silently-hidden first match).
+  // (a conflict the API reports; the UI never hides the second entry).
+  const bySlot = useMemo(() => {
+    const m = new Map<string, TimetableCell[]>()
+    for (const c of cells) {
+      const k = `${c.day}|${c.period}`
+      const arr = m.get(k) ?? []
+      arr.push(c)
+      m.set(k, arr)
+    }
+    return m
+  }, [cells])
   const cellsAt = useCallback(
-    (day: string, period: number): TimetableCell[] =>
-      cells.filter((c) => c.day === day && c.period === period),
-    [cells],
+    (day: string, period: number): TimetableCell[] => bySlot.get(`${day}|${period}`) ?? [],
+    [bySlot],
   )
+
+  const todayCells = useMemo(
+    () =>
+      cells
+        .filter((c) => c.day === today)
+        .sort((a, b) => a.period - b.period),
+    [cells, today],
+  )
+
+  // Live "Now"/"Next" — from the real client clock and the school ladder.
+  const live = useMemo<LiveSlot | null>(() => {
+    if (!isTeachingDay) return null
+    const nowMin = clock.getHours() * 60 + clock.getMinutes()
+    let currentPeriod: number | null = null
+    for (const pt of periodTimes) {
+      const s = minutesOf(pt.startTime)
+      const e = minutesOf(pt.endTime)
+      if (s != null && e != null && nowMin >= s && nowMin < e) {
+        currentPeriod = pt.period
+        break
+      }
+    }
+    let nextPeriod: number | null = null
+    if (currentPeriod == null) {
+      const nowMinAgain = nowMin
+      for (const pt of periodTimes) {
+        const s = minutesOf(pt.startTime)
+        if (s != null && nowMinAgain < s) {
+          nextPeriod = pt.period
+          break
+        }
+      }
+    }
+    return { currentPeriod, nextPeriod }
+  }, [clock, isTeachingDay, periodTimes])
 
   if (loading && !data) return <HubModuleSkeleton />
 
@@ -248,7 +437,10 @@ export function MyTimetableModule() {
       key: 'today',
       label: "Today's Periods",
       value: todayCells.length,
-      context: todayCells.length > 0 ? `${today} · ${cellTime(todayCells[0]) ?? ''}`.trim() : `${today} · no teaching duty`,
+      context:
+        todayCells.length > 0
+          ? `${today} · starts ${prettyTime(todayCells[0].startTime) ?? `${todayCells.length} periods`}`
+          : `${today} · no teaching duty`,
       icon: Clock,
       tone: todayCells.length > 0 ? 'amber' : 'slate',
     },
@@ -271,9 +463,18 @@ export function MyTimetableModule() {
     )
   }
 
-  const selectedCells = cells
-    .filter((c) => c.day === selectedDay)
-    .sort((a, b) => a.period - b.period)
+  // Mobile day chips: default to today when it is a teaching day.
+  const defaultDay = isTeachingDay ? today : (schoolDays[0] ?? today)
+  const activeDay = schoolDays.includes(selectedDay) ? selectedDay : defaultDay
+
+  const periodRangeLabel =
+    periodTimes.length > 0
+      ? `P${periodTimes[0].period}–P${periodTimes[periodTimes.length - 1].period}`
+      : ''
+  const dayRangeLabel =
+    schoolDays.length > 0
+      ? `${schoolDays[0].slice(0, 3)}–${schoolDays[schoolDays.length - 1].slice(0, 3)}`
+      : ''
 
   return (
     <PageTransition className="space-y-4 sm:space-y-5">
@@ -286,28 +487,126 @@ export function MyTimetableModule() {
       {/* Stale-notice when a refresh failed but earlier data exists */}
       {error && <HubSectionError message={error} onRetry={() => void load()} />}
 
+      {/* ── Conflict banner (only when the API reports conflicts) ────── */}
+      {conflicts.length > 0 && (
+        <motion.section
+          initial={reduce ? false : { opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          aria-label="Timetable conflicts"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+              <AlertTriangle
+                className="h-4 w-4 text-amber-600 dark:text-amber-400"
+                aria-hidden="true"
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                Timetable conflict detected
+              </h2>
+              <ul className="mt-1.5 space-y-1.5">
+                {conflicts.map((c, i) => (
+                  <li
+                    key={`${c.kind}-${c.day}-${c.period}-${i}`}
+                    className="text-xs leading-relaxed text-amber-800/90 dark:text-amber-200/90"
+                  >
+                    {conflictLine(c)}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2.5 border-t border-amber-500/20 pt-2 text-[10px] text-amber-700/80 dark:text-amber-300/70">
+                This needs to be resolved in the timetable management layer. Contact the school
+                timetable administrator.
+              </p>
+            </div>
+          </div>
+        </motion.section>
+      )}
+
+      {/* ── TODAY card — the quick view that answers "what now?" ─────── */}
+      <section
+        aria-label="Today's schedule"
+        className="overflow-hidden rounded-xl border border-border bg-card"
+      >
+        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border bg-muted/20 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <CalendarDays
+              className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+            <h2 className="min-w-0 text-sm font-semibold text-foreground">
+              Today · {todayDateLabel}
+              {!isTeachingDay && (
+                <span className="font-normal text-muted-foreground">
+                  {' '}
+                  — no classes scheduled (non-teaching day)
+                </span>
+              )}
+            </h2>
+          </div>
+          {isTeachingDay && (
+            <p className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              {todayCells.length} teaching period{todayCells.length === 1 ? '' : 's'}
+            </p>
+          )}
+        </header>
+        {isTeachingDay && (
+          <>
+            {todayCells.length === 0 && (
+              <p className="border-b border-border bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
+                No teaching periods today
+              </p>
+            )}
+            <DayPeriodList
+              day={today}
+              periodTimes={periodTimes}
+              cellsAt={cellsAt}
+              live={live}
+              reduce={reduce}
+            />
+          </>
+        )}
+      </section>
+
       {/* ── Desktop weekly grid (period rows × day columns) ─────────── */}
       <section
         aria-label="Weekly timetable"
-        className="hidden lg:block rounded-xl border border-border bg-card overflow-hidden"
+        className="hidden overflow-hidden rounded-xl border border-border bg-card lg:block"
       >
+        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border bg-muted/30 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <Table2
+              className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              This Week
+            </h2>
+          </div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            {[periodRangeLabel, dayRangeLabel].filter(Boolean).join(' · ')}
+          </p>
+        </header>
         <div className="overflow-x-auto">
           {/* table-fixed: columns share the card width equally and content
-              truncates — the weekly grid NEVER forces its card to scroll,
-              even on narrow iPad widths (spec Phase 19). */}
+              truncates — the weekly grid NEVER forces the page (or its
+              card) to overflow, even on narrow iPad widths. */}
           <table className="w-full table-fixed border-collapse text-xs">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="w-20 px-3 py-2.5 text-left text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                <th className="w-24 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   Period
                 </th>
-                {activeDays.map((d) => (
+                {schoolDays.map((d) => (
                   <th
                     key={d}
                     className={cn(
-                      'px-3 py-2.5 text-left text-[10px] uppercase font-bold tracking-wider',
+                      'px-2.5 py-2 text-left text-[10px] font-bold uppercase tracking-wider',
                       d === today
-                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/5'
+                        ? 'bg-emerald-500/5 text-emerald-700 dark:text-emerald-400'
                         : 'text-muted-foreground',
                     )}
                   >
@@ -322,54 +621,54 @@ export function MyTimetableModule() {
               </tr>
             </thead>
             <tbody>
-              {periodNumbers.map((p) => (
-                <tr key={p} className="border-b border-border/40 last:border-b-0">
+              {periodTimes.map((pt) => (
+                <tr key={pt.period} className="border-b border-border/40 last:border-b-0">
                   <td className="px-3 py-2.5 align-top">
-                    <span className="font-display font-bold tabular-nums text-foreground">{p}</span>
+                    <p className="font-display text-[11px] font-bold tabular-nums text-foreground">
+                      P{pt.period}
+                    </p>
+                    <p className="mt-0.5 text-[9px] leading-tight text-muted-foreground/80 tabular-nums">
+                      {prettyRange(pt.startTime, pt.endTime)}
+                    </p>
                   </td>
-                  {activeDays.map((d) => {
-                    const slot = cellsAt(d, p)
-                    if (slot.length === 0) {
+                  {schoolDays.map((d) => {
+                    const entries = cellsAt(d, pt.period)
+                    const isTodayCol = d === today
+                    if (entries.length === 0) {
                       return (
-                        <td key={d} className="px-3 py-2.5">
-                          <span className="text-muted-foreground/40">—</span>
+                        <td
+                          key={d}
+                          className={cn('px-2.5 py-2.5 align-top', isTodayCol && 'bg-emerald-500/[0.04]')}
+                        >
+                          <span className="text-muted-foreground/50">Free</span>
                         </td>
                       )
                     }
-                    const [first] = slot
-                    const time = cellTime(first)
                     return (
                       <td
                         key={d}
-                        className={cn(
-                          'px-2.5 py-2.5 align-top',
-                          d === today && 'bg-emerald-500/[0.04]',
-                        )}
+                        className={cn('px-2.5 py-2.5 align-top', isTodayCol && 'bg-emerald-500/[0.04]')}
                       >
-                        <div className="min-w-0 space-y-1">
-                          <p className="font-medium text-foreground truncate">{first.subjectName}</p>
-                          {slot.map((c, i) => (
-                            <p
-                              key={`${d}-${p}-${i}`}
-                              className="text-[10px] text-muted-foreground truncate"
-                            >
-                              {c.classLabel}
-                              {c.room ? ` · ${c.room}` : ''}
-                              {slot.length > 1 && (
-                                <span className="ml-1 text-amber-600 dark:text-amber-400" title="Two classes share this period — check with the timetable manager">
-                                  ⚠
-                                </span>
-                              )}
-                            </p>
+                        <div className="min-w-0 space-y-1.5">
+                          {entries.map((e, i) => (
+                            <div key={`${d}-${pt.period}-${i}`} className="min-w-0">
+                              <p className="flex items-center gap-1 text-xs font-medium text-foreground">
+                                <span className="truncate">{e.subjectName}</span>
+                                {entries.length > 1 && (
+                                  <AlertTriangle
+                                    className="h-3 w-3 shrink-0 text-amber-500"
+                                    aria-hidden="true"
+                                  />
+                                )}
+                              </p>
+                              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                                {e.classLabel}
+                              </p>
+                              <p className="mt-0.5 truncate text-[10px] text-muted-foreground/80">
+                                {e.room ?? 'Room not assigned'}
+                              </p>
+                            </div>
                           ))}
-                          {/* Time shows only on wide screens — the period row
-                              header + mobile list carry it otherwise; keeps the
-                              weekly grid inside its card on iPad widths. */}
-                          {time && (
-                            <p className="hidden xl:block text-[10px] text-muted-foreground/70 truncate">
-                              {time}
-                            </p>
-                          )}
                         </div>
                       </td>
                     )
@@ -381,18 +680,18 @@ export function MyTimetableModule() {
         </div>
       </section>
 
-      {/* ── Mobile / tablet: day chips + that day's list ────────────── */}
+      {/* ── Mobile / tablet: day chips + that day's period list ────── */}
       <section
         aria-label="Timetable by day"
-        className="lg:hidden rounded-xl border border-border bg-card overflow-hidden"
+        className="overflow-hidden rounded-xl border border-border bg-card lg:hidden"
       >
         <div
           role="tablist"
           aria-label="Choose a weekday"
-          className="flex gap-1.5 overflow-x-auto px-3 py-2.5 border-b border-border bg-muted/20"
+          className="flex gap-1.5 overflow-x-auto border-b border-border bg-muted/20 px-3 py-2.5"
         >
-          {activeDays.map((d) => {
-            const isActive = d === selectedDay
+          {schoolDays.map((d) => {
+            const isActive = d === activeDay
             return (
               <button
                 key={d}
@@ -400,7 +699,7 @@ export function MyTimetableModule() {
                 aria-selected={isActive}
                 onClick={() => setSelectedDay(d)}
                 className={cn(
-                  'shrink-0 min-h-[36px] rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                  'min-h-[40px] shrink-0 rounded-lg border px-3.5 py-1.5 text-xs font-medium transition-colors',
                   isActive
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                     : 'border-border bg-card text-muted-foreground hover:bg-muted/50',
@@ -419,55 +718,23 @@ export function MyTimetableModule() {
           })}
         </div>
 
-        {selectedCells.length === 0 ? (
-          <HubEmptyState
-            icon={CalendarDays}
-            title={`No periods on ${selectedDay}`}
-            hint="Your next teaching day may differ — pick another day above."
-            className="py-8"
-          />
-        ) : (
-          <ol className="divide-y divide-border/40">
-            {selectedCells.map((c, i) => (
-              <motion.li
-                /* index in the key: a period can legitimately hold two
-                   classes (double-booked slot) — entries must stay unique. */
-                key={`${c.day}-${c.period}-${i}`}
-                initial={reduce ? false : { opacity: 0, x: -4 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: Math.min(i * 0.04, 0.3), duration: 0.2 }}
-                className="flex items-center gap-3 px-4 py-3"
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/50 font-display text-sm font-bold tabular-nums text-foreground">
-                  {c.period}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-foreground truncate">{c.subjectName}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    {c.classLabel}
-                    {c.room ? ` · ${c.room}` : ''}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  {cellTime(c) ? (
-                    <p className="text-[11px] text-muted-foreground tabular-nums">{cellTime(c)}</p>
-                  ) : null}
-                  {c.room && (
-                    <p className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-muted-foreground/70">
-                      <MapPin className="h-3 w-3" aria-hidden="true" />
-                      {c.room}
-                    </p>
-                  )}
-                </div>
-              </motion.li>
-            ))}
-          </ol>
+        {cells.filter((c) => c.day === activeDay).length === 0 && (
+          <p className="border-b border-border bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
+            No teaching periods on {activeDay}
+          </p>
         )}
+        <DayPeriodList
+          day={activeDay}
+          periodTimes={periodTimes}
+          cellsAt={cellsAt}
+          live={activeDay === today ? live : null}
+          reduce={reduce}
+        />
       </section>
 
-      <p className="text-[10px] text-muted-foreground text-center">
-        Your personal schedule, read from the school timetable. Room and period details are set by
-        the school timetable manager.
+      <p className="text-center text-[10px] text-muted-foreground">
+        Your personal schedule, read from the school timetable. Rooms and period times are set by the
+        school timetable administrator.
       </p>
     </PageTransition>
   )

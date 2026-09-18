@@ -314,6 +314,9 @@ export interface StaffAttendanceRecord {
   department: string
   status: AttendanceStatus
   checkIn: string | null // "09:02 AM" or null when absent/leave
+  /** Check-out time ("03:45 PM"); null when absent/leave. Populated by the
+   *  deterministic generators; manually-marked rows may leave it undefined. */
+  checkOut?: string | null
 }
 
 export const STAFF_DEFS: Omit<StaffAttendanceRecord, 'status' | 'checkIn'>[] = [
@@ -341,16 +344,50 @@ export const STAFF_DEFS: Omit<StaffAttendanceRecord, 'status' | 'checkIn'>[] = [
   { id: 'T-056', name: 'Geeta Sharma',     role: 'Librarian',     department: 'Library' },
 ]
 
-/** Build today's staff attendance deterministically. */
-function buildStaffToday(): StaffAttendanceRecord[] {
+/** Format minutes-since-midnight as a 12-hour clock string ("03:45 PM"). */
+function format12h(totalMinutes: number): string {
+  const h24 = Math.floor(totalMinutes / 60)
+  const min = totalMinutes % 60
+  const ampm = h24 >= 12 ? 'PM' : 'AM'
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
+  return `${String(h12).padStart(2, '0')}:${String(min).padStart(2, '0')} ${ampm}`
+}
+
+/** Seeded LCG — same construction as the original builders (no fabrication). */
+function seededRand(seedStr: string): () => number {
   let seed = 0
-  for (let i = 0; i < 'staff-2025-12-10'.length; i++) seed = (seed * 31 + 'staff-2025-12-10'.charCodeAt(i)) >>> 0
-  const rand = () => {
+  for (let i = 0; i < seedStr.length; i++) seed = (seed * 31 + seedStr.charCodeAt(i)) >>> 0
+  return () => {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff
     return seed / 0x7fffffff
   }
+}
 
-  return STAFF_DEFS.map((s) => {
+/**
+ * Attach deterministic check-out times WITHOUT touching the status/check-in
+ * RNG stream (a separate seeded pass, so statuses per date never change).
+ *   - present: checks out between 15:30 and 16:45
+ *   - late:    checks out between 15:35 and 16:50
+ *   - absent / leave: null
+ */
+function withCheckOuts(records: StaffAttendanceRecord[], seedStr: string): StaffAttendanceRecord[] {
+  const rand = seededRand(seedStr)
+  return records.map((r) => {
+    if (r.status === 'present') {
+      return { ...r, checkOut: format12h(15 * 60 + 30 + Math.floor(rand() * 76)) }
+    }
+    if (r.status === 'late') {
+      return { ...r, checkOut: format12h(15 * 60 + 35 + Math.floor(rand() * 76)) }
+    }
+    return { ...r, checkOut: null }
+  })
+}
+
+/** Build today's staff attendance deterministically. */
+function buildStaffToday(): StaffAttendanceRecord[] {
+  const rand = seededRand('staff-2025-12-10')
+
+  const records = STAFF_DEFS.map((s) => {
     const r = rand()
     let status: AttendanceStatus
     let checkIn: string | null
@@ -376,6 +413,7 @@ function buildStaffToday(): StaffAttendanceRecord[] {
     }
     return { ...s, status, checkIn }
   })
+  return withCheckOuts(records, 'staff-checkout-2025-12-10')
 }
 
 export const staffAttendance: StaffAttendanceRecord[] = buildStaffToday()
@@ -395,15 +433,12 @@ export function getStaffAttendanceSummary(records: StaffAttendanceRecord[] = sta
 /**
  * Build historical staff attendance for a given date.
  * Deterministic — same date produces same records (Brief 34: no fabrication).
+ * Check-outs come from a separate seeded pass so the status/check-in stream
+ * (and therefore every per-date status) stays bit-identical to the original.
  */
 export function getStaffAttendanceForDate(dateStr: string): StaffAttendanceRecord[] {
-  let seed = 0
-  for (let i = 0; i < dateStr.length; i++) seed = (seed * 31 + dateStr.charCodeAt(i)) >>> 0
-  const rand = () => {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff
-    return seed / 0x7fffffff
-  }
-  return STAFF_DEFS.map((s) => {
+  const rand = seededRand(dateStr)
+  const records = STAFF_DEFS.map((s) => {
     const r = rand()
     let status: AttendanceStatus
     let checkIn: string | null
@@ -423,6 +458,7 @@ export function getStaffAttendanceForDate(dateStr: string): StaffAttendanceRecor
     }
     return { ...s, status, checkIn }
   })
+  return withCheckOuts(records, `checkout-${dateStr}`)
 }
 
 /* ──────────────────────────────────────────────────────────────────────

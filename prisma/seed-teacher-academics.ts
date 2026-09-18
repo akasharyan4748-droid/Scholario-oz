@@ -132,29 +132,74 @@ async function main() {
   // ── 2. Grade 10-A timetable (Mon–Sat × 6 periods) ────────────────────
   await db.timetable.deleteMany({ where: { schoolId: school.id, classId: grade10.id } })
 
-  // P1 Math + P2 English every day; P3–P6 rotate the five other subjects.
-  const rotation = ['Physics', 'Chemistry', 'Biology', 'Social Science', 'Hindi']
+  // Conflict-free plan. BUSINESS RULE (Teacher Workspace spec): one teacher
+  // + one day + one period = at most one teaching assignment. The naive
+  // "P1 Math + P2 English every day" rotation double-booked every shared
+  // teacher against their Grade 9-A duties (e.g. Rohan had Grade 9-A Math
+  // AND Grade 10-A Math at Mon P1). This plan places every 10-A slot at a
+  // (day, period) where the subject's teacher is FREE from 9-A duties,
+  // while keeping the exact same subject quotas the pacing engine uses
+  // (Math 6 · English 6 · Physics 5 · Chemistry 5 · Biology 5 ·
+  // Social Science 5 · Hindi 4 = 36 cells).
+  const PLAN_10A: { day: string; period: number; subject: string }[] = [
+    // Monday — 9-A busy: P1 Rohan, P2 Kavita, P3 Priya, P4 Rohan, P5 Kavita, P6 Arjun, P7 Arjun
+    { day: 'Monday', period: 1, subject: 'Physics' },        // Kavita free at Mon P1
+    { day: 'Monday', period: 3, subject: 'Social Science' },  // Arjun free at Mon P3
+    { day: 'Monday', period: 4, subject: 'English' },         // Priya free at Mon P4
+    { day: 'Monday', period: 5, subject: 'Hindi' },           // Arjun free at Mon P5
+    { day: 'Monday', period: 6, subject: 'Chemistry' },       // Kavita free at Mon P6
+    // Tuesday — 9-A busy: P1 Rohan, P2 Priya, P3 Kavita, P4 Kavita, P5 Priya, P6 Arjun, P7 Arjun
+    { day: 'Tuesday', period: 1, subject: 'English' },
+    { day: 'Tuesday', period: 3, subject: 'Hindi' },
+    { day: 'Tuesday', period: 4, subject: 'Biology' },
+    { day: 'Tuesday', period: 5, subject: 'Physics' },
+    { day: 'Tuesday', period: 6, subject: 'Chemistry' },
+    // Wednesday — 9-A busy: P1 Rohan, P2 Priya, P3 Priya, P4 Arjun, P5 Kavita, P6 Kavita, P7 Arjun
+    { day: 'Wednesday', period: 1, subject: 'Chemistry' },
+    { day: 'Wednesday', period: 3, subject: 'Social Science' },
+    { day: 'Wednesday', period: 4, subject: 'Biology' },
+    { day: 'Wednesday', period: 5, subject: 'English' },
+    { day: 'Wednesday', period: 6, subject: 'Hindi' },
+    // Thursday — 9-A busy: P1 Rohan, P2 Kavita, P3 Arjun, P4 Priya, P5 Rohan, P6 Kavita, P7 Priya
+    { day: 'Thursday', period: 1, subject: 'English' },
+    { day: 'Thursday', period: 3, subject: 'Biology' },
+    { day: 'Thursday', period: 4, subject: 'Physics' },
+    { day: 'Thursday', period: 5, subject: 'Hindi' },
+    { day: 'Thursday', period: 6, subject: 'Social Science' },
+    // Friday — 9-A busy: P1 Rohan, P2 Priya, P3 Arjun, P4 Priya, P5 Kavita, P6 Arjun, P7 Kavita
+    { day: 'Friday', period: 1, subject: 'Biology' },
+    { day: 'Friday', period: 3, subject: 'Chemistry' },
+    { day: 'Friday', period: 4, subject: 'Physics' },
+    { day: 'Friday', period: 5, subject: 'Social Science' },
+    { day: 'Friday', period: 6, subject: 'English' },
+    // Saturday — 9-A busy: P1 Rohan, P2 Kavita, P3 Arjun, P4 Arjun, P5 Priya, P6 Priya, P7 Kavita
+    { day: 'Saturday', period: 1, subject: 'English' },
+    { day: 'Saturday', period: 3, subject: 'Physics' },
+    { day: 'Saturday', period: 4, subject: 'Biology' },
+    { day: 'Saturday', period: 5, subject: 'Chemistry' },
+    { day: 'Saturday', period: 6, subject: 'Social Science' },
+  ]
   const cells: { day: string; period: number; subjectId: string; teacherName: string; room: string }[] = []
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   const idByName = new Map(subjectIds.map((id) => [subjectName(id), id] as const))
-  let rotationIndex = 0
-  for (const day of days) {
-    for (const pt of PERIOD_TIMES) {
-      let subjectNameThis: string
-      if (pt.period === 1) subjectNameThis = 'Mathematics'
-      else if (pt.period === 2) subjectNameThis = 'English'
-      else {
-        subjectNameThis = rotation[rotationIndex % rotation.length]
-        rotationIndex += 1
-      }
-      const subjectId = idByName.get(subjectNameThis)
+  for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']) {
+    // Mathematics anchors P2 every day — every shared teacher is free at
+    // their own class's P2 (9-A P2 rotates away from Rohan every day).
+    cells.push({
+      day,
+      period: 2,
+      subjectId: idByName.get('Mathematics')!,
+      teacherName: teacherNameForSubject(idByName.get('Mathematics')!),
+      room: 'Room 202',
+    })
+    for (const slot of PLAN_10A.filter((s) => s.day === day)) {
+      const subjectId = idByName.get(slot.subject)
       if (!subjectId) continue
       cells.push({
-        day,
-        period: pt.period,
+        day: slot.day,
+        period: slot.period,
         subjectId,
         teacherName: teacherNameForSubject(subjectId),
-        room: `Room ${200 + pt.period}`,
+        room: `Room ${200 + slot.period}`,
       })
     }
   }

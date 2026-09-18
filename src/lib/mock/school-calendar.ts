@@ -1,40 +1,70 @@
-// school-calendar.ts — single source of truth for the academic calendar.
+// school-calendar.ts — client-side mirror of the school's declared academic
+// calendar.
 //
-// Brief PART 9-13 + PART 34-35: Attendance MUST respect the school's official
-// academic calendar — no duplicate holiday lists inside Attendance or Staff.
+// ⚠ MIRROR DISCIPLINE: the holiday list below mirrors `HOLIDAY_SEED` in
+// prisma/curriculum-data.ts (seeded into the DB as SchoolEvent HOLIDAY rows
+// by prisma/seed-teacher-academics.ts) and MUST stay in sync with it.
+// The AUTHORITATIVE source is the DB — modules that can fetch should use
+// `GET /api/events?type=HOLIDAY` (schoolId-scoped SchoolEvent rows); this
+// module is the bundled fallback + the shared date-helper library.
+//
+// Session 2026-27 declared holidays (all audience ALL):
+//   Ambedkar Jayanti 2026-04-14 · Labour Day 2026-05-01 ·
+//   Summer Break 2026-05-18 → 2026-06-14 · Independence Day 2026-08-15 ·
+//   Janmashtami 2026-09-04 · Gandhi Jayanti 2026-10-02 ·
+//   Dussehra Break 2026-10-19 → 2026-10-21 · Diwali Break 2026-11-07 →
+//   2026-11-10 · Christmas 2026-12-25 · Republic Day 2027-01-26.
+//
+// NOTE on the weekend rule: the school's timetable runs Monday–Saturday
+// (DB Timetable rows exist for every day except Sunday), so for TEACHING
+// STAFF the weekend is Sunday ONLY — see `isStaffWeekend` / `isStaffWorkingDay`.
+// The legacy `isWeekend` (Sat + Sun) semantics are kept for existing callers.
 //
 // Provides:
 //   - isHoliday(dateStr) → boolean
-//   - getHoliday(dateStr) → { name, type } | null
-//   - isWorkingDay(dateStr) → boolean (working day = not weekend + not holiday)
-//   - isFutureDate(dateStr, todayStr) → boolean
-//
-// Holidays are derived from the existing `calendarEvents` (Holiday type) +
-// standard Indian school holidays. This is the SINGLE source — both student
-// attendance + staff attendance consume this module.
+//   - getHoliday(dateStr) → { name, type } | null   (date-RANGE aware)
+//   - isWeekend(dateStr) → boolean                   (legacy: Sat + Sun)
+//   - isWorkingDay(dateStr) → boolean                (legacy: Mon–Fri minus holidays)
+//   - isStaffWeekend(dateStr) → boolean              (this school: Sunday only)
+//   - isStaffWorkingDay(dateStr) → boolean           (Mon–Sat minus declared holidays)
+//   - isFutureDate / isToday / isPastDate / getPreviousWorkingDay /
+//     findPendingWorkingDays / categorizeDate
 
 /**
- * Standard Indian school holidays (month, day, name).
- * These are deterministic year-over-year.
+ * Fixed national/religious holidays the school declares every year.
+ * (The school declares these for 2026-27 too — kept recurring so legacy
+ * out-of-session lookups keep working.)
  */
-const FIXED_HOLIDAYS: { month: number; day: number; name: string; type: 'national' | 'religious' | 'school' }[] = [
+const FIXED_HOLIDAYS: { month: number; day: number; name: string; type: 'national' | 'religious' }[] = [
   { month: 1, day: 26, name: 'Republic Day', type: 'national' },
   { month: 8, day: 15, name: 'Independence Day', type: 'national' },
   { month: 10, day: 2, name: 'Gandhi Jayanti', type: 'national' },
   { month: 12, day: 25, name: 'Christmas Day', type: 'religious' },
-  { month: 1, day: 1, name: 'New Year\'s Day', type: 'school' },
-  { month: 11, day: 1, name: 'Karnataka Rajyotsava', type: 'school' },
 ]
 
 /**
- * Winter break (Dec 23 → Jan 1) — declared by the school.
+ * The school's declared session 2026-27 holidays — a 1:1 mirror of
+ * HOLIDAY_SEED in prisma/curriculum-data.ts (DB SchoolEvent HOLIDAY rows).
+ * Date ranges are inclusive; a date inside a multi-day break is a holiday.
+ * KEEP IN SYNC with prisma/curriculum-data.ts.
  */
-const WINTER_BREAK = { startMonth: 12, startDay: 23, endMonth: 1, endDay: 1, name: 'Winter Break', type: 'school' as const }
-
-/**
- * Summer break (Apr 15 → May 31) — declared by the school.
- */
-const SUMMER_BREAK = { startMonth: 4, startDay: 15, endMonth: 5, endDay: 31, name: 'Summer Break', type: 'school' as const }
+const DECLARED_SESSION_HOLIDAYS: {
+  name: string
+  start: string // YYYY-MM-DD
+  end: string // YYYY-MM-DD (inclusive)
+  type: 'national' | 'religious' | 'school' | 'summer-break'
+}[] = [
+  { name: 'Ambedkar Jayanti', start: '2026-04-14', end: '2026-04-14', type: 'national' },
+  { name: 'Labour Day', start: '2026-05-01', end: '2026-05-01', type: 'national' },
+  { name: 'Summer Break', start: '2026-05-18', end: '2026-06-14', type: 'summer-break' },
+  { name: 'Independence Day', start: '2026-08-15', end: '2026-08-15', type: 'national' },
+  { name: 'Janmashtami', start: '2026-09-04', end: '2026-09-04', type: 'religious' },
+  { name: 'Gandhi Jayanti', start: '2026-10-02', end: '2026-10-02', type: 'national' },
+  { name: 'Dussehra Break', start: '2026-10-19', end: '2026-10-21', type: 'school' },
+  { name: 'Diwali Break', start: '2026-11-07', end: '2026-11-10', type: 'school' },
+  { name: 'Christmas', start: '2026-12-25', end: '2026-12-25', type: 'religious' },
+  { name: 'Republic Day', start: '2027-01-26', end: '2027-01-26', type: 'national' },
+]
 
 export interface Holiday {
   dateStr: string
@@ -54,46 +84,38 @@ function parseISO(dateStr: string): { year: number; month: number; day: number }
   return { year: parseInt(m[1], 10), month: parseInt(m[2], 10), day: parseInt(m[3], 10) }
 }
 
-/** Check if a date falls within a date range (inclusive), supporting year wrap. */
-function isInRange(year: number, month: number, day: number, range: { startMonth: number; startDay: number; endMonth: number; endDay: number }): boolean {
-  // Convert date to comparable "month-day" tuple
-  const target = month * 100 + day
-  const start = range.startMonth * 100 + range.startDay
-  const end = range.endMonth * 100 + range.endDay
-  if (start <= end) {
-    return target >= start && target <= end
-  }
-  // Range wraps around year boundary (e.g., Dec 23 → Jan 1)
-  return target >= start || target <= end
+/** Day-of-week for a YYYY-MM-DD string (0 = Sunday … 6 = Saturday), local time. */
+function dayOfWeek(dateStr: string): number | null {
+  const parsed = parseISO(dateStr)
+  if (!parsed) return null
+  return new Date(parsed.year, parsed.month - 1, parsed.day).getDay()
 }
 
 /**
  * Returns the holiday for a specific date, or null if it's a working day.
- * Brief PART 9: SINGLE source of truth — no duplicate lists.
+ * Handles multi-day ranges — a date inside a declared break is a holiday.
  */
 export function getHoliday(dateStr: string): Holiday | null {
   const parsed = parseISO(dateStr)
   if (!parsed) return null
-  const { year, month, day } = parsed
+  const { month, day } = parsed
 
-  // Fixed holidays (Jan 26, Aug 15, Oct 2, Dec 25, etc.)
+  // Fixed recurring holidays (Republic Day, Independence Day, Gandhi Jayanti,
+  // Christmas) — the school declares these every year.
   for (const h of FIXED_HOLIDAYS) {
     if (h.month === month && h.day === day) {
       return { dateStr, name: h.name, type: h.type }
     }
   }
 
-  // Winter break
-  if (isInRange(year, month, day, WINTER_BREAK)) {
-    return { dateStr, name: WINTER_BREAK.name, type: 'winter-break' }
-  }
-  // Summer break
-  if (isInRange(year, month, day, SUMMER_BREAK)) {
-    return { dateStr, name: SUMMER_BREAK.name, type: 'summer-break' }
+  // Declared session 2026-27 holidays (incl. multi-day breaks) — string
+  // comparison is safe for zero-padded YYYY-MM-DD ranges.
+  for (const h of DECLARED_SESSION_HOLIDAYS) {
+    if (dateStr >= h.start && dateStr <= h.end) {
+      return { dateStr, name: h.name, type: h.type }
+    }
   }
 
-  // Sundays + Saturdays are weekend (handled separately by isWeekend),
-  // not as holidays per Brief PART 35.
   return null
 }
 
@@ -102,34 +124,51 @@ export function isHoliday(dateStr: string): boolean {
   return getHoliday(dateStr) !== null
 }
 
-/** Returns true if the date is a weekend (Sunday or Saturday). */
+/**
+ * LEGACY weekend rule (Saturday + Sunday). Kept for backward compatibility
+ * with existing callers. For THIS school's teaching staff the weekend is
+ * Sunday only — use `isStaffWeekend`.
+ */
 export function isWeekend(dateStr: string): boolean {
-  const parsed = parseISO(dateStr)
-  if (!parsed) return false
-  const date = new Date(parsed.year, parsed.month - 1, parsed.day)
-  const dayOfWeek = date.getDay() // 0=Sun, 6=Sat
-  return dayOfWeek === 0 || dayOfWeek === 6
+  const dow = dayOfWeek(dateStr)
+  if (dow === null) return false
+  return dow === 0 || dow === 6
 }
 
-/** Returns true if the date is a working day (not weekend + not holiday). */
+/** LEGACY working day (Mon–Fri minus holidays). See `isStaffWorkingDay`. */
 export function isWorkingDay(dateStr: string): boolean {
   return !isWeekend(dateStr) && !isHoliday(dateStr)
 }
 
 /**
- * Brief PART 3: Returns the PREVIOUS working day before the given date.
- * Skips weekends + school holidays automatically.
- *
- * Example: if today = Wednesday 11 Aug, previous working day = Tuesday 10 Aug.
- * If 10 Aug was a holiday, skips to Friday 7 Aug.
+ * THIS school's teaching-staff weekend rule: Sunday only. The school's
+ * timetable runs Monday–Saturday (DB Timetable rows exist for Saturday),
+ * so Saturday is a working day for teaching staff.
+ */
+export function isStaffWeekend(dateStr: string): boolean {
+  const dow = dayOfWeek(dateStr)
+  if (dow === null) return false
+  return dow === 0
+}
+
+/**
+ * THIS school's teaching-staff working day: not a Sunday, not a declared
+ * holiday (Mon–Sat minus the school's declared holiday list).
+ */
+export function isStaffWorkingDay(dateStr: string): boolean {
+  return !isStaffWeekend(dateStr) && !isHoliday(dateStr)
+}
+
+/**
+ * Returns the PREVIOUS working day before the given date (legacy Sat+Sun
+ * weekend rule). Skips weekends + school holidays automatically.
  */
 export function getPreviousWorkingDay(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number)
   let date = new Date(y, m - 1, d)
-  // Go back one day at a time, skipping weekends + holidays
   do {
     date.setDate(date.getDate() - 1)
-    const prevStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    const prevStr = formatISO(date.getFullYear(), date.getMonth() + 1, date.getDate())
     if (isWorkingDay(prevStr)) {
       return prevStr
     }
@@ -137,8 +176,8 @@ export function getPreviousWorkingDay(dateStr: string): string {
 }
 
 /**
- * Brief PART 10: Find all past working days (from today backward) that have
- * unsubmitted attendance. Returns array of date strings.
+ * Find all past working days (from today backward) that have unsubmitted
+ * attendance. Legacy Sat+Sun weekend rule. Returns array of date strings.
  */
 export function findPendingWorkingDays(
   todayStr: string,
@@ -150,7 +189,7 @@ export function findPendingWorkingDays(
   let date = new Date(ty, tm - 1, td)
   for (let i = 0; i < maxDays; i++) {
     date.setDate(date.getDate() - 1)
-    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    const dateStr = formatISO(date.getFullYear(), date.getMonth() + 1, date.getDate())
     if (!isWorkingDay(dateStr)) continue
     const state = byDate[dateStr]
     if (!state || (!state.submitted && !state.draft)) {
@@ -165,10 +204,7 @@ export function findPendingWorkingDays(
   return pending
 }
 
-/**
- * Returns true if the date is in the future (after `todayStr`).
- * Brief PART 12 + PART 46: future dates are not markable.
- */
+/** Returns true if the date is in the future (after `todayStr`). */
 export function isFutureDate(dateStr: string, todayStr: string): boolean {
   return dateStr > todayStr
 }
@@ -183,16 +219,16 @@ export function isPastDate(dateStr: string, todayStr: string): boolean {
   return dateStr < todayStr
 }
 
-/** The canonical "today" string used by the Attendance module. */
+/** The canonical "today" string used by the legacy shared calendar. */
 export const TODAY_STR = '2025-12-10'
 
 /**
- * Categorize a date by its attendance state (Brief PART 46):
+ * Categorize a date by its attendance state:
  *   - 'future' — disabled (not markable)
  *   - 'holiday' — disabled (no attendance)
  *   - 'working' — editable (if not submitted)
  *
- * Holiday takes precedence over future (Brief PART 13).
+ * Holiday takes precedence over future.
  */
 export type DateCategory = 'future' | 'holiday' | 'working'
 
