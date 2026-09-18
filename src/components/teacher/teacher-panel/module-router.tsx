@@ -10,7 +10,6 @@ import { TeacherAnalyticsModule } from '../modules/analytics'
 import { CommunicationModule } from '../modules/communication'
 import { LessonPlannerModule } from '../modules/lesson-planner'
 import { StudentBehaviorModule } from '../modules/student-behavior'
-import { ParentConnectModule } from '../modules/parent-connect'
 import { ExamProctoringModule } from '../modules/exam-proctoring'
 import { ApplicationReviewsModule } from '../modules/applications'
 import { TeacherSettingsModule } from '../modules/settings'
@@ -33,7 +32,6 @@ export function ModuleRouter({ active, onNavigate }: ModuleRouterProps) {
       {active === 'students' && <StudentsModule />}
       {active === 'app-reviews' && <ApplicationReviewsModule />}
       {active === 'behavior' && <StudentBehaviorModule onNavigate={onNavigate} />}
-      {active === 'parent-connect' && <ParentConnectModule onNavigate={onNavigate} />}
       {active === 'analytics' && <TeacherAnalyticsModule onNavigate={onNavigate} />}
       {active === 'settings' && <TeacherSettingsModule />}
       {active === 'communication' && <CommunicationModule onNavigate={onNavigate} />}

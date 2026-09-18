@@ -5,7 +5,7 @@
  *
  * A right-side Sheet (full-width on mobile): identity header, four mini
  * count tiles (positive / observation / concern / open), the real
- * cross-module action (Parent Connect — rendered only when the link
+ * cross-module action (Communication Hub — rendered only when the link
  * exists), the full record timeline newest-first with private
  * staff notes, and the student's open follow-ups with Complete.
  *
@@ -151,7 +151,7 @@ export function StudentProfileDialog({
                     className={GHOST_ACTION_CLASS}
                     onClick={() => {
                       onOpenChange(false)
-                      onNavigate?.('parent-connect')
+                      onNavigate?.('communication')
                     }}
                   >
                     <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />

@@ -53,6 +53,7 @@ model School {
   events               SchoolEvent[]
   examTypes            ExamTypeConfig[]
   examIncidents        ExamIncident[]
+  examDutyCompletions  ExamDutyCompletion[]
   gradeScales          GradeScale[]
   examRules            ExamRule[]
   admitCardConfigs     AdmitCardConfig[]
@@ -369,6 +370,32 @@ model ExamScheduleItem {
 
   examAttendance ExamAttendance[]
   incidents      ExamIncident[]
+  dutyCompletion ExamDutyCompletion?
+}
+
+/// An invigilator's signed-off duty completion (the "Complete Duty" action
+/// in Exam Duties). The attendance/incident rows themselves persist in
+/// ExamAttendance/ExamIncident; this record captures the teacher's
+/// declaration that the duty is finished, with the counts at sign-off time.
+model ExamDutyCompletion {
+  id             String          @id @default(cuid())
+  schoolId       String
+  school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  scheduleItemId String          @unique
+  scheduleItem   ExamScheduleItem @relation(fields: [scheduleItemId], references: [id], onDelete: Cascade)
+  /// User.id of the invigilator who signed off
+  teacherId      String
+  /// when the paper started (scheduleItem date + startTime)
+  startedAt      DateTime
+  completedAt    DateTime        @default(now())
+  presentCount   Int             @default(0)
+  absentCount    Int             @default(0)
+  lateCount      Int             @default(0)
+  incidentCount  Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([schoolId, teacherId])
 }
 
 model ExamMark {

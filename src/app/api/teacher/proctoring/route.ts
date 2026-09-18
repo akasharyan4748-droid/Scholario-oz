@@ -91,14 +91,21 @@ export async function GET() {
         )
       }
 
+      // Persisted sign-offs complete a duty immediately (even on its exam
+      // day — the same-day window only keeps UNCOMPLETED duties editable).
+      const myDutyIds = myItems.map((i) => i.id)
+      const completions = myDutyIds.length
+        ? await db.examDutyCompletion.findMany({
+            where: { scheduleItemId: { in: myDutyIds }, teacherId: user.id },
+            select: { scheduleItemId: true },
+          })
+        : []
+      const completedByMe = new Set(completions.map((c) => c.scheduleItemId))
+
       const dutyDTOs = myItems.map((i) => {
-        const status: DutyStatus = deriveDutyStatus(
-          i.date,
-          i.startTime,
-          i.endTime,
-          i.exam.status,
-          now,
-        )
+        const status: DutyStatus = completedByMe.has(i.id)
+          ? 'Completed'
+          : deriveDutyStatus(i.date, i.startTime, i.endTime, i.exam.status, now)
         const att = attByDuty.get(i.id)
         return {
           id: i.id,

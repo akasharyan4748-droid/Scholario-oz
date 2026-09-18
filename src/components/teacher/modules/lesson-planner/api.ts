@@ -12,7 +12,7 @@
  * The types mirror src/lib/lesson-planner.ts (server truth) but are declared
  * here so the client bundle never imports the Prisma-backed server module.
  * A 401 routes through the shared signOut() exactly once, mirroring the
- * parent-connect / student-behavior request discipline.
+ * communication / student-behavior request discipline.
  */
 
 import { signOut } from '@/lib/signout'

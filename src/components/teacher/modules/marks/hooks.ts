@@ -3,7 +3,7 @@
 /**
  * marks/hooks — the data layer for the Marks Entry module.
  *
- * Mirrors the parent-connect/hooks discipline: every request goes out with
+ * Mirrors the communication/hooks discipline: every request goes out with
  * `{ cache: 'no-store', credentials: 'same-origin' }`, a 401 routes through
  * the shared signOut() instead of a dead end, and every response is read
  * through the `{ ok, data }` envelope. `useMarksExams` loads the picker

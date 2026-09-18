@@ -16,15 +16,18 @@ export const runtime = 'nodejs'
  *                        chronological. Only exams with at least one
  *                        entered, config-normalizable mark appear.
  *   • subjectAverages  — latest graded assessment, averages by subject
- *                        (raw avg + maxMarks + pct).
+ *                        (raw avg + maxMarks + pct + the number of
+ *                        students with an entered mark, so rows can
+ *                        show an honest "graded / total" context).
  *   • attendance       — canonical Attendance rows: totals, rate and a
  *                        weekly trend labelled with the REAL Monday of
  *                        each week (no W1/W2 placeholders).
  *   • assessmentCompletion — marks entered vs expected (configured
  *                        subjects × enrolled students) for the latest
  *                        exam configured for the class.
- *   • needingAttention — documented thresholds (see constants below).
- *   • topPerformers    — top 5 students of the latest graded assessment.
+ *   • needingAttention — documented thresholds (see constants below);
+ *                        each reason carries a short label for the UI
+ *                        plus the real numbers behind the flag.
  *
  * DOCUMENTED THRESHOLDS (Students Needing Attention):
  *   • PERFORMANCE: student's latest-assessment average is ≥ 15
@@ -44,8 +47,6 @@ const ATTENDANCE_MIN_PCT = 75
 const ATTENDANCE_MIN_RECORDS = 5
 /** How many weeks of the attendance trend to return (most recent). */
 const TREND_WEEKS = 8
-/** Top performers to return per class. */
-const TOP_PERFORMERS = 5
 
 /** The exam fields selected on both the marks and configs queries. */
 interface ExamRef {
@@ -106,7 +107,6 @@ export async function GET() {
             select: { id: true, rollNo: true, user: { select: { name: true } } },
             orderBy: { rollNo: 'asc' },
           })
-          const studentById = new Map(students.map((s) => [s.id, s]))
 
           // ── Marks (canonical ExamMark rows with a value) ──────────
           const marks = await db.examMark.findMany({
@@ -182,20 +182,35 @@ export async function GET() {
                 examId: latest.exam.id,
                 name: latest.exam.name,
                 dateLabel: examLabel(latest.exam, showYear),
+                // Full label (with year) for the single-assessment
+                // PERFORMANCE SNAPSHOT card — always from the real
+                // start date, never a hardcoded year.
+                dateLabelFull: latest.exam.startDate
+                  ? DAY_MONTH_YEAR.format(latest.exam.startDate)
+                  : latest.exam.name,
                 status: latest.exam.status,
                 resultStatus: latest.exam.resultStatus,
               }
             : null
 
-          // Subject averages (raw + pct) for the latest graded exam.
-          const subjectMap = new Map<string, { subject: string; sum: number; count: number; max: number }>()
+          // Subject averages (raw + pct + students graded) for the
+          // latest graded exam. `graded` is the number of DISTINCT
+          // students with an entered mark in that subject — the honest
+          // numerator for the "N of M students graded" row context.
+          const subjectMap = new Map<
+            string,
+            { subject: string; sum: number; count: number; max: number; students: Set<string> }
+          >()
           for (const m of latest?.marks ?? []) {
             if (m.marksObtained == null) continue
             const max = maxOf.get(`${m.examId}:${m.subjectId}`)
             if (!max) continue
-            const entry = subjectMap.get(m.subject.name) ?? { subject: m.subject.name, sum: 0, count: 0, max }
+            const entry =
+              subjectMap.get(m.subject.name) ??
+              { subject: m.subject.name, sum: 0, count: 0, max, students: new Set<string>() }
             entry.sum += m.marksObtained
             entry.count += 1
+            entry.students.add(m.studentId)
             subjectMap.set(m.subject.name, entry)
           }
           const subjectAverages = [...subjectMap.values()]
@@ -204,11 +219,12 @@ export async function GET() {
               avg: Math.round((s.sum / s.count) * 10) / 10,
               max: s.max,
               pct: Math.round((s.sum / s.count / s.max) * 1000) / 10,
+              graded: s.students.size,
             }))
             .sort((a, b) => b.pct - a.pct)
 
           // Per-student averages for the latest graded exam → class
-          // average, top performers and the performance flag.
+          // average and the performance flag.
           const studentMap = new Map<string, { pctSum: number; subjects: number }>()
           for (const m of latest?.marks ?? []) {
             if (m.marksObtained == null) continue
@@ -225,20 +241,6 @@ export async function GET() {
             const total = [...studentMap.values()].reduce((s, e) => s + e.pctSum / e.subjects, 0)
             classAveragePct = Math.round((total / gradedStudents) * 10) / 10
           }
-          const topPerformers = [...studentMap.entries()]
-            .map(([studentId, e]) => {
-              const s = studentById.get(studentId)
-              return {
-                studentId,
-                name: s?.user.name ?? 'Unknown student',
-                rollNo: s?.rollNo ?? null,
-                avgPct: Math.round((e.pctSum / e.subjects) * 10) / 10,
-                subjects: e.subjects,
-              }
-            })
-            .sort((a, b) => b.avgPct - a.avgPct)
-            .slice(0, TOP_PERFORMERS)
-
           // ── Assessment completion for the current grading cycle ──
           // Latest exam (by start date) that has subject configs for
           // this class. Expected = configured subjects × enrolled
@@ -317,10 +319,10 @@ export async function GET() {
             avgPct: number | null
             attendancePct: number | null
             attendanceRecords: number
-            reasons: { kind: 'performance' | 'attendance'; text: string }[]
+            reasons: { kind: 'performance' | 'attendance'; label: string; detail: string }[]
           }[] = []
           for (const s of students) {
-            const reasons: { kind: 'performance' | 'attendance'; text: string }[] = []
+            const reasons: { kind: 'performance' | 'attendance'; label: string; detail: string }[] = []
 
             const perf = studentMap.get(s.id)
             if (
@@ -332,7 +334,8 @@ export async function GET() {
               const gap = Math.round((classAveragePct - avgPct) * 10) / 10
               reasons.push({
                 kind: 'performance',
-                text: `Averaging ${avgPct}% in ${latestAssessment?.name ?? 'the latest assessment'} — ${gap} pts below the class average of ${classAveragePct}%`,
+                label: 'Below class benchmark',
+                detail: `${avgPct}% in ${latestAssessment?.name ?? 'the latest assessment'} — ${gap} pts below the ${classAveragePct}% class average`,
               })
             }
 
@@ -342,7 +345,8 @@ export async function GET() {
             if (att != null && att.total >= ATTENDANCE_MIN_RECORDS && attPct != null && attPct < ATTENDANCE_MIN_PCT) {
               reasons.push({
                 kind: 'attendance',
-                text: `Attendance ${attPct}% across ${att.total} recorded days — below the ${ATTENDANCE_MIN_PCT}% threshold`,
+                label: 'Low attendance',
+                detail: `${attPct}% across ${att.total} recorded ${att.total === 1 ? 'day' : 'days'} — below the ${ATTENDANCE_MIN_PCT}% threshold`,
               })
             }
 
@@ -378,7 +382,6 @@ export async function GET() {
             subjectAverages,
             examTrend,
             assessmentCompletion,
-            topPerformers,
             attendance: { total, present, late, absent, pct: attendancePct, weeklyTrend },
             needingAttention,
           }

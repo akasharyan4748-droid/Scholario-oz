@@ -97,7 +97,7 @@ export function searchPeople(q: string, role: Role): SearchResultItem[] {
         subtitle: `Guardian of ${s.name} · Roll ${s.rollNo}${s.guardianPhone ? ` · ${s.guardianPhone}` : ''}`,
         category: 'Parents & Guardians',
         type: 'parent',
-        moduleKey: role === 'teacher' ? 'parent-connect' : 'messaging',
+        moduleKey: role === 'teacher' ? 'communication' : 'messaging',
         iconName: 'MessageSquare',
         badge: 'Guardian',
         badgeVariant: 'info',

@@ -1,9 +1,9 @@
 'use client'
 
 /**
- * parent-connect/follow-up-dialog — mark a parent conversation for
- * follow-up. Reason is prefilled from the thread context, the due date
- * defaults to +3 days, priority defaults to normal, note is optional.
+ * communication/follow-up-dialog — mark a parent conversation for
+ * follow-up (inside the Communication Hub). Reason is prefilled from the
+ * thread context, the due date defaults to +3 days, priority to normal.
  */
 
 import { useEffect, useState } from 'react'
@@ -28,7 +28,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { formatDate } from '@/lib/format'
 import type { FollowUpPriority } from '@/lib/teacher-hub-types'
 import { toast } from 'sonner'
-import { createParentConnectFollowUp } from './hooks'
+import { createFollowUp } from './hooks'
 import { dateInputValue, PRIORITY_OPTIONS } from './shared'
 
 export interface FollowUpContext {
@@ -74,7 +74,7 @@ export function FollowUpDialog({ open, onOpenChange, context, onCreated }: Follo
     }
     setSending(true)
     try {
-      await createParentConnectFollowUp({
+      await createFollowUp({
         conversationId: context.conversationId,
         reason: reason.trim(),
         dueDate,

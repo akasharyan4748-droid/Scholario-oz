@@ -9,6 +9,8 @@
  * Sources (existing Teacher Hub APIs, teacher-session scoped):
  *   • GET /api/teacher/parent-connect  → stats.unread + follow-ups
  *   • GET /api/teacher/behavior        → stats.openConcerns
+ * (Navigation targets the Communication Hub — Parent Connect was absorbed
+ * into it as the parent-thread channel.)
  * Every number rendered here traces to a real row — the widget renders an
  * honest empty state when nothing needs attention.
  */
@@ -30,7 +32,7 @@ interface PendingActionsProps {
 }
 
 interface FollowUpRow extends FollowUpItem {
-  moduleKey: 'parent-connect' | 'behavior'
+  moduleKey: 'communication' | 'behavior'
 }
 
 function dueLabel(due: string): { text: string; tone: 'overdue' | 'today' | 'later' } {
@@ -74,7 +76,7 @@ export function PendingActions({ onNavigate }: PendingActionsProps) {
         const rows: FollowUpRow[] = []
         pcData?.followUps
           ?.filter((f) => f.status === 'open')
-          .forEach((f) => rows.push({ ...f, moduleKey: 'parent-connect' }))
+          .forEach((f) => rows.push({ ...f, moduleKey: 'communication' }))
         rows.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 
         setState({
@@ -136,7 +138,7 @@ export function PendingActions({ onNavigate }: PendingActionsProps) {
           <div className="space-y-2.5">
             {state.unread > 0 && (
               <button
-                onClick={() => onNavigate('parent-connect')}
+                onClick={() => onNavigate('communication')}
                 className="w-full flex items-center gap-3 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3 text-left hover:bg-sky-500/10 transition-colors"
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600">
@@ -144,7 +146,7 @@ export function PendingActions({ onNavigate }: PendingActionsProps) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-sm">{state.unread} unread parent message{state.unread === 1 ? '' : 's'}</p>
-                  <p className="text-xs text-muted-foreground">Parent Connect · reply from your conversations</p>
+                  <p className="text-xs text-muted-foreground">Communication Hub · reply from your conversations</p>
                 </div>
                 <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </button>
@@ -213,11 +215,11 @@ function TeacherHubCard({ onNavigate }: { onNavigate: (key: string) => void }) {
       </h3>
       <p className="text-xs text-muted-foreground mb-3">Parents & behaviour records</p>
       <button
-        onClick={() => onNavigate('parent-connect')}
+        onClick={() => onNavigate('communication')}
         className="w-full rounded-xl border border-border bg-card/40 p-3 text-left hover:bg-accent/40 transition-colors"
       >
         <p className="text-[11px] text-muted-foreground">
-          Open Parent Connect & Student Behavior
+          Open Communication Hub & Student Behavior
         </p>
       </button>
     </GlassCard>

@@ -5,111 +5,180 @@ import {
   requireTeacher,
   authorizedStudentWhere,
   toStudentRef,
+  toFollowUpItem,
 } from '@/lib/teacher-hub'
+import type {
+  ConversationSummary,
+} from '@/lib/teacher-hub-types'
 import type { CommunicationHubPayload } from '@/components/teacher/modules/communication/types'
 
 export const runtime = 'nodejs'
 
-// GET /api/teacher/communication — the Communication Hub in ONE server-
-// resolved call. Everything the teacher sees on screen is derived here from
-// real rows, scoped by the session (school + teacher):
+// GET /api/teacher/communication — the Communication Hub in ONE server-resolved
+// call. The hub is the single teacher messaging surface (parents + staff +
+// announcements), so this payload carries everything its panes render:
+//   · conversations  the teacher's FULL ParentConversation list with unread
+//                    counts, last-message previews and open follow-ups (the
+//                    engine behind /api/teacher/parent-connect — threads are
+//                    opened through that route)
+//   · directConversations  Message rows between the teacher and staff
+//                    counterparts, grouped into one summary per person
+//   · followUps      open parent-communication follow-ups (items, not counts)
 //   · announcements  Notification rows this role may see (audienceAllows,
 //                    class fan-outs deduped — same rule as the bell feed)
-//   · conversations  the teacher's own ParentConversation rows with unread
-//                    counts + last-message previews (READ-ONLY preview —
-//                    the threads themselves live in Parent Connect)
 //   · sent messages  her ParentMessages + direct Message rows, merged
 //   · students       in-scope students with a linked guardian (message dialog)
+//   · staffDirectory same-school staff the teacher may message
 //   · stats          honest counts only — no fabricated rates
 //
 // The announcement list is NOT display-capped: the summary card's count must
-// equal the number of rows actually visible to the teacher, so every visible
-// announcement is returned (bounded only by the fetch window, which covers
-// far more rows than a school realistically produces).
+// equal the number of rows actually visible to the teacher.
 const ANNOUNCEMENT_FETCH_WINDOW = 200
-// Conversation window mirrors Parent Connect (take 200): the stat must count
-// every thread the teacher owns, not a display page.
-const CONVERSATION_TAKE = 6
 const CONVERSATION_FETCH_WINDOW = 200
+const MESSAGE_HISTORY_TAKE = 400
+const DIRECT_FETCH_WINDOW = 200
 const SENT_TAKE = 8
 const CATEGORIES = ['general', 'academic', 'attendance', 'behavior', 'wellbeing', 'urgent']
+const ACTIVE_WINDOW_MS = 21 * 86_400_000
+const STAFF_ROLES = ['TEACHER', 'PRINCIPAL', 'COORDINATOR', 'MANAGEMENT']
+
+const ROLE_LABELS: Record<string, string> = {
+  TEACHER: 'Teacher',
+  PRINCIPAL: 'Principal',
+  COORDINATOR: 'Coordinator',
+  MANAGEMENT: 'Management',
+  STUDENT: 'Student',
+  PARENT: 'Parent',
+}
 
 export async function GET() {
   return withUser(
     async (user) => {
       const ctx = await requireTeacher(user)
 
-      const [announcementRows, conversations, sentParentRows, sentDirectRows, scopeStudents, templates] =
-        await Promise.all([
-          db.notification.findMany({
-            where: { schoolId: ctx.schoolId },
-            orderBy: { createdAt: 'desc' },
-            take: ANNOUNCEMENT_FETCH_WINDOW,
-            include: {
-              sender: { select: { name: true } },
-              reads: { where: { userId: ctx.userId }, select: { readAt: true } },
-            },
-          }),
-          db.parentConversation.findMany({
-            where: { schoolId: ctx.schoolId, teacherId: ctx.userId },
-            include: {
-              parent: { select: { id: true, name: true } },
-              student: {
-                select: {
-                  id: true,
-                  rollNo: true,
-                  classId: true,
-                  class: { select: { name: true, section: true } },
-                  user: { select: { name: true } },
-                },
+      const [
+        announcementRows,
+        conversations,
+        followUpRows,
+        templates,
+        scopeStudents,
+        sentParentRows,
+        sentDirectRows,
+        directRows,
+        staffDirectory,
+      ] = await Promise.all([
+        db.notification.findMany({
+          where: { schoolId: ctx.schoolId },
+          orderBy: { createdAt: 'desc' },
+          take: ANNOUNCEMENT_FETCH_WINDOW,
+          include: {
+            sender: { select: { name: true } },
+            reads: { where: { userId: ctx.userId }, select: { readAt: true } },
+          },
+        }),
+        db.parentConversation.findMany({
+          where: { schoolId: ctx.schoolId, teacherId: ctx.userId },
+          include: {
+            parent: { select: { id: true, name: true, phone: true } },
+            student: {
+              select: {
+                id: true,
+                rollNo: true,
+                classId: true,
+                class: { select: { name: true, section: true } },
+                user: { select: { name: true } },
               },
-              // Prisma relation take:1 + desc order = the latest message only.
-              messages: { orderBy: { createdAt: 'desc' }, take: 1 },
             },
-            orderBy: { lastMessageAt: 'desc' },
-            take: CONVERSATION_FETCH_WINDOW,
-          }),
-          db.parentMessage.findMany({
-            where: { schoolId: ctx.schoolId, senderId: ctx.userId },
-            orderBy: { createdAt: 'desc' },
-            take: SENT_TAKE,
-            include: {
-              conversation: {
-                include: {
-                  parent: { select: { name: true } },
-                  student: {
-                    select: {
-                      id: true,
-                      rollNo: true,
-                      classId: true,
-                      class: { select: { name: true, section: true } },
-                      user: { select: { name: true } },
-                    },
+          },
+          take: CONVERSATION_FETCH_WINDOW,
+        }),
+        db.teacherFollowUp.findMany({
+          where: {
+            schoolId: ctx.schoolId,
+            teacherId: ctx.userId,
+            kind: 'parent-connect',
+            status: 'open',
+          },
+          include: {
+            student: {
+              select: {
+                id: true,
+                rollNo: true,
+                classId: true,
+                class: { select: { name: true, section: true } },
+                user: { select: { name: true } },
+              },
+            },
+          },
+          orderBy: { dueDate: 'asc' },
+          take: 50,
+        }),
+        db.messageTemplate.findMany({
+          where: { schoolId: ctx.schoolId, kind: 'parent-connect', isActive: true },
+          orderBy: { sortOrder: 'asc' },
+        }),
+        db.student.findMany({
+          where: { guardianId: { not: null }, ...authorizedStudentWhere(ctx) },
+          include: {
+            class: { select: { name: true, section: true } },
+            user: { select: { name: true } },
+          },
+          orderBy: { rollNo: 'asc' },
+          take: 300,
+        }),
+        db.parentMessage.findMany({
+          where: { schoolId: ctx.schoolId, senderId: ctx.userId },
+          orderBy: { createdAt: 'desc' },
+          take: SENT_TAKE,
+          include: {
+            conversation: {
+              include: {
+                parent: { select: { name: true } },
+                student: {
+                  select: {
+                    id: true,
+                    rollNo: true,
+                    classId: true,
+                    class: { select: { name: true, section: true } },
+                    user: { select: { name: true } },
                   },
                 },
               },
             },
-          }),
-          db.message.findMany({
-            where: { schoolId: ctx.schoolId, senderId: ctx.userId },
-            orderBy: { createdAt: 'desc' },
-            take: SENT_TAKE,
-            include: { recipient: { select: { name: true, role: true } } },
-          }),
-          db.student.findMany({
-            where: { guardianId: { not: null }, ...authorizedStudentWhere(ctx) },
-            include: {
-              class: { select: { name: true, section: true } },
-              user: { select: { name: true } },
-            },
-            orderBy: { rollNo: 'asc' },
-            take: 300,
-          }),
-          db.messageTemplate.findMany({
-            where: { schoolId: ctx.schoolId, kind: 'parent-connect', isActive: true },
-            orderBy: { sortOrder: 'asc' },
-          }),
-        ])
+          },
+        }),
+        db.message.findMany({
+          where: { schoolId: ctx.schoolId, senderId: ctx.userId },
+          orderBy: { createdAt: 'desc' },
+          take: SENT_TAKE,
+          include: { recipient: { select: { name: true, role: true } } },
+        }),
+        // Every direct message involving the teacher (both directions) —
+        // grouped client-side-of-the-server into one summary per counterpart.
+        db.message.findMany({
+          where: {
+            schoolId: ctx.schoolId,
+            OR: [{ senderId: ctx.userId }, { recipientId: ctx.userId }],
+          },
+          orderBy: { createdAt: 'desc' },
+          take: DIRECT_FETCH_WINDOW,
+          include: {
+            sender: { select: { id: true, name: true, role: true } },
+            recipient: { select: { id: true, name: true, role: true } },
+          },
+        }),
+        db.user.findMany({
+          where: {
+            schoolId: ctx.schoolId,
+            role: { in: STAFF_ROLES },
+            status: 'ACTIVE',
+            id: { not: ctx.userId },
+          },
+          select: { id: true, name: true, role: true },
+          orderBy: [{ role: 'asc' }, { name: 'asc' }],
+          take: 100,
+        }),
+      ])
 
       // ── Announcements: audience filter + class-fanout dedupe (bell-feed rule) ──
       const ownClassKeys = new Set(
@@ -139,10 +208,18 @@ export async function GET() {
         })
       }
 
-      // ── Conversations: unread counts (exact via groupBy) + preview rows ──
+      // ── Parent conversations: unread counts (exact via groupBy), last
+      //    message previews and the nearest open follow-up (same construction
+      //    as /api/teacher/parent-connect so the two stay interchangeable). ──
       const conversationIds = conversations.map((c) => c.id)
-      const unreadGroups = conversationIds.length
-        ? await db.parentMessage.groupBy({
+      const unreadByConversation = new Map<string, number>()
+      const lastMessageByConversation = new Map<
+        string,
+        { id: string; conversationId: string; senderId: string; body: string; createdAt: Date }
+      >()
+      if (conversationIds.length) {
+        const [unreadGroups, recentMessages] = await Promise.all([
+          db.parentMessage.groupBy({
             by: ['conversationId'],
             where: {
               conversationId: { in: conversationIds },
@@ -150,20 +227,45 @@ export async function GET() {
               readAt: null,
             },
             _count: { _all: true },
-          })
-        : []
-      const unreadByConversation = new Map(
-        unreadGroups.map((g) => [g.conversationId, g._count._all]),
-      )
+          }),
+          db.parentMessage.findMany({
+            where: { conversationId: { in: conversationIds } },
+            orderBy: { createdAt: 'desc' },
+            take: MESSAGE_HISTORY_TAKE,
+            select: { id: true, conversationId: true, senderId: true, body: true, createdAt: true },
+          }),
+        ])
+        for (const g of unreadGroups) {
+          unreadByConversation.set(g.conversationId, g._count._all)
+        }
+        for (const m of recentMessages) {
+          if (!lastMessageByConversation.has(m.conversationId)) {
+            lastMessageByConversation.set(m.conversationId, m)
+          }
+        }
+      }
+      const followUpByConversation = new Map<string, (typeof followUpRows)[number]>()
+      for (const f of followUpRows) {
+        if (f.conversationId && !followUpByConversation.has(f.conversationId)) {
+          followUpByConversation.set(f.conversationId, f)
+        }
+      }
 
-      const conversationRows = conversations.map((c) => {
-        const last = c.messages[0] ?? null
+      const conversationRows: ConversationSummary[] = conversations.map((c) => {
+        const last = lastMessageByConversation.get(c.id)
+        const openFollowUp = followUpByConversation.get(c.id)
         return {
           id: c.id,
-          category: (CATEGORIES.includes(c.category) ? c.category : 'general') as CommunicationHubPayload['conversations'][number]['category'],
+          category: (CATEGORIES.includes(c.category) ? c.category : 'general') as ConversationSummary['category'],
           pinned: c.pinned,
+          createdAt: c.createdAt.toISOString(),
+          lastMessageAt: c.lastMessageAt ? c.lastMessageAt.toISOString() : null,
           unread: unreadByConversation.get(c.id) ?? 0,
-          parent: { name: c.parent.name ?? 'Guardian' },
+          parent: {
+            id: c.parent.id,
+            name: c.parent.name ?? 'Guardian',
+            phone: c.parent.phone ?? null,
+          },
           student: toStudentRef(c.student),
           lastMessage: last
             ? {
@@ -172,17 +274,54 @@ export async function GET() {
                 createdAt: last.createdAt.toISOString(),
               }
             : null,
-          lastMessageAt: c.lastMessageAt ? c.lastMessageAt.toISOString() : null,
-          awaitingReply: last != null && last.senderId !== ctx.userId,
+          openFollowUp: openFollowUp
+            ? {
+                id: openFollowUp.id,
+                dueDate: openFollowUp.dueDate.toISOString(),
+                priority: openFollowUp.priority as 'low' | 'normal' | 'high',
+              }
+            : null,
         }
       })
-      // Pinned first, then most recent activity (same order as Parent Connect).
       conversationRows.sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
         const at = a.lastMessageAt ? Date.parse(a.lastMessageAt) : 0
         const bt = b.lastMessageAt ? Date.parse(b.lastMessageAt) : 0
         return bt - at
       })
+
+      // ── Direct conversations: group Message rows by counterpart. Rows are
+      //    newest-first, so the first row seen per counterpart is the last
+      //    message of that thread. ──
+      const directByCounterpart = new Map<string, CommunicationHubPayload['directConversations'][number]>()
+      for (const m of directRows) {
+        const fromMe = m.senderId === ctx.userId
+        const counterpart = fromMe ? m.recipient : m.sender
+        if (!counterpart) continue
+        const existing = directByCounterpart.get(counterpart.id)
+        if (!existing) {
+          directByCounterpart.set(counterpart.id, {
+            counterpartId: counterpart.id,
+            counterpartName: counterpart.name ?? 'User',
+            counterpartRole: counterpart.role,
+            lastMessage: {
+              id: m.id,
+              subject: m.subject,
+              body: m.body,
+              fromMe,
+              createdAt: m.createdAt.toISOString(),
+            },
+            lastMessageAt: m.createdAt.toISOString(),
+            unread: !fromMe && !m.read ? 1 : 0,
+            awaitingReply: !fromMe,
+          })
+        } else if (!fromMe && !m.read) {
+          existing.unread++
+        }
+      }
+      const directConversations = [...directByCounterpart.values()].sort(
+        (a, b) => Date.parse(b.lastMessageAt) - Date.parse(a.lastMessageAt),
+      )
 
       // ── Sent messages: parent-thread messages + direct rows, merged ──
       const sentMessages: CommunicationHubPayload['sentMessages'] = [
@@ -199,57 +338,60 @@ export async function GET() {
           channel: 'direct' as const,
           recipientName: m.recipient?.name ?? 'Recipient',
           contextLabel:
-            m.recipient?.role === 'STUDENT'
-              ? 'Student'
-              : m.recipient?.role === 'PARENT'
-                ? 'Parent'
-                : m.recipient?.role === 'TEACHER'
-                  ? 'Teacher'
-                  : 'Direct message',
+            m.recipient?.role && ROLE_LABELS[m.recipient.role]
+              ? ROLE_LABELS[m.recipient.role]
+              : 'Direct message',
           preview: (m.subject ? `${m.subject} — ` : '') + m.body.replace(/\s+/g, ' ').trim(),
           createdAt: m.createdAt.toISOString(),
         })),
       ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
 
       // ── Honest stats (every number is a real count for THIS teacher) ──
-      const [unreadDirect, parentSent, directSent, openFollowUps] = await Promise.all([
-        db.message.count({
-          where: { schoolId: ctx.schoolId, recipientId: ctx.userId, read: false },
-        }),
+      const [parentSent, directSent] = await Promise.all([
         db.parentMessage.count({
           where: { schoolId: ctx.schoolId, senderId: ctx.userId },
         }),
         db.message.count({
           where: { schoolId: ctx.schoolId, senderId: ctx.userId },
         }),
-        db.teacherFollowUp.count({
-          where: {
-            schoolId: ctx.schoolId,
-            teacherId: ctx.userId,
-            kind: 'parent-connect',
-            status: 'open',
-          },
-        }),
       ])
 
+      const now = Date.now()
+      const endOfToday = new Date()
+      endOfToday.setHours(23, 59, 59, 999)
+      const followUpItems = followUpRows.map(toFollowUpItem)
+
       const unreadParent = conversationRows.reduce((sum, c) => sum + c.unread, 0)
-      const awaitingReply = conversationRows.filter((c) => c.awaitingReply).length
+      const unreadDirect = directConversations.reduce((sum, c) => sum + c.unread, 0)
+      const parentActive = conversationRows.filter(
+        (c) => c.lastMessageAt != null && Date.parse(c.lastMessageAt) >= now - ACTIVE_WINDOW_MS,
+      ).length
+      const directActive = directConversations.filter(
+        (c) => Date.parse(c.lastMessageAt) >= now - ACTIVE_WINDOW_MS,
+      ).length
+      const parentAwaiting = conversationRows.filter(
+        (c) => c.lastMessage != null && !c.lastMessage.fromTeacher,
+      ).length
+      const directAwaiting = directConversations.filter((c) => c.awaitingReply).length
 
       const stats = {
         unreadMessages: unreadParent + unreadDirect,
         unreadParentMessages: unreadParent,
         unreadDirectMessages: unreadDirect,
+        activeConversations: parentActive + directActive,
+        needsReply: parentAwaiting + directAwaiting,
+        conversations: conversationRows.length,
+        directConversations: directConversations.length,
+        followUpsOpen: followUpItems.length,
+        followUpsDue: followUpRows.filter((f) => f.dueDate.getTime() <= endOfToday.getTime()).length,
         announcements: announcements.length,
         announcementsUnread: announcements.filter((a) => a.readAt == null).length,
         messagesSent: parentSent + directSent,
         messagesSentToParents: parentSent,
         messagesSentDirect: directSent,
-        awaitingReply,
-        openFollowUps,
-        conversations: conversationRows.length,
       }
 
-      // ── Linkable students (same annotation as Parent Connect) ──
+      // ── Linkable students (same annotation as the parent-connect engine) ──
       const conversationByStudentParent = new Map<string, string>()
       for (const c of conversations) {
         const key = `${c.studentId}\u0000${c.parentId}`
@@ -277,8 +419,9 @@ export async function GET() {
           classLabels: ctx.classTeacherOf.map((c) => c.label),
         },
         stats,
-        conversations: conversationRows.slice(0, CONVERSATION_TAKE),
-        totalConversations: conversationRows.length,
+        conversations: conversationRows,
+        directConversations,
+        followUps: followUpItems,
         announcements,
         sentMessages: sentMessages.slice(0, SENT_TAKE),
         students,
@@ -287,6 +430,12 @@ export async function GET() {
           label: t.label,
           body: t.body,
           category: t.category,
+        })),
+        staffDirectory: staffDirectory.map((s) => ({
+          id: s.id,
+          name: s.name ?? 'Staff member',
+          role: s.role,
+          roleLabel: ROLE_LABELS[s.role] ?? s.role,
         })),
       }
       return payload

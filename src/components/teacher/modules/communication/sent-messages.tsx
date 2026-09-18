@@ -3,7 +3,7 @@
 /**
  * communication/sent-messages — the SENT MESSAGES card: what THIS teacher
  * has actually sent, merged from two real sources by the server —
- * ParentMessages inside her Parent Connect threads ("parent" channel) and
+ * ParentMessages inside her parent threads ("parent" channel) and
  * direct Message rows to students/colleagues ("direct" channel). Newest
  * first. No delivery rates, no fabricated statuses — just the sent facts.
  */
@@ -21,10 +21,10 @@ const THIN_SCROLLBAR =
 
 interface SentMessagesProps {
   messages: SentMessageItem[]
-  onMessageParent: () => void
+  onNewMessage: () => void
 }
 
-export function SentMessagesCard({ messages, onMessageParent }: SentMessagesProps) {
+export function SentMessagesCard({ messages, onNewMessage }: SentMessagesProps) {
   return (
     <GlassCard className="flex flex-col p-0 overflow-hidden">
       <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-2.5">
@@ -40,14 +40,14 @@ export function SentMessagesCard({ messages, onMessageParent }: SentMessagesProp
         <HubEmptyState
           icon={Send}
           title="No messages sent yet"
-          hint="Messages you send to parents and students will appear here."
+          hint="Messages you send to parents and colleagues will appear here."
           action={
             <button
-              onClick={onMessageParent}
+              onClick={onNewMessage}
               className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
             >
               <Send className="h-3.5 w-3.5" aria-hidden="true" />
-              Message a Parent
+              New Message
             </button>
           }
         />

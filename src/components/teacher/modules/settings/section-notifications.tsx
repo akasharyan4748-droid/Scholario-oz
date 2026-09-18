@@ -15,7 +15,7 @@ import { useTeacherSettings } from './hooks'
 import { SectionCard, ToggleRow, RowDivider, SettingsError, SettingsSkeleton } from './primitives'
 
 const PREF_ROWS: { key: keyof TeacherNotificationPrefs; label: string; caption: string }[] = [
-  { key: 'parentMessages', label: 'Parent messages', caption: 'New Parent Connect messages in your bell feed' },
+  { key: 'parentMessages', label: 'Parent messages', caption: 'New parent messages in your bell feed' },
   { key: 'announcements', label: 'Announcements', caption: 'School notices and events in your bell feed' },
   { key: 'examDuty', label: 'Examination duty', caption: 'Assigned invigilation duties and reminders' },
   { key: 'attendance', label: 'Attendance activity', caption: 'Class attendance summaries on your dashboard' },

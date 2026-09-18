@@ -9,7 +9,7 @@
  * rendered value comes from the server payload; search/filter views are
  * derived in the grid, never fabricated here.
  *
- * Fetch discipline mirrors the house pattern (parent-connect/marks):
+ * Fetch discipline mirrors the house pattern (communication/marks):
  * `{ cache: 'no-store', credentials: 'same-origin' }`, a `{ ok, data }`
  * envelope, and a 401 that routes through the shared signOut() exactly
  * once.

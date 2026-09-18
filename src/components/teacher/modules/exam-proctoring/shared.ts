@@ -168,6 +168,14 @@ export interface DutyDetail {
   roster: DutyRosterStudent[]
   rosterAttendance: Record<string, ExamAttendanceStatus>
   attendance: DutyAttendanceSummary
+  /** the invigilator's persisted sign-off (null = duty not completed yet) */
+  completion: {
+    completedAt: string
+    presentCount: number
+    absentCount: number
+    lateCount: number
+    incidentCount: number
+  } | null
   incidents: DutyIncident[]
   room: { capacity: number; rows: number; cols: number }
 }

@@ -1,6 +1,6 @@
 /**
  * teacher-hub — server-side authorization + serialization for the
- * Teacher Hub modules (Parent Connect / Student Behavior).
+ * Teacher Hub modules (parent conversations / Student Behavior).
  *
  * SECURITY MODEL (mirrors learning.ts's requireStudent pattern):
  *   erp_session cookie → getCurrentUser → requireTeacher → Teacher row →
@@ -8,7 +8,7 @@
  * Client-supplied ids are NEVER trusted — every mutation re-validates that
  * the target student/conversation/record belongs to the
  * authenticated teacher's scope:
- *   • Parent Connect conversations are owned by the teacher (teacherId).
+ *   • Parent conversations are owned by the teacher (teacherId).
  *   • Behavior records are visible to their recorder AND to the class
  *     teacher of the student's class (the class teacher sees the whole
  *     picture for their class — that is what a class teacher is for).

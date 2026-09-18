@@ -20,7 +20,7 @@
  * reloads keep the current data on screen while refreshing in the
  * background (no skeleton flash after a mutation).
  *
- * Nothing is published to the teacher-hub store — Parent Connect owns
+ * Nothing is published to the teacher-hub store — the Communication Hub owns
  * the shared hub state; this module keeps its data to itself.
  */
 

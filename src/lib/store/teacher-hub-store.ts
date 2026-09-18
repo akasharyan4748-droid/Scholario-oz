@@ -3,7 +3,7 @@
 /**
  * teacher-hub-store — cross-cutting live counts for the three Teacher Hub
  * modules. Modules publish their real server-derived counts after each load;
- * the Teacher sidebar reads the unread count for the Parent Connect badge
+ * the Teacher sidebar reads the unread count for the Communication Hub badge
  * (replacing the old hardcoded badge). One store, one truth — the badge is
  * never a mock.
  */

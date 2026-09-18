@@ -98,7 +98,7 @@ export interface TeacherNotificationPrefs {
   academic: boolean
   /** Examination duty reminders (proctoring duties). */
   examDuty: boolean
-  /** Parent Connect messages (server-enforced in /api/notifications-feed). */
+  /** Parent messages (server-enforced in /api/notifications-feed). */
   parentMessages: boolean
   /** School announcements (server-enforced in /api/notifications-feed). */
   announcements: boolean

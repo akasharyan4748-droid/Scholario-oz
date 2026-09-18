@@ -1,12 +1,12 @@
 'use client'
 
 /**
- * parent-connect/thread-view — the RIGHT pane of the Parent Connect
- * workspace: sticky header (parent, student, category chip, quiet actions),
- * the message stream (day dividers, bubbles, read state on the last teacher
- * message) and the composer (auto-grow textarea, school templates, Enter to
- * send). Sending is optimistic (pending style) and reconciled with the
- * server message; failures roll the optimistic row back.
+ * communication/thread-view — the RIGHT pane of the Communication
+ * Hub for a PARENT thread: sticky header, message stream and composer,
+ * backed by the /api/teacher/parent-connect engine (threads stay unified
+ * with the former Parent Connect module).
+ * 
+ * 
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -34,7 +34,7 @@ import {
 } from '@/lib/teacher-hub-types'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { sendThreadMessage } from './hooks'
+import { sendParentThreadMessage } from './hooks'
 import { applyTemplateBody, CATEGORY_TONES, dayKey, dayLabel, firstName } from './shared'
 
 /** A thread message plus the optimistic-send pending flag. */
@@ -122,7 +122,7 @@ export function ThreadView({
     setDraft('')
     setSending(true)
     try {
-      const saved = await sendThreadMessage(conversationId, text)
+      const saved = await sendParentThreadMessage(conversationId, text)
       setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? saved : m)))
       onSent(conversationId, saved)
     } catch {

@@ -1,6 +1,6 @@
 /**
  * teacher-hub-types — the shared DTO contract for the Teacher Hub
- * modules (Parent Connect / Student Behavior).
+ * modules (parent conversations / Student Behavior).
  *
  * Pure types + tiny config maps: NO server imports — this file is safe for
  * client components. Server routes in /api/teacher/** serialize rows into
@@ -38,7 +38,7 @@ export interface FollowUpItem {
   createdAt: string
 }
 
-// ---------- Parent Connect ----------
+// ---------- Parent conversations (the former Parent Connect engine) ----------
 
 export type ConversationCategory =
   | 'general'

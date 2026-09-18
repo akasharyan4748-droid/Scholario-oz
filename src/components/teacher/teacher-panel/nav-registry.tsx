@@ -1,8 +1,8 @@
 import {
   LayoutDashboard, CalendarCheck, BookMarked,
   FileText, Users, BarChart3, Megaphone,
-  Shield, MessageSquareHeart, ClipboardCheck, Wallet, ClipboardList, Settings,
-  CalendarDays,
+  Shield, ClipboardCheck, Wallet, ClipboardList, Settings,
+  CalendarDays, MessagesSquare,
 } from 'lucide-react'
 import type { NavGroup } from '@/components/shell/app-shell'
 import type { TeacherRecord, PositionAssignment } from '@/lib/store/teachers-store'
@@ -10,7 +10,7 @@ import type { TeacherRecord, PositionAssignment } from '@/lib/store/teachers-sto
 export interface NavRegistryArgs {
   isRelieved: boolean
   activePermissions: string[]
-  /** live server-derived unread parent messages — drives the Parent Connect badge */
+  /** live server-derived unread messages — drives the Communication Hub badge */
   hubUnread?: number
 }
 
@@ -63,17 +63,24 @@ export function buildTeacherNavGroups({ isRelieved, activePermissions, hubUnread
       label: 'Class Teacher Hub',
       items: [
         { key: 'behavior', label: 'Student Behavior', icon: <Shield className="h-4.5 w-4.5" /> },
-        { key: 'parent-connect', label: 'Parent Connect', icon: <MessageSquareHeart className="h-4.5 w-4.5" />, badge: hubUnread > 0 ? hubUnread : undefined },
       ],
     })
   }
+
+  // Communication — the single teacher-facing messaging surface (parents,
+  // colleagues, principal — parent messaging absorbed from Parent Connect)
+  navGroups.push({
+    label: 'Communication',
+    items: [
+      { key: 'communication', label: 'Communication Hub', icon: <MessagesSquare className="h-4.5 w-4.5" />, badge: hubUnread > 0 ? hubUnread : undefined },
+    ],
+  })
 
   // Add Insights
   navGroups.push({
     label: 'Insights & Reviews',
     items: [
       { key: 'analytics', label: 'Performance Analytics', icon: <BarChart3 className="h-4.5 w-4.5" /> },
-      { key: 'communication', label: 'Communication Hub', icon: <Megaphone className="h-4.5 w-4.5" /> },
     ],
   })
 

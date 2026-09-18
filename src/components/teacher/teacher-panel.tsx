@@ -23,7 +23,7 @@ import { useTeacherHandlers } from './teacher-panel/use-teacher-handlers'
 
 export function TeacherPanel() {
   const { teachers, positionsList, confirmPayrollRevision } = useTeachersStore()
-  // Live server-derived Teacher Hub counts (published by the Parent Connect
+  // Live server-derived Teacher Hub counts (published by the Communication Hub
   // module after each load) — drives the sidebar badge. One store, one truth.
   const hubUnread = useTeacherHubStore((s) => s.parentUnread)
 

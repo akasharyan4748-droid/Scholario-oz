@@ -179,3 +179,16 @@ export async function reportDutyIncident(payload: {
     body: JSON.stringify(payload),
   })
 }
+
+/** The invigilator signs off a duty (persists an ExamDutyCompletion row). */
+export async function completeDuty(
+  scheduleItemId: string,
+): Promise<{ completion: NonNullable<DutyDetail['completion']> }> {
+  return proctoringFetch<{ completion: NonNullable<DutyDetail['completion']> }>(
+    '/api/teacher/proctoring/complete',
+    {
+      method: 'POST',
+      body: JSON.stringify({ scheduleItemId }),
+    },
+  )
+}

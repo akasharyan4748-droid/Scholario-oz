@@ -3,9 +3,11 @@ import { withUser } from '@/lib/api'
 import {
   deriveDutyStatus,
   dutyAttendanceSummary,
+  dutyCompletionOf,
   dutyEditable,
   dutyRoster,
   findAuthorizedDuty,
+  type DutyStatus,
 } from '@/lib/exam-duty'
 
 export const runtime = 'nodejs'
@@ -30,13 +32,17 @@ export async function GET(request: Request) {
       const duty = await findAuthorizedDuty(user, id)
       if (!duty) throw new Error('NOT_FOUND')
 
-      const status = deriveDutyStatus(
+      const derived = deriveDutyStatus(
         duty.date,
         duty.startTime,
         duty.endTime,
         duty.examStatus,
         new Date(),
       )
+      // A persisted sign-off completes the duty immediately (even on the
+      // exam day — the same-day window only keeps UNCOMPLETED duties open).
+      const completion = await dutyCompletionOf(duty.id)
+      const status: DutyStatus = completion ? 'Completed' : derived
 
       const roster = await dutyRoster(duty)
       const [attendance, attendanceRows, incidents] = await Promise.all([
@@ -82,6 +88,7 @@ export async function GET(request: Request) {
           attendanceRows.map((r) => [r.studentId, r.status]),
         ),
         attendance,
+        completion,
         incidents: incidents.map((inc) => ({
           id: inc.id,
           studentName: inc.student ? inc.student.user.name : null,

@@ -27,6 +27,7 @@ import {
   ChevronRight,
   ClipboardList,
   Eye,
+  CheckCircle2,
   Flag,
   Loader2,
   PackageCheck,
@@ -51,7 +52,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { reportDutyIncident, saveDutyAttendance, useDutyDetail } from './hooks'
+import { completeDuty, reportDutyIncident, saveDutyAttendance, useDutyDetail } from './hooks'
 import {
   ATTENDANCE_CONFIG,
   DUTY_STATUS_CONFIG,
@@ -122,6 +123,9 @@ export function DutyDetailPanel({
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Duty sign-off (Complete Duty — persisted server-side).
+  const [completing, setCompleting] = useState(false)
+
   // Incident form (inline — a quiet GlassCard form, no modal).
   const [formOpen, setFormOpen] = useState(false)
   const [formStudent, setFormStudent] = useState<string>(ROOM_LEVEL)
@@ -154,6 +158,24 @@ export function DutyDetailPanel({
         s.seatLabel.toLowerCase().includes(q),
     )
   }, [roster, search])
+
+  // ── duty sign-off ──────────────────────────────────────────────────
+
+  const handleComplete = async (): Promise<void> => {
+    if (!detail || completing) return
+    setCompleting(true)
+    try {
+      const res = await completeDuty(detail.duty.id)
+      toast.success('Duty completed', {
+        description: `${res.completion.presentCount} present · ${res.completion.incidentCount} incident${res.completion.incidentCount === 1 ? '' : 's'} recorded`,
+      })
+      reload()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'The duty could not be completed')
+    } finally {
+      setCompleting(false)
+    }
+  }
 
   // ── attendance actions ─────────────────────────────────────────────
 
@@ -621,6 +643,14 @@ export function DutyDetailPanel({
         </p>
       </GlassCard>
 
+      {/* 5.5 ─ duty sign-off (Complete Duty — real persistence) */}
+      <SignOffCard
+        detail={detail}
+        dirty={dirty}
+        completing={completing}
+        onComplete={() => void handleComplete()}
+      />
+
       {/* 6 ─ seating (read-only, this duty's room only) */}
       <SeatingCard detail={detail} />
     </PageTransition>
@@ -801,6 +831,128 @@ function IncidentRow({ incident, dutyDate }: { incident: DutyIncident; dutyDate:
         Reported by {incident.reportedByName ?? 'the invigilator'}
       </p>
     </div>
+  )
+}
+
+// ─── duty sign-off (Complete Duty) ─────────────────────────────────────
+
+/**
+ * The duty's closing action. When the invigilator has signed off, the
+ * persisted record is shown (sign-off time + the counts at sign-off). While
+ * the duty is open (In Progress, exam day), a [Complete Duty] action is
+ * offered — gated on attendance being complete and saved, exactly what the
+ * server re-verifies before writing the ExamDutyCompletion row.
+ */
+function SignOffCard({
+  detail,
+  dirty,
+  completing,
+  onComplete,
+}: {
+  detail: DutyDetail
+  dirty: boolean
+  completing: boolean
+  onComplete: () => void
+}) {
+  const { duty, attendance, completion } = detail
+
+  // Cancelled duties have nothing to sign off.
+  if (duty.status === 'Cancelled') return null
+
+  if (completion) {
+    const signedAt = new Date(completion.completedAt).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    })
+    return (
+      <GlassCard
+        hover={false}
+        className="border-emerald-500/30 bg-emerald-500/[0.04] p-3 sm:p-4 lg:p-5"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10">
+              <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                Duty completed
+              </h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Signed off at {signedAt} · attendance and incidents are closed for this duty.
+              </p>
+            </div>
+          </div>
+          <p className="shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 tabular-nums dark:text-emerald-400">
+            {completion.presentCount} present · {completion.absentCount} absent ·{' '}
+            {completion.lateCount} late · {completion.incidentCount} incident
+            {completion.incidentCount === 1 ? '' : 's'}
+          </p>
+        </div>
+      </GlassCard>
+    )
+  }
+
+  // No sign-off yet — offer the action only while the duty is open on its
+  // exam day (In Progress). Upcoming duties get a quiet explanation.
+  if (!detail.editable) return null
+  if (duty.status === 'Upcoming') {
+    return (
+      <GlassCard hover={false} className="p-3 sm:p-4 lg:p-5">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/50">
+            <PackageCheck className="h-4.5 w-4.5 text-muted-foreground" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold">Duty sign-off</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Once the paper starts on {longDate(duty.date)}, complete the duty here after
+              submitting attendance and any incidents.
+            </p>
+          </div>
+        </div>
+      </GlassCard>
+    )
+  }
+
+  // In Progress (exam day) — the real sign-off action.
+  const unmarked = attendance.unmarked
+  const rosterEmpty = attendance.total === 0
+  const blocked = rosterEmpty || unmarked > 0 || dirty
+  const hint = rosterEmpty
+    ? 'The exam office has not seated students in this room yet.'
+    : unmarked > 0
+      ? `Mark attendance for all ${attendance.total} students before completing the duty (${unmarked} still unmarked).`
+      : dirty
+        ? 'Save your attendance changes before completing the duty.'
+        : 'Verify the roster attendance and incidents above, then sign off the duty.'
+
+  return (
+    <GlassCard hover={false} className="p-3 sm:p-4 lg:p-5">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/50">
+            <PackageCheck className="h-4.5 w-4.5 text-muted-foreground" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold">Duty sign-off</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+          </div>
+        </div>
+        <Button onClick={onComplete} disabled={blocked || completing} className="h-9 shrink-0">
+          {completing ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Completing…
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="h-3.5 w-3.5" /> Complete Duty
+            </>
+          )}
+        </Button>
+      </div>
+    </GlassCard>
   )
 }
 

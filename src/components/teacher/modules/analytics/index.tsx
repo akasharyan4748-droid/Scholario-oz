@@ -3,25 +3,34 @@
 /**
  * Performance Analytics — the module composition.
  *
- * Purpose: help the teacher understand how their assigned classes and
- * subjects are performing — not to show as many charts as possible.
- * Everything on screen comes from GET /api/teacher/analytics (real
- * ExamMark / ExamSubjectConfig / Attendance rows):
+ * Purpose: answer six questions with real data — how the class is
+ * performing, how complete assessment entry is, how attendance is,
+ * which students need attention, which subjects are weaker, and
+ * whether performance is changing over time. Everything on screen
+ * comes from GET /api/teacher/analytics (real ExamMark /
+ * ExamSubjectConfig / Attendance rows):
  *
  *   ModuleToolbar   — class scope + class selector (multi-class only;
  *                     defaults to the class-teacher class, which the
  *                     API lists first).
- *   KpiRow          — Class Average · Attendance Rate · Assessment
- *                     Completion · Students Needing Attention.
- *   Charts          — Performance Trend (per graded exam), Subject
- *                     Averages (latest exam), Attendance Trend (weekly).
- *   TopPerformers   — honest latest-exam rankings.
- *   AttentionList   — flagged students with reasons + View Student.
+ *   KpiRow          — Class Average · Attendance · Assessment
+ *                     Completion (graded/students) · Needing Attention.
+ *   Performance     — ≥2 graded assessments → real trend chart;
+ *                     exactly 1 → compact PERFORMANCE SNAPSHOT (never
+ *                     a fake one-point trend); 0 → honest empty state.
+ *   Attendance      — weekly trend once ≥2 weeks of records exist,
+ *                     otherwise a compact honest empty state.
+ *   Subjects        — ≥2 assessments → compact subject rows with thin
+ *                     progress bars (latest graded assessment); with a
+ *                     single assessment the rows live inside the
+ *                     snapshot card, so they never appear twice.
+ *   AttentionList   — flagged students with real threshold reasons +
+ *                     View Profile.
  *
  * Classes without data get honest empty states, never zero-filled
  * charts. A failed refresh keeps the last payload on screen behind a
  * quiet amber strip (only a first-load failure shows the full error
- * card). `module-router.tsx` passes onNavigate so View Student opens
+ * card). `module-router.tsx` passes onNavigate so View Profile opens
  * the student directory; without it the buttons simply don't render.
  */
 
@@ -39,13 +48,10 @@ import {
 import { HubEmptyState, HubModuleSkeleton, HubSectionError } from '../shared/hub-stat-cards'
 import { useAnalytics } from './hooks'
 import { KpiRow } from './kpi-row'
-import {
-  AttendanceTrendCard,
-  PerformanceTrendCard,
-  SubjectAveragesCard,
-} from './trend-charts'
+import { AttendanceTrendCard, PerformanceTrendCard } from './trend-charts'
+import { PerformanceSnapshotCard } from './snapshot-card'
+import { SubjectPerformanceCard } from './subject-performance'
 import { AttentionList } from './attention-list'
-import { TopPerformers } from './top-performers'
 
 /** Quiet amber strip — a failed refresh never wipes a readable module. */
 function StaleStrip({ message, onRetry }: { message: string; onRetry: () => void }) {
@@ -121,7 +127,7 @@ export function TeacherAnalyticsModule({ onNavigate }: { onNavigate?: (key: stri
   if (active == null) return noClasses
 
   const context = `${active.label} · ${active.studentCount} students${
-    active.latestAssessment ? ` · latest graded: ${active.latestAssessment.name}` : ''
+    active.latestAssessment ? ` · Latest graded: ${active.latestAssessment.name}` : ''
   }`
 
   return (
@@ -165,17 +171,19 @@ export function TeacherAnalyticsModule({ onNavigate }: { onNavigate?: (key: stri
       {/* summary — every value derived from real records */}
       <KpiRow a={active} />
 
-      {/* time-series charts */}
+      {/* performance + attendance */}
       <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
-        <PerformanceTrendCard a={active} className="lg:col-span-2" />
+        {active.examTrend.length === 1 ? (
+          <PerformanceSnapshotCard a={active} className="lg:col-span-2" />
+        ) : (
+          <PerformanceTrendCard a={active} className="lg:col-span-2" />
+        )}
         <AttendanceTrendCard a={active} />
       </div>
 
-      {/* latest assessment detail + rankings */}
-      <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
-        <SubjectAveragesCard a={active} className="lg:col-span-2" />
-        <TopPerformers a={active} />
-      </div>
+      {/* Subject rows live inside the snapshot until a second
+          assessment is graded — then they get their own section. */}
+      {active.examTrend.length >= 2 && <SubjectPerformanceCard a={active} />}
 
       {/* actionable list */}
       <AttentionList a={active} onNavigate={onNavigate} />

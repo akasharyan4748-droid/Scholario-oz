@@ -11,10 +11,10 @@ import {
 export const runtime = 'nodejs'
 
 // POST /api/teacher/communication/message-parent — send a message to the
-// guardian of an authorized student. Mirrors the Parent Connect POST flow
+// guardian of an authorized student. Mirrors the parent-connect POST flow
 // (same tables, same authorization model) so threads stay unified: the
 // conversation is upserted on the (teacher, student, parent) triple and the
-// message lands in the same thread Parent Connect renders.
+// message lands in the same parent thread the Communication Hub renders.
 //   · requireTeacher resolves the session teacher + school scope
 //   · assertStudentInScope re-validates the student server-side — the
 //     client-supplied studentId is NEVER trusted

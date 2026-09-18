@@ -16,6 +16,8 @@ export interface LatestAssessment {
   examId: string
   name: string
   dateLabel: string
+  /** Full label with year (e.g. "9 Sept 2026") — real start date. */
+  dateLabelFull: string
   status: string
   resultStatus: string
 }
@@ -35,6 +37,8 @@ export interface SubjectAverage {
   /** maxMarks from ExamSubjectConfig — the honest denominator. */
   max: number
   pct: number
+  /** Distinct students with an entered mark in this subject. */
+  graded: number
 }
 
 export interface AssessmentCompletion {
@@ -44,14 +48,6 @@ export interface AssessmentCompletion {
   entered: number
   expected: number
   pct: number | null
-}
-
-export interface TopPerformer {
-  studentId: string
-  name: string
-  rollNo: string | null
-  avgPct: number
-  subjects: number
 }
 
 export interface WeeklyAttendancePoint {
@@ -72,7 +68,10 @@ export interface AttendanceStats {
 
 export interface AttentionReason {
   kind: 'performance' | 'attendance'
-  text: string
+  /** Short threshold-based label for the UI chip. */
+  label: string
+  /** The real numbers behind the flag. */
+  detail: string
 }
 
 export interface AttentionStudent {
@@ -97,7 +96,6 @@ export interface ClassAnalytics {
   subjectAverages: SubjectAverage[]
   examTrend: ExamTrendPoint[]
   assessmentCompletion: AssessmentCompletion | null
-  topPerformers: TopPerformer[]
   attendance: AttendanceStats
   needingAttention: AttentionStudent[]
 }

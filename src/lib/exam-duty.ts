@@ -86,6 +86,41 @@ export function dutyEditable(status: DutyStatus): boolean {
   return status === 'Upcoming' || status === 'In Progress'
 }
 
+// ─── Duty completion (the invigilator's sign-off) ────────────────────────
+
+export interface DutyCompletionInfo {
+  completedAt: string
+  presentCount: number
+  absentCount: number
+  lateCount: number
+  incidentCount: number
+}
+
+/** The persisted sign-off for one duty (null = not completed yet). */
+export async function dutyCompletionOf(
+  scheduleItemId: string,
+): Promise<DutyCompletionInfo | null> {
+  const row = await db.examDutyCompletion.findUnique({
+    where: { scheduleItemId },
+  })
+  if (!row) return null
+  return {
+    completedAt: row.completedAt.toISOString(),
+    presentCount: row.presentCount,
+    absentCount: row.absentCount,
+    lateCount: row.lateCount,
+    incidentCount: row.incidentCount,
+  }
+}
+
+/** The paper's start timestamp (UTC date + "HH:MM" start time). */
+export function paperStartAt(duty: { date: Date; startTime: string }): Date {
+  const [h, m] = duty.startTime.split(':').map((x) => Number.parseInt(x, 10))
+  const d = new Date(duty.date)
+  d.setUTCHours(Number.isFinite(h) ? h : 0, Number.isFinite(m) ? m : 0, 0, 0)
+  return d
+}
+
 // ─── Duty resolution + authorization ─────────────────────────────────────
 
 export interface DutyRow {

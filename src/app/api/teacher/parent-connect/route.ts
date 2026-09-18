@@ -22,7 +22,7 @@ const ACTIVE_WINDOW_DAYS = 21
 const REPLY_WINDOW_DAYS = 90
 const MESSAGE_HISTORY_TAKE = 400
 
-// GET /api/teacher/parent-connect — the whole Parent Connect workspace in one
+// GET /api/teacher/parent-connect — the parent-conversation engine payload in one
 // server-resolved call: conversations (with unread + last message), open
 // follow-ups, school-approved templates, linkable students and honest stats.
 export async function GET() {
